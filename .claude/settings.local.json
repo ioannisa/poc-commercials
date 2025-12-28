@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew:*)",
+      "Bash(cat:*)",
+      "Bash(tree:*)",
+      "Bash(jar tf:*)",
+      "Bash(curl:*)",
+      "Bash(xxd:*)"
+    ]
+  }
+}

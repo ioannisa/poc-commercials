@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- JasperReports 7.x format - Program Flow Report -->
+<jasperReport name="ProgramFlowReport"
+              pageWidth="595"
+              pageHeight="842"
+              columnWidth="555"
+              leftMargin="20"
+              rightMargin="20"
+              topMargin="20"
+              bottomMargin="20"
+              uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+
+    <!-- Parameters passed from Java code -->
+    <parameter name="REPORT_TITLE" class="java.lang.String">
+        <defaultValueExpression><![CDATA["ΡΟΗ ΠΡΟΓΡΑΜΜΑΤΟΣ"]]></defaultValueExpression>
+    </parameter>
+    <parameter name="REPORT_DATE" class="java.lang.String">
+        <defaultValueExpression><![CDATA[""]]></defaultValueExpression>
+    </parameter>
+    <parameter name="EMPTY_TIME" class="java.lang.String">
+        <defaultValueExpression><![CDATA["Κενός Χρόνος: 00:00"]]></defaultValueExpression>
+    </parameter>
+    <parameter name="LOGO_PATH" class="java.lang.String" forPrompting="false"/>
+
+    <!-- Fields from ProgramFlowItem bean -->
+    <field name="timeSlot" class="java.lang.String"/>
+    <field name="message" class="java.lang.String"/>
+    <field name="duration" class="java.lang.String"/>
+    <field name="durationSeconds" class="java.lang.Integer"/>
+    <field name="program" class="java.lang.String"/>
+    <field name="notes" class="java.lang.String"/>
+    <field name="firstInGroup" class="java.lang.Boolean"/>
+    <field name="lastInGroup" class="java.lang.Boolean"/>
+    <field name="groupTotalDuration" class="java.lang.String"/>
+    <field name="groupSpotCount" class="java.lang.Integer"/>
+
+    <!-- Group by time slot for subtotals -->
+    <group name="TimeSlotGroup">
+        <expression><![CDATA[$F{timeSlot}]]></expression>
+        <groupHeader>
+            <band height="2">
+                <element kind="line" x="0" y="0" width="555" height="1" uuid="b1b2c3d4-e5f6-7890-abcd-ef1234567891">
+                    <pen lineWidth="1.0" lineColor="#000000"/>
+                </element>
+            </band>
+        </groupHeader>
+        <groupFooter>
+            <band height="20">
+                <element kind="line" x="0" y="0" width="555" height="1" uuid="c1b2c3d4-e5f6-7890-abcd-ef1234567892">
+                    <pen lineWidth="0.5" lineColor="#666666"/>
+                </element>
+                <element kind="staticText" x="200" y="2" width="100" height="16" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" bold="true" uuid="d1b2c3d4-e5f6-7890-abcd-ef1234567893">
+                    <text><![CDATA[Σύνολα Χρόνου]]></text>
+                </element>
+                <element kind="textField" x="300" y="2" width="50" height="16" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" bold="true" uuid="e1b2c3d4-e5f6-7890-abcd-ef1234567894">
+                    <expression><![CDATA[$F{groupTotalDuration}]]></expression>
+                </element>
+                <element kind="staticText" x="380" y="2" width="40" height="16" hTextAlign="Right" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" bold="true" uuid="f1b2c3d4-e5f6-7890-abcd-ef1234567895">
+                    <text><![CDATA[Spots]]></text>
+                </element>
+                <element kind="textField" x="425" y="2" width="30" height="16" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" bold="true" uuid="01b2c3d4-e5f6-7890-abcd-ef1234567896">
+                    <expression><![CDATA[$F{groupSpotCount}]]></expression>
+                </element>
+            </band>
+        </groupFooter>
+    </group>
+
+    <!-- Report Title/Header -->
+    <title height="80">
+        <!-- Logo placeholder (left) -->
+        <element kind="staticText" x="0" y="5" width="100" height="30" forecolor="#E07000" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="16.0" bold="true" uuid="11b2c3d4-e5f6-7890-abcd-ef1234567897">
+            <text><![CDATA[LOGO]]></text>
+        </element>
+
+        <!-- Empty Time Badge (center) -->
+        <element kind="rectangle" x="180" y="5" width="130" height="20" backcolor="#FFFACD" uuid="21b2c3d4-e5f6-7890-abcd-ef1234567898">
+            <pen lineWidth="1.0" lineColor="#DAA520"/>
+        </element>
+        <element kind="textField" x="185" y="7" width="120" height="16" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" bold="true" uuid="31b2c3d4-e5f6-7890-abcd-ef1234567899">
+            <expression><![CDATA[$P{EMPTY_TIME}]]></expression>
+        </element>
+
+        <!-- Report Title (right) -->
+        <element kind="textField" x="350" y="5" width="205" height="20" hTextAlign="Right" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="14.0" bold="true" uuid="41b2c3d4-e5f6-7890-abcd-ef123456789a">
+            <expression><![CDATA[$P{REPORT_TITLE}]]></expression>
+        </element>
+
+        <!-- Report Date (underlined) -->
+        <element kind="textField" x="350" y="28" width="205" height="18" hTextAlign="Right" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="10.0" underline="true" uuid="51b2c3d4-e5f6-7890-abcd-ef123456789b">
+            <expression><![CDATA[$P{REPORT_DATE}]]></expression>
+        </element>
+
+        <!-- Column Headers -->
+        <element kind="staticText" x="0" y="55" width="200" height="20" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" uuid="61b2c3d4-e5f6-7890-abcd-ef123456789c">
+            <text><![CDATA[Μήνυμα]]></text>
+        </element>
+        <element kind="staticText" x="200" y="55" width="50" height="20" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" uuid="71b2c3d4-e5f6-7890-abcd-ef123456789d">
+            <text><![CDATA[Ώρα]]></text>
+        </element>
+        <element kind="staticText" x="250" y="55" width="50" height="20" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" uuid="81b2c3d4-e5f6-7890-abcd-ef123456789e">
+            <text><![CDATA[Διάρκεια]]></text>
+        </element>
+        <element kind="staticText" x="300" y="55" width="130" height="20" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" uuid="91b2c3d4-e5f6-7890-abcd-ef123456789f">
+            <text><![CDATA[Πρόγραμμα]]></text>
+        </element>
+        <element kind="staticText" x="430" y="55" width="125" height="20" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="9.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567900">
+            <text><![CDATA[Παρατηρήσεις]]></text>
+        </element>
+    </title>
+
+    <!-- Detail Band (each row) -->
+    <detail>
+        <band height="14">
+            <!-- Message -->
+            <element kind="textField" textAdjust="ScaleFont" x="0" y="0" width="200" height="13" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567901">
+                <expression><![CDATA[$F{message}]]></expression>
+            </element>
+            <!-- Time (bold, colored) -->
+            <element kind="textField" x="200" y="0" width="50" height="13" forecolor="#E07000" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" bold="true" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567902">
+                <expression><![CDATA[$F{timeSlot}]]></expression>
+            </element>
+            <!-- Duration -->
+            <element kind="textField" x="250" y="0" width="50" height="13" hTextAlign="Center" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567903">
+                <expression><![CDATA[$F{duration}]]></expression>
+            </element>
+            <!-- Program -->
+            <element kind="textField" textAdjust="ScaleFont" x="300" y="0" width="130" height="13" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567904">
+                <expression><![CDATA[$F{program}]]></expression>
+            </element>
+            <!-- Notes -->
+            <element kind="textField" textAdjust="ScaleFont" x="430" y="0" width="125" height="13" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567905">
+                <expression><![CDATA[$F{notes}]]></expression>
+            </element>
+        </band>
+    </detail>
+
+    <!-- Page Footer -->
+    <pageFooter height="20">
+        <element kind="textField" x="0" y="5" width="200" height="12" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="7.0" italic="true" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567906">
+            <expression><![CDATA["Generated: " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(new java.util.Date())]]></expression>
+        </element>
+        <element kind="textField" x="450" y="5" width="60" height="12" hTextAlign="Right" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567907">
+            <expression><![CDATA["Page " + $V{PAGE_NUMBER}]]></expression>
+        </element>
+        <element kind="textField" evaluationTime="Report" x="510" y="5" width="45" height="12" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567908">
+            <expression><![CDATA[" of " + $V{PAGE_NUMBER}]]></expression>
+        </element>
+    </pageFooter>
+
+</jasperReport>
