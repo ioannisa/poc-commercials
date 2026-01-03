@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package eu.anifantakis.poc.ctv.grids
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -54,7 +56,6 @@ sealed interface CacheWindowConfig {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 private fun CacheWindowConfig.toLazyLayoutCacheWindow(): LazyLayoutCacheWindow = when (this) {
     is CacheWindowConfig.Fixed -> LazyLayoutCacheWindow(ahead = ahead, behind = behind)
     is CacheWindowConfig.Fraction -> LazyLayoutCacheWindow(aheadFraction = ahead, behindFraction = behind)
@@ -72,7 +73,6 @@ private fun CacheWindowConfig.toLazyLayoutCacheWindow(): LazyLayoutCacheWindow =
  * @param initialFirstVisibleItemScrollOffset the initial value for [LazyListState.firstVisibleItemScrollOffset].
  * @param cacheConfig Configuration for the prefetch cache window. Defaults to [CacheWindowConfig.DefaultList].
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun rememberCachedLazyListState(
     cacheConfig: CacheWindowConfig = CacheWindowConfig.DefaultList,
@@ -105,7 +105,6 @@ fun rememberCachedLazyListState(
  * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
  * @param content a block which describes the content.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CachedLazyColumn(
     modifier: Modifier = Modifier,
@@ -147,7 +146,6 @@ fun CachedLazyColumn(
  * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
  * @param content a block which describes the content.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CachedLazyRow(
     modifier: Modifier = Modifier,
@@ -186,7 +184,6 @@ fun CachedLazyRow(
  * @param initialFirstVisibleItemScrollOffset the initial value for [LazyGridState.firstVisibleItemScrollOffset].
  * @param cacheConfig Configuration for the prefetch cache window. Defaults to [CacheWindowConfig.DefaultGrid].
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun rememberCachedLazyGridState(
     initialFirstVisibleItemIndex: Int = 0,
@@ -220,7 +217,6 @@ fun rememberCachedLazyGridState(
  * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
  * @param content a block which describes the content.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CachedLazyVerticalGrid(
     columns: GridCells,
@@ -265,7 +261,6 @@ fun CachedLazyVerticalGrid(
  * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
  * @param content a block which describes the content.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CachedLazyHorizontalGrid(
     rows: GridCells,
