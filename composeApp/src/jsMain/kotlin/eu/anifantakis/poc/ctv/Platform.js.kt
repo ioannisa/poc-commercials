@@ -10,7 +10,7 @@ actual fun getPlatform(): Platform = JsPlatform()
 
 @Composable
 actual fun WithTextPrefetch(
-    enabled: Boolean,
+    mode: TextPrefetchMode,
     content: @Composable () -> Unit
 ) {
     content()

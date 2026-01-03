@@ -11,7 +11,7 @@ actual fun getPlatform(): Platform = IOSPlatform()
 
 @Composable
 actual fun WithTextPrefetch(
-    enabled: Boolean,
+    mode: TextPrefetchMode,
     content: @Composable () -> Unit
 ) {
     content()

@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 
 @Composable
 actual fun WithTextPrefetch(
-    enabled: Boolean,
+    mode: TextPrefetchMode,
     content: @Composable () -> Unit
 ) {
     content()

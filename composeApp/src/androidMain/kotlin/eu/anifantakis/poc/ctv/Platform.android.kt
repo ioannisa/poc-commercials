@@ -24,10 +24,10 @@ private object TextPrefetchExecutor {
 
 @Composable
 actual fun WithTextPrefetch(
-    enabled: Boolean,
+    mode: TextPrefetchMode,
     content: @Composable () -> Unit
 ) {
-    if (!enabled) {
+    if (mode == TextPrefetchMode.DISABLED || (mode == TextPrefetchMode.HARDWARE_BASED && Runtime.getRuntime().availableProcessors() < 4)) {
         content()
         return
     }

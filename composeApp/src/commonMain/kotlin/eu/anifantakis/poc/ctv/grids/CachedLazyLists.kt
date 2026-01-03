@@ -186,9 +186,9 @@ fun CachedLazyRow(
  */
 @Composable
 fun rememberCachedLazyGridState(
-    initialFirstVisibleItemIndex: Int = 0,
-    initialFirstVisibleItemScrollOffset: Int = 0,
     cacheConfig: CacheWindowConfig = CacheWindowConfig.DefaultGrid,
+    initialFirstVisibleItemIndex: Int = 0,
+    initialFirstVisibleItemScrollOffset: Int = 0
 ): LazyGridState {
     val cacheWindow = remember(cacheConfig) {
         cacheConfig.toLazyLayoutCacheWindow()
