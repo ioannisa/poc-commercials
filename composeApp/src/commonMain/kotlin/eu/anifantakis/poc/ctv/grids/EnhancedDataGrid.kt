@@ -491,7 +491,7 @@ fun <T> EnhancedDataGrid(
     var hasFocus by remember { mutableStateOf(false) }
 
     // Scroll states - need to sync between frozen and scrollable areas
-    val verticalScrollState = rememberCachedLazyListState(ahead = 500.dp, behind = 500.dp)
+    val verticalScrollState = rememberCachedLazyListState(cacheConfig = CacheWindowConfig.Fixed(300.dp))
     val horizontalScrollState = rememberScrollState()
 
     // Separate columns by frozen position

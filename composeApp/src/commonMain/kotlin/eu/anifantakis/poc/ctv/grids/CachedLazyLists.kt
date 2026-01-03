@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,28 +17,72 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Creates a [LazyListState] that is remembered across compositions and includes a pre-configured 
+ * Configuration for the cache window (prefetch buffer) used by lazy layouts.
+ * Defines how much content to keep composed ahead of and behind the visible area.
+ */
+@Stable
+sealed interface CacheWindowConfig {
+    /**
+     * Fixed Dp-based cache window configuration.
+     *
+     * @param ahead The amount of content (in [Dp]) to prefetch ahead of the visible area.
+     * @param behind The amount of content (in [Dp]) to keep composed behind the visible area.
+     */
+    data class Fixed(val ahead: Dp, val behind: Dp) : CacheWindowConfig {
+        /** Creates a symmetric cache window with the same size ahead and behind. */
+        constructor(both: Dp) : this(ahead = both, behind = both)
+    }
+
+    /**
+     * Fraction-based cache window configuration that scales with viewport size.
+     * More adaptive across different screen sizes.
+     *
+     * @param ahead Fraction of viewport to prefetch ahead (e.g., 0.5f = half viewport).
+     * @param behind Fraction of viewport to keep composed behind (e.g., 0.3f = 30% of viewport).
+     */
+    data class Fraction(val ahead: Float, val behind: Float) : CacheWindowConfig {
+        /** Creates a symmetric cache window with the same fraction ahead and behind. */
+        constructor(both: Float) : this(ahead = both, behind = both)
+    }
+
+    companion object {
+        /** Default configuration for lists: 50% viewport ahead, 30% behind */
+        val DefaultList = Fraction(ahead = 0.5f, behind = 0.3f)
+
+        /** Default configuration for grids: 40% viewport ahead, 25% behind (more conservative due to item density) */
+        val DefaultGrid = Fraction(ahead = 0.4f, behind = 0.25f)
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun CacheWindowConfig.toLazyLayoutCacheWindow(): LazyLayoutCacheWindow = when (this) {
+    is CacheWindowConfig.Fixed -> LazyLayoutCacheWindow(ahead = ahead, behind = behind)
+    is CacheWindowConfig.Fraction -> LazyLayoutCacheWindow(aheadFraction = ahead, behindFraction = behind)
+}
+
+// ============================================================================
+// LIST STATE
+// ============================================================================
+
+/**
+ * Creates a [LazyListState] that is remembered across compositions and includes a pre-configured
  * cache window (prefetch buffer) using [LazyLayoutCacheWindow] to enhance scrolling performance.
  *
  * @param initialFirstVisibleItemIndex the initial value for [LazyListState.firstVisibleItemIndex].
  * @param initialFirstVisibleItemScrollOffset the initial value for [LazyListState.firstVisibleItemScrollOffset].
- * @param ahead The amount of content (in [Dp]) to prefetch and keep composed ahead of the visible area 
- * in the scrolling direction. This helps eliminate jank when new items enter the viewport.
- * @param behind The amount of content (in [Dp]) to keep composed behind the current scroll position. 
- * This prevents immediate disposal of items that just left the screen, making reverse scrolling smoother.
+ * @param cacheConfig Configuration for the prefetch cache window. Defaults to [CacheWindowConfig.DefaultList].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun rememberCachedLazyListState(
+    cacheConfig: CacheWindowConfig = CacheWindowConfig.DefaultList,
     initialFirstVisibleItemIndex: Int = 0,
     initialFirstVisibleItemScrollOffset: Int = 0,
-    ahead: Dp = 500.dp,
-    behind: Dp = 500.dp,
 ): LazyListState {
-    val cacheWindow = remember(ahead, behind) {
-        LazyLayoutCacheWindow(ahead = ahead, behind = behind)
+    val cacheWindow = remember(cacheConfig) {
+        cacheConfig.toLazyLayoutCacheWindow()
     }
-    
+
     return rememberLazyListState(
         cacheWindow = cacheWindow,
         initialFirstVisibleItemIndex = initialFirstVisibleItemIndex,
@@ -46,27 +91,19 @@ fun rememberCachedLazyListState(
 }
 
 /**
- * A vertically scrolling list that only composes and lays out the currently visible items, 
+ * A vertically scrolling list that only composes and lays out the currently visible items,
  * with an added [LazyLayoutCacheWindow] to pre-compose off-screen content for smoother performance.
  *
  * @param modifier the modifier to apply to this layout.
- * @param state the state object to be used to control or observe the list's state. 
+ * @param state the state object to be used to control or observe the list's state.
  * Defaults to a state created via [rememberCachedLazyListState].
- * @param contentPadding a padding around the whole content. This will add padding for the 
- * content after it has been clipped, which is not possible via [modifier] param. You can use it 
- * to add a padding before the first item or after the last one.
- * @param reverseLayout reverse the direction of scrolling and layout. When `true`, items will be 
- * composed from the bottom to the top and [LazyListState.firstVisibleItemIndex] == 0 will mean 
- * we scrolled to the bottom.
- * @param verticalArrangement The vertical arrangement of the layout's children. This allows 
- * to add a spacing between items and specify the arrangement of the items when we have not 
- * enough of them to fill the whole minimum size.
+ * @param contentPadding a padding around the whole content.
+ * @param reverseLayout reverse the direction of scrolling and layout.
+ * @param verticalArrangement The vertical arrangement of the layout's children.
  * @param horizontalAlignment the horizontal alignment applied to the items.
  * @param flingBehavior logic describing fling behavior.
- * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions 
- * is allowed. You can still scroll programmatically via [state] even when it is disabled.
- * @param content a block which describes the content. Inside this block you can use methods 
- * like [LazyListScope.item] to add a single item or [LazyListScope.items] to add a list of items.
+ * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
+ * @param content a block which describes the content.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -96,27 +133,19 @@ fun CachedLazyColumn(
 }
 
 /**
- * A horizontally scrolling list that only composes and lays out the currently visible items, 
+ * A horizontally scrolling list that only composes and lays out the currently visible items,
  * with an added [LazyLayoutCacheWindow] to pre-compose off-screen content for smoother performance.
  *
  * @param modifier the modifier to apply to this layout.
- * @param state the state object to be used to control or observe the list's state. 
+ * @param state the state object to be used to control or observe the list's state.
  * Defaults to a state created via [rememberCachedLazyListState].
- * @param contentPadding a padding around the whole content. This will add padding for the 
- * content after it has been clipped, which is not possible via [modifier] param. You can use it 
- * to add a padding before the first item or after the last one.
- * @param reverseLayout reverse the direction of scrolling and layout. When `true`, items will be 
- * composed from the end to the start and [LazyListState.firstVisibleItemIndex] == 0 will mean 
- * we scrolled to the end.
- * @param horizontalArrangement The horizontal arrangement of the layout's children. This allows 
- * to add a spacing between items and specify the arrangement of the items when we have not 
- * enough of them to fill the whole minimum size.
+ * @param contentPadding a padding around the whole content.
+ * @param reverseLayout reverse the direction of scrolling and layout.
+ * @param horizontalArrangement The horizontal arrangement of the layout's children.
  * @param verticalAlignment the vertical alignment applied to the items.
  * @param flingBehavior logic describing fling behavior.
- * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions 
- * is allowed. You can still scroll programmatically via [state] even when it is disabled.
- * @param content a block which describes the content. Inside this block you can use methods 
- * like [LazyListScope.item] to add a single item or [LazyListScope.items] to add a list of items.
+ * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions is allowed.
+ * @param content a block which describes the content.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -146,32 +175,28 @@ fun CachedLazyRow(
 }
 
 // ============================================================================
-// GRID VARIANTS
+// GRID STATE
 // ============================================================================
 
 /**
- * Creates a [LazyGridState] that is remembered across compositions and includes a pre-configured 
+ * Creates a [LazyGridState] that is remembered across compositions and includes a pre-configured
  * cache window (prefetch buffer) using [LazyLayoutCacheWindow] to enhance scrolling performance.
  *
  * @param initialFirstVisibleItemIndex the initial value for [LazyGridState.firstVisibleItemIndex].
  * @param initialFirstVisibleItemScrollOffset the initial value for [LazyGridState.firstVisibleItemScrollOffset].
- * @param ahead The amount of content (in [Dp]) to prefetch and keep composed ahead of the visible area 
- * in the scrolling direction. This helps eliminate jank when new items enter the viewport.
- * @param behind The amount of content (in [Dp]) to keep composed behind the current scroll position. 
- * This prevents immediate disposal of items that just left the screen, making reverse scrolling smoother.
+ * @param cacheConfig Configuration for the prefetch cache window. Defaults to [CacheWindowConfig.DefaultGrid].
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun rememberCachedLazyGridState(
     initialFirstVisibleItemIndex: Int = 0,
     initialFirstVisibleItemScrollOffset: Int = 0,
-    ahead: Dp = 500.dp,
-    behind: Dp = 500.dp,
+    cacheConfig: CacheWindowConfig = CacheWindowConfig.DefaultGrid,
 ): LazyGridState {
-    val cacheWindow = remember(ahead, behind) {
-        LazyLayoutCacheWindow(ahead = ahead, behind = behind)
+    val cacheWindow = remember(cacheConfig) {
+        cacheConfig.toLazyLayoutCacheWindow()
     }
-    
+
     return rememberLazyGridState(
         cacheWindow = cacheWindow,
         initialFirstVisibleItemIndex = initialFirstVisibleItemIndex,
@@ -180,12 +205,12 @@ fun rememberCachedLazyGridState(
 }
 
 /**
- * A vertical grid that only composes and lays out the currently visible items, 
+ * A vertical grid that only composes and lays out the currently visible items,
  * with an added [LazyLayoutCacheWindow] to pre-compose off-screen content for smoother performance.
  *
  * @param columns describes the count and the size of the grid's columns.
  * @param modifier the modifier to apply to this layout.
- * @param state the state object to be used to control or observe the list's state. 
+ * @param state the state object to be used to control or observe the list's state.
  * Defaults to a state created via [rememberCachedLazyGridState].
  * @param contentPadding a padding around the whole content.
  * @param reverseLayout reverse the direction of scrolling and layout.
@@ -225,12 +250,12 @@ fun CachedLazyVerticalGrid(
 }
 
 /**
- * A horizontal grid that only composes and lays out the currently visible items, 
+ * A horizontal grid that only composes and lays out the currently visible items,
  * with an added [LazyLayoutCacheWindow] to pre-compose off-screen content for smoother performance.
  *
  * @param rows describes the count and the size of the grid's rows.
  * @param modifier the modifier to apply to this layout.
- * @param state the state object to be used to control or observe the list's state. 
+ * @param state the state object to be used to control or observe the list's state.
  * Defaults to a state created via [rememberCachedLazyGridState].
  * @param contentPadding a padding around the whole content.
  * @param reverseLayout reverse the direction of scrolling and layout.

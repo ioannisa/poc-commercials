@@ -126,7 +126,7 @@ fun LazySchedulerGrid(
 
     // Scroll states - use rememberSaveable to survive configuration changes
     // Optimization: Use cached state with prefetch buffer (500.dp) to reduce jank
-    val lazyListState = rememberCachedLazyListState(ahead = 500.dp, behind = 500.dp)
+    val lazyListState = rememberCachedLazyListState(cacheConfig = CacheWindowConfig.Fixed(300.dp))
     val horizontalScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
 
     // Calculate total content width
