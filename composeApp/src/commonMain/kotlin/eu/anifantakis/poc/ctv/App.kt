@@ -1,28 +1,45 @@
 package eu.anifantakis.poc.ctv
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import eu.anifantakis.poc.ctv.data.SampleData
-import eu.anifantakis.poc.ctv.grids.*
+import eu.anifantakis.poc.ctv.grids.SchedulerCellData
+import eu.anifantakis.poc.ctv.grids.SchedulerKey
+import eu.anifantakis.poc.ctv.grids.StableDate
 import eu.anifantakis.poc.ctv.navigation.NavRoute
-import kotlinx.collections.immutable.persistentListOf
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableMap
 import eu.anifantakis.poc.ctv.navigation.rememberNavigationState
 import eu.anifantakis.poc.ctv.screens.CommercialDetailScreen
 import eu.anifantakis.poc.ctv.screens.TimetableScreen
-import kotlinx.datetime.LocalDate
-import org.jetbrains.compose.ui.tooling.preview.Preview
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 
 @Composable
-@Preview
 fun App() {
+    WithTextPrefetch {
+        Content()
+    }
+}
+
+@Composable
+fun Content() {
     MaterialTheme {
         Surface(
             modifier = Modifier
