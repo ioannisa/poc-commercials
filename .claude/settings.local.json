@@ -6,7 +6,11 @@
       "Bash(tree:*)",
       "Bash(jar tf:*)",
       "Bash(curl:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(find /Users/ioannisanif/Developer/KMP/poc-commercials/iosApp -type f -name *.swift)",
+      "Bash(git mv:*)",
+      "Bash(mkdir -p /Users/ioannisanif/Developer/KMP/poc-commercials/androidApp/src/main/kotlin/eu/anifantakis/poc/ctv)",
+      "Bash(mkdir -p /Users/ioannisanif/Developer/KMP/poc-commercials/androidApp/src/main/res)"
     ]
   }
 }
