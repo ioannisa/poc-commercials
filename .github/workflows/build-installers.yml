@@ -1,0 +1,59 @@
+name: Build Desktop Installers
+
+# This tells GitHub to run this script every time you push to the 'main' branch,
+# and also gives you a button to run it manually from the GitHub website.
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: 
+
+jobs:
+  build:
+    # The Matrix Strategy: Define the 3 operating systems and their specific Gradle tasks
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            task: packageMsi
+            artifact_name: Windows-Installer
+            artifact_path: desktopApp/build/compose/binaries/main/msi/*.msi
+            
+          - os: macos-latest
+            task: packageDmg
+            artifact_name: macOS-Installer
+            artifact_path: desktopApp/build/compose/binaries/main/dmg/*.dmg
+            
+          - os: ubuntu-latest
+            task: packageDeb
+            artifact_name: Linux-Installer
+            artifact_path: desktopApp/build/compose/binaries/main/deb/*.deb
+
+    # This line tells GitHub which virtual machine to spin up for the current matrix job
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # We use the exact same Microsoft OpenJDK 21 that we set up on your local machine!
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'microsoft' 
+
+      # This official action caches your Gradle downloads so future builds are much faster
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      # Run the specific Compose Multiplatform packaging task for the current OS
+      - name: Build Installer
+        run: ./gradlew :desktopApp:${{ matrix.task }} --no-daemon --no-configuration-cache
+
+      # Take the finished installer file and upload it to the GitHub dashboard
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
