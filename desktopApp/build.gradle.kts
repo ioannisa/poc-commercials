@@ -9,9 +9,9 @@ plugins {
 dependencies {
     implementation(project(":shared"))
     implementation(compose.desktop.currentOs)
-    implementation(compose.runtime)
-    implementation(compose.foundation)
-    implementation(compose.material3)
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.material3)
 }
 
 compose.desktop {
