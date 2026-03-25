@@ -296,6 +296,7 @@ class EnhancedDataGridState<T>(
     var selectedRows by mutableStateOf(setOf<Int>())
     var focusedRow by mutableStateOf(-1)
     var focusedColumn by mutableStateOf(-1)
+    var scrollToFocusedRow by mutableStateOf(false)
 
     // Editing state
     val editingState = EditingState()
@@ -553,10 +554,11 @@ fun <T> EnhancedDataGrid(
         onSelectionChanged?.invoke(state.selectedRows, selectedItems)
     }
 
-    // Scroll to focused row
-    LaunchedEffect(state.focusedRow) {
-        if (state.focusedRow >= 0) {
+    // Scroll to focused row (only for keyboard navigation)
+    LaunchedEffect(state.focusedRow, state.scrollToFocusedRow) {
+        if (state.scrollToFocusedRow && state.focusedRow >= 0) {
             verticalScrollState.animateScrollToItem(state.focusedRow)
+            state.scrollToFocusedRow = false
         }
     }
 
@@ -610,6 +612,7 @@ fun <T> EnhancedDataGrid(
             Key.DirectionUp -> {
                 if (state.focusedRow > 0) {
                     state.focusedRow--
+                    state.scrollToFocusedRow = true
                     if (selectionMode == SelectionMode.SINGLE) {
                         state.selectedRows = setOf(state.focusedRow)
                     }
@@ -619,6 +622,7 @@ fun <T> EnhancedDataGrid(
             Key.DirectionDown -> {
                 if (state.focusedRow < sortedItems.lastIndex) {
                     state.focusedRow++
+                    state.scrollToFocusedRow = true
                     if (selectionMode == SelectionMode.SINGLE) {
                         state.selectedRows = setOf(state.focusedRow)
                     }
@@ -687,6 +691,7 @@ fun <T> EnhancedDataGrid(
             Key.MoveHome -> {
                 state.focusedRow = 0
                 state.focusedColumn = 0
+                state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(0)
                 }
@@ -696,6 +701,7 @@ fun <T> EnhancedDataGrid(
                 state.focusedRow = sortedItems.lastIndex.coerceAtLeast(0)
                 val allCols = frozenLeftCols + scrollableCols + frozenRightCols
                 state.focusedColumn = allCols.lastIndex.coerceAtLeast(0)
+                state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(state.focusedRow)
                 }
@@ -703,6 +709,7 @@ fun <T> EnhancedDataGrid(
             }
             Key.PageUp -> {
                 state.focusedRow = (state.focusedRow - 10).coerceAtLeast(0)
+                state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(state.focusedRow)
                 }
@@ -710,6 +717,7 @@ fun <T> EnhancedDataGrid(
             }
             Key.PageDown -> {
                 state.focusedRow = (state.focusedRow + 10).coerceAtMost(sortedItems.lastIndex.coerceAtLeast(0))
+                state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(state.focusedRow)
                 }
