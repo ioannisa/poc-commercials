@@ -28,6 +28,26 @@ compose.desktop {
             packageName = "Commercials Manager 2"
             packageVersion = "1.0.0"
             includeAllModules = true
+
+            windows {
+                menu = true
+                shortcut = true
+                menuGroup = "Cybernate"
+                console = false
+                dirChooser = true
+                upgradeUuid = "f4a8e9b2-7c3d-41a5-8f6e-2b1c0d9a4e3f"
+            }
+
+            macOS {
+                bundleID = "eu.anifantakis.poc.ctv"
+                dockName = "Commercials Manager"
+            }
+
+            linux {
+                shortcut = true
+                appCategory = "Utility"
+                debMaintainer = "ioannisanif@gmail.com"
+            }
         }
     }
 }
