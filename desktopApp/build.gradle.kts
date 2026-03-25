@@ -18,10 +18,16 @@ compose.desktop {
     application {
         mainClass = "eu.anifantakis.poc.ctv.MainKt"
 
+        javaHome = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(21)
+            vendor = JvmVendorSpec.MICROSOFT
+        }.get().metadata.installationPath.asFile.absolutePath
+
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "eu.anifantakis.poc.ctv"
+            packageName = "Commercials Manager 2"
             packageVersion = "1.0.0"
+            includeAllModules = true
         }
     }
 }
