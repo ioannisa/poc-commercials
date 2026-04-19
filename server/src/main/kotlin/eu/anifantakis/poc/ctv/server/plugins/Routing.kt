@@ -1,6 +1,6 @@
 package eu.anifantakis.poc.ctv.server.plugins
 
-import eu.anifantakis.poc.ctv.server.routes.dbRoutes
+import eu.anifantakis.poc.ctv.server.routes.demoRoutes
 import eu.anifantakis.poc.ctv.server.routes.reportRoutes
 import eu.anifantakis.poc.ctv.server.routes.scheduleRoutes
 import io.ktor.server.application.*
@@ -24,7 +24,7 @@ fun Application.configureRouting() {
         // Schedule / commercials data (DB-backed)
         scheduleRoutes()
 
-        // Generic MySQL query route (POC only, localhost)
-        dbRoutes()
+        // Tiny DB connectivity smoke test (returns first row of test.user)
+        demoRoutes()
     }
 }

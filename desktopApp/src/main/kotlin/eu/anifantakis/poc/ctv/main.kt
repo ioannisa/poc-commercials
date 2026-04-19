@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import kotlinx.coroutines.delay
+import eu.anifantakis.poc.ctv.config.AppConfig
 
 fun main() = application {
     Window(
@@ -34,10 +34,15 @@ fun main() = application {
         title = "POCCTV",
     ) {
         var isLoading by remember { mutableStateOf(true) }
+        var loadError by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
-            delay(100) // Let the window render first
-            isLoading = false
+            try {
+                AppConfig.load()
+                isLoading = false
+            } catch (e: Exception) {
+                loadError = e.message ?: e::class.simpleName
+            }
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -62,7 +67,7 @@ fun main() = application {
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Loading...",
+                            text = loadError?.let { "Config error: $it" } ?: "Loading...",
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 14.sp
                         )

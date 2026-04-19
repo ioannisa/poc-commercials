@@ -1,19 +1,16 @@
 package eu.anifantakis.poc.ctv.server.scheduler
 
+import eu.anifantakis.poc.ctv.server.config.ServerConfigLoader
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.LocalDate
 
 object SchedulerDb {
 
-    private val jdbcUrl: String = System.getenv("POC_DB_URL")
-        ?: "jdbc:mysql://localhost:3306/commercials?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
-    private val user: String = System.getenv("POC_DB_USER") ?: "root"
-    private val password: String = System.getenv("POC_DB_PASSWORD") ?: "rootpass123"
-
     fun connection(): Connection {
+        val cfg = ServerConfigLoader.get()
         Class.forName("com.mysql.cj.jdbc.Driver")
-        return DriverManager.getConnection(jdbcUrl, user, password)
+        return DriverManager.getConnection(cfg.mysqlJdbcUrl, cfg.mysqlUsername, cfg.mysqlPassword)
     }
 
     fun bootstrap() {

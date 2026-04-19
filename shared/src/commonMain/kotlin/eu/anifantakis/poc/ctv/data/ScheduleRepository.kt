@@ -1,7 +1,7 @@
 package eu.anifantakis.poc.ctv.data
 
 import androidx.compose.ui.graphics.Color
-import eu.anifantakis.poc.ctv.db.dbServerBaseUrl
+import eu.anifantakis.poc.ctv.config.AppConfig
 import eu.anifantakis.poc.ctv.grids.BreakSlot
 import eu.anifantakis.poc.ctv.grids.BreakZone
 import eu.anifantakis.poc.ctv.grids.CommercialItem
@@ -70,7 +70,7 @@ private val client by lazy {
 object ScheduleRepository {
 
     suspend fun getBreaks(): List<BreakSlot> {
-        val dtos: List<BreakSlotDto> = client.get("${dbServerBaseUrl()}/api/breaks").body()
+        val dtos: List<BreakSlotDto> = client.get("${AppConfig.require().serverBaseUrl}/api/breaks").body()
         return dtos.map {
             BreakSlot(
                 id = it.id,
@@ -83,7 +83,7 @@ object ScheduleRepository {
     }
 
     suspend fun getSchedule(year: Int, month: Int): Map<SchedulerKey, SchedulerCellData> {
-        val dto: ScheduleDto = client.get("${dbServerBaseUrl()}/api/schedule") {
+        val dto: ScheduleDto = client.get("${AppConfig.require().serverBaseUrl}/api/schedule") {
             parameter("year", year)
             parameter("month", month)
         }.body()
