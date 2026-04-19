@@ -23,6 +23,7 @@ kotlinx-collections-immutable = "0.4.0"
 kotlinx-serialization = "1.11.0"
 ktor = "3.4.2"
 logback = "1.5.32"
+mysql-connector = "9.6.0"
 
 jasperreports = "7.0.6"
 
@@ -83,9 +84,11 @@ ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 
-# Ktor Client (for browser-based platforms)
+# Ktor Client (multiplatform)
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 
 # Kotlinx Serialization
@@ -101,6 +104,9 @@ androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", vers
 
 # Logging
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+# MySQL JDBC (server-only)
+mysql-connector-j = { module = "com.mysql:mysql-connector-j", version.ref = "mysql-connector" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

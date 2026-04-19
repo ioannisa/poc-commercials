@@ -36,6 +36,9 @@ dependencies {
     // Logging
     implementation(libs.logback.classic)
 
+    // MySQL JDBC driver (POC: ad-hoc DB queries)
+    implementation(libs.mysql.connector.j)
+
     // Testing
     testImplementation(libs.kotlin.test)
 }

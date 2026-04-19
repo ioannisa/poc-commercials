@@ -52,6 +52,9 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.ui.text.google.fonts)
+
+            // Ktor client engine for Android
+            implementation(libs.ktor.client.cio)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -77,6 +80,12 @@ kotlin {
             implementation(libs.jetbrains.lifecycle.viewmodel.navigation3)
             implementation(libs.kotlinx.serialization.json)
 
+            // Ktor client + serialization (shared DB API client across all platforms)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
+            implementation(libs.kotlinx.serialization.json)
+
             implementation(libs.ksafe)
             implementation(libs.ksafe.compose)
         }
@@ -86,6 +95,9 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+
+            // Ktor client engine for JVM (desktop)
+            implementation(libs.ktor.client.cio)
 
             // JasperReports 7.x for PDF report generation (modular)
             implementation(libs.jasperreports)
@@ -110,6 +122,9 @@ kotlin {
 
         val iosMain by creating {
             dependsOn(commonMain.get())
+            dependencies {
+                implementation(libs.ktor.client.darwin)
+            }
         }
         iosArm64Main.get().dependsOn(iosMain)
         iosSimulatorArm64Main.get().dependsOn(iosMain)

@@ -1,5 +1,6 @@
 package eu.anifantakis.poc.ctv.server.plugins
 
+import eu.anifantakis.poc.ctv.server.routes.dbRoutes
 import eu.anifantakis.poc.ctv.server.routes.reportRoutes
 import io.ktor.server.application.*
 import io.ktor.server.response.*
@@ -18,5 +19,8 @@ fun Application.configureRouting() {
 
         // Report routes
         reportRoutes()
+
+        // Generic MySQL query route (POC only, localhost)
+        dbRoutes()
     }
 }
