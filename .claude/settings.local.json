@@ -10,7 +10,11 @@
       "Bash(find /Users/ioannisanif/Developer/KMP/poc-commercials/iosApp -type f -name *.swift)",
       "Bash(git mv:*)",
       "Bash(mkdir -p /Users/ioannisanif/Developer/KMP/poc-commercials/androidApp/src/main/kotlin/eu/anifantakis/poc/ctv)",
-      "Bash(mkdir -p /Users/ioannisanif/Developer/KMP/poc-commercials/androidApp/src/main/res)"
+      "Bash(mkdir -p /Users/ioannisanif/Developer/KMP/poc-commercials/androidApp/src/main/res)",
+      "Bash(echo \"JAVA_HOME=$JAVA_HOME\")",
+      "Bash($HOME/.sdkman/candidates/java/21.0.10-zulu/bin/jpackage --version 2>&1)",
+      "Bash(JAVA_HOME=$HOME/.sdkman/candidates/java/21.0.10-zulu ./gradlew --no-daemon --no-configuration-cache :desktopApp:packageDmg)",
+      "Read(//Users/ioannisanif/.gradle/**)"
     ]
   }
 }

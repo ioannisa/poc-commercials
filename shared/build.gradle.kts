@@ -39,9 +39,9 @@ kotlin {
 
     jvm()
 
-    js {
-        browser()
-    }
+//    js {
+//        browser()
+//    }
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
@@ -76,6 +76,9 @@ kotlin {
             implementation(libs.jetbrains.navigation3.ui)
             implementation(libs.jetbrains.lifecycle.viewmodel.navigation3)
             implementation(libs.kotlinx.serialization.json)
+
+            implementation(libs.ksafe)
+            implementation(libs.ksafe.compose)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -102,7 +105,7 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
             }
         }
-        jsMain.get().dependsOn(webMain)
+//        jsMain.get().dependsOn(webMain)
         wasmJsMain.get().dependsOn(webMain)
 
         val iosMain by creating {
