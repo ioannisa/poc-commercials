@@ -16,7 +16,9 @@
       "Bash(JAVA_HOME=$HOME/.sdkman/candidates/java/21.0.10-zulu ./gradlew --no-daemon --no-configuration-cache :desktopApp:packageDmg)",
       "Read(//Users/ioannisanif/.gradle/**)",
       "Bash(lsof -nP -iTCP:8080 -sTCP:LISTEN)",
-      "Bash(lsof -nP -iTCP:3306 -sTCP:LISTEN)"
+      "Bash(lsof -nP -iTCP:3306 -sTCP:LISTEN)",
+      "Bash(git ls-tree *)",
+      "Bash(git checkout *)"
     ]
   }
 }
