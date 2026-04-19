@@ -3,6 +3,7 @@ package eu.anifantakis.poc.ctv.server
 import eu.anifantakis.poc.ctv.server.plugins.configureRouting
 import eu.anifantakis.poc.ctv.server.plugins.configureSerialization
 import eu.anifantakis.poc.ctv.server.plugins.configureCORS
+import eu.anifantakis.poc.ctv.server.scheduler.SchedulerDb
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -17,6 +18,7 @@ fun main() {
 }
 
 fun Application.module() {
+    SchedulerDb.bootstrap()
     configureSerialization()
     configureCORS()
     configureRouting()

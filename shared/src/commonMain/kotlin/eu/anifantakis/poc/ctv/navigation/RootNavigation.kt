@@ -6,6 +6,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,7 +21,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
-import eu.anifantakis.poc.ctv.data.SampleData
+import eu.anifantakis.poc.ctv.data.ScheduleRepository
+import eu.anifantakis.poc.ctv.grids.BreakSlot
 import eu.anifantakis.poc.ctv.grids.SchedulerCellData
 import eu.anifantakis.poc.ctv.grids.SchedulerKey
 import eu.anifantakis.poc.ctv.grids.StableDate
@@ -51,20 +53,28 @@ fun RootNavigation() {
     var year by remember { mutableStateOf(2025) }
     var month by remember { mutableStateOf(12) }
 
-    val breaks = remember { SampleData.generateBreaks() }
+    var breaks by remember { mutableStateOf<List<BreakSlot>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        breaks = ScheduleRepository.getBreaks()
+    }
 
-    val originalCellData = remember(year, month) {
-        SampleData.generateCellData(breaks, year, month)
+    var originalCellData by remember(year, month) {
+        mutableStateOf<Map<SchedulerKey, SchedulerCellData>>(emptyMap())
     }
 
     val cellData = remember(year, month) {
-        mutableStateMapOf<SchedulerKey, SchedulerCellData>().apply {
-            putAll(originalCellData)
-        }
+        mutableStateMapOf<SchedulerKey, SchedulerCellData>()
     }
 
     val modifiedCells = remember(year, month) {
         mutableStateSetOf<SchedulerKey>()
+    }
+
+    LaunchedEffect(year, month) {
+        val data = ScheduleRepository.getSchedule(year, month)
+        originalCellData = data
+        cellData.clear()
+        cellData.putAll(data)
     }
 
     var selectedRow by rememberSaveable { mutableStateOf(0) }
