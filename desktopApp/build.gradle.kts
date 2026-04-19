@@ -14,6 +14,13 @@ dependencies {
     implementation(libs.compose.material3)
 }
 
+// Run the desktop app from the repo root so ./config.properties resolves to
+// the shared dev config file. Compose Desktop registers the `run` task lazily,
+// so configure it via matching to avoid "Task not found" at config time.
+tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
+    workingDir = rootProject.projectDir
+}
+
 compose.desktop {
     application {
         mainClass = "eu.anifantakis.poc.ctv.MainKt"

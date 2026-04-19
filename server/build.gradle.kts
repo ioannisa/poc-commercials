@@ -43,6 +43,12 @@ dependencies {
     testImplementation(libs.kotlin.test)
 }
 
+// Run the server from the repo root so ./config.properties resolves to the
+// shared dev config file. The application plugin registers `run` lazily.
+tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
+    workingDir = rootProject.projectDir
+}
+
 ktor {
     fatJar {
         archiveFileName.set("server.jar")

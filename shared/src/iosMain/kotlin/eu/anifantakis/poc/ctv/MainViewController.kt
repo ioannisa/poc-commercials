@@ -1,6 +1,10 @@
 package eu.anifantakis.poc.ctv
 
 import androidx.compose.ui.window.ComposeUIViewController
-import eu.anifantakis.poc.ctv.config.ConfigGate
+import eu.anifantakis.poc.ctv.config.AppConfig
+import kotlinx.coroutines.runBlocking
 
-fun MainViewController() = ComposeUIViewController { ConfigGate { App() } }
+fun MainViewController(): platform.UIKit.UIViewController {
+    runBlocking { AppConfig.load() }
+    return ComposeUIViewController { App() }
+}
