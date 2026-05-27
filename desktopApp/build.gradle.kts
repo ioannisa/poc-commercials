@@ -40,7 +40,7 @@ compose.desktop {
                 menu = true
                 shortcut = true
                 menuGroup = "Cybernate"
-                console = false
+                console = true // for debug to see console errors on windows installations
                 dirChooser = true
                 upgradeUuid = "f4a8e9b2-7c3d-41a5-8f6e-2b1c0d9a4e3f"
             }
