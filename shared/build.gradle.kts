@@ -67,6 +67,12 @@ kotlin {
             implementation(libs.ktor.client.cio)
         }
         commonMain.dependencies {
+            // Extracted feature modules. `api`: their types (BreakSlot,
+            // SchedulerCellData, AppTheme, ...) appear in shared's own
+            // composable signatures.
+            api(project(":grids"))
+            api(project(":appearance"))
+
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
