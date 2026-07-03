@@ -73,6 +73,7 @@ kotlin {
             api(project(":grids"))
             api(project(":appearance"))
             api(project(":client-core"))
+            api(project(":reports-client"))
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -117,18 +118,6 @@ kotlin {
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
         }
-        // Report-producing targets (desktop generates in-process, browsers call
-        // the server): the payload -> wire-DTO adapter lives here so the JVM
-        // and web paths cannot drift apart. JasperReports itself comes
-        // transitively from :reportcore (jvm only).
-        val reportsMain by creating {
-            dependsOn(commonMain.get())
-            dependencies {
-                api(project(":reportcore"))
-            }
-        }
-
-        jvmMain.get().dependsOn(reportsMain)
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
@@ -139,7 +128,7 @@ kotlin {
 
         // Browser-based platforms: Ktor client for server-side report generation
         val webMain by creating {
-            dependsOn(reportsMain)
+            dependsOn(commonMain.get())
             dependencies {
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.js)
