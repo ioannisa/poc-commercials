@@ -158,7 +158,7 @@ fun loadHostingConfig(): HostingConfig {
  * identity used to detect central/station schema collisions. Best-effort:
  * host aliases (localhost vs 127.0.0.1) are not resolved.
  */
-internal fun databaseTarget(jdbcUrl: String): String =
+fun databaseTarget(jdbcUrl: String): String =
     jdbcUrl.removePrefix("jdbc:mysql://").substringBefore('?').trimEnd('/')
 
 /**

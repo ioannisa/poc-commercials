@@ -42,15 +42,12 @@ dependencies {
     // Legacy-dump migration engine/service/CLI (server implements its MigrationHost port)
     implementation(project(":migration"))
 
+    // Database layer (stations.yaml, HikariCP pools, station/central schemas,
+    // auth persistence) - brings the MySQL driver at runtime
+    implementation(project(":persistence"))
+
     // Logging
     implementation(libs.logback.classic)
-
-    // MySQL JDBC driver (POC: ad-hoc DB queries)
-    implementation(libs.mysql.connector.j)
-    implementation(libs.hikaricp)
-
-    // stations.yaml parsing (kotlinx-serialization YAML format)
-    implementation(libs.kaml)
 
     // Testing
     testImplementation(libs.kotlin.test)
