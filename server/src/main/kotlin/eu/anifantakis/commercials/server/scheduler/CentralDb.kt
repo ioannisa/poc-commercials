@@ -2,7 +2,9 @@ package eu.anifantakis.commercials.server.scheduler
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import eu.anifantakis.commercials.server.stations.DEFAULT_CENTRAL_MAX_POOL
 import eu.anifantakis.commercials.server.stations.HostingConfig
+import eu.anifantakis.commercials.server.stations.resolveMaxPoolSize
 import org.koin.core.annotation.Provided
 import java.sql.Connection
 
@@ -23,7 +25,12 @@ class CentralDb(@Provided hosting: HostingConfig) {
             username = hosting.central.username
             password = hosting.central.password
             driverClassName = "com.mysql.cj.jdbc.Driver"
-            maximumPoolSize = 10
+            // Central is on the hot path (a token lookup per authenticated
+            // request), so its ceiling is resolved independently: central
+            // override / file default / built-in (10).
+            maximumPoolSize = resolveMaxPoolSize(
+                hosting.central.maxPoolSize, hosting.maxPoolSize, DEFAULT_CENTRAL_MAX_POOL
+            )
             minimumIdle = 1
             connectionTimeout = 10_000
             // Do not fail-fast at pool construction: connections are

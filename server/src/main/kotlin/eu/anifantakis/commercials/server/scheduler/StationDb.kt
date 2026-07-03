@@ -14,7 +14,7 @@ import java.time.LocalDate
  * instances are created and cached by StationRegistry - NOT a Koin
  * definition, since the set of stations is data, not wiring.
  */
-class StationDb(private val station: StationConfig) {
+class StationDb(private val station: StationConfig, maxPoolSize: Int) {
 
     private val dataSource = HikariDataSource(
         HikariConfig().apply {
@@ -22,8 +22,9 @@ class StationDb(private val station: StationConfig) {
             username = station.username
             password = station.password
             driverClassName = "com.mysql.cj.jdbc.Driver"
-            // Several station pools coexist - keep each modest
-            maximumPoolSize = 5
+            // Several station pools coexist - ceiling resolved from
+            // stations.yaml (per-station override / file default / built-in)
+            maximumPoolSize = maxPoolSize
             minimumIdle = 1
             connectionTimeout = 10_000
             // Do not fail-fast at pool construction: connections are

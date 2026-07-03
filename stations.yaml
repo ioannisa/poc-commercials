@@ -15,6 +15,20 @@
 # `id` is the stable key used in user grants and API calls; `name` is what
 # users see in the station dropdown.
 #
+# Connection pools: each database gets its own HikariCP pool. The optional
+# file-wide `maxPoolSize` below sets the default ceiling for central and every
+# station; `maxPoolSize` on any single block overrides it. Defaults when unset:
+# central 10, station 5. The theoretical peak against a MySQL server is the sum
+# of the pools pointing at it, so tune this against its `max_connections` as
+# stations grow. Example:
+#
+#   maxPoolSize: 8          # file-wide default for every pool
+#   central:
+#     maxPoolSize: 20       # central is hottest (token check per request)
+#   stations:
+#     - id: crete-tv
+#       maxPoolSize: 3      # override just this station
+#
 # Path override: -Dstations.config=<path> or POC_STATIONS env var.
 central:
   jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"

@@ -8,20 +8,37 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+/** Built-in connection-pool ceilings when nothing is set in stations.yaml. */
+const val DEFAULT_CENTRAL_MAX_POOL = 10
+const val DEFAULT_STATION_MAX_POOL = 5
+
+/**
+ * Effective HikariCP `maximumPoolSize`: a per-connection [override] wins, then
+ * the file-wide [global] default, then the [builtinDefault].
+ */
+internal fun resolveMaxPoolSize(override: Int?, global: Int?, builtinDefault: Int): Int =
+    override ?: global ?: builtinDefault
+
 /**
  * A MySQL connection target (full JDBC URL + credentials, plaintext by
  * design: stations.yaml is server-side deployment config).
+ *
+ * @param maxPoolSize optional HikariCP pool ceiling override for this
+ *        connection; falls back to the file-wide default, then the built-in.
  */
 @Serializable
 data class DbConnectionConfig(
     val jdbcUrl: String,
     val username: String,
     val password: String,
+    val maxPoolSize: Int? = null,
 )
 
 /**
  * One entry per hosted station (TV or radio). Identical table structure per
  * schema; the schemas may live on the same MySQL server or different ones.
+ *
+ * @param maxPoolSize optional per-station HikariCP pool ceiling override.
  */
 @Serializable
 data class StationConfig(
@@ -32,6 +49,7 @@ data class StationConfig(
     val jdbcUrl: String,
     val username: String,
     val password: String,
+    val maxPoolSize: Int? = null,
 )
 
 /**
@@ -41,11 +59,16 @@ data class StationConfig(
  *   It must never double as a station schema.
  * - [stations] is 0..n: a server may host no stations at all (users can log
  *   in but have nothing to select) or many.
+ * - [maxPoolSize] is the file-wide default HikariCP pool ceiling applied to
+ *   central and every station unless they override it. When null, the
+ *   built-in defaults apply (central 10, station 5). Tune this against the
+ *   MySQL server's `max_connections` as the number of stations grows.
  */
 @Serializable
 data class HostingConfig(
     val central: DbConnectionConfig,
     val stations: List<StationConfig> = emptyList(),
+    val maxPoolSize: Int? = null,
 )
 
 /**
@@ -71,6 +94,16 @@ fun loadHostingConfig(): HostingConfig {
     val duplicates = parsed.stations.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicates.isEmpty()) { "Duplicate station ids in '${file.path}': $duplicates" }
 
+    // Any specified pool ceiling must be positive
+    val declaredPoolSizes = buildList {
+        add("(global) maxPoolSize" to parsed.maxPoolSize)
+        add("central.maxPoolSize" to parsed.central.maxPoolSize)
+        parsed.stations.forEach { add("station '${it.id}' maxPoolSize" to it.maxPoolSize) }
+    }
+    declaredPoolSizes.forEach { (who, size) ->
+        require(size == null || size > 0) { "$who must be > 0 in '${file.path}' (was $size)" }
+    }
+
     // The central schema is standalone by contract - reject configs that
     // point a station at the same database as central.
     val centralTarget = databaseTarget(parsed.central.jdbcUrl)
@@ -80,9 +113,13 @@ fun loadHostingConfig(): HostingConfig {
             "The central schema is standalone and must not double as a station schema."
     }
 
+    val centralPool = resolveMaxPoolSize(parsed.central.maxPoolSize, parsed.maxPoolSize, DEFAULT_CENTRAL_MAX_POOL)
     log.info(
-        "Hosting config from '${file.path}': central=$centralTarget, " +
-            "${parsed.stations.size} station(s) ${parsed.stations.map { it.id }}"
+        "Hosting config from '${file.path}': central=$centralTarget (maxPool=$centralPool), " +
+            "${parsed.stations.size} station(s) " +
+            parsed.stations.joinToString(prefix = "[", postfix = "]") {
+                "${it.id}(maxPool=${resolveMaxPoolSize(it.maxPoolSize, parsed.maxPoolSize, DEFAULT_STATION_MAX_POOL)})"
+            }
     )
     return parsed
 }
@@ -107,6 +144,7 @@ internal fun databaseTarget(jdbcUrl: String): String =
 class StationRegistry(@Provided hosting: HostingConfig) {
 
     private val configs: List<StationConfig> = hosting.stations
+    private val globalMaxPool: Int? = hosting.maxPoolSize
 
     private val pools = ConcurrentHashMap<String, StationDb>()
 
@@ -119,7 +157,10 @@ class StationRegistry(@Provided hosting: HostingConfig) {
     /** The station's DB (pool created + schema bootstrapped on first call). */
     fun db(id: String): StationDb? {
         val config = config(id) ?: return null
-        return pools.computeIfAbsent(id) { StationDb(config).also { it.bootstrap() } }
+        return pools.computeIfAbsent(id) {
+            val maxPool = resolveMaxPoolSize(config.maxPoolSize, globalMaxPool, DEFAULT_STATION_MAX_POOL)
+            StationDb(config, maxPool).also { it.bootstrap() }
+        }
     }
 
     fun closeAll() {
