@@ -74,9 +74,24 @@ fun RootNavigation() {
     // new token - which matters because the server filters data per role.
     val authRevision = authSession.revision
 
+    // If the session becomes invalid at any point (e.g. the server rejects our
+    // token with 401 - the auth layer clears it), bounce back to Login instead
+    // of sitting on a screen that can't load data.
+    LaunchedEffect(authRevision) {
+        if (!authSession.isLoggedIn && backStack.lastOrNull() != CommercialNavRoute.Login) {
+            backStack.clear()
+            backStack.add(CommercialNavRoute.Login)
+        }
+    }
+
     var breaks by remember { mutableStateOf<List<BreakSlot>>(emptyList()) }
     LaunchedEffect(authRevision) {
-        if (authSession.isLoggedIn) breaks = scheduleRepository.getBreaks()
+        if (!authSession.isLoggedIn) return@LaunchedEffect
+        // A failed load (incl. an expired token, which clears the session and
+        // triggers the Login redirect above) must never crash the app.
+        runCatching { scheduleRepository.getBreaks() }
+            .onSuccess { breaks = it }
+            .onFailure { breaks = emptyList() }
     }
 
     // Also keyed on the session revision: a station switch (or user switch)
@@ -97,10 +112,16 @@ fun RootNavigation() {
 
     LaunchedEffect(year, month, authRevision) {
         if (!authSession.isLoggedIn) return@LaunchedEffect
-        val data = scheduleRepository.getSchedule(year, month)
-        originalCellData = data
-        cellData.clear()
-        cellData.putAll(data)
+        runCatching { scheduleRepository.getSchedule(year, month) }
+            .onSuccess { data ->
+                originalCellData = data
+                cellData.clear()
+                cellData.putAll(data)
+            }
+            .onFailure {
+                originalCellData = emptyMap()
+                cellData.clear()
+            }
     }
 
     var selectedRow by rememberSaveable { mutableStateOf(0) }

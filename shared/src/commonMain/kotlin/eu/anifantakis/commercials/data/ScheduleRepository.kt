@@ -2,21 +2,16 @@ package eu.anifantakis.commercials.data
 
 import androidx.compose.ui.graphics.Color
 import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.auth.authenticatedJsonClient
 import eu.anifantakis.commercials.config.AppConfig
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.BreakZone
 import eu.anifantakis.commercials.grids.CommercialItem
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.http.HttpHeaders
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -66,17 +61,9 @@ private data class ScheduleDto(
 /** Koin singleton - schedule/breaks data via the app server. */
 class ScheduleRepository(private val session: AuthSession) {
 
-    private val client by lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
-            }
-            // Runs per request - picks up the current session token
-            defaultRequest {
-                session.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-            }
-        }
-    }
+    // Shared client: bearer header per request + centralized 401 -> session
+    // clear + SessionExpiredException (see auth/AuthHttpClient.kt)
+    private val client by lazy { authenticatedJsonClient(session) }
 
     suspend fun getBreaks(): List<BreakSlot> {
         val dtos: List<BreakSlotDto> = client.get("${AppConfig.require().serverBaseUrl}/api/breaks") {

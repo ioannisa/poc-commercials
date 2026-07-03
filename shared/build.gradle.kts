@@ -107,6 +107,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
         }
         // Report-producing targets (desktop generates in-process, browsers call
         // the server): the payload -> wire-DTO adapter lives here so the JVM

@@ -63,6 +63,9 @@ class ReportApiClient(private val session: AuthSession) {
             if (response.status.isSuccess()) {
                 Result.success(response.readRawBytes())
             } else {
+                // A rejected token here means the session is dead - clear it so
+                // the app returns to Login (same 401 policy as the JSON client).
+                if (response.status == HttpStatusCode.Unauthorized) session.clear()
                 val errorBody = response.bodyAsText()
                 Result.failure(Exception("Server error ${response.status}: $errorBody"))
             }

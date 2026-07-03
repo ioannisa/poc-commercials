@@ -1,17 +1,11 @@
 package eu.anifantakis.commercials.db
 
 import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.auth.authenticatedJsonClient
 import eu.anifantakis.commercials.config.AppConfig
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.http.HttpHeaders
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 data class DbUser(val username: String, val password: String)
 
@@ -21,17 +15,8 @@ private data class DemoUserDto(val username: String, val password: String)
 /** Koin singleton - calls the app server's /api/demo/user. The server talks to MySQL; this code doesn't. */
 class DbApi(private val session: AuthSession) {
 
-    private val httpClient by lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
-            }
-            // Runs per request - picks up the current session token
-            defaultRequest {
-                session.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
-            }
-        }
-    }
+    // Shared client: bearer header per request + centralized 401 handling
+    private val httpClient by lazy { authenticatedJsonClient(session) }
 
     suspend fun fetchDbUser(): DbUser {
         val baseUrl = AppConfig.require().serverBaseUrl
