@@ -87,6 +87,8 @@ fun LazySchedulerGrid(
     dayHeaderContextMenuItems: ((LocalDate) -> List<ContextMenuEntry>)? = null,
     breakHeaderContextMenuItems: ((BreakSlot) -> List<ContextMenuEntry>)? = null
 ) {
+    val palette = gridPalette()
+
     // Keyboard navigation state - use rememberSaveable to survive configuration changes
     var selectedRow by rememberSaveable { mutableStateOf(initialSelectedRow) }
     var selectedColumn by rememberSaveable { mutableStateOf(initialSelectedColumn) }
@@ -260,7 +262,7 @@ fun LazySchedulerGrid(
         modifier = modifier
             .border(
                 width = 2.dp,
-                color = if (hasFocus) MaterialTheme.colorScheme.primary else Color.Gray
+                color = if (hasFocus) MaterialTheme.colorScheme.primary else palette.gridBorderUnfocused
             )
             .focusRequester(focusRequester)
             .focusable()
@@ -278,15 +280,15 @@ fun LazySchedulerGrid(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(headerHeight)
-                .background(Color(0xFFE8E8E8))
+                .background(palette.headerBackground)
         ) {
             // Break time header (frozen)
             Box(
                 modifier = Modifier
                     .width(breakColumnWidth)
                     .fillMaxHeight()
-                    .background(Color(0xFFE8E8E8))
-                    .border(0.5.dp, Color.Gray),
+                    .background(palette.headerBackground)
+                    .border(0.5.dp, palette.headerBorder),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -339,9 +341,9 @@ fun LazySchedulerGrid(
                             .width(breakColumnWidth)
                             .fillMaxHeight()
                             .background(
-                                if (isRowSelected) Color(0xFFE53935) else Color(0xFFF5F5F5)
+                                if (isRowSelected) palette.selectedRowHeader else palette.frozenRowHeader
                             )
-                            .border(0.5.dp, Color.LightGray),
+                            .border(0.5.dp, palette.cellBorder),
                         menuEntriesProvider = if (breakHeaderContextMenuItems != null) {
                             { breakHeaderContextMenuItems(breakSlot) }
                         } else null,
@@ -351,7 +353,7 @@ fun LazySchedulerGrid(
                             text = formatTime(breakSlot.time.hour, breakSlot.time.minute),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (isRowSelected) Color.White else Color.Black
+                            color = if (isRowSelected) palette.onSelectionHeader else palette.cellText
                         )
                     }
 
@@ -399,14 +401,14 @@ fun LazySchedulerGrid(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(rowHeight)
-                    .background(Color(0xFFE8E8E8))
+                    .background(palette.headerBackground)
             ) {
                 // Totals label
                 Box(
                     modifier = Modifier
                         .width(breakColumnWidth)
                         .fillMaxHeight()
-                        .border(0.5.dp, Color.Gray),
+                        .border(0.5.dp, palette.headerBorder),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -430,7 +432,7 @@ fun LazySchedulerGrid(
                                 modifier = Modifier
                                     .width(dayColumnWidth)
                                     .fillMaxHeight()
-                                    .border(0.5.dp, Color.Gray),
+                                    .border(0.5.dp, palette.headerBorder),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -455,11 +457,12 @@ private fun LazyDayHeader(
     menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null,
     onMenuOpen: (() -> Unit)? = null
 ) {
+    val palette = gridPalette()
     val isWeekend = date.value.dayOfWeek == DayOfWeek.SATURDAY || date.value.dayOfWeek == DayOfWeek.SUNDAY
     val bgColor = when {
-        isSelected -> Color(0xFFE53935)
-        isWeekend -> Color(0xFFFFE0B2)
-        else -> Color(0xFFE8E8E8)
+        isSelected -> palette.selectedColumnHeader
+        isWeekend -> palette.weekendColumn
+        else -> palette.headerBackground
     }
 
     FrozenHeaderBox(
@@ -467,7 +470,7 @@ private fun LazyDayHeader(
             .width(width)
             .fillMaxHeight()
             .background(bgColor)
-            .border(0.5.dp, Color.Gray),
+            .border(0.5.dp, palette.headerBorder),
         menuEntriesProvider = menuEntriesProvider,
         onMenuOpen = onMenuOpen
     ) {
@@ -479,13 +482,13 @@ private fun LazyDayHeader(
                 text = date.value.dayOfWeek.toGreekAbbrLazy(),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isSelected) Color.White else Color.Black
+                color = if (isSelected) palette.onSelectionHeader else palette.cellText
             )
             Text(
                 text = date.value.day.toString(),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isSelected) Color.White else Color.Black
+                color = if (isSelected) palette.onSelectionHeader else palette.cellText
             )
         }
     }
@@ -573,20 +576,25 @@ private fun GridCell(
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // Modified cells show black background (plain computation is cheaper than remember)
+    val palette = gridPalette()
+
+    // Modified cells show the palette's high-contrast marker (black chip on
+    // light, inverted light chip on dark). Zone colours arrive from the
+    // server as LIGHT-theme values; Color.White is the "no zone" sentinel
+    // (compared RAW, before tinting) and zoneTint adapts the rest per theme.
     val bgColor = when {
-        isModified -> Color.Black
-        data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor.copy(alpha = 0.4f)
-        spotCount > 10 -> Color(0xFFFF69B4).copy(alpha = 0.4f)
-        spotCount > 5 -> Color(0xFF90EE90).copy(alpha = 0.4f)
-        spotCount > 0 -> Color(0xFF87CEEB).copy(alpha = 0.4f)
-        isWeekend -> Color(0xFFFFE0B2).copy(alpha = 0.3f)
-        else -> Color.White
+        isModified -> palette.modifiedCellBackground
+        data?.zoneColor != null && data.zoneColor != Color.White -> palette.zoneTint(data.zoneColor).copy(alpha = 0.4f)
+        spotCount > 10 -> palette.densityHigh.copy(alpha = 0.4f)
+        spotCount > 5 -> palette.densityMedium.copy(alpha = 0.4f)
+        spotCount > 0 -> palette.densityLow.copy(alpha = 0.4f)
+        isWeekend -> palette.weekendColumn.copy(alpha = 0.3f)
+        else -> palette.cellBackground
     }
 
-    val textColor = if (isModified) Color.White else Color.Black
-    val selectionColor = Color(0xFFE53935)
-    val normalBorderColor = Color.LightGray
+    val textColor = if (isModified) palette.onModifiedCell else palette.cellText
+    val selectionColor = palette.selectionBorder
+    val normalBorderColor = palette.cellBorder
 
     Box(
         modifier = Modifier

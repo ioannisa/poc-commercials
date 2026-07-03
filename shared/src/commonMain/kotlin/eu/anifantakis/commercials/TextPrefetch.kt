@@ -1,11 +1,5 @@
 package eu.anifantakis.commercials
 
-interface Platform {
-    val name: String
-}
-
-expect fun getPlatform(): Platform
-
 enum class TextPrefetchMode {
     DISABLED,
     ENABLED,

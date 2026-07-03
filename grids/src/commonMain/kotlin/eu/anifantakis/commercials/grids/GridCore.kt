@@ -258,33 +258,6 @@ fun <T> rememberDataGridState(
 }
 
 // ============================================================================
-// GRID COLORS & THEME
-// ============================================================================
-
-object GridColors {
-    val headerBackground = Color(0xFFE8E8E8)
-    val headerBorder = Color(0xFFBDBDBD)
-    val rowAlternate = Color(0xFFF5F5F5)
-    val rowSelected = Color(0xFFBBDEFB)
-    val rowHovered = Color(0xFFE3F2FD)
-    val rowFocused = Color(0xFF90CAF9)
-    val cellBorder = Color(0xFFE0E0E0)
-    val resizeHandle = Color(0xFF9E9E9E)
-    val negativeValue = Color(0xFFD32F2F)
-    val warningValue = Color(0xFFFF9800)
-    val positiveValue = Color(0xFF388E3C)
-
-    // Scheduler specific
-    val weekendColumn = Color(0xFFFFE0B2)
-    val selectedRowHeader = Color(0xFFEF5350)
-    val selectedColumnHeader = Color(0xFFEF5350)
-    val zonePrime = Color(0xFFFF69B4)
-    val zoneStandard = Color(0xFF87CEEB)
-    val zoneSpecial = Color(0xFF90EE90)
-    val zoneDefault = Color.White
-}
-
-// ============================================================================
 // RIGHT-CLICK SUPPORT FOR DESKTOP/MULTIPLATFORM
 // ============================================================================
 
@@ -1243,7 +1216,7 @@ fun ColumnResizeHandle(
                     if (isDragging)
                         MaterialTheme.colorScheme.primary
                     else
-                        GridColors.resizeHandle.copy(alpha = 0.6f)
+                        gridPalette().resizeHandle.copy(alpha = 0.6f)
                 )
                 .align(Alignment.CenterEnd)
         )
@@ -1367,7 +1340,7 @@ fun TooltipWrapper(
  * .cellBorder(
  * isSelected = isCellFocused,
  * selectedColor = MaterialTheme.colorScheme.primary,
- * normalColor = GridColors.cellBorder,
+ * normalColor = palette.cellBorder,
  * selectedWidth = 2.dp,
  * normalWidth = 0.5.dp
  * )
@@ -1377,7 +1350,7 @@ fun TooltipWrapper(
 fun Modifier.cellBorder(
     isSelected: Boolean,
     selectedColor: Color,
-    normalColor: Color = GridColors.cellBorder,
+    normalColor: Color = LightGridPalette.cellBorder,
     selectedWidth: Dp = 2.dp,
     normalWidth: Dp = 0.5.dp,
     drawBackground: Color? = null
@@ -1422,7 +1395,7 @@ fun Modifier.gridCell(
     backgroundColor: Color,
     isSelected: Boolean,
     selectedBorderColor: Color,
-    normalBorderColor: Color = GridColors.cellBorder,
+    normalBorderColor: Color = LightGridPalette.cellBorder,
     selectedBorderWidth: Dp = 2.dp,
     normalBorderWidth: Dp = 0.5.dp
 ): Modifier = this.drawBehind {
@@ -1452,7 +1425,7 @@ fun Modifier.gridCell(
  * Draw only right border - useful for header cells.
  */
 fun Modifier.rightBorder(
-    color: Color = GridColors.cellBorder,
+    color: Color = LightGridPalette.cellBorder,
     width: Dp = 1.dp
 ): Modifier = this.drawBehind {
     val strokeWidth = width.toPx()

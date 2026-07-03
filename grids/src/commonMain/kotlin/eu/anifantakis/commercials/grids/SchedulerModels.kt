@@ -140,7 +140,7 @@ fun DefaultEmptyContent() {
     ) {
         Text(
             text = "No data available",
-            color = Color.Gray
+            color = gridPalette().mutedText
         )
     }
 }

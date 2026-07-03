@@ -21,12 +21,10 @@ fun App() {
     val authSession = koinInject<AuthSession>()
 
     WithTextPrefetch {
-        // Locked to light for now: the scheduler grids use hardcoded light
-        // cell colours (white backgrounds, dark text, fixed zone tints), so a
-        // dark surface underneath them looks broken. To re-enable OS-following
-        // dark mode, make those grid colours theme-aware and change this to
-        // AppTheme { ... } (its default already follows the OS).
-        AppTheme(darkTheme = false) {
+        // Follows the OS light/dark setting (see AppTheme). The grids resolve
+        // their own GridPalette from the active theme, including dark-mode
+        // adaptation of the server-sent zone colours.
+        AppTheme {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()

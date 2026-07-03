@@ -148,7 +148,11 @@ fun CommercialDetailScreen(
     )
 
     // Create column definitions for the data grid
-    val columns = remember(localCommercials) {
+    // Captured here: column lambdas ((T) -> Color) are not composable, so the
+    // theme-resolved palette must be read in composition and closed over.
+    // Keyed into the remember so a live theme switch rebuilds the columns.
+    val palette = gridPalette()
+    val columns = remember(localCommercials, palette) {
         listOf(
             // Reorder buttons column
             ColumnDef<CommercialItem>(
@@ -174,7 +178,7 @@ fun CommercialDetailScreen(
                                 Icons.Default.KeyboardArrowUp,
                                 contentDescription = "Move up",
                                 modifier = Modifier.size(18.dp),
-                                tint = if (index > 0) MaterialTheme.colorScheme.primary else Color.LightGray
+                                tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             )
                         }
                         IconButton(
@@ -186,7 +190,7 @@ fun CommercialDetailScreen(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Move down",
                                 modifier = Modifier.size(18.dp),
-                                tint = if (index < localCommercials.size - 1) MaterialTheme.colorScheme.primary else Color.LightGray
+                                tint = if (index < localCommercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             )
                         }
                     }
@@ -261,7 +265,7 @@ fun CommercialDetailScreen(
                 headerAlignment = TextAlign.Center,
                 extractor = { it.flow },
                 cellBackground = { item ->
-                    if (item.flow == "ΡΟΗ") Color(0xFFE8F5E9) else Color.Transparent
+                    if (item.flow == "ΡΟΗ") palette.positiveValue.copy(alpha = 0.15f) else Color.Transparent
                 }
             )
         ).filter { canEdit || it.id != "reorder" }.toImmutableList()
@@ -293,7 +297,7 @@ fun CommercialDetailScreen(
             onPrint = { printBreak() }
         )
 
-        HorizontalDivider(thickness = 2.dp, color = Color(0xFFBDBDBD))
+        HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outlineVariant)
 
         // Data grid with commercials
         EnhancedDataGrid(
@@ -490,7 +494,7 @@ private fun DetailHeader(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFFF5F5F5)
+        color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -517,7 +521,7 @@ private fun DetailHeader(
                         Column {
                             Text(
                                 text = "$dayName - $dayNumber $monthName $year",
-                                color = Color(0xFF1565C0),
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
@@ -531,7 +535,7 @@ private fun DetailHeader(
                                 )
                                 Text(
                                     text = breakTime,
-                                    color = Color(0xFFC62828),
+                                    color = MaterialTheme.colorScheme.error,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.sp
                                 )
@@ -572,7 +576,7 @@ private fun DetailHeader(
                 ) {
                     Text(
                         text = "MOVIE TIME",
-                        color = Color(0xFF2E7D32),
+                        color = gridPalette().positiveValue,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -640,7 +644,7 @@ private fun StatColumn(
             Text(
                 text = label,
                 fontSize = 10.sp,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Row(

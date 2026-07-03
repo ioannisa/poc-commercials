@@ -472,12 +472,12 @@ private fun StationSelector(authSession: AuthSession) {
                     text = current.name,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1565C0)
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Icon(
                     Icons.Default.ArrowDropDown,
                     contentDescription = "Switch station",
-                    tint = Color(0xFF1565C0)
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -503,7 +503,7 @@ private fun StationSelector(authSession: AuthSession) {
                 text = current.name,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1565C0),
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
@@ -527,7 +527,7 @@ private fun KeyboardEnabledHeader(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFFE8E8E8),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 4.dp
     ) {
         Column {
@@ -568,12 +568,12 @@ private fun KeyboardEnabledHeader(
                         text = if (canEdit) "Arrows: Navigate | Enter: Open | A: Add | D: Delete"
                         else "Arrows: Navigate | Enter: Open (view only)",
                         fontSize = 11.sp,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = "Click grid to focus, then use keyboard",
                         fontSize = 10.sp,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -618,7 +618,7 @@ private fun SimpleHeader(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFFE8E8E8),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 4.dp
     ) {
         Row(
@@ -655,7 +655,7 @@ private fun SimpleHeader(
             Text(
                 text = "Double-click a cell to see details",
                 fontSize = 12.sp,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -677,7 +677,7 @@ private fun TimetableHeader(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color(0xFFE8E8E8),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 4.dp
     ) {
         Row(
@@ -765,7 +765,7 @@ private fun TimetableHeader(
                 Icon(
                     if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                     contentDescription = if (isLocked) "Unlock" else "Lock",
-                    tint = if (isLocked) MaterialTheme.colorScheme.primary else Color.Gray
+                    tint = if (isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -806,7 +806,7 @@ private fun AccountBadge(
             Text(
                 text = if (authSession.isAdmin) "Super Administrator" else authSession.role.label,
                 fontSize = 10.sp,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {

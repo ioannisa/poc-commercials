@@ -493,6 +493,8 @@ fun <T> EnhancedDataGrid(
     // Empty state
     emptyContent: @Composable () -> Unit = { DefaultEmptyContent() }
 ) {
+    val palette = gridPalette()
+
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
 
@@ -780,7 +782,7 @@ fun <T> EnhancedDataGrid(
             ) {
                 focusRequester.requestFocus()
             }
-            .border(1.dp, if (hasFocus) MaterialTheme.colorScheme.primary else GridColors.headerBorder)
+            .border(1.dp, if (hasFocus) MaterialTheme.colorScheme.primary else palette.headerBorder)
     ) {
         if (sortedItems.isEmpty()) {
             // Empty state
@@ -803,7 +805,7 @@ fun <T> EnhancedDataGrid(
                     onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
                 )
 
-                HorizontalDivider(thickness = 2.dp, color = GridColors.headerBorder)
+                HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
 
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -833,7 +835,7 @@ fun <T> EnhancedDataGrid(
                         onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
                     )
 
-                    HorizontalDivider(thickness = 2.dp, color = GridColors.headerBorder)
+                    HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
                 }
 
                 // ===== SCROLLABLE BODY =====
@@ -868,7 +870,7 @@ fun <T> EnhancedDataGrid(
                                 modifier = Modifier
                                     .width(2.dp)
                                     .fillMaxHeight()
-                                    .background(GridColors.headerBorder)
+                                    .background(palette.headerBorder)
                             )
                         }
 
@@ -917,7 +919,7 @@ fun <T> EnhancedDataGrid(
                                 modifier = Modifier
                                     .width(2.dp)
                                     .fillMaxHeight()
-                                    .background(GridColors.headerBorder)
+                                    .background(palette.headerBorder)
                             )
 
                             FrozenRightSection(
@@ -947,7 +949,7 @@ fun <T> EnhancedDataGrid(
 
                 // ===== STICKY FOOTER (TOTALS) =====
                 if (stickyRows.stickyFooter && totalsRow != null) {
-                    HorizontalDivider(thickness = 2.dp, color = GridColors.headerBorder)
+                    HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
 
                     StickyFooterRow(
                         totals = totalsRow(sortedItems),
@@ -989,13 +991,15 @@ private fun <T> StickyHeaderRow(
     allColumns: ImmutableList<ColumnDef<T>>,
     onHeaderReorder: (String, String) -> Unit
 ) {
+    val palette = gridPalette()
+
     val columnDragState = state.columnDragState
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(headerHeight)
-            .background(GridColors.headerBackground)
+            .background(palette.headerBackground)
     ) {
         // Frozen left header
         if (frozenLeftWidth > 0.dp) {
@@ -1040,7 +1044,7 @@ private fun <T> StickyHeaderRow(
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(GridColors.headerBorder)
+                    .background(palette.headerBorder)
             )
         }
 
@@ -1092,7 +1096,7 @@ private fun <T> StickyHeaderRow(
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(GridColors.headerBorder)
+                    .background(palette.headerBorder)
             )
 
             Row(modifier = Modifier.width(frozenRightWidth)) {
@@ -1132,6 +1136,8 @@ private fun <T> HeaderCell(
     onReorder: ((String, String) -> Unit)?,
     columnDragState: ColumnDragState? = null
 ) {
+    val palette = gridPalette()
+
     val density = LocalDensity.current
     val isDragging = columnDragState?.isDragging == true && columnDragState.draggedColumnId == columnId
     val isDropTarget = columnDragState?.isDragging == true &&
@@ -1279,7 +1285,7 @@ private fun <T> HeaderCell(
             modifier = Modifier
                 .width(1.dp)
                 .fillMaxHeight()
-                .background(GridColors.headerBorder)
+                .background(palette.headerBorder)
                 .align(Alignment.CenterEnd)
         )
     }
@@ -1312,6 +1318,8 @@ private fun <T> FrozenLeftSection(
     allItems: ImmutableList<T>,
     onRowReorder: ((Int, Int) -> Unit)?
 ) {
+    val palette = gridPalette()
+
     val density = LocalDensity.current
     val rowHeightPx = with(density) { rowHeight.toPx() }
     val rowDragState = state.rowDragState
@@ -1370,7 +1378,7 @@ private fun <T> FrozenLeftSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = GridColors.cellBorder)
+            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -1400,6 +1408,8 @@ private fun <T> FrozenLeftRow(
     totalRows: Int = 0,
     onRowReorder: ((Int, Int) -> Unit)? = null
 ) {
+    val palette = gridPalette()
+
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
 
@@ -1419,11 +1429,11 @@ private fun <T> FrozenLeftRow(
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        isFocused && isSelected -> GridColors.rowFocused
-        isSelected -> GridColors.rowSelected
-        isHovered -> GridColors.rowHovered
-        rowIndex % 2 == 1 -> GridColors.rowAlternate
-        else -> Color.White
+        isFocused && isSelected -> palette.rowFocused
+        isSelected -> palette.rowSelected
+        isHovered -> palette.rowHovered
+        rowIndex % 2 == 1 -> palette.rowAlternate
+        else -> palette.cellBackground
     }
 
     Row(
@@ -1498,13 +1508,13 @@ private fun <T> FrozenLeftRow(
                 modifier = Modifier
                     .width(rowNumberWidth)
                     .fillMaxHeight()
-                    .background(GridColors.headerBackground.copy(alpha = 0.5f)),
+                    .background(palette.headerBackground.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = (rowIndex + 1).toString(),
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = palette.mutedText
                 )
             }
         }
@@ -1578,6 +1588,8 @@ private fun <T> ScrollableMiddleSection(
     frozenLeftCols: ImmutableList<ColumnDef<T>>,
     onRowReorder: ((Int, Int) -> Unit)?
 ) {
+    val palette = gridPalette()
+
     val density = LocalDensity.current
     val rowHeightPx = with(density) { rowHeight.toPx() }
     val rowDragState = state.rowDragState
@@ -1638,7 +1650,7 @@ private fun <T> ScrollableMiddleSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = GridColors.cellBorder)
+            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -1668,6 +1680,8 @@ private fun <T> ScrollableMiddleRow(
     totalRows: Int = 0,
     onRowReorder: ((Int, Int) -> Unit)? = null
 ) {
+    val palette = gridPalette()
+
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
 
@@ -1687,11 +1701,11 @@ private fun <T> ScrollableMiddleRow(
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        isFocused && isSelected -> GridColors.rowFocused
-        isSelected -> GridColors.rowSelected
-        isHovered -> GridColors.rowHovered
-        rowIndex % 2 == 1 -> GridColors.rowAlternate
-        else -> Color.White
+        isFocused && isSelected -> palette.rowFocused
+        isSelected -> palette.rowSelected
+        isHovered -> palette.rowHovered
+        rowIndex % 2 == 1 -> palette.rowAlternate
+        else -> palette.cellBackground
     }
 
     Row(
@@ -1777,13 +1791,13 @@ private fun <T> ScrollableMiddleRow(
                 modifier = Modifier
                     .width(rowNumberWidth)
                     .fillMaxHeight()
-                    .background(GridColors.headerBackground.copy(alpha = 0.5f)),
+                    .background(palette.headerBackground.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = (rowIndex + 1).toString(),
                     fontSize = 12.sp,
-                    color = Color.Gray
+                    color = palette.mutedText
                 )
             }
         }
@@ -1854,6 +1868,8 @@ private fun <T> FrozenRightSection(
     scrollableCols: ImmutableList<ColumnDef<T>>,
     onRowReorder: ((Int, Int) -> Unit)?
 ) {
+    val palette = gridPalette()
+
     val density = LocalDensity.current
     val rowHeightPx = with(density) { rowHeight.toPx() }
     val rowDragState = state.rowDragState
@@ -1910,7 +1926,7 @@ private fun <T> FrozenRightSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = GridColors.cellBorder)
+            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -1938,6 +1954,8 @@ private fun <T> FrozenRightRow(
     totalRows: Int = 0,
     onRowReorder: ((Int, Int) -> Unit)? = null
 ) {
+    val palette = gridPalette()
+
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
 
@@ -1957,11 +1975,11 @@ private fun <T> FrozenRightRow(
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        isFocused && isSelected -> GridColors.rowFocused
-        isSelected -> GridColors.rowSelected
-        isHovered -> GridColors.rowHovered
-        rowIndex % 2 == 1 -> GridColors.rowAlternate
-        else -> Color.White
+        isFocused && isSelected -> palette.rowFocused
+        isSelected -> palette.rowSelected
+        isHovered -> palette.rowHovered
+        rowIndex % 2 == 1 -> palette.rowAlternate
+        else -> palette.cellBackground
     }
 
     Row(
@@ -2087,6 +2105,8 @@ private fun <T> DataCell(
     allItems: ImmutableList<T>,
     onCellRightClick: ((Offset) -> Unit)? = null
 ) {
+    val palette = gridPalette()
+
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
 
@@ -2182,7 +2202,7 @@ private fun <T> DataCell(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Edit",
                         modifier = Modifier.size(14.dp).padding(start = 4.dp),
-                        tint = Color.Gray
+                        tint = palette.mutedText
                     )
                 }
             }
@@ -2202,6 +2222,8 @@ private fun EditableCell(
     onCancel: () -> Unit,
     textAlign: TextAlign
 ) {
+    val palette = gridPalette()
+
     val focusRequester = remember { FocusRequester() }
     var textFieldValue by remember(value) { 
         mutableStateOf(TextFieldValue(value, TextRange(0, value.length))) 
@@ -2249,7 +2271,7 @@ private fun EditableCell(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
+                        .background(palette.editorBackground)
                         .border(1.dp, MaterialTheme.colorScheme.primary)
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
@@ -2266,7 +2288,7 @@ private fun EditableCell(
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Save",
-                tint = GridColors.positiveValue,
+                tint = palette.positiveValue,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -2279,7 +2301,7 @@ private fun EditableCell(
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Cancel",
-                tint = GridColors.negativeValue,
+                tint = palette.negativeValue,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -2306,11 +2328,13 @@ private fun <T> StickyFooterRow(
     scrollableCols: ImmutableList<ColumnDef<T>>,
     stickyColumns: StickyColumnsConfig
 ) {
+    val palette = gridPalette()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(rowHeight)
-            .background(GridColors.headerBackground)
+            .background(palette.headerBackground)
     ) {
         // Frozen left footer
         if (frozenLeftWidth > 0.dp) {
@@ -2343,7 +2367,7 @@ private fun <T> StickyFooterRow(
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(GridColors.headerBorder)
+                    .background(palette.headerBorder)
             )
         }
         
@@ -2383,7 +2407,7 @@ private fun <T> StickyFooterRow(
                 modifier = Modifier
                     .width(2.dp)
                     .fillMaxHeight()
-                    .background(GridColors.headerBorder)
+                    .background(palette.headerBorder)
             )
             
             Row(modifier = Modifier.width(frozenRightWidth)) {

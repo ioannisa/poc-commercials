@@ -1,16 +1,9 @@
 package eu.anifantakis.commercials
 
-import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.text.LocalBackgroundTextMeasurementExecutor
 import java.util.concurrent.Executors
-
-class AndroidPlatform : Platform {
-    override val name: String = "Android ${Build.VERSION.SDK_INT}"
-}
-
-actual fun getPlatform(): Platform = AndroidPlatform()
 
 private object TextPrefetchExecutor {
     val instance by lazy {
