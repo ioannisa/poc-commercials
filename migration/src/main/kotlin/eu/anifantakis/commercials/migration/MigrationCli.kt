@@ -156,6 +156,7 @@ private fun runMigration(opts: Options) {
             """
             ─── Migration summary ───────────────────────────────
             break slots     ${summary.breaks} (from real airing times)
+            programmes      ${summary.programs} (with operator-assigned colours)
             customers       ${summary.customers}  (${summary.customers - summary.customersSynthetic} recovered real names, ${summary.customersSynthetic} synthetic)
             contracts       ${summary.contracts}  (${summary.contractsSynthetic} synthetic)
             contract lines  ${summary.contractLines}

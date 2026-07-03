@@ -306,6 +306,7 @@ fun MigrationScreen(onBack: () -> Unit) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Migration summary", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Text("Break slots: ${s.breaks} (from real airing times)", fontSize = 13.sp)
+                    Text("Programmes: ${s.programs} (with their operator-assigned colours)", fontSize = 13.sp)
                     Text(
                         "Customers: ${s.customers} (${s.customers - s.customersSynthetic} real names recovered, ${s.customersSynthetic} synthetic)",
                         fontSize = 13.sp

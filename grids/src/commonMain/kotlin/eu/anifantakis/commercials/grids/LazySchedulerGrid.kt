@@ -576,25 +576,39 @@ private fun GridCell(
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    val palette = gridPalette()
-
-    // Modified cells show the palette's high-contrast marker (black chip on
-    // light, inverted light chip on dark). Zone colours arrive from the
-    // server as LIGHT-theme values; Color.White is the "no zone" sentinel
-    // (compared RAW, before tinting) and zoneTint adapts the rest per theme.
-    val bgColor = when {
-        isModified -> palette.modifiedCellBackground
-        data?.zoneColor != null && data.zoneColor != Color.White -> palette.zoneTint(data.zoneColor).copy(alpha = 0.4f)
-        spotCount > 10 -> palette.densityHigh.copy(alpha = 0.4f)
-        spotCount > 5 -> palette.densityMedium.copy(alpha = 0.4f)
-        spotCount > 0 -> palette.densityLow.copy(alpha = 0.4f)
-        isWeekend -> palette.weekendColumn.copy(alpha = 0.3f)
-        else -> palette.cellBackground
+    // The scheduler INTERIOR is always LIGHT, whatever the app theme.
+    // Cell colours are DATA from the database - each programme carries an
+    // operator-assigned colour (legacy `programtypes.color`), so a "news"
+    // cell looks like news on every screen and in every theme - and empty
+    // cells must read as paper, never as dark holes. Only the frozen chrome
+    // (day headers, break column, totals) follows the theme.
+    // Color.White is the "no programme colour" wire sentinel, compared raw.
+    val light = LightGridPalette
+    val dataColor = when {
+        isModified -> null
+        data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor
+        spotCount > 10 -> SchedulerDataColors.densityHigh
+        spotCount > 5 -> SchedulerDataColors.densityMedium
+        spotCount > 0 -> SchedulerDataColors.densityLow
+        else -> null
     }
 
-    val textColor = if (isModified) palette.onModifiedCell else palette.cellText
-    val selectionColor = palette.selectionBorder
-    val normalBorderColor = palette.cellBorder
+    val bgColor = when {
+        isModified -> light.modifiedCellBackground
+        dataColor != null -> dataColor
+        isWeekend -> light.weekendColumn.copy(alpha = 0.3f)
+        else -> light.cellBackground
+    }
+
+    // Text follows the FILL, not the theme: programme colours are operator
+    // -assigned and can be arbitrarily dark, so contrast is computed per cell.
+    val textColor = when {
+        isModified -> light.onModifiedCell
+        dataColor != null -> contrastTextColor(dataColor)
+        else -> light.cellText
+    }
+    val selectionColor = light.selectionBorder
+    val normalBorderColor = light.cellBorder
 
     Box(
         modifier = Modifier

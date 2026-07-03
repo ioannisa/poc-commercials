@@ -160,6 +160,18 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 )
                 s.executeUpdate(
                     """
+                    CREATE TABLE IF NOT EXISTS programs (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        legacy_id BIGINT NULL,
+                        name VARCHAR(128) NOT NULL,
+                        color_argb INT NULL,
+                        hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                        KEY idx_programs_legacy (legacy_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
+                s.executeUpdate(
+                    """
                     CREATE TABLE IF NOT EXISTS placements (
                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
                         legacy_id BIGINT NULL,
@@ -168,12 +180,14 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         show_date DATE NOT NULL,
                         position INT NOT NULL,
                         duration_seconds INT NOT NULL,
+                        program_id BIGINT NULL,
                         played BOOLEAN NOT NULL DEFAULT FALSE,
                         hidden BOOLEAN NOT NULL DEFAULT FALSE,
                         UNIQUE KEY uq_placement_slot (break_id, show_date, position),
                         KEY idx_placements_legacy (legacy_id),
                         CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
-                        CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES break_slots(id)
+                        CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES break_slots(id),
+                        CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -212,6 +226,9 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Schemas created before the migration tool lack these columns.
             ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
             ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // Schemas created before programme colours (the ALTER path skips
+            // the FK; fresh schemas get it via CREATE TABLE above).
+            ensureColumn(c, "placements", "program_id", "BIGINT NULL")
 
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.
@@ -462,6 +479,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         val zoneByBreak = loadBreaks().associate { it.id to it.zone }
 
         val commercialsByKey = linkedMapOf<Pair<Long, LocalDate>, MutableList<CommercialRow>>()
+        // Programme colour per cell (legacy `programtypes.color` semantics):
+        // the break belongs to the programme airing at that slot, so the
+        // first placement's programme colour is the cell's colour.
+        val programColorByKey = mutableMapOf<Pair<Long, LocalDate>, Int>()
 
         connection().use { c ->
             c.prepareStatement(
@@ -469,12 +490,14 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 SELECT p.id, p.break_id, p.show_date, p.position, p.duration_seconds,
                        s.description, s.spot_type, s.flow,
                        cu.code AS client_code, cu.name AS client_name,
-                       ct.number AS contract_number, ct.is_gift
+                       ct.number AS contract_number, ct.is_gift,
+                       pr.color_argb AS program_color
                 FROM placements p
                 JOIN spots s      ON s.id = p.spot_id
                 JOIN customers cu ON cu.id = s.customer_id
                 LEFT JOIN contract_lines cl ON cl.id = s.contract_line_id
                 LEFT JOIN contracts ct      ON ct.id = cl.contract_id
+                LEFT JOIN programs pr       ON pr.id = p.program_id
                 WHERE p.show_date >= ? AND p.show_date < ?
                   AND p.hidden = FALSE AND s.hidden = FALSE
                 ORDER BY p.break_id, p.show_date, p.position
@@ -486,6 +509,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         val breakId = rs.getLong("break_id")
                         val date = rs.getDate("show_date").toLocalDate()
                         val isGift = rs.getBoolean("is_gift")
+                        val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
+                        if (programColor != null) {
+                            programColorByKey.putIfAbsent(breakId to date, programColor)
+                        }
                         val list = commercialsByKey.getOrPut(breakId to date) { mutableListOf() }
                         list += CommercialRow(
                             id = rs.getLong("id"),
@@ -511,7 +538,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 date = date,
                 spotCount = commercials.size,
                 totalDurationSeconds = commercials.sumOf { it.durationSeconds },
-                zoneColorArgb = cellColorArgb(
+                // The PROGRAMME's colour wins (operator-assigned identity,
+                // migrated from the legacy app); the zone/weekend/density
+                // rules are the demo fallback for placements without one.
+                zoneColorArgb = programColorByKey[key] ?: cellColorArgb(
                     zone = zoneByBreak[breakId] ?: BreakZone.DEFAULT,
                     isWeekend = isWeekend,
                     spotCount = commercials.size

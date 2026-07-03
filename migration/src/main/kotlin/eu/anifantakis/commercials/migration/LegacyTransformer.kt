@@ -48,6 +48,8 @@ class LegacyTransformer(
         val otherFlowRows: Long,
         val orphanedRows: Long,
         val zeroDateRows: Long,
+        /** Programmes with their operator-assigned colours (≙ legacy programtypes). */
+        val programs: Int = 0,
     )
 
     fun run(): Summary {
@@ -55,6 +57,9 @@ class LegacyTransformer(
 
         log("Building break grid from real airing times...")
         val breaks = migrateBreaks()
+
+        log("Migrating programmes (with their operator-assigned colours)...")
+        val programs = migratePrograms()
 
         log("Migrating customers (recovering real names where possible)...")
         val (customers, customersSynthetic) = migrateCustomers()
@@ -109,7 +114,57 @@ class LegacyTransformer(
             otherFlowRows = otherFlow,
             orphanedRows = orphaned,
             zeroDateRows = zeroDate,
+            programs = programs,
         )
+    }
+
+    // ───────────────────────────────────────────────────────── programmes ──
+
+    /**
+     * The legacy app coloured scheduler cells by the PROGRAMME airing at that
+     * slot: `schedule.programID` points straight at `programtypes` (the
+     * separate `program` table is empty in every backup), whose `color`
+     * column holds the operator-assigned colour. Migrated as-is - the colour
+     * is the programme's identity across the whole application.
+     */
+    private fun migratePrograms(): Int {
+        if (!tableExists("programtypes")) return 0
+        var count = 0
+        c.prepareStatement(
+            "INSERT INTO $t.programs(legacy_id, name, color_argb, hidden) VALUES(?,?,?,?)"
+        ).use { insert ->
+            c.createStatement().use { st ->
+                st.executeQuery(
+                    "SELECT id, descr, color, visible FROM $s.programtypes WHERE forTV = $forTv"
+                ).use { rs ->
+                    while (rs.next()) {
+                        insert.setLong(1, rs.getLong("id"))
+                        insert.setString(2, rs.getString("descr").trim())
+                        val argb = colorrefToArgb(rs.getLong("color"))
+                        if (argb != null) insert.setInt(3, argb) else insert.setNull(3, java.sql.Types.INTEGER)
+                        insert.setBoolean(4, !rs.getBoolean("visible"))
+                        insert.addBatch()
+                        count++
+                    }
+                }
+            }
+            if (count > 0) insert.executeBatch()
+        }
+        return count
+    }
+
+    /**
+     * Legacy colours are Windows COLORREF ints (0x00BBGGRR - the original was
+     * a Windows desktop app; see `generic.serverDir`'s UNC path), converted
+     * to Compose ARGB. Zero/negative means "no colour assigned". If migrated
+     * colours ever render with red and blue swapped, flip r and b here.
+     */
+    private fun colorrefToArgb(colorref: Long): Int? {
+        if (colorref <= 0L) return null
+        val r = (colorref and 0xFF).toInt()
+        val g = ((colorref shr 8) and 0xFF).toInt()
+        val b = ((colorref shr 16) and 0xFF).toInt()
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
     }
 
     // ─────────────────────────────────────────────────────────── breaks ──
@@ -355,17 +410,18 @@ class LegacyTransformer(
             st.executeUpdate(
                 """
                 INSERT INTO $t.placements(legacy_id, spot_id, break_id, show_date, position,
-                                          duration_seconds, played, hidden)
+                                          duration_seconds, program_id, played, hidden)
                 SELECT sch.id, ts.id, tb.id, sch.showDate,
                        ROW_NUMBER() OVER (
                            PARTITION BY sch.showDate, HOUR(sch.showTime), MINUTE(sch.showTime)
                            ORDER BY sch.showOrder, sch.id
                        ) - 1,
-                       sch.durationSecs, sch.played, sch.hideSchedule
+                       sch.durationSecs, tp.id, sch.played, sch.hideSchedule
                 FROM $s.schedule sch
                 JOIN $t.spots ts ON ts.legacy_id = sch.messageID
                 JOIN $t.break_slots tb ON tb.hour_of_day = HOUR(sch.showTime)
                                       AND tb.minute_of_hour = MINUTE(sch.showTime)
+                LEFT JOIN $t.programs tp ON tp.legacy_id = sch.programID
                 WHERE sch.showDate >= '1900-01-01'
                 """.trimIndent()
             )

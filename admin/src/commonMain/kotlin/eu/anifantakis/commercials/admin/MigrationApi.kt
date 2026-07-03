@@ -50,6 +50,7 @@ data class MigrationSummary(
     val otherFlowRows: Long = 0,
     val orphanedRows: Long = 0,
     val zeroDateRows: Long = 0,
+    val programs: Int = 0,
 )
 
 @Serializable
