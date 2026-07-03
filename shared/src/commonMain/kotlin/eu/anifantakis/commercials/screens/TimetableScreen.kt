@@ -1,8 +1,6 @@
 package eu.anifantakis.commercials.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,14 +17,12 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,14 +30,12 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.snapshots.SnapshotStateSet
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.automirrored.filled.Logout
-import eu.anifantakis.commercials.auth.AuthApi
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.data.SampleData
 import eu.anifantakis.commercials.grids.*
@@ -86,9 +80,7 @@ fun TimetableScreen(
     onSelectionChange: (row: Int, col: Int) -> Unit,
     onCellClick: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit,
     onLogout: () -> Unit,
-    onManageUsers: () -> Unit,
-    onMigration: () -> Unit,
-    onDatabases: () -> Unit
+    onPreferences: () -> Unit
 ) {
     // View-only roles (Report Viewer / Customer Viewer) see everything their
     // data allows but cannot modify it. The role is PER STATION, so reading
@@ -166,9 +158,7 @@ fun TimetableScreen(
             cellData = cellData.toImmutableMap(),
             canEdit = canEdit,
             onLogout = onLogout,
-            onManageUsers = onManageUsers,
-            onMigration = onMigration,
-            onDatabases = onDatabases,
+            onPreferences = onPreferences,
             onPreviousMonth = {
                 if (month == 1) {
                     onMonthChange(12)
@@ -519,9 +509,7 @@ private fun KeyboardEnabledHeader(
     cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
     canEdit: Boolean,
     onLogout: () -> Unit,
-    onManageUsers: () -> Unit,
-    onMigration: () -> Unit,
-    onDatabases: () -> Unit,
+    onPreferences: () -> Unit,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
@@ -586,7 +574,13 @@ private fun KeyboardEnabledHeader(
                 // Logged-in user: clicking the badge opens the account menu
                 // (change password / recovery codes, or user management for
                 // the super admin)
-                AccountBadge(authSession, onManageUsers, onMigration, onDatabases)
+                AccountBadge(authSession)
+                IconButton(onClick = onPreferences) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Preferences"
+                    )
+                }
                 IconButton(onClick = onLogout) {
                     Icon(
                         Icons.AutoMirrored.Filled.Logout,
@@ -779,72 +773,20 @@ private fun TimetableHeader(
  * managed in stations.yaml, not through the API.
  */
 @Composable
-private fun AccountBadge(
-    authSession: AuthSession,
-    onManageUsers: () -> Unit,
-    onMigration: () -> Unit,
-    onDatabases: () -> Unit,
-) {
-    val authApi = koinInject<AuthApi>()
-    var menuOpen by remember { mutableStateOf(false) }
-    var showChangePassword by remember { mutableStateOf(false) }
-    var showRecoveryCodes by remember { mutableStateOf(false) }
-
-    Box {
-        Column(
-            horizontalAlignment = Alignment.End,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable { menuOpen = true }
-                .padding(horizontal = 8.dp, vertical = 2.dp)
-        ) {
-            Text(
-                text = authSession.displayName,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = if (authSession.isAdmin) "Super Administrator" else authSession.role.label,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            if (authSession.isAdmin) {
-                DropdownMenuItem(
-                    text = { Text("Manage Users…") },
-                    leadingIcon = { Icon(Icons.Default.ManageAccounts, null, modifier = Modifier.size(18.dp)) },
-                    onClick = { menuOpen = false; onManageUsers() }
-                )
-                DropdownMenuItem(
-                    text = { Text("Legacy Migration…") },
-                    leadingIcon = { Icon(Icons.Default.Storage, null, modifier = Modifier.size(18.dp)) },
-                    onClick = { menuOpen = false; onMigration() }
-                )
-                DropdownMenuItem(
-                    text = { Text("Hosted Databases…") },
-                    leadingIcon = { Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp)) },
-                    onClick = { menuOpen = false; onDatabases() }
-                )
-            } else {
-                DropdownMenuItem(
-                    text = { Text("Change Password…") },
-                    leadingIcon = { Icon(Icons.Default.Lock, null, modifier = Modifier.size(18.dp)) },
-                    onClick = { menuOpen = false; showChangePassword = true }
-                )
-                DropdownMenuItem(
-                    text = { Text("Recovery Codes…") },
-                    leadingIcon = { Icon(Icons.Default.Key, null, modifier = Modifier.size(18.dp)) },
-                    onClick = { menuOpen = false; showRecoveryCodes = true }
-                )
-            }
-        }
-    }
-
-    if (showChangePassword) {
-        ChangePasswordDialog(authApi = authApi, onDismiss = { showChangePassword = false })
-    }
-    if (showRecoveryCodes) {
-        RecoveryCodesDialog(authApi = authApi, onDismiss = { showRecoveryCodes = false })
+private fun AccountBadge(authSession: AuthSession) {
+    Column(
+        horizontalAlignment = Alignment.End,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = authSession.displayName,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = if (authSession.isAdmin) "Super Administrator" else authSession.role.label,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }

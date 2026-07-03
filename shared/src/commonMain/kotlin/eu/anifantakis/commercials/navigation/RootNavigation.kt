@@ -32,6 +32,7 @@ import eu.anifantakis.commercials.grids.StableDate
 import eu.anifantakis.commercials.screens.CommercialDetailScreen
 import eu.anifantakis.commercials.admin.DatabasesScreen
 import eu.anifantakis.commercials.screens.LoginScreen
+import eu.anifantakis.commercials.screens.PreferencesScreen
 import eu.anifantakis.commercials.admin.MigrationScreen
 import eu.anifantakis.commercials.screens.TimetableScreen
 import eu.anifantakis.commercials.admin.UserManagementScreen
@@ -53,6 +54,7 @@ private val navConfig = SavedStateConfiguration {
         polymorphic(NavKey::class) {
             subclass(CommercialNavRoute.Login::class, CommercialNavRoute.Login.serializer())
             subclass(CommercialNavRoute.Timetable::class, CommercialNavRoute.Timetable.serializer())
+            subclass(CommercialNavRoute.Preferences::class, CommercialNavRoute.Preferences.serializer())
             subclass(CommercialNavRoute.UserManagement::class, CommercialNavRoute.UserManagement.serializer())
             subclass(CommercialNavRoute.Migration::class, CommercialNavRoute.Migration.serializer())
             subclass(CommercialNavRoute.Databases::class, CommercialNavRoute.Databases.serializer())
@@ -203,15 +205,18 @@ fun RootNavigation() {
                             backStack.add(CommercialNavRoute.Login)
                         }
                     },
-                    onManageUsers = {
-                        backStack.add(CommercialNavRoute.UserManagement)
-                    },
-                    onMigration = {
-                        backStack.add(CommercialNavRoute.Migration)
-                    },
-                    onDatabases = {
-                        backStack.add(CommercialNavRoute.Databases)
+                    onPreferences = {
+                        backStack.add(CommercialNavRoute.Preferences)
                     }
+                )
+            }
+
+            entry<CommercialNavRoute.Preferences> {
+                PreferencesScreen(
+                    onBack = { backStack.removeLastOrNull() },
+                    onManageUsers = { backStack.add(CommercialNavRoute.UserManagement) },
+                    onMigration = { backStack.add(CommercialNavRoute.Migration) },
+                    onDatabases = { backStack.add(CommercialNavRoute.Databases) }
                 )
             }
 

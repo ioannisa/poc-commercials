@@ -13,6 +13,10 @@ sealed interface CommercialNavRoute : NavKey {
     @Serializable
     data object Timetable : CommercialNavRoute, NavKey
 
+    /** Theme + account/maintenance hub (the gear icon). */
+    @Serializable
+    data object Preferences : CommercialNavRoute, NavKey
+
     /** Super-admin user management. */
     @Serializable
     data object UserManagement : CommercialNavRoute, NavKey

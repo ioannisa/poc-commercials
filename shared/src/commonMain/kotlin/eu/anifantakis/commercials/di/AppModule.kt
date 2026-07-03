@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.admin.AdminApi
 import eu.anifantakis.commercials.auth.AuthApi
+import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.auth.createKSafe
@@ -28,6 +29,7 @@ val appModule = module {
     single { createKSafe() }
 
     single<AuthSession>()
+    single<UserPreferences>()
     single<AuthApi>()
     single<AdminApi>()
     single<MigrationApi>()
