@@ -20,15 +20,20 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.savedstate.serialization.SavedStateConfiguration
+import eu.anifantakis.poc.ctv.auth.AuthApi
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.data.ScheduleRepository
 import eu.anifantakis.poc.ctv.grids.BreakSlot
 import eu.anifantakis.poc.ctv.grids.SchedulerCellData
 import eu.anifantakis.poc.ctv.grids.SchedulerKey
 import eu.anifantakis.poc.ctv.grids.StableDate
 import eu.anifantakis.poc.ctv.screens.CommercialDetailScreen
+import eu.anifantakis.poc.ctv.screens.LoginScreen
 import eu.anifantakis.poc.ctv.screens.TimetableScreen
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.launch
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.serialization.modules.SerializersModule
@@ -39,6 +44,7 @@ import kotlinx.serialization.modules.polymorphic
 private val navConfig = SavedStateConfiguration {
     serializersModule = SerializersModule {
         polymorphic(NavKey::class) {
+            subclass(CommercialNavRoute.Login::class, CommercialNavRoute.Login.serializer())
             subclass(CommercialNavRoute.Timetable::class, CommercialNavRoute.Timetable.serializer())
             subclass(CommercialNavRoute.CommercialDetail::class, CommercialNavRoute.CommercialDetail.serializer())
         }
@@ -47,15 +53,26 @@ private val navConfig = SavedStateConfiguration {
 
 @Composable
 fun RootNavigation() {
-    val backStack = rememberNavBackStack(navConfig, CommercialNavRoute.Timetable)
+    val scope = rememberCoroutineScope()
+
+    // Token persists (no expiry), so a returning user skips the login screen
+    val backStack = rememberNavBackStack(
+        navConfig,
+        if (AuthSession.isLoggedIn) CommercialNavRoute.Timetable else CommercialNavRoute.Login
+    )
 
     // Shared state lifted above NavDisplay so it persists across screen transitions
     var year by remember { mutableStateOf(2025) }
     var month by remember { mutableStateOf(12) }
 
+    // Data loading is keyed on the session revision: nothing is fetched until
+    // login succeeds, and switching users (logout -> login) refetches with the
+    // new token - which matters because the server filters data per role.
+    val authRevision = AuthSession.revision
+
     var breaks by remember { mutableStateOf<List<BreakSlot>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        breaks = ScheduleRepository.getBreaks()
+    LaunchedEffect(authRevision) {
+        if (AuthSession.isLoggedIn) breaks = ScheduleRepository.getBreaks()
     }
 
     var originalCellData by remember(year, month) {
@@ -70,7 +87,8 @@ fun RootNavigation() {
         mutableStateSetOf<SchedulerKey>()
     }
 
-    LaunchedEffect(year, month) {
+    LaunchedEffect(year, month, authRevision) {
+        if (!AuthSession.isLoggedIn) return@LaunchedEffect
         val data = ScheduleRepository.getSchedule(year, month)
         originalCellData = data
         cellData.clear()
@@ -97,6 +115,15 @@ fun RootNavigation() {
         },
         entryProvider = entryProvider {
 
+            entry<CommercialNavRoute.Login> {
+                LoginScreen(
+                    onLoggedIn = {
+                        backStack.clear()
+                        backStack.add(CommercialNavRoute.Timetable)
+                    }
+                )
+            }
+
             entry<CommercialNavRoute.Timetable> {
                 TimetableScreen(
                     year = year,
@@ -122,6 +149,17 @@ fun RootNavigation() {
                                 spotCount = spotCount
                             )
                         )
+                    },
+                    onLogout = {
+                        scope.launch {
+                            AuthApi.logout()   // revokes the token server-side, clears AuthSession
+                            breaks = emptyList()
+                            originalCellData = emptyMap()
+                            cellData.clear()
+                            modifiedCells.clear()
+                            backStack.clear()
+                            backStack.add(CommercialNavRoute.Login)
+                        }
                     }
                 )
             }

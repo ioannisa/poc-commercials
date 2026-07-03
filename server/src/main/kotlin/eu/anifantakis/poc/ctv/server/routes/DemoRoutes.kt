@@ -1,5 +1,7 @@
 package eu.anifantakis.poc.ctv.server.routes
 
+import eu.anifantakis.poc.ctv.server.auth.UserRole
+import eu.anifantakis.poc.ctv.server.plugins.requireRole
 import eu.anifantakis.poc.ctv.server.scheduler.SchedulerDb
 import io.ktor.http.*
 import io.ktor.server.response.*
@@ -20,6 +22,9 @@ data class DemoUserDto(val username: String, val password: String)
 fun Route.demoRoutes() {
     route("/api/demo") {
         get("/user") {
+            // Exposes a raw DB row - admin-only
+            if (!call.requireRole(UserRole.NORMAL_USER)) return@get
+
             val user = withContext(Dispatchers.IO) {
                 SchedulerDb.connection().use { c ->
                     c.prepareStatement("SELECT username, password FROM test.user LIMIT 1").use { ps ->

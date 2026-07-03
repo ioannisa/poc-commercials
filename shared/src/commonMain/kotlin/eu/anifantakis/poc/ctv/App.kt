@@ -10,6 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.anifantakis.poc.ctv.auth.AppRole
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.db.DbDemoButton
 import eu.anifantakis.poc.ctv.navigation.RootNavigation
 
@@ -25,11 +27,15 @@ fun App() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     RootNavigation()
 
-                    DbDemoButton(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp)
-                    )
+                    // DB smoke test - admin-only on the server too
+                    @Suppress("UNUSED_EXPRESSION") AuthSession.revision  // recompose on login/logout
+                    if (AuthSession.isLoggedIn && AuthSession.role == AppRole.NORMAL_USER) {
+                        DbDemoButton(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                        )
+                    }
                 }
             }
         }

@@ -1,8 +1,10 @@
 package eu.anifantakis.poc.ctv.server
 
+import eu.anifantakis.poc.ctv.server.auth.AuthDb
 import eu.anifantakis.poc.ctv.server.config.ServerConfigLoader
 import eu.anifantakis.poc.ctv.server.plugins.configureCallLogging
 import eu.anifantakis.poc.ctv.server.plugins.configureRouting
+import eu.anifantakis.poc.ctv.server.plugins.configureSecurity
 import eu.anifantakis.poc.ctv.server.plugins.configureSerialization
 import eu.anifantakis.poc.ctv.server.plugins.configureStatusPages
 import eu.anifantakis.poc.ctv.server.plugins.configureCORS
@@ -22,8 +24,10 @@ fun main() {
 
 fun Application.module() {
     SchedulerDb.bootstrap()
+    AuthDb.bootstrap()
     configureCallLogging()
     configureStatusPages()
+    configureSecurity()
     configureSerialization()
     configureCORS()
     configureRouting()

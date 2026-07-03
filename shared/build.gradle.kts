@@ -88,8 +88,8 @@ kotlin {
             implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
 
-//            implementation(libs.ksafe)
-//            implementation(libs.ksafe.compose)
+            // Encrypted key/value persistence (auth token storage)
+            implementation(libs.ksafe)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

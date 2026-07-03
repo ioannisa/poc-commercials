@@ -8,6 +8,9 @@ import kotlinx.serialization.Serializable
 sealed interface CommercialNavRoute : NavKey {
 
     @Serializable
+    data object Login : CommercialNavRoute, NavKey
+
+    @Serializable
     data object Timetable : CommercialNavRoute, NavKey
 
     @Serializable

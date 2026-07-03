@@ -1,10 +1,14 @@
 package eu.anifantakis.poc.ctv.db
 
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.config.AppConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -18,6 +22,10 @@ private val httpClient by lazy {
     HttpClient {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
+        }
+        // Runs per request - picks up the current session token
+        defaultRequest {
+            AuthSession.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
         }
     }
 }

@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.automirrored.filled.Logout
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.data.SampleData
 import eu.anifantakis.poc.ctv.grids.*
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
@@ -71,8 +73,13 @@ fun TimetableScreen(
     onYearChange: (Int) -> Unit,
     onMonthChange: (Int) -> Unit,
     onSelectionChange: (row: Int, col: Int) -> Unit,
-    onCellClick: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit
+    onCellClick: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit,
+    onLogout: () -> Unit
 ) {
+    // View-only roles (Report Viewer / Customer Viewer) see everything their
+    // data allows but cannot modify it
+    val canEdit = AuthSession.role.canEdit
+
     // Daily totals - recalculate when cellData changes
     // We need to observe cellData changes. cellData is a SnapshotStateMap.
     // However, derivedStateOf might not observe map content deep changes if we just pass the map reference?
@@ -140,6 +147,8 @@ fun TimetableScreen(
             monthName = greekMonths[month - 1],
             breaks = breaks,
             cellData = cellData.toImmutableMap(),
+            canEdit = canEdit,
+            onLogout = onLogout,
             onPreviousMonth = {
                 if (month == 1) {
                     onMonthChange(12)
@@ -192,7 +201,7 @@ fun TimetableScreen(
                     )
                 }
             },
-            onAddSpot = { breakSlot, date ->
+            onAddSpot = if (!canEdit) null else { breakSlot, date ->
                 // 'A' key pressed - add a new spot
                 val key = SchedulerKey(breakSlot.id, date)
                 val currentData = cellData[key] ?: SchedulerCellData()
@@ -220,7 +229,7 @@ fun TimetableScreen(
 
                 println("Added spot at ${breakSlot.id}, $date - now ${cellData[key]?.spotCount} spots")
             },
-            onDeleteSpot = { breakSlot, date ->
+            onDeleteSpot = if (!canEdit) null else { breakSlot, date ->
                 // 'D' key pressed - revert to original
                 val key = SchedulerKey(breakSlot.id, date)
 
@@ -243,9 +252,9 @@ fun TimetableScreen(
                 val key = SchedulerKey(breakSlot.id, date)
                 val isModified = modifiedCells.contains(key)
 
-                listOf(
+                buildList {
                     // Open/View details
-                    ContextMenuEntry.Item(
+                    add(ContextMenuEntry.Item(
                         label = "Open Details",
                         icon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "Enter",
@@ -259,31 +268,33 @@ fun TimetableScreen(
                                 spotCount
                             )
                         }
-                    },
+                    })
 
                     // Print the whole day this cell belongs to
-                    ContextMenuEntry.Item(
+                    add(ContextMenuEntry.Item(
                         label = "Print Day ${dayMenuLabel(date)}",
                         icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         printDay(date)
-                    },
+                    })
 
                     // Print this break's commercials
-                    ContextMenuEntry.Item(
+                    add(ContextMenuEntry.Item(
                         label = "Print Break",
                         icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
                         enabled = spotCount > 0
                     ) {
                         printBreak(breakSlot, date)
-                    },
+                    })
 
-                    // === SEPARATOR ===
-                    ContextMenuEntry.Separator,
+                    // Editing actions - Normal User only; viewer roles get a
+                    // read-and-print menu
+                    if (canEdit) {
+                        add(ContextMenuEntry.Separator)
 
-                    // Edit submenu
-                    ContextMenuEntry.SubMenu(
+                        // Edit submenu
+                        add(ContextMenuEntry.SubMenu(
                         label = "Edit",
                         icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
                         items = listOf(
@@ -332,41 +343,40 @@ fun TimetableScreen(
                                 modifiedCells.remove(key)
                             }
                         )
-                    ),
+                        ))
 
-                    // === SEPARATOR ===
-                    ContextMenuEntry.Separator,
+                        add(ContextMenuEntry.Separator)
 
-                    // Clipboard operations
-                    ContextMenuEntry.Item(
-                        label = "Copy",
-                        icon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
-                        shortcut = "⌘C",
-                        enabled = spotCount > 0
-                    ) {
-                        println("Copy: ${breakSlot.id} on $date")
-                    },
-                    ContextMenuEntry.Item(
-                        label = "Cut",
-                        icon = { Icon(Icons.Default.ContentCut, null, modifier = Modifier.size(16.dp)) },
-                        shortcut = "⌘X",
-                        enabled = spotCount > 0
-                    ) {
-                        println("Cut: ${breakSlot.id} on $date")
-                    },
-                    ContextMenuEntry.Item(
-                        label = "Paste",
-                        icon = { Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(16.dp)) },
-                        shortcut = "⌘V"
-                    ) {
-                        println("Paste at: ${breakSlot.id} on $date")
-                    },
+                        // Clipboard operations
+                        add(ContextMenuEntry.Item(
+                            label = "Copy",
+                            icon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                            shortcut = "⌘C",
+                            enabled = spotCount > 0
+                        ) {
+                            println("Copy: ${breakSlot.id} on $date")
+                        })
+                        add(ContextMenuEntry.Item(
+                            label = "Cut",
+                            icon = { Icon(Icons.Default.ContentCut, null, modifier = Modifier.size(16.dp)) },
+                            shortcut = "⌘X",
+                            enabled = spotCount > 0
+                        ) {
+                            println("Cut: ${breakSlot.id} on $date")
+                        })
+                        add(ContextMenuEntry.Item(
+                            label = "Paste",
+                            icon = { Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(16.dp)) },
+                            shortcut = "⌘V"
+                        ) {
+                            println("Paste at: ${breakSlot.id} on $date")
+                        })
+                    }
 
-                    // === SEPARATOR ===
-                    ContextMenuEntry.Separator,
+                    add(ContextMenuEntry.Separator)
 
                     // More options submenu
-                    ContextMenuEntry.SubMenu(
+                    add(ContextMenuEntry.SubMenu(
                         label = "More Options",
                         icon = { Icon(Icons.Default.MoreVert, null, modifier = Modifier.size(16.dp)) },
                         items = listOf(
@@ -390,8 +400,8 @@ fun TimetableScreen(
                                 println("Info: Break ${breakSlot.id}, Date: $date, Spots: $spotCount")
                             }
                         )
-                    )
-                )
+                    ))
+                }
             },
             dayHeaderContextMenuItems = { date ->
                 listOf(
@@ -431,6 +441,8 @@ private fun KeyboardEnabledHeader(
     monthName: String,
     breaks: ImmutableList<BreakSlot>,
     cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
+    canEdit: Boolean,
+    onLogout: () -> Unit,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
@@ -474,7 +486,8 @@ private fun KeyboardEnabledHeader(
                 // Keyboard shortcut hints
                 Column {
                     Text(
-                        text = "Arrows: Navigate | Enter: Open | A: Add | D: Delete",
+                        text = if (canEdit) "Arrows: Navigate | Enter: Open | A: Add | D: Delete"
+                        else "Arrows: Navigate | Enter: Open (view only)",
                         fontSize = 11.sp,
                         color = Color.Gray
                     )
@@ -482,6 +495,27 @@ private fun KeyboardEnabledHeader(
                         text = "Click grid to focus, then use keyboard",
                         fontSize = 10.sp,
                         color = Color.Gray
+                    )
+                }
+
+                // Logged-in user + logout
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = AuthSession.displayName,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = AuthSession.role.label,
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                }
+                IconButton(onClick = onLogout) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = "Logout",
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }

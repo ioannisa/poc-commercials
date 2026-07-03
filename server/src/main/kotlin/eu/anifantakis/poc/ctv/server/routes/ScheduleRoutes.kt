@@ -1,5 +1,8 @@
 package eu.anifantakis.poc.ctv.server.routes
 
+import eu.anifantakis.poc.ctv.server.auth.UserRole
+import eu.anifantakis.poc.ctv.server.plugins.authUser
+import eu.anifantakis.poc.ctv.server.scheduler.CommercialRow
 import eu.anifantakis.poc.ctv.server.scheduler.SchedulerDb
 import eu.anifantakis.poc.ctv.server.scheduler.breakZoneColorArgb
 import io.ktor.http.*
@@ -80,27 +83,45 @@ fun Route.scheduleRoutes() {
                 SchedulerDb.loadMonth(year, month)
             }
 
-            val dtos = cells.map { cell ->
-                val coms = commercialsByKey[cell.breakId to cell.date].orEmpty().map {
-                    CommercialDto(
-                        id = it.id,
-                        position = it.position,
-                        clientCode = it.clientCode,
-                        clientName = it.clientName,
-                        message = it.message,
-                        durationSeconds = it.durationSeconds,
-                        type = it.type,
-                        contract = it.contract,
-                        flow = it.flow
-                    )
+            // CUSTOMER_VIEWER data scoping: they only ever receive their own
+            // commercials. Cell aggregates (spot count, duration) are
+            // recomputed from the filtered list, and cells with none of their
+            // spots are omitted entirely - the client renders the filtered
+            // world as-is, so reports built from it are scoped too.
+            val user = call.authUser()
+            val onlyClientCode = user.clientCode?.takeIf { user.role == UserRole.CUSTOMER_VIEWER }
+
+            val dtos = cells.mapNotNull { cell ->
+                var coms = commercialsByKey[cell.breakId to cell.date].orEmpty()
+                var spotCount = cell.spotCount
+                var totalDuration = cell.totalDurationSeconds
+
+                if (onlyClientCode != null) {
+                    coms = coms.filter { it.clientCode == onlyClientCode }
+                    if (coms.isEmpty()) return@mapNotNull null
+                    spotCount = coms.size
+                    totalDuration = coms.sumOf(CommercialRow::durationSeconds)
                 }
+
                 CellDto(
                     breakId = cell.breakId,
                     date = cell.date.toString(),
-                    spotCount = cell.spotCount,
-                    totalDurationSeconds = cell.totalDurationSeconds,
+                    spotCount = spotCount,
+                    totalDurationSeconds = totalDuration,
                     zoneColorArgb = cell.zoneColorArgb,
-                    commercials = coms
+                    commercials = coms.map {
+                        CommercialDto(
+                            id = it.id,
+                            position = it.position,
+                            clientCode = it.clientCode,
+                            clientName = it.clientName,
+                            message = it.message,
+                            durationSeconds = it.durationSeconds,
+                            type = it.type,
+                            contract = it.contract,
+                            flow = it.flow
+                        )
+                    }
                 )
             }
 

@@ -1,9 +1,11 @@
 package eu.anifantakis.poc.ctv.reports
 
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.config.AppConfig
 import eu.anifantakis.poc.ctv.reports.dto.ReportBatchRequest
 import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
 import io.ktor.client.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -30,6 +32,10 @@ object ReportApiClient {
                     ignoreUnknownKeys = true
                     isLenient = true
                 })
+            }
+            // Runs per request - picks up the current session token
+            defaultRequest {
+                AuthSession.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
         }
     }

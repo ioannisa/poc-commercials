@@ -25,12 +25,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.config.AppConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 
 fun main() {
-    runBlocking { AppConfig.load() }
+    runBlocking {
+        AppConfig.load()
+        AuthSession.ready()   // restore persisted login (no-op wait on JVM)
+    }
 
     application {
         Window(

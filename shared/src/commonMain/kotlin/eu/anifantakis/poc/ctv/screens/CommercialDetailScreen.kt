@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.grids.*
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
 import eu.anifantakis.poc.ctv.reports.createReportService
@@ -56,6 +57,9 @@ fun CommercialDetailScreen(
     onPrevious: (() -> Unit)? = null,
     onNext: (() -> Unit)? = null
 ) {
+    // View-only roles can browse and print, but not reorder/edit
+    val canEdit = AuthSession.role.canEdit
+
     // Local mutable state for reordering - synced with parent
     // We treat the incoming ImmutableList as the initial value.
     // The internal state holds a List (which might be the ImmutableList or a new ArrayList after modification)
@@ -88,6 +92,7 @@ fun CommercialDetailScreen(
 
     // Reorder functions
     fun moveUp(index: Int) {
+        if (!canEdit) return
         if (index > 0) {
             val newList = localCommercials.toMutableList()
             val item = newList.removeAt(index)
@@ -99,6 +104,7 @@ fun CommercialDetailScreen(
     }
 
     fun moveDown(index: Int) {
+        if (!canEdit) return
         if (index < localCommercials.size - 1) {
             val newList = localCommercials.toMutableList()
             val item = newList.removeAt(index)
@@ -111,6 +117,7 @@ fun CommercialDetailScreen(
 
     // General reorder function for drag-and-drop
     fun reorderRow(fromIndex: Int, toIndex: Int) {
+        if (!canEdit) return
         if (fromIndex != toIndex && fromIndex in localCommercials.indices && toIndex in localCommercials.indices) {
             val newList = localCommercials.toMutableList()
             val item = newList.removeAt(fromIndex)
@@ -255,7 +262,7 @@ fun CommercialDetailScreen(
                     if (item.flow == "ΡΟΗ") Color(0xFFE8F5E9) else Color.Transparent
                 }
             )
-        ).toImmutableList()
+        ).filter { canEdit || it.id != "reorder" }.toImmutableList()
     }
 
     val gridState = rememberEnhancedDataGridState(columns)
@@ -330,7 +337,8 @@ fun CommercialDetailScreen(
                     ContextMenuEntry.Item(
                         label = "Edit Commercial",
                         icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
-                        shortcut = "⌘E"
+                        shortcut = "⌘E",
+                        enabled = canEdit
                     ) {
                         println("Edit: ${item.clientName} - ${item.message}")
                     },
@@ -342,6 +350,7 @@ fun CommercialDetailScreen(
                     ContextMenuEntry.SubMenu(
                         label = "Clipboard",
                         icon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                        enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = "Copy",
@@ -371,6 +380,7 @@ fun CommercialDetailScreen(
                     ContextMenuEntry.SubMenu(
                         label = "Move",
                         icon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                        enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = "Move Up",
@@ -417,7 +427,8 @@ fun CommercialDetailScreen(
                     ContextMenuEntry.Item(
                         label = "Delete",
                         icon = { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)) },
-                        shortcut = "⌫"
+                        shortcut = "⌫",
+                        enabled = canEdit
                     ) {
                         println("Delete: ${item.clientName} at index $rowIndex")
                     },

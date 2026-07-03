@@ -1,6 +1,7 @@
 package eu.anifantakis.poc.ctv.data
 
 import androidx.compose.ui.graphics.Color
+import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.config.AppConfig
 import eu.anifantakis.poc.ctv.grids.BreakSlot
 import eu.anifantakis.poc.ctv.grids.BreakZone
@@ -10,8 +11,11 @@ import eu.anifantakis.poc.ctv.grids.SchedulerKey
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.LocalDate
@@ -63,6 +67,10 @@ private val client by lazy {
     HttpClient {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
+        }
+        // Runs per request - picks up the current session token
+        defaultRequest {
+            AuthSession.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
         }
     }
 }
