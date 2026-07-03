@@ -1,7 +1,6 @@
-package eu.anifantakis.commercials.server.routes
+package eu.anifantakis.commercials.migration
 
-import eu.anifantakis.commercials.migration.MigrationService
-import eu.anifantakis.commercials.server.plugins.requireAdmin
+import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -70,9 +69,16 @@ data class BrowseDto(val path: String, val parent: String? = null, val entries: 
  * Drives the legacy-dump migration from the in-app Migration screen.
  * Super administrator only; the heavy lifting happens server-side in
  * [MigrationService] (the dump file path is a path on the SERVER machine).
- * Validation errors surface as 400 via StatusPages.
+ * Validation errors surface as 400 via the host's StatusPages.
+ *
+ * [requireAdmin] is the HOST's guard: security (who is the super admin, how
+ * the bearer principal works) stays the server's concern - this module only
+ * demands that every endpoint pass it.
  */
-fun Route.migrationRoutes(migration: MigrationService) {
+fun Route.migrationRoutes(
+    migration: MigrationService,
+    requireAdmin: suspend ApplicationCall.() -> Boolean,
+) {
     route("/api/admin/migration") {
 
         get("/status") {

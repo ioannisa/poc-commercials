@@ -3,8 +3,9 @@ package eu.anifantakis.commercials.server.plugins
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
 import eu.anifantakis.commercials.migration.MigrationService
+import eu.anifantakis.commercials.migration.migrationRoutes
+import eu.anifantakis.commercials.server.plugins.requireAdmin
 import eu.anifantakis.commercials.server.routes.authRoutes
-import eu.anifantakis.commercials.server.routes.migrationRoutes
 import eu.anifantakis.commercials.server.routes.stationAdminRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
@@ -41,7 +42,7 @@ fun Application.configureRouting() {
         authenticate(AUTH_BEARER) {
             // User management + legacy migration (super administrator only)
             adminRoutes(authDb)
-            migrationRoutes(migrationService)
+            migrationRoutes(migrationService, requireAdmin = { requireAdmin() })
             stationAdminRoutes(registry, authDb)
 
             // Report routes
