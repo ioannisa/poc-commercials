@@ -1,4 +1,4 @@
-rootProject.name = "POCCTV"
+rootProject.name = "commercials-manager"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
