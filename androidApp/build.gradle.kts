@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "eu.anifantakis.poc.ctv"
+    namespace = "eu.anifantakis.ctv"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "eu.anifantakis.poc.ctv"
+        applicationId = "eu.anifantakis.ctv"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

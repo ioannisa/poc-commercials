@@ -23,7 +23,7 @@ tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
 
 compose.desktop {
     application {
-        mainClass = "eu.anifantakis.poc.ctv.MainKt"
+        mainClass = "eu.anifantakis.ctv.MainKt"
 
         buildTypes.release.proguard {
             // JasperReports and commons-beanutils resolve report fields and
@@ -54,7 +54,7 @@ compose.desktop {
             }
 
             macOS {
-                bundleID = "eu.anifantakis.poc.ctv"
+                bundleID = "eu.anifantakis.ctv"
                 dockName = "Commercials Manager"
             }
 

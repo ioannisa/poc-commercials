@@ -10,6 +10,6 @@
     </root>
 
     <logger name="io.ktor" level="INFO"/>
-    <logger name="eu.anifantakis.poc.ctv.server" level="DEBUG"/>
+    <logger name="eu.anifantakis.ctv.server" level="DEBUG"/>
     <logger name="net.sf.jasperreports" level="WARN"/>
 </configuration>
