@@ -7,11 +7,11 @@ plugins {
     application
 }
 
-group = "eu.anifantakis.ctv"
+group = "eu.anifantakis.commercials"
 version = "1.0.0"
 
 application {
-    mainClass.set("eu.anifantakis.ctv.server.ApplicationKt")
+    mainClass.set("eu.anifantakis.commercials.server.ApplicationKt")
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")

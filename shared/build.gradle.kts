@@ -26,7 +26,7 @@ koinCompiler {
 
 kotlin {
     android {
-        namespace = "eu.anifantakis.ctv.shared"
+        namespace = "eu.anifantakis.commercials.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
