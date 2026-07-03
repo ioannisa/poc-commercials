@@ -24,6 +24,7 @@ kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
 logback = "1.5.37"
 mysql-connector = "9.7.0"
+hikaricp = "6.3.0"
 
 jasperreports = "7.0.7"
 
@@ -82,6 +83,7 @@ ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor"
 ktor-server-content-negotiation = { module = "io.ktor:ktor-server-content-negotiation", version.ref = "ktor" }
 ktor-server-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 ktor-server-call-logging = { module = "io.ktor:ktor-server-call-logging", version.ref = "ktor" }
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 
 # Ktor Client (multiplatform)
@@ -107,6 +109,9 @@ logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "lo
 
 # MySQL JDBC (server-only)
 mysql-connector-j = { module = "com.mysql:mysql-connector-j", version.ref = "mysql-connector" }
+
+# Connection pooling (server-only)
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -4,6 +4,7 @@ import java.io.File
 import java.util.Properties
 
 data class ServerConfig(
+    val port: Int,
     val mysqlJdbcUrl: String,
     val mysqlUsername: String,
     val mysqlPassword: String
@@ -32,6 +33,7 @@ object ServerConfigLoader {
             props.getProperty(key) ?: System.getenv(envKey) ?: default
 
         return ServerConfig(
+            port = read("server.port", "POC_PORT", "8080").toIntOrNull() ?: 8080,
             mysqlJdbcUrl = read(
                 "mysql.jdbcUrl",
                 "POC_DB_URL",

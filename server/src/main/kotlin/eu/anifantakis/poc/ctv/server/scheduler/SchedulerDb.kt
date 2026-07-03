@@ -1,16 +1,44 @@
 package eu.anifantakis.poc.ctv.server.scheduler
 
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import eu.anifantakis.poc.ctv.server.config.ServerConfigLoader
 import java.sql.Connection
-import java.sql.DriverManager
+import java.sql.SQLException
 import java.time.LocalDate
+import javax.sql.DataSource
 
 object SchedulerDb {
 
-    fun connection(): Connection {
+    /**
+     * Pooled instead of one physical connection per call: without pooling,
+     * every query paid a fresh TCP + MySQL auth handshake, and a burst of
+     * concurrent requests (this server is the sole engine for Wasm/JS, so
+     * every screen load goes through it) had no bound on concurrent
+     * connections opened against MySQL.
+     */
+    private val dataSource: DataSource by lazy {
         val cfg = ServerConfigLoader.get()
-        Class.forName("com.mysql.cj.jdbc.Driver")
-        return DriverManager.getConnection(cfg.mysqlJdbcUrl, cfg.mysqlUsername, cfg.mysqlPassword)
+        HikariDataSource(
+            HikariConfig().apply {
+                jdbcUrl = cfg.mysqlJdbcUrl
+                username = cfg.mysqlUsername
+                password = cfg.mysqlPassword
+                driverClassName = "com.mysql.cj.jdbc.Driver"
+                maximumPoolSize = 10
+                minimumIdle = 1
+                connectionTimeout = 10_000
+                poolName = "scheduler-db"
+            }
+        )
+    }
+
+    /** A pooled connection; closing it (e.g. via `.use {}`) returns it to the pool. */
+    fun connection(): Connection = dataSource.getConnection()
+
+    /** Closes the pool on application shutdown. */
+    fun close() {
+        (dataSource as? HikariDataSource)?.close()
     }
 
     fun bootstrap() {
@@ -61,7 +89,29 @@ object SchedulerDb {
                     """.trimIndent()
                 )
             }
+            // cell_date is the SECOND column of each table's primary key, so
+            // MySQL can't use those PKs for a date-only WHERE (no leftmost
+            // prefix match). Without a dedicated index, loadMonth/monthHasCells
+            // force a full table scan that gets worse every month of data added.
+            ensureIndex(c, "scheduler_cells", "idx_scheduler_cells_date", "cell_date")
+            ensureIndex(c, "commercials", "idx_commercials_date", "cell_date")
             seedBreaksIfEmpty(c)
+        }
+    }
+
+    private fun ensureIndex(c: Connection, table: String, indexName: String, columns: String) {
+        val exists = c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, indexName)
+            ps.executeQuery().use { it.next() }
+        }
+        if (!exists) {
+            c.createStatement().use { it.executeUpdate("CREATE INDEX $indexName ON $table($columns)") }
         }
     }
 
@@ -116,15 +166,24 @@ object SchedulerDb {
             }
         }
 
-    private fun monthHasCells(c: Connection, year: Int, month: Int): Boolean =
-        c.prepareStatement(
-            "SELECT 1 FROM scheduler_cells WHERE YEAR(cell_date)=? AND MONTH(cell_date)=? LIMIT 1"
+    /** [start, end) - first day of the month to first day of the next month. */
+    private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> {
+        val start = LocalDate.of(year, month, 1)
+        return start to start.plusMonths(1)
+    }
+
+    private fun monthHasCells(c: Connection, year: Int, month: Int): Boolean {
+        val (start, end) = monthRange(year, month)
+        return c.prepareStatement(
+            "SELECT 1 FROM scheduler_cells WHERE cell_date >= ? AND cell_date < ? LIMIT 1"
         ).use { ps ->
-            ps.setInt(1, year); ps.setInt(2, month)
+            ps.setDate(1, java.sql.Date.valueOf(start)); ps.setDate(2, java.sql.Date.valueOf(end))
             ps.executeQuery().use { it.next() }
         }
+    }
 
     fun loadMonth(year: Int, month: Int): Pair<List<CellRow>, Map<Pair<Long, LocalDate>, List<CommercialRow>>> {
+        val (start, end) = monthRange(year, month)
         connection().use { c ->
             val cells = mutableListOf<CellRow>()
             val commercialsByKey = mutableMapOf<Pair<Long, LocalDate>, MutableList<CommercialRow>>()
@@ -133,10 +192,10 @@ object SchedulerDb {
                 """
                 SELECT break_id, cell_date, spot_count, total_duration_seconds, zone_color_argb
                 FROM scheduler_cells
-                WHERE YEAR(cell_date)=? AND MONTH(cell_date)=?
+                WHERE cell_date >= ? AND cell_date < ?
                 """.trimIndent()
             ).use { ps ->
-                ps.setInt(1, year); ps.setInt(2, month)
+                ps.setDate(1, java.sql.Date.valueOf(start)); ps.setDate(2, java.sql.Date.valueOf(end))
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
                         val breakId = rs.getLong(1)
@@ -158,11 +217,11 @@ object SchedulerDb {
                 SELECT break_id, cell_date, position, id, client_code, client_name, message,
                        duration_seconds, type, contract, flow
                 FROM commercials
-                WHERE YEAR(cell_date)=? AND MONTH(cell_date)=?
+                WHERE cell_date >= ? AND cell_date < ?
                 ORDER BY break_id, cell_date, position
                 """.trimIndent()
             ).use { ps ->
-                ps.setInt(1, year); ps.setInt(2, month)
+                ps.setDate(1, java.sql.Date.valueOf(start)); ps.setDate(2, java.sql.Date.valueOf(end))
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
                         val breakId = rs.getLong(1)
@@ -187,7 +246,20 @@ object SchedulerDb {
         }
     }
 
-    /** Loads the month; seeds it from the generator if the DB has no rows for that month. */
+    /**
+     * Loads the month; seeds it from the generator if the DB has no rows for
+     * that month.
+     *
+     * Concurrency: two requests for the same unseeded month can both pass the
+     * `monthHasCells` check before either commits (check-then-act race - each
+     * request uses its own connection, so there's no in-process serialization
+     * point). Since generation is deterministic (RNG seeded from year/month),
+     * both requests would generate byte-for-byte identical rows; if a
+     * concurrent insert already committed the same rows first, this request's
+     * INSERT hits a duplicate primary key and we treat that as "already
+     * seeded by someone else" rather than a failure. This is also correct
+     * across multiple server instances, unlike an in-process lock.
+     */
     fun ensureMonthSeeded(year: Int, month: Int) {
         connection().use { c ->
             if (monthHasCells(c, year, month)) return
@@ -237,12 +309,35 @@ object SchedulerDb {
                     ps.executeBatch()
                 }
                 c.commit()
+            } catch (e: SQLException) {
+                c.rollback()
+                // Another request already seeded this exact month concurrently
+                // (generation is deterministic, so the rows collide byte-for-byte) -
+                // nothing to do. Anything else is a real failure.
+                if (!isDuplicateKeyViolation(e)) throw e
             } catch (e: Exception) {
                 c.rollback(); throw e
             } finally {
                 c.autoCommit = true
             }
         }
+    }
+
+    /**
+     * True if [e] (or any exception chained via `getNextException`, which is
+     * how JDBC batch failures report the real per-row cause) is a duplicate
+     * primary key violation. Checked by SQLState/vendor code rather than a
+     * concrete exception type, since JDBC drivers vary in whether a failed
+     * batch surfaces as `BatchUpdateException`, `SQLIntegrityConstraintViolationException`,
+     * or a plain `SQLException` wrapping the real one.
+     */
+    private fun isDuplicateKeyViolation(e: SQLException): Boolean {
+        var current: SQLException? = e
+        while (current != null) {
+            if (current.errorCode == 1062 || current.sqlState?.startsWith("23") == true) return true
+            current = current.nextException
+        }
+        return false
     }
 
 }

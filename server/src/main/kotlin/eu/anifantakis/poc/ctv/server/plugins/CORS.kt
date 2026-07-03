@@ -21,8 +21,11 @@ fun Application.configureCORS() {
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.Accept)
 
-        // Allow credentials (cookies, authorization headers)
-        allowCredentials = true
+        // NOTE: allowCredentials is deliberately NOT set. Nothing in the app
+        // uses cookies or HTTP auth, and anyHost() + credentials would make
+        // Ktor reflect arbitrary Origins on credentialed requests - the
+        // combination browsers forbid for `*` exists precisely because it
+        // lets any website script authenticated calls against this API.
 
         // Expose headers to the client
         exposeHeader(HttpHeaders.ContentDisposition)

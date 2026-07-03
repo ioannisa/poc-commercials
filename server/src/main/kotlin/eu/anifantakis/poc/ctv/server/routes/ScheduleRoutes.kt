@@ -5,6 +5,8 @@ import eu.anifantakis.poc.ctv.server.scheduler.breakZoneColorArgb
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -50,7 +52,8 @@ data class ScheduleDto(
 fun Route.scheduleRoutes() {
     route("/api") {
         get("/breaks") {
-            val breaks = SchedulerDb.loadBreaks().map {
+            // JDBC is blocking - keep it off Ktor's request threads
+            val breaks = withContext(Dispatchers.IO) { SchedulerDb.loadBreaks() }.map {
                 BreakSlotDto(
                     id = it.id,
                     hour = it.hour,
@@ -71,8 +74,11 @@ fun Route.scheduleRoutes() {
                 return@get
             }
 
-            SchedulerDb.ensureMonthSeeded(year, month)
-            val (cells, commercialsByKey) = SchedulerDb.loadMonth(year, month)
+            // JDBC is blocking - keep it off Ktor's request threads
+            val (cells, commercialsByKey) = withContext(Dispatchers.IO) {
+                SchedulerDb.ensureMonthSeeded(year, month)
+                SchedulerDb.loadMonth(year, month)
+            }
 
             val dtos = cells.map { cell ->
                 val coms = commercialsByKey[cell.breakId to cell.date].orEmpty().map {

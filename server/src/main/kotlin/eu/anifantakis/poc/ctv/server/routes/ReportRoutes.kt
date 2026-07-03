@@ -8,6 +8,8 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Generic report endpoints: any report with a template in :reportcore is
@@ -49,50 +51,41 @@ fun Route.reportRoutes() {
     }
 }
 
+// Error handling lives in the StatusPages plugin: malformed bodies
+// (BadRequestException from receive) and engine validation failures
+// (IllegalArgumentException) map to 400, everything else to 500.
+
 private suspend fun ApplicationCall.generateReport(disposition: ContentDisposition) {
-    try {
-        val request = receive<ReportRequest>()
+    val request = receive<ReportRequest>()
 
-        if (request.reportId != parameters["reportId"]) {
-            respond(
-                HttpStatusCode.BadRequest,
-                mapOf("error" to "reportId in path and body do not match")
-            )
-            return
-        }
-        if (respondedUnknownReport(listOf(request))) return
-
-        respondPdf(
-            ReportEngine.generatePdf(request),
-            request.fileName ?: "${request.reportId}.pdf",
-            disposition
+    if (request.reportId != parameters["reportId"]) {
+        respond(
+            HttpStatusCode.BadRequest,
+            mapOf("error" to "reportId in path and body do not match")
         )
-    } catch (e: Exception) {
-        respondReportError(e)
+        return
     }
+    if (respondedUnknownReport(listOf(request))) return
+
+    // Jasper fill + PDF export is blocking work - keep it off Ktor's request threads
+    val pdfBytes = withContext(Dispatchers.IO) { ReportEngine.generatePdf(request) }
+    respondPdf(pdfBytes, request.fileName ?: "${request.reportId}.pdf", disposition)
 }
 
 private suspend fun ApplicationCall.generateBatch(disposition: ContentDisposition) {
-    try {
-        val batch = receive<ReportBatchRequest>()
+    val batch = receive<ReportBatchRequest>()
 
-        if (batch.requests.isEmpty()) {
-            respond(
-                HttpStatusCode.BadRequest,
-                mapOf("error" to "The report batch is empty")
-            )
-            return
-        }
-        if (respondedUnknownReport(batch.requests)) return
-
-        respondPdf(
-            ReportEngine.generatePdf(batch),
-            batch.fileName ?: "reports.pdf",
-            disposition
+    if (batch.requests.isEmpty()) {
+        respond(
+            HttpStatusCode.BadRequest,
+            mapOf("error" to "The report batch is empty")
         )
-    } catch (e: Exception) {
-        respondReportError(e)
+        return
     }
+    if (respondedUnknownReport(batch.requests)) return
+
+    val pdfBytes = withContext(Dispatchers.IO) { ReportEngine.generatePdf(batch) }
+    respondPdf(pdfBytes, batch.fileName ?: "reports.pdf", disposition)
 }
 
 /** Responds 404 and returns true if any request targets a missing template. */
@@ -117,16 +110,3 @@ private suspend fun ApplicationCall.respondPdf(
     respondBytes(pdfBytes, ContentType.Application.Pdf)
 }
 
-private suspend fun ApplicationCall.respondReportError(e: Exception) {
-    when (e) {
-        // Engine validation: unknown parameter/field names, bad value types
-        is IllegalArgumentException -> respond(
-            HttpStatusCode.BadRequest,
-            mapOf("error" to (e.message ?: "Invalid report request"))
-        )
-        else -> respond(
-            HttpStatusCode.InternalServerError,
-            mapOf("error" to (e.message ?: "Failed to generate report"))
-        )
-    }
-}
