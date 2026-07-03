@@ -1,10 +1,31 @@
 package eu.anifantakis.commercials.migration
 
+import eu.anifantakis.commercials.server.scheduler.StationDb
+import eu.anifantakis.commercials.server.stations.StationConfig
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 import java.util.Collections
 import kotlin.concurrent.thread
+
+/**
+ * Creates the normalized station tables in [jdbcUrl]'s schema WITHOUT demo
+ * seeding (station_meta.demo_seed=false, so empty months stay empty forever).
+ * The DDL stays single-sourced in :persistence's [StationDb]. Idempotent.
+ */
+internal fun prepareStationSchema(jdbcUrl: String, username: String, password: String) {
+    val schema = jdbcUrl.substringAfterLast('/').substringBefore('?')
+    val db = StationDb(
+        StationConfig(id = schema, name = schema, jdbcUrl = jdbcUrl, username = username, password = password),
+        maxPoolSize = 2
+    )
+    try {
+        db.bootstrap(seedDemo = false)
+    } finally {
+        db.close()
+    }
+}
 
 /**
  * The engine behind the in-app Migration screen: one legacy-dump migration
@@ -25,7 +46,7 @@ import kotlin.concurrent.thread
  * Koin singleton; all state transitions are synchronized, the heavy work
  * runs on a background thread appending to [logLines] for live polling.
  */
-class MigrationService(private val host: MigrationHost) {
+class MigrationService(private val registry: StationRegistry) {
 
     enum class State { IDLE, REPLAYING, AWAITING_FLOW, TRANSFORMING, DONE, FAILED }
 
@@ -97,9 +118,7 @@ class MigrationService(private val host: MigrationHost) {
                 else -> Unit
             }
 
-            // Same DDL the server itself uses (via the MigrationHost port);
-            // demo seeding permanently off (station_meta.demo_seed=false).
-            host.prepareStationSchema(targetJdbcUrl(req), req.username, req.password)
+            prepareStationSchema(targetJdbcUrl(req), req.username, req.password)
 
             val placements = c.createStatement().use { st ->
                 st.executeQuery("SELECT COUNT(*) FROM `${req.schema}`.placements").use { rs -> rs.next(); rs.getLong(1) }
@@ -156,7 +175,7 @@ class MigrationService(private val host: MigrationHost) {
         if (flowReq.addToYaml) {
             require(stationIdPattern.matches(flowReq.stationId)) { "Station id must match ${stationIdPattern.pattern}" }
             require(flowReq.stationName.isNotBlank()) { "Station name must not be blank" }
-            require(!host.isStationHosted(flowReq.stationId)) { "Station id '${flowReq.stationId}' is already hosted" }
+            require(registry.config(flowReq.stationId) == null) { "Station id '${flowReq.stationId}' is already hosted" }
         }
 
         state = State.TRANSFORMING
@@ -179,21 +198,19 @@ class MigrationService(private val host: MigrationHost) {
                         username = req.username,
                         password = req.password,
                     )
-                    // Hosted LIVE when the host can (running server); the
-                    // yaml entry above makes it survive the next boot either way.
-                    val live = host.hostStation(
-                        id = flowReq.stationId,
-                        name = flowReq.stationName,
-                        jdbcUrl = targetJdbcUrl(req),
-                        username = req.username,
-                        password = req.password,
+                    // Hosted LIVE - no restart needed; the yaml entry above
+                    // makes it survive the next boot.
+                    registry.add(
+                        StationConfig(
+                            id = flowReq.stationId,
+                            name = flowReq.stationName,
+                            jdbcUrl = targetJdbcUrl(req),
+                            username = req.username,
+                            password = req.password,
+                        )
                     )
-                    if (live) {
-                        log("Station '${flowReq.stationId}' added to ${stationsYamlFile().path} and hosted LIVE - no restart needed.")
-                        log("It appears in user dropdowns at their next login; the super admin can grant access right away.")
-                    } else {
-                        log("Station '${flowReq.stationId}' added to ${stationsYamlFile().path} - restart the server to host it.")
-                    }
+                    log("Station '${flowReq.stationId}' added to ${stationsYamlFile().path} and hosted LIVE - no restart needed.")
+                    log("It appears in user dropdowns at their next login; the super admin can grant access right away.")
                 }
                 log("Migration finished.")
                 state = State.DONE

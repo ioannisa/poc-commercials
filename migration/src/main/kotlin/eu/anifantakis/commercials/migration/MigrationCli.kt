@@ -7,15 +7,16 @@ import java.sql.DriverManager
 /**
  * Command-line front for the legacy migration - same pipeline the in-app
  * Migration screen drives, for scripted/offline use. The host application
- * provides its entry-point `main` and a [MigrationHost] (see the server's
- * MigrationToolKt, which keeps the historical class name so the
- * `java -cp server.jar ...` command is unchanged).
+ * provides only its entry-point `main` (see the server's MigrationToolKt,
+ * which keeps the historical class name so the `java -cp server.jar ...`
+ * command is unchanged). Unlike the in-app service there is no running
+ * StationRegistry here, so a migrated station is hosted at the next restart.
  *
  * Any missing option is prompted for interactively. Pipeline:
  *
  *   1. connect; create the target schema (or verify an existing EMPTY one)
- *   2. create the normalized tables via [MigrationHost.prepareStationSchema]
- *      (single-sourced DDL, NO demo seeding)
+ *   2. create the normalized tables (single-sourced DDL from :persistence,
+ *      NO demo seeding)
  *   3. replay the dump's relevant tables into a scratch schema (streaming;
  *      emailhistory & friends are skipped entirely)
  *   4. transform scratch -> target (see LegacyTransformer; missing ERP data
@@ -26,9 +27,9 @@ import java.sql.DriverManager
  * Requires MySQL 8+ on the TARGET server (window functions; MyISAM replay of
  * the 5.7-era dumps works fine there).
  */
-fun runMigrationCli(args: Array<String>, host: MigrationHost) {
+fun runMigrationCli(args: Array<String>) {
     try {
-        runMigration(parseArgs(args), host)
+        runMigration(parseArgs(args))
     } catch (e: Exception) {
         System.err.println("\nMIGRATION FAILED: ${e.message}")
         e.printStackTrace()
@@ -70,7 +71,7 @@ private fun parseArgs(args: Array<String>): Options {
     return Options(map, flags)
 }
 
-private fun runMigration(opts: Options, migrationHost: MigrationHost) {
+private fun runMigration(opts: Options) {
     val dumpPath = opts.get("dump", "Path to the legacy mysqldump file")
     val dumpFile = File(dumpPath)
     require(dumpFile.isFile) { "Dump file not found: $dumpPath" }
@@ -106,7 +107,7 @@ private fun runMigration(opts: Options, migrationHost: MigrationHost) {
         }
 
         // ── 2. normalized tables, WITHOUT demo seeding ──────────────────
-        migrationHost.prepareStationSchema(targetJdbcUrl, user, password)
+        prepareStationSchema(targetJdbcUrl, user, password)
         val placementCount = c.createStatement().use { st ->
             st.executeQuery("SELECT COUNT(*) FROM `$schema`.placements").use { rs -> rs.next(); rs.getLong(1) }
         }
@@ -192,13 +193,12 @@ private fun runMigration(opts: Options, migrationHost: MigrationHost) {
             username = user,
             password = password,
         )
-        val live = migrationHost.hostStation(stationId, stationName, targetJdbcUrl, user, password)
         println(
             """
             Added station '$stationId' to $yamlPath.
 
             Next steps:
-              1. ${if (live) "the station is hosted live" else "restart the server"} - the super admin sees '$stationName' immediately${if (live) "" else " after"}
+              1. restart the server - the super admin sees '$stationName' immediately after
               2. grant users access via the super admin's "Manage Users" screen
               3. browse to a month inside the migrated date range shown above
             """.trimIndent()
