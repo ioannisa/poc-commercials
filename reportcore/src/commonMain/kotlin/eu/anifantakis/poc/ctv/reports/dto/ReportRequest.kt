@@ -26,3 +26,16 @@ data class ReportRequest(
     val rows: List<JsonObject> = emptyList(),
     val fileName: String? = null,
 )
+
+/**
+ * A batch of reports exported into ONE PDF, in order - e.g. a whole month as
+ * one daily report per page-run. The requests may target different templates.
+ *
+ * Note: `fileName` on the individual [requests] is ignored in a batch; the
+ * batch-level [fileName] names the merged document.
+ */
+@Serializable
+data class ReportBatchRequest(
+    val requests: List<ReportRequest>,
+    val fileName: String? = null,
+)

@@ -69,12 +69,19 @@ service.exportToPdf(data.toReportPayload(), "Invoice_$number.pdf")  // or previe
 ```
 POST /api/reports/{reportId}          -> PDF (attachment)
 POST /api/reports/{reportId}/preview  -> PDF (inline)
+POST /api/reports/batch               -> many reports as ONE PDF, in order
+POST /api/reports/batch/preview       -> same, inline
 GET  /api/reports/status              -> health check
 ```
 
-Body is the serialized `ReportRequest`. Errors: `400` for unknown
-parameter/field names or a path/body id mismatch, `404` for an unknown
-report id, `500` otherwise.
+Body is the serialized `ReportRequest` (`ReportBatchRequest` for the batch
+endpoints - note "batch" is therefore reserved as a report id). Errors: `400`
+for unknown parameter/field names, an empty batch, or a path/body id mismatch,
+`404` for an unknown report id, `500` otherwise.
+
+`ReportService` mirrors this: its methods take `List<ReportPayload>` (with
+single-payload convenience overloads), so "print the whole month" is just the
+list of that month's daily payloads - see `ReportToolbar`.
 
 ## Value typing
 

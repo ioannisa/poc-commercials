@@ -1,5 +1,6 @@
 package eu.anifantakis.poc.ctv.reports
 
+import eu.anifantakis.poc.ctv.reports.dto.ReportBatchRequest
 import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
 
 /**
@@ -12,5 +13,11 @@ fun ReportPayload.toWire(fileName: String? = null): ReportRequest =
         reportId = reportId,
         parameters = parameters,
         rows = rows,
+        fileName = fileName,
+    )
+
+fun List<ReportPayload>.toWireBatch(fileName: String? = null): ReportBatchRequest =
+    ReportBatchRequest(
+        requests = map { it.toWire() },
         fileName = fileName,
     )

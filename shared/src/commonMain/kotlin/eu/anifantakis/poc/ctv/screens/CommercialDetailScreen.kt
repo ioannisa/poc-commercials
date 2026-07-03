@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,8 +28,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.poc.ctv.grids.*
+import eu.anifantakis.poc.ctv.reports.ReportDataFactory
+import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.models.ReportConfig
+import eu.anifantakis.poc.ctv.reports.print
+import eu.anifantakis.poc.ctv.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 
@@ -56,6 +63,23 @@ fun CommercialDetailScreen(
 
     // Selected item for reordering
     var selectedIndex by remember { mutableStateOf(-1) }
+
+    // Print this break's program flow (same report the scheduler popups print)
+    val reportScope = rememberCoroutineScope()
+    val reportService = remember { createReportService() }
+
+    fun printBreak() {
+        reportScope.launch {
+            val data = ReportDataFactory.createBreakProgramFlowData(
+                date = date.value,
+                breakTimeLabel = breakTime,
+                commercials = localCommercials
+            )
+            if (data.items.isNotEmpty()) {
+                reportService.print(data.toReportPayload(ReportConfig()))
+            }
+        }
+    }
 
     // Calculate totals from local list
     val totalDuration = localCommercials.sumOf { it.durationSeconds }
@@ -256,7 +280,8 @@ fun CommercialDetailScreen(
             exceptDuration = totalDuration - flowDuration,
             onBack = onBack,
             onPrevious = onPrevious,
-            onNext = onNext
+            onNext = onNext,
+            onPrint = { printBreak() }
         )
 
         HorizontalDivider(thickness = 2.dp, color = Color(0xFFBDBDBD))
@@ -289,6 +314,18 @@ fun CommercialDetailScreen(
             rowKey = { it.id },
             contextMenuItems = { item, rowIndex ->
                 listOf(
+                    // Print this break's program flow
+                    ContextMenuEntry.Item(
+                        label = "Print Break",
+                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        enabled = localCommercials.isNotEmpty()
+                    ) {
+                        printBreak()
+                    },
+
+                    // === SEPARATOR ===
+                    ContextMenuEntry.Separator,
+
                     // Edit action
                     ContextMenuEntry.Item(
                         label = "Edit Commercial",
@@ -435,7 +472,8 @@ private fun DetailHeader(
     exceptDuration: Int,
     onBack: () -> Unit,
     onPrevious: (() -> Unit)?,
-    onNext: (() -> Unit)?
+    onNext: (() -> Unit)?,
+    onPrint: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -531,6 +569,18 @@ private fun DetailHeader(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        if (onPrint != null) {
+                            OutlinedButton(onClick = onPrint) {
+                                Icon(
+                                    Icons.Default.Print,
+                                    contentDescription = "Print break",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Εκτύπωση")
+                            }
+                        }
+
                         OutlinedButton(
                             onClick = { onPrevious?.invoke() },
                             enabled = onPrevious != null

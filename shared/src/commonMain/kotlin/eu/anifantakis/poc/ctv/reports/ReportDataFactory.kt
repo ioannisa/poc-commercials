@@ -1,12 +1,17 @@
 package eu.anifantakis.poc.ctv.reports
 
 import eu.anifantakis.poc.ctv.grids.BreakSlot
+import eu.anifantakis.poc.ctv.grids.CommercialItem
 import eu.anifantakis.poc.ctv.grids.SchedulerCellData
 import eu.anifantakis.poc.ctv.grids.SchedulerKey
 import eu.anifantakis.poc.ctv.reports.models.ProgramFlowItem
 import eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /**
  * Factory functions to create report data from scheduler data
@@ -68,6 +73,71 @@ object ReportDataFactory {
             emptyTimeFormatted = "Κενός Χρόνος: ${formatDuration(emptyTimeSeconds)}",
             items = items
         )
+    }
+
+    /**
+     * Creates Program Flow report data for every day of a month that has
+     * spots - one entry per day, in date order. Feed the mapped payloads to
+     * ReportService as a batch to get the whole month as one document.
+     */
+    fun createMonthProgramFlowData(
+        year: Int,
+        month: Int,
+        breaks: List<BreakSlot>,
+        cellData: Map<SchedulerKey, SchedulerCellData>
+    ): List<ProgramFlowReportData> {
+        val firstDay = LocalDate(year, month, 1)
+        val daysInMonth = firstDay.plus(1, DateTimeUnit.MONTH).minus(1, DateTimeUnit.DAY).day
+        return (1..daysInMonth)
+            .map { day -> createProgramFlowData(LocalDate(year, month, day), breaks, cellData) }
+            .filter { it.items.isNotEmpty() }
+    }
+
+    /**
+     * Creates Program Flow report data for a single break of a single day,
+     * from the break's commercials directly (used by the break popup and the
+     * break details screen, which hold the commercial list rather than the
+     * whole scheduler map).
+     */
+    fun createBreakProgramFlowData(
+        date: LocalDate,
+        breakTimeLabel: String,
+        commercials: List<CommercialItem>
+    ): ProgramFlowReportData {
+        val totalDurationSeconds = commercials.sumOf { it.durationSeconds }
+        val time = parseTimeLabel(breakTimeLabel)
+
+        val items = commercials.mapIndexed { index, commercial ->
+            ProgramFlowItem(
+                timeSlot = breakTimeLabel,
+                timeSlotTime = time,
+                message = commercial.message,
+                duration = formatDuration(commercial.durationSeconds),
+                durationSeconds = commercial.durationSeconds,
+                program = commercial.type,
+                notes = if (commercial.flow == "ΡΟΗ") "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
+                firstInGroup = index == 0,
+                lastInGroup = index == commercials.lastIndex,
+                groupTotalDuration = formatDuration(totalDurationSeconds),
+                groupSpotCount = commercials.size
+            )
+        }
+
+        return ProgramFlowReportData(
+            title = "ΡΟΗ ΠΡΟΓΡΑΜΜΑΤΟΣ",
+            generatedAt = currentTimeMillis(),
+            date = date,
+            dateFormatted = formatGreekDate(date),
+            emptyTimeFormatted = "Κενός Χρόνος: ${formatDuration(0)}",
+            items = items
+        )
+    }
+
+    private fun parseTimeLabel(label: String): LocalTime {
+        val parts = label.split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        return LocalTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59))
     }
 
     /**

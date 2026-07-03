@@ -1,6 +1,7 @@
 package eu.anifantakis.poc.ctv.reports
 
 import eu.anifantakis.poc.ctv.config.AppConfig
+import eu.anifantakis.poc.ctv.reports.dto.ReportBatchRequest
 import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -37,11 +38,20 @@ object ReportApiClient {
      * Generate a PDF report via the server API.
      * @return PDF bytes on success, failure with the server error otherwise
      */
-    suspend fun generatePdf(request: ReportRequest): Result<ByteArray> {
+    suspend fun generatePdf(request: ReportRequest): Result<ByteArray> =
+        postForPdf("$serverBaseUrl/api/reports/${request.reportId}", request)
+
+    /**
+     * Generate a batch of reports as one PDF via the server API.
+     */
+    suspend fun generatePdf(batch: ReportBatchRequest): Result<ByteArray> =
+        postForPdf("$serverBaseUrl/api/reports/batch", batch)
+
+    private suspend inline fun <reified T> postForPdf(url: String, body: T): Result<ByteArray> {
         return try {
-            val response = httpClient.post("$serverBaseUrl/api/reports/${request.reportId}") {
+            val response = httpClient.post(url) {
                 contentType(ContentType.Application.Json)
-                setBody(request)
+                setBody(body)
             }
 
             if (response.status.isSuccess()) {

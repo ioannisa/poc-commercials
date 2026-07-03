@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -32,7 +33,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.poc.ctv.data.SampleData
 import eu.anifantakis.poc.ctv.grids.*
+import eu.anifantakis.poc.ctv.reports.ReportDataFactory
+import eu.anifantakis.poc.ctv.reports.ReportPayload
+import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.models.ReportConfig
+import eu.anifantakis.poc.ctv.reports.print
+import eu.anifantakis.poc.ctv.reports.toReportPayload
 import eu.anifantakis.poc.ctv.reports.ui.ReportToolbar
+import kotlinx.coroutines.launch
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
@@ -81,6 +89,44 @@ fun TimetableScreen(
         "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος",
         "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"
     )
+
+    // Report printing from popup menus (day header, break header, cell)
+    val reportScope = rememberCoroutineScope()
+    val reportService = remember { createReportService() }
+
+    fun printDay(date: LocalDate) {
+        reportScope.launch {
+            val data = ReportDataFactory.createProgramFlowData(date, breaks, cellData)
+            if (data.items.isNotEmpty()) {
+                reportService.print(data.toReportPayload(ReportConfig()))
+            }
+        }
+    }
+
+    fun printBreak(breakSlot: BreakSlot, date: LocalDate) {
+        reportScope.launch {
+            val commercials = cellData[SchedulerKey(breakSlot.id, date)]?.commercials ?: return@launch
+            val data = ReportDataFactory.createBreakProgramFlowData(
+                date = date,
+                breakTimeLabel = formatTime(breakSlot.time.hour, breakSlot.time.minute),
+                commercials = commercials
+            )
+            if (data.items.isNotEmpty()) {
+                reportService.print(data.toReportPayload(ReportConfig()))
+            }
+        }
+    }
+
+    fun printBreakForMonth(breakSlot: BreakSlot) {
+        reportScope.launch {
+            val payloads: List<ReportPayload> = ReportDataFactory
+                .createMonthProgramFlowData(year, month, listOf(breakSlot), cellData)
+                .map { it.toReportPayload(ReportConfig()) }
+            if (payloads.isNotEmpty()) {
+                reportService.print(payloads)
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -215,6 +261,24 @@ fun TimetableScreen(
                         }
                     },
 
+                    // Print the whole day this cell belongs to
+                    ContextMenuEntry.Item(
+                        label = "Print Day ${dayMenuLabel(date)}",
+                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
+                    ) {
+                        printDay(date)
+                    },
+
+                    // Print this break's commercials
+                    ContextMenuEntry.Item(
+                        label = "Print Break",
+                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        enabled = spotCount > 0
+                    ) {
+                        printBreak(breakSlot, date)
+                    },
+
                     // === SEPARATOR ===
                     ContextMenuEntry.Separator,
 
@@ -328,10 +392,37 @@ fun TimetableScreen(
                         )
                     )
                 )
+            },
+            dayHeaderContextMenuItems = { date ->
+                listOf(
+                    ContextMenuEntry.Item(
+                        label = "Print Day ${dayMenuLabel(date)}",
+                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
+                    ) {
+                        printDay(date)
+                    }
+                )
+            },
+            breakHeaderContextMenuItems = { breakSlot ->
+                val label = formatTime(breakSlot.time.hour, breakSlot.time.minute)
+
+                listOf(
+                    ContextMenuEntry.Item(
+                        label = "Print Break $label (Entire Month)",
+                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) }
+                    ) {
+                        printBreakForMonth(breakSlot)
+                    }
+                )
             }
         )
     }
 }
+
+/** Menu label for a day, e.g. "05/12". */
+private fun dayMenuLabel(date: LocalDate): String =
+    "${date.day.toString().padStart(2, '0')}/${date.monthNumber.toString().padStart(2, '0')}"
 
 @Composable
 private fun KeyboardEnabledHeader(
@@ -343,9 +434,6 @@ private fun KeyboardEnabledHeader(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
-    // Current selected date for reports (use first day of month as default)
-    val selectedDate = LocalDate(year, month, 1).toStable()
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color(0xFFE8E8E8),
@@ -398,9 +486,10 @@ private fun KeyboardEnabledHeader(
                 }
             }
 
-            // Report toolbar
+            // Report toolbar - Preview/Print/Export cover the entire month
             ReportToolbar(
-                selectedDate = selectedDate,
+                year = year,
+                month = month,
                 breaks = breaks,
                 cellData = cellData,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)

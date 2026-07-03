@@ -81,7 +81,11 @@ fun LazySchedulerGrid(
     onAddSpot: ((BreakSlot, LocalDate) -> Unit)? = null,
     onDeleteSpot: ((BreakSlot, LocalDate) -> Unit)? = null,
     dailyTotals: ImmutableMap<StableDate, DailyStats>? = null,
-    contextMenuItems: ((BreakSlot, LocalDate, SchedulerCellData?) -> List<ContextMenuEntry>)? = null
+    contextMenuItems: ((BreakSlot, LocalDate, SchedulerCellData?) -> List<ContextMenuEntry>)? = null,
+    // Popup menus for the frozen edges: the day-header row (top) and the
+    // break-time column (left)
+    dayHeaderContextMenuItems: ((LocalDate) -> List<ContextMenuEntry>)? = null,
+    breakHeaderContextMenuItems: ((BreakSlot) -> List<ContextMenuEntry>)? = null
 ) {
     // Keyboard navigation state - use rememberSaveable to survive configuration changes
     var selectedRow by rememberSaveable { mutableStateOf(initialSelectedRow) }
@@ -304,7 +308,11 @@ fun LazySchedulerGrid(
                         LazyDayHeader(
                             date = StableDate(date),
                             width = dayColumnWidth,
-                            isSelected = colIndex == selectedColumn
+                            isSelected = colIndex == selectedColumn,
+                            menuEntriesProvider = if (dayHeaderContextMenuItems != null) {
+                                { dayHeaderContextMenuItems(date) }
+                            } else null,
+                            onMenuOpen = { updateSelection(selectedRow, colIndex) }
                         )
                     }
                 }
@@ -326,7 +334,7 @@ fun LazySchedulerGrid(
 
                 Row(modifier = Modifier.fillMaxWidth().height(rowHeight)) {
                     // Break time column (frozen - not in horizontal scroll)
-                    Box(
+                    FrozenHeaderBox(
                         modifier = Modifier
                             .width(breakColumnWidth)
                             .fillMaxHeight()
@@ -334,7 +342,10 @@ fun LazySchedulerGrid(
                                 if (isRowSelected) Color(0xFFE53935) else Color(0xFFF5F5F5)
                             )
                             .border(0.5.dp, Color.LightGray),
-                        contentAlignment = Alignment.Center
+                        menuEntriesProvider = if (breakHeaderContextMenuItems != null) {
+                            { breakHeaderContextMenuItems(breakSlot) }
+                        } else null,
+                        onMenuOpen = { updateSelection(rowIndex, selectedColumn) }
                     ) {
                         Text(
                             text = formatTime(breakSlot.time.hour, breakSlot.time.minute),
@@ -440,7 +451,9 @@ fun LazySchedulerGrid(
 private fun LazyDayHeader(
     date: StableDate,
     width: Dp,
-    isSelected: Boolean = false
+    isSelected: Boolean = false,
+    menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null,
+    onMenuOpen: (() -> Unit)? = null
 ) {
     val isWeekend = date.value.dayOfWeek == DayOfWeek.SATURDAY || date.value.dayOfWeek == DayOfWeek.SUNDAY
     val bgColor = when {
@@ -449,27 +462,82 @@ private fun LazyDayHeader(
         else -> Color(0xFFE8E8E8)
     }
 
-    Column(
+    FrozenHeaderBox(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
             .background(bgColor)
             .border(0.5.dp, Color.Gray),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        menuEntriesProvider = menuEntriesProvider,
+        onMenuOpen = onMenuOpen
     ) {
-        Text(
-            text = date.value.dayOfWeek.toGreekAbbrLazy(),
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isSelected) Color.White else Color.Black
-        )
-        Text(
-            text = date.value.day.toString(),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (isSelected) Color.White else Color.Black
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = date.value.dayOfWeek.toGreekAbbrLazy(),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) Color.White else Color.Black
+            )
+            Text(
+                text = date.value.day.toString(),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isSelected) Color.White else Color.Black
+            )
+        }
+    }
+}
+
+/**
+ * A frozen header cell (day column header or break-time row header) that can
+ * host a right-click context menu. The menu is rendered locally inside the
+ * box so its offset is relative to the header cell (same pattern as GridCell).
+ * [onMenuOpen] fires when the menu opens - used to move the grid selection to
+ * the right-clicked column/row, mirroring how cells select on right-click.
+ */
+@Composable
+private fun FrozenHeaderBox(
+    modifier: Modifier,
+    menuEntriesProvider: (() -> List<ContextMenuEntry>)?,
+    onMenuOpen: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    var menuVisible by remember { mutableStateOf(false) }
+    var clickOffset by remember { mutableStateOf(Offset.Zero) }
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier.let { mod ->
+            if (menuEntriesProvider != null) {
+                mod.onRightClick { offset ->
+                    clickOffset = offset
+                    menuVisible = true
+                    onMenuOpen?.invoke()
+                }
+            } else mod
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+
+        if (menuVisible && menuEntriesProvider != null) {
+            val entries = menuEntriesProvider()
+            if (entries.isNotEmpty()) {
+                val dpOffset = with(density) {
+                    DpOffset(clickOffset.x.toDp(), clickOffset.y.toDp())
+                }
+
+                RichContextMenu(
+                    expanded = true,
+                    onDismissRequest = { menuVisible = false },
+                    entries = entries.toImmutableList(),
+                    offset = dpOffset
+                )
+            }
+        }
     }
 }
 

@@ -13,23 +13,25 @@ import androidx.compose.ui.unit.dp
 import eu.anifantakis.poc.ctv.grids.BreakSlot
 import eu.anifantakis.poc.ctv.grids.SchedulerCellData
 import eu.anifantakis.poc.ctv.grids.SchedulerKey
-import eu.anifantakis.poc.ctv.grids.StableDate
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
+import eu.anifantakis.poc.ctv.reports.ReportPayload
 import eu.anifantakis.poc.ctv.reports.createReportService
-import eu.anifantakis.poc.ctv.reports.toReportPayload
 import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
+import eu.anifantakis.poc.ctv.reports.toReportPayload
 import kotlinx.coroutines.launch
 
 /**
- * Toolbar with report generation buttons.
- * Shows Preview, Print, and Export PDF buttons when JasperReports is available.
+ * Toolbar with report generation buttons for the visible month.
+ * Preview, Print, and Export PDF all produce the ENTIRE month - one daily
+ * Program Flow report per day that has spots, merged into one document.
  */
 @Composable
 fun ReportToolbar(
-    selectedDate: StableDate,
+    year: Int,
+    month: Int,
     breaks: ImmutableList<BreakSlot>,
     cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
     modifier: Modifier = Modifier
@@ -41,6 +43,32 @@ fun ReportToolbar(
 
     val isReportAvailable = reportService.isReportGenerationAvailable()
 
+    fun monthPayloads(): List<ReportPayload> =
+        ReportDataFactory.createMonthProgramFlowData(year, month, breaks, cellData)
+            .map { it.toReportPayload(ReportConfig()) }
+
+    fun runReportAction(action: suspend (List<ReportPayload>) -> ReportResult) {
+        scope.launch {
+            isLoading = true
+            resultMessage = null
+
+            val payloads = monthPayloads()
+            val result = if (payloads.isEmpty()) {
+                ReportResult.Error("No spots in this month")
+            } else {
+                action(payloads)
+            }
+
+            resultMessage = when (result) {
+                is ReportResult.Success -> result.filePath?.let { "PDF saved: $it" } ?: result.message
+                is ReportResult.Error -> result.message
+                is ReportResult.Cancelled -> "Cancelled"
+            }
+
+            isLoading = false
+        }
+    }
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -48,33 +76,12 @@ fun ReportToolbar(
     ) {
         // Preview button
         OutlinedButton(
-            onClick = {
-                scope.launch {
-                    isLoading = true
-                    resultMessage = null
-
-                    val payload = ReportDataFactory.createProgramFlowData(
-                        date = selectedDate.value,
-                        breaks = breaks,
-                        cellData = cellData
-                    ).toReportPayload(ReportConfig())
-
-                    val result = reportService.preview(payload)
-
-                    resultMessage = when (result) {
-                        is ReportResult.Success -> result.message
-                        is ReportResult.Error -> result.message
-                        is ReportResult.Cancelled -> "Cancelled"
-                    }
-
-                    isLoading = false
-                }
-            },
+            onClick = { runReportAction { reportService.preview(it) } },
             enabled = !isLoading && isReportAvailable
         ) {
             Icon(
                 Icons.Default.Visibility,
-                contentDescription = "Preview Report",
+                contentDescription = "Preview Month Report",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -83,33 +90,12 @@ fun ReportToolbar(
 
         // Print button
         OutlinedButton(
-            onClick = {
-                scope.launch {
-                    isLoading = true
-                    resultMessage = null
-
-                    val payload = ReportDataFactory.createProgramFlowData(
-                        date = selectedDate.value,
-                        breaks = breaks,
-                        cellData = cellData
-                    ).toReportPayload(ReportConfig())
-
-                    val result = reportService.print(payload)
-
-                    resultMessage = when (result) {
-                        is ReportResult.Success -> result.message
-                        is ReportResult.Error -> result.message
-                        is ReportResult.Cancelled -> "Cancelled"
-                    }
-
-                    isLoading = false
-                }
-            },
+            onClick = { runReportAction { reportService.print(it) } },
             enabled = !isLoading && isReportAvailable
         ) {
             Icon(
                 Icons.Default.Print,
-                contentDescription = "Print Report",
+                contentDescription = "Print Month Report",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -119,28 +105,8 @@ fun ReportToolbar(
         // Export PDF button
         Button(
             onClick = {
-                scope.launch {
-                    isLoading = true
-                    resultMessage = null
-
-                    val payload = ReportDataFactory.createProgramFlowData(
-                        date = selectedDate.value,
-                        breaks = breaks,
-                        cellData = cellData
-                    ).toReportPayload(ReportConfig())
-
-                    val fileName = "ProgramFlow_${selectedDate.value}.pdf"
-
-                    val result = reportService.exportToPdf(payload, fileName)
-
-                    resultMessage = when (result) {
-                        is ReportResult.Success -> "PDF saved: ${result.filePath ?: "Success"}"
-                        is ReportResult.Error -> result.message
-                        is ReportResult.Cancelled -> "Export cancelled"
-                    }
-
-                    isLoading = false
-                }
+                val fileName = "ProgramFlow_${year}-${month.toString().padStart(2, '0')}.pdf"
+                runReportAction { reportService.exportToPdf(it, fileName) }
             },
             enabled = !isLoading && isReportAvailable
         ) {
@@ -152,7 +118,7 @@ fun ReportToolbar(
             } else {
                 Icon(
                     Icons.Default.Save,
-                    contentDescription = "Export to PDF",
+                    contentDescription = "Export Month to PDF",
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -160,7 +126,7 @@ fun ReportToolbar(
             Text("Export PDF")
         }
 
-        // Show message if JasperReports not available
+        // Show message if report generation is not available
         if (!isReportAvailable) {
             Text(
                 text = "(Reports not available on this platform)",

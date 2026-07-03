@@ -1,5 +1,6 @@
 package eu.anifantakis.poc.ctv.reports.engine
 
+import eu.anifantakis.poc.ctv.reports.dto.ReportBatchRequest
 import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -58,6 +59,13 @@ object ReportEngine {
         exportToPdfBytes(fill(request))
 
     /**
+     * Generate a batch of reports as ONE PDF, in request order (used by the
+     * server; e.g. a month = one daily report after another).
+     */
+    fun generatePdf(batch: ReportBatchRequest): ByteArray =
+        exportToPdfBytes(batch.requests.map(::fill))
+
+    /**
      * Fill the report, returning a [JasperPrint] for further use
      * (PDF export, printing via JasperPrintManager, etc.).
      *
@@ -79,24 +87,30 @@ object ReportEngine {
     }
 
     /**
-     * Export a filled report to PDF bytes.
+     * Export one or more filled reports to PDF bytes (batch order preserved).
      */
-    fun exportToPdfBytes(jasperPrint: JasperPrint): ByteArray {
+    fun exportToPdfBytes(jasperPrint: JasperPrint): ByteArray = exportToPdfBytes(listOf(jasperPrint))
+
+    fun exportToPdfBytes(jasperPrints: List<JasperPrint>): ByteArray {
         val outputStream = ByteArrayOutputStream()
-        exportToPdf(jasperPrint, SimpleOutputStreamExporterOutput(outputStream))
+        exportToPdf(jasperPrints, SimpleOutputStreamExporterOutput(outputStream))
         return outputStream.toByteArray()
     }
 
     /**
-     * Export a filled report to a PDF file.
+     * Export one or more filled reports to a PDF file (batch order preserved).
      */
-    fun exportToPdfFile(jasperPrint: JasperPrint, outputFile: File) {
-        exportToPdf(jasperPrint, SimpleOutputStreamExporterOutput(outputFile))
+    fun exportToPdfFile(jasperPrint: JasperPrint, outputFile: File) =
+        exportToPdfFile(listOf(jasperPrint), outputFile)
+
+    fun exportToPdfFile(jasperPrints: List<JasperPrint>, outputFile: File) {
+        exportToPdf(jasperPrints, SimpleOutputStreamExporterOutput(outputFile))
     }
 
-    private fun exportToPdf(jasperPrint: JasperPrint, output: SimpleOutputStreamExporterOutput) {
+    private fun exportToPdf(jasperPrints: List<JasperPrint>, output: SimpleOutputStreamExporterOutput) {
+        require(jasperPrints.isNotEmpty()) { "Nothing to export: the report batch is empty" }
         val exporter = JRPdfExporter()
-        exporter.setExporterInput(SimpleExporterInput(jasperPrint))
+        exporter.setExporterInput(SimpleExporterInput.getInstance(jasperPrints))
         exporter.setExporterOutput(output)
 
         val configuration = SimplePdfExporterConfiguration()

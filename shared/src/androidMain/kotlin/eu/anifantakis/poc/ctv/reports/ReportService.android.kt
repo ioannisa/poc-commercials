@@ -10,13 +10,13 @@ import eu.anifantakis.poc.ctv.reports.models.ReportResult
 actual class ReportService actual constructor() {
 
     actual suspend fun exportToPdf(
-        payload: ReportPayload,
+        payloads: List<ReportPayload>,
         suggestedFileName: String
     ): ReportResult = unsupported()
 
-    actual suspend fun preview(payload: ReportPayload): ReportResult = unsupported()
+    actual suspend fun preview(payloads: List<ReportPayload>): ReportResult = unsupported()
 
-    actual suspend fun print(payload: ReportPayload): ReportResult = unsupported()
+    actual suspend fun print(payloads: List<ReportPayload>): ReportResult = unsupported()
 
     actual fun isReportGenerationAvailable(): Boolean = false
 
