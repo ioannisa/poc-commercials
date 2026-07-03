@@ -40,8 +40,11 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
+import kotlin.time.Clock
 
 // Required for non-JVM platforms (iOS, JS, WASM) — registers route serializers explicitly
 // since they cannot rely on reflection-based discovery.
@@ -71,9 +74,13 @@ fun RootNavigation() {
         if (authSession.isLoggedIn) CommercialNavRoute.Timetable else CommercialNavRoute.Login
     )
 
-    // Shared state lifted above NavDisplay so it persists across screen transitions
-    var year by remember { mutableStateOf(2025) }
-    var month by remember { mutableStateOf(12) }
+    // Shared state lifted above NavDisplay so it persists across screen
+    // transitions. Starts on the CURRENT month (user's local timezone).
+    val today = remember {
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    }
+    var year by remember { mutableStateOf(today.year) }
+    var month by remember { mutableStateOf(today.monthNumber) }
 
     // Data loading is keyed on the session revision: nothing is fetched until
     // login succeeds, and switching users (logout -> login) refetches with the

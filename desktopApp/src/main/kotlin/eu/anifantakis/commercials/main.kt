@@ -24,7 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.config.AppConfig
 import eu.anifantakis.commercials.di.initKoin
@@ -44,6 +46,9 @@ fun main() {
         Window(
             onCloseRequest = ::exitApplication,
             title = "Commercials Manager",
+            // Occupy the whole available screen area (respects the OS menu
+            // bar/dock/taskbar - unlike fullscreen, the window chrome stays).
+            state = rememberWindowState(placement = WindowPlacement.Maximized),
         ) {
             var isLoading by remember { mutableStateOf(true) }
 
