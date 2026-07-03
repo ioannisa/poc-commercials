@@ -14,9 +14,12 @@ import eu.anifantakis.poc.ctv.auth.AppRole
 import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.db.DbDemoButton
 import eu.anifantakis.poc.ctv.navigation.RootNavigation
+import org.koin.compose.koinInject
 
 @Composable
 fun App() {
+    val authSession = koinInject<AuthSession>()
+
     WithTextPrefetch {
         MaterialTheme {
             Surface(
@@ -28,8 +31,8 @@ fun App() {
                     RootNavigation()
 
                     // DB smoke test - admin-only on the server too
-                    @Suppress("UNUSED_EXPRESSION") AuthSession.revision  // recompose on login/logout
-                    if (AuthSession.isLoggedIn && AuthSession.role == AppRole.NORMAL_USER) {
+                    @Suppress("UNUSED_EXPRESSION") authSession.revision  // recompose on login/logout
+                    if (authSession.isLoggedIn && authSession.role == AppRole.NORMAL_USER) {
                         DbDemoButton(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)

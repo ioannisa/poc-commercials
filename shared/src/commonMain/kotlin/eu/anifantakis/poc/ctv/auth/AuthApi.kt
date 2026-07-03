@@ -30,9 +30,9 @@ private data class LoginResponseDto(
 
 /**
  * Client for the server's /api/auth endpoints. On successful login the
- * session is stored in [AuthSession] (encrypted, persistent).
+ * session is stored in the injected [AuthSession] (encrypted, persistent).
  */
-object AuthApi {
+class AuthApi(private val session: AuthSession) {
 
     private val httpClient by lazy {
         HttpClient {
@@ -51,7 +51,7 @@ object AuthApi {
             when {
                 response.status.isSuccess() -> {
                     val dto: LoginResponseDto = response.body()
-                    AuthSession.store(dto.token, dto.role, dto.displayName, dto.clientCode)
+                    session.store(dto.token, dto.role, dto.displayName, dto.clientCode)
                     Result.success(Unit)
                 }
                 response.status == HttpStatusCode.Unauthorized ->
@@ -69,7 +69,7 @@ object AuthApi {
      * this is what actually kills them), then clears the local session.
      */
     suspend fun logout() {
-        val token = AuthSession.token
+        val token = session.token
         if (token != null) {
             try {
                 httpClient.post("${AppConfig.require().serverBaseUrl}/api/auth/logout") {
@@ -79,6 +79,6 @@ object AuthApi {
                 // Server unreachable - still log out locally
             }
         }
-        AuthSession.clear()
+        session.clear()
     }
 }

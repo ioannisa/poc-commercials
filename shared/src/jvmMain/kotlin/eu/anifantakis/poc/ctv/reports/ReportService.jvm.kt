@@ -16,14 +16,14 @@ import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
- * JVM/Desktop implementation of ReportService.
+ * JVM/Desktop implementation of ReportService (Koin-bound on this platform).
  * Generates any report in-process via the shared generic [ReportEngine]
  * (same engine and templates the server uses). Multiple payloads are filled
  * separately and exported/printed as one document, in order.
  */
-actual class ReportService actual constructor() {
+class DesktopReportService : ReportService {
 
-    actual suspend fun exportToPdf(
+    override suspend fun exportToPdf(
         payloads: List<ReportPayload>,
         suggestedFileName: String
     ): ReportResult {
@@ -45,7 +45,7 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual suspend fun preview(payloads: List<ReportPayload>): ReportResult = withContext(Dispatchers.IO) {
+    override suspend fun preview(payloads: List<ReportPayload>): ReportResult = withContext(Dispatchers.IO) {
         if (payloads.isEmpty()) return@withContext ReportResult.Error("Nothing to preview: the report is empty")
         try {
             // Create temp PDF file for preview
@@ -66,7 +66,7 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual suspend fun print(payloads: List<ReportPayload>): ReportResult {
+    override suspend fun print(payloads: List<ReportPayload>): ReportResult {
         if (payloads.isEmpty()) return ReportResult.Error("Nothing to print: the report is empty")
         return try {
             val jasperPrints = withContext(Dispatchers.IO) { fillAll(payloads) }
@@ -84,7 +84,7 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual fun isReportGenerationAvailable(): Boolean = true
+    override fun isReportGenerationAvailable(): Boolean = true
 
     private fun fillAll(payloads: List<ReportPayload>): List<JasperPrint> =
         payloads.map { ReportEngine.fill(it.toWire()) }
@@ -124,7 +124,5 @@ actual class ReportService actual constructor() {
         return null
     }
 }
-
-actual fun createReportService(): ReportService = ReportService()
 
 actual fun currentTimeMillis(): Long = System.currentTimeMillis()

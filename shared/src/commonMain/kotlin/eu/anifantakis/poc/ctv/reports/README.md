@@ -60,7 +60,7 @@ fun InvoiceData.toReportPayload(): ReportPayload = ReportPayload(
 That's it - no engine, route, client, or service changes. Any screen then does:
 
 ```kotlin
-val service = createReportService()
+val service = koinInject<ReportService>()   // Koin-bound per platform
 service.exportToPdf(data.toReportPayload(), "Invoice_$number.pdf")  // or preview / print
 ```
 

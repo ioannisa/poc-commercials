@@ -8,12 +8,20 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.kotlinSerialization)
+    // Compile-time DI safety: validates the Koin graph during compilation
+    alias(libs.plugins.koinCompiler)
 }
 
 composeCompiler {
     stabilityConfigurationFiles.add(
         layout.projectDirectory.file("compose_compiler_config.conf")
     )
+}
+
+koinCompiler {
+    // Print detected Koin components during compilation (proof the
+    // compile-time DI validation is active)
+    userLogs = true
 }
 
 kotlin {
@@ -90,6 +98,12 @@ kotlin {
 
             // Encrypted key/value persistence (auth token storage)
             implementation(libs.ksafe)
+
+            // Koin DI. koin-core is `api`: initKoin's signature and the app
+            // modules' entry points (KoinPlatform.getKoin()) use Koin types.
+            api(libs.koin.core)
+            implementation(libs.koin.compose)
+            implementation(libs.koin.annotations)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

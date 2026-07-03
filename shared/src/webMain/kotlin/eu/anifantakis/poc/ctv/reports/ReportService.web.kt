@@ -3,14 +3,14 @@ package eu.anifantakis.poc.ctv.reports
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 
 /**
- * Browser implementation of ReportService, shared by the js and wasmJs
- * targets. Reports are generated server-side via [ReportApiClient] (single
- * request or batch); the resulting PDF bytes are handed to the platform's
- * [BrowserPdfHelper].
+ * Browser implementation of ReportService (Koin-bound on js and wasmJs).
+ * Reports are generated server-side via the injected [ReportApiClient]
+ * (single request or batch); the resulting PDF bytes are handed to the
+ * platform's [BrowserPdfHelper].
  */
-actual class ReportService actual constructor() {
+class BrowserReportService(private val api: ReportApiClient) : ReportService {
 
-    actual suspend fun exportToPdf(
+    override suspend fun exportToPdf(
         payloads: List<ReportPayload>,
         suggestedFileName: String
     ): ReportResult {
@@ -20,14 +20,14 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual suspend fun preview(payloads: List<ReportPayload>): ReportResult {
+    override suspend fun preview(payloads: List<ReportPayload>): ReportResult {
         return generate(payloads, fileName = null, verb = "preview") { pdfBytes ->
             BrowserPdfHelper.previewPdf(pdfBytes)
             ReportResult.Success("PDF opened in new tab")
         }
     }
 
-    actual suspend fun print(payloads: List<ReportPayload>): ReportResult {
+    override suspend fun print(payloads: List<ReportPayload>): ReportResult {
         return generate(payloads, fileName = null, verb = "print") { pdfBytes ->
             BrowserPdfHelper.printPdf(pdfBytes)
             ReportResult.Success("Print dialog opened")
@@ -37,10 +37,9 @@ actual class ReportService actual constructor() {
     /**
      * Report generation runs on the server, reachable via the API. This is
      * optimistic (it does not probe the server - the API is sync); if the
-     * server is down, the actual call reports the error. Use
-     * ReportApiClient.checkServerStatus() for a real reachability check.
+     * server is down, the actual call reports the error.
      */
-    actual fun isReportGenerationAvailable(): Boolean = true
+    override fun isReportGenerationAvailable(): Boolean = true
 
     private suspend fun generate(
         payloads: List<ReportPayload>,
@@ -51,9 +50,9 @@ actual class ReportService actual constructor() {
         if (payloads.isEmpty()) return ReportResult.Error("Nothing to $verb: the report is empty")
         return try {
             val result = if (payloads.size == 1) {
-                ReportApiClient.generatePdf(payloads.single().toWire(fileName))
+                api.generatePdf(payloads.single().toWire(fileName))
             } else {
-                ReportApiClient.generatePdf(payloads.toWireBatch(fileName))
+                api.generatePdf(payloads.toWireBatch(fileName))
             }
             result.fold(
                 onSuccess = onPdf,
@@ -66,5 +65,3 @@ actual class ReportService actual constructor() {
         }
     }
 }
-
-actual fun createReportService(): ReportService = ReportService()

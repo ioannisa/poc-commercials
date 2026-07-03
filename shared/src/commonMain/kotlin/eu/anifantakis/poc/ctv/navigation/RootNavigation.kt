@@ -34,6 +34,7 @@ import eu.anifantakis.poc.ctv.screens.LoginScreen
 import eu.anifantakis.poc.ctv.screens.TimetableScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.serialization.modules.SerializersModule
@@ -54,11 +55,14 @@ private val navConfig = SavedStateConfiguration {
 @Composable
 fun RootNavigation() {
     val scope = rememberCoroutineScope()
+    val authSession = koinInject<AuthSession>()
+    val authApi = koinInject<AuthApi>()
+    val scheduleRepository = koinInject<ScheduleRepository>()
 
     // Token persists (no expiry), so a returning user skips the login screen
     val backStack = rememberNavBackStack(
         navConfig,
-        if (AuthSession.isLoggedIn) CommercialNavRoute.Timetable else CommercialNavRoute.Login
+        if (authSession.isLoggedIn) CommercialNavRoute.Timetable else CommercialNavRoute.Login
     )
 
     // Shared state lifted above NavDisplay so it persists across screen transitions
@@ -68,11 +72,11 @@ fun RootNavigation() {
     // Data loading is keyed on the session revision: nothing is fetched until
     // login succeeds, and switching users (logout -> login) refetches with the
     // new token - which matters because the server filters data per role.
-    val authRevision = AuthSession.revision
+    val authRevision = authSession.revision
 
     var breaks by remember { mutableStateOf<List<BreakSlot>>(emptyList()) }
     LaunchedEffect(authRevision) {
-        if (AuthSession.isLoggedIn) breaks = ScheduleRepository.getBreaks()
+        if (authSession.isLoggedIn) breaks = scheduleRepository.getBreaks()
     }
 
     var originalCellData by remember(year, month) {
@@ -88,8 +92,8 @@ fun RootNavigation() {
     }
 
     LaunchedEffect(year, month, authRevision) {
-        if (!AuthSession.isLoggedIn) return@LaunchedEffect
-        val data = ScheduleRepository.getSchedule(year, month)
+        if (!authSession.isLoggedIn) return@LaunchedEffect
+        val data = scheduleRepository.getSchedule(year, month)
         originalCellData = data
         cellData.clear()
         cellData.putAll(data)
@@ -152,7 +156,7 @@ fun RootNavigation() {
                     },
                     onLogout = {
                         scope.launch {
-                            AuthApi.logout()   // revokes the token server-side, clears AuthSession
+                            authApi.logout()   // revokes the token server-side, clears the session
                             breaks = emptyList()
                             originalCellData = emptyMap()
                             cellData.clear()

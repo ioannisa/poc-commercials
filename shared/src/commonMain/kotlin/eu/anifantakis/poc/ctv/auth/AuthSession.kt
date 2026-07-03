@@ -3,8 +3,10 @@ package eu.anifantakis.poc.ctv.auth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.invoke
 import kotlinx.serialization.Serializable
+import org.koin.core.annotation.Provided
 
 /**
  * Everything the client knows about the logged-in user, persisted as ONE
@@ -22,10 +24,13 @@ data class StoredSession(
  * The app-wide auth state: an encrypted, persisted [StoredSession] (survives
  * restarts - tokens never expire, so a returning user goes straight in) plus
  * a Compose-observable revision so UI reacts to login/logout.
+ *
+ * Koin singleton - inject it, never construct it directly.
  */
-object AuthSession {
-
-    private val ksafe by lazy { createKSafe() }
+// KSafe is @Provided: it comes from the expect/actual factory (createKSafe),
+// registered with a classic-DSL definition the compile-time checker can't
+// index - the annotation tells the checker to trust it exists at runtime.
+class AuthSession(@Provided private val ksafe: KSafe) {
 
     // Encrypted at rest by default (KSafe); key = property name.
     private var stored by ksafe(StoredSession())

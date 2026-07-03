@@ -30,10 +30,11 @@ import androidx.compose.ui.unit.sp
 import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.grids.*
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
-import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.ReportService
 import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.print
 import eu.anifantakis.poc.ctv.reports.toReportPayload
+import org.koin.compose.koinInject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
@@ -58,7 +59,8 @@ fun CommercialDetailScreen(
     onNext: (() -> Unit)? = null
 ) {
     // View-only roles can browse and print, but not reorder/edit
-    val canEdit = AuthSession.role.canEdit
+    val authSession = koinInject<AuthSession>()
+    val canEdit = authSession.role.canEdit
 
     // Local mutable state for reordering - synced with parent
     // We treat the incoming ImmutableList as the initial value.
@@ -70,7 +72,7 @@ fun CommercialDetailScreen(
 
     // Print this break's program flow (same report the scheduler popups print)
     val reportScope = rememberCoroutineScope()
-    val reportService = remember { createReportService() }
+    val reportService = koinInject<ReportService>()
 
     fun printBreak() {
         reportScope.launch {

@@ -8,12 +8,12 @@ import eu.anifantakis.poc.ctv.reports.models.ReportResult
  * hand them in. Multiple payloads become ONE document in order - e.g. a whole
  * month as a batch of daily reports.
  *
- * Platform actuals:
- * - JVM desktop: fills in-process via the shared JasperReports engine
- * - Browsers (js/wasmJs): POST the payload(s) to the report server
- * - Android/iOS: report generation is not available; every call returns an error
+ * Injected via Koin; the platform module binds the right implementation:
+ * - JVM desktop: [DesktopReportService] - fills in-process via the shared engine
+ * - Browsers (js/wasmJs): BrowserReportService - POSTs to the report server
+ * - Android/iOS: [UnsupportedReportService]
  */
-expect class ReportService() {
+interface ReportService {
     /**
      * Generate a PDF and save it (desktop: save dialog; browser: download).
      */
@@ -45,6 +45,23 @@ suspend fun ReportService.preview(payload: ReportPayload): ReportResult = previe
 suspend fun ReportService.print(payload: ReportPayload): ReportResult = print(listOf(payload))
 
 /**
- * Factory function to create a ReportService instance
+ * Bound on platforms that cannot generate reports (Android/iOS).
  */
-expect fun createReportService(): ReportService
+class UnsupportedReportService : ReportService {
+
+    override suspend fun exportToPdf(
+        payloads: List<ReportPayload>,
+        suggestedFileName: String
+    ): ReportResult = unsupported()
+
+    override suspend fun preview(payloads: List<ReportPayload>): ReportResult = unsupported()
+
+    override suspend fun print(payloads: List<ReportPayload>): ReportResult = unsupported()
+
+    override fun isReportGenerationAvailable(): Boolean = false
+
+    private fun unsupported() = ReportResult.Error(
+        "Report generation is not available on this platform. " +
+            "Use the Desktop app or the web app instead."
+    )
+}

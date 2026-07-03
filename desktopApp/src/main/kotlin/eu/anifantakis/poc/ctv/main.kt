@@ -27,13 +27,17 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import eu.anifantakis.poc.ctv.auth.AuthSession
 import eu.anifantakis.poc.ctv.config.AppConfig
+import eu.anifantakis.poc.ctv.di.initKoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.koin.mp.KoinPlatform
 
 fun main() {
+    initKoin()
     runBlocking {
         AppConfig.load()
-        AuthSession.ready()   // restore persisted login (no-op wait on JVM)
+        // Restore persisted login (no-op wait on JVM)
+        KoinPlatform.getKoin().get<AuthSession>().ready()
     }
 
     application {

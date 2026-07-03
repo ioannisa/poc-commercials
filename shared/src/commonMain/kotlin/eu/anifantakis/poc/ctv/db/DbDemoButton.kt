@@ -13,10 +13,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 @Composable
 fun DbDemoButton(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val dbApi = koinInject<DbApi>()
     var showDialog by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<DbUser?>(null) }
@@ -31,7 +33,7 @@ fun DbDemoButton(modifier: Modifier = Modifier) {
             showDialog = true
             scope.launch {
                 try {
-                    result = fetchDbUser()
+                    result = dbApi.fetchDbUser()
                 } catch (t: Throwable) {
                     error = t.message ?: t::class.simpleName ?: "Unknown error"
                 } finally {

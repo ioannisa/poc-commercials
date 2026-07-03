@@ -14,11 +14,11 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 /**
- * HTTP client for calling the report server API.
+ * HTTP client for calling the report server API (Koin singleton).
  * Used by browser-based platforms (JS and WASM) to generate PDFs via the
  * backend. Generic: any report id the server has a template for works here.
  */
-object ReportApiClient {
+class ReportApiClient(private val session: AuthSession) {
 
     // Same config source as every other network call in the app
     // (config.properties -> AppConfig, loaded at application startup)
@@ -35,7 +35,7 @@ object ReportApiClient {
             }
             // Runs per request - picks up the current session token
             defaultRequest {
-                AuthSession.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+                session.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
             }
         }
     }

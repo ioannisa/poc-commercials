@@ -17,11 +17,12 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
 import eu.anifantakis.poc.ctv.reports.ReportPayload
-import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.ReportService
 import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 import eu.anifantakis.poc.ctv.reports.toReportPayload
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 /**
  * Toolbar with report generation buttons for the visible month.
@@ -37,7 +38,7 @@ fun ReportToolbar(
     modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
-    val reportService = remember { createReportService() }
+    val reportService = koinInject<ReportService>()
     var isLoading by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
 

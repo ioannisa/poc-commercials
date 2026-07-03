@@ -63,19 +63,20 @@ private data class ScheduleDto(
     val cells: List<CellDto>
 )
 
-private val client by lazy {
-    HttpClient {
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-        // Runs per request - picks up the current session token
-        defaultRequest {
-            AuthSession.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+/** Koin singleton - schedule/breaks data via the app server. */
+class ScheduleRepository(private val session: AuthSession) {
+
+    private val client by lazy {
+        HttpClient {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+            // Runs per request - picks up the current session token
+            defaultRequest {
+                session.token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+            }
         }
     }
-}
-
-object ScheduleRepository {
 
     suspend fun getBreaks(): List<BreakSlot> {
         val dtos: List<BreakSlotDto> = client.get("${AppConfig.require().serverBaseUrl}/api/breaks").body()

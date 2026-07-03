@@ -37,12 +37,13 @@ import eu.anifantakis.poc.ctv.data.SampleData
 import eu.anifantakis.poc.ctv.grids.*
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
 import eu.anifantakis.poc.ctv.reports.ReportPayload
-import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.ReportService
 import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.print
 import eu.anifantakis.poc.ctv.reports.toReportPayload
 import eu.anifantakis.poc.ctv.reports.ui.ReportToolbar
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
@@ -78,7 +79,8 @@ fun TimetableScreen(
 ) {
     // View-only roles (Report Viewer / Customer Viewer) see everything their
     // data allows but cannot modify it
-    val canEdit = AuthSession.role.canEdit
+    val authSession = koinInject<AuthSession>()
+    val canEdit = authSession.role.canEdit
 
     // Daily totals - recalculate when cellData changes
     // We need to observe cellData changes. cellData is a SnapshotStateMap.
@@ -99,7 +101,7 @@ fun TimetableScreen(
 
     // Report printing from popup menus (day header, break header, cell)
     val reportScope = rememberCoroutineScope()
-    val reportService = remember { createReportService() }
+    val reportService = koinInject<ReportService>()
 
     fun printDay(date: LocalDate) {
         reportScope.launch {
@@ -499,14 +501,15 @@ private fun KeyboardEnabledHeader(
                 }
 
                 // Logged-in user + logout
+                val authSession = koinInject<AuthSession>()
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = AuthSession.displayName,
+                        text = authSession.displayName,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = AuthSession.role.label,
+                        text = authSession.role.label,
                         fontSize = 10.sp,
                         color = Color.Gray
                     )

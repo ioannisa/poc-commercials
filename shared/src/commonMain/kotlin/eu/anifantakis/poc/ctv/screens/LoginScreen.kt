@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.poc.ctv.auth.AuthApi
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 /**
  * Login gate shown before any data is loaded. On success the session (token,
@@ -50,6 +51,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(onLoggedIn: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val authApi = koinInject<AuthApi>()
 
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -62,7 +64,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
         isLoading = true
         errorMessage = null
         scope.launch {
-            AuthApi.login(username.trim(), password)
+            authApi.login(username.trim(), password)
                 .onSuccess { onLoggedIn() }
                 .onFailure { errorMessage = it.message }
             isLoading = false
