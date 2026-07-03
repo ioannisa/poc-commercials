@@ -1,0 +1,41 @@
+# Hosting layout for the Commercials Manager server.
+#
+# central  (REQUIRED, standalone): the server's OWN schema - application
+#          users, tokens, and per-station grants. It must never double as a
+#          station schema; the server refuses to start if a station below
+#          points at the same database.
+#
+# stations (OPTIONAL, 0..n): one entry per hosted TV/radio station. Identical
+#          table structure per schema; schemas may live on the same MySQL
+#          server (as below) or entirely different servers - every entry
+#          carries its own full jdbcUrl + credentials (plaintext by design;
+#          this file is server-side deployment config, keep it out of client
+#          bundles).
+#
+# `id` is the stable key used in user grants and API calls; `name` is what
+# users see in the station dropdown.
+#
+# Path override: -Dstations.config=<path> or POC_STATIONS env var.
+central:
+  jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+  username: root
+  password: rootpass123
+
+stations:
+  - id: crete-tv
+    name: "Crete TV"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_cretetv?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: rootpass123
+
+  - id: radio-984
+    name: "Radio 984"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_radio984?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: rootpass123
+
+  - id: channel-4
+    name: "Channel 4"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_channel4?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: rootpass123

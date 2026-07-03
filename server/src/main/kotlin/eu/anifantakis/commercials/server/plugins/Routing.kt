@@ -5,7 +5,8 @@ import eu.anifantakis.commercials.server.routes.authRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
 import eu.anifantakis.commercials.server.routes.scheduleRoutes
-import eu.anifantakis.commercials.server.scheduler.SchedulerDb
+import eu.anifantakis.commercials.server.scheduler.CentralDb
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.response.*
@@ -15,31 +16,32 @@ import org.koin.ktor.ext.inject
 fun Application.configureRouting() {
     // Injected once here and passed to the route builders explicitly -
     // route functions stay plain and easy to test with fakes.
-    val schedulerDb by inject<SchedulerDb>()
+    val centralDb by inject<CentralDb>()
     val authDb by inject<AuthDb>()
+    val registry by inject<StationRegistry>()
 
     routing {
         // Open endpoints: health checks + login (how you obtain a token)
         get("/") {
-            call.respondText("POCCTV Report Server is running")
+            call.respondText("Commercials Manager Server is running")
         }
 
         get("/health") {
             call.respondText("OK")
         }
 
-        authRoutes(authDb)
+        authRoutes(authDb, registry)
 
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
             // Report routes
             reportRoutes()
 
-            // Schedule / commercials data (DB-backed)
-            scheduleRoutes(schedulerDb)
+            // Schedule / commercials data (station-scoped, DB-backed)
+            scheduleRoutes(registry)
 
             // Tiny DB connectivity smoke test (returns first row of test.user)
-            demoRoutes(schedulerDb)
+            demoRoutes(centralDb)
         }
     }
 }

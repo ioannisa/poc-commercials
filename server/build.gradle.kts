@@ -46,6 +46,9 @@ dependencies {
     implementation(libs.mysql.connector.j)
     implementation(libs.hikaricp)
 
+    // stations.yaml parsing (kotlinx-serialization YAML format)
+    implementation(libs.kaml)
+
     // Testing
     testImplementation(libs.kotlin.test)
 }

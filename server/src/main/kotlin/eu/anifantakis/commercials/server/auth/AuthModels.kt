@@ -1,24 +1,37 @@
 package eu.anifantakis.commercials.server.auth
 
 /**
- * The three access layers:
+ * The three access layers, granted PER STATION:
  * - [NORMAL_USER]: full access - everything the app does today.
- * - [REPORT_VIEWER]: sees all data and reports, but read-only (no editing).
+ * - [REPORT_VIEWER]: sees all of the station's data and reports, read-only.
  * - [CUSTOMER_VIEWER]: read-only AND scoped - sees only the spots belonging
- *   to their own [AuthUser.clientCode]; the server filters their data.
+ *   to their own [StationGrant.clientCode] on that station.
  */
 enum class UserRole { NORMAL_USER, REPORT_VIEWER, CUSTOMER_VIEWER }
 
 /**
- * The authenticated user, attached to the call as the auth principal.
+ * One user's privilege on one hosted station. A user can be NORMAL_USER on
+ * "Crete TV" and REPORT_VIEWER on "Radio 984" at the same time.
  *
  * @param clientCode set only for [UserRole.CUSTOMER_VIEWER] - the client code
- *        (Κωδ. Πελ.) whose commercials this customer is allowed to see.
+ *        (Κωδ. Πελ.) whose commercials this customer may see on that station.
+ */
+data class StationGrant(
+    val stationId: String,
+    val role: UserRole,
+    val clientCode: String?
+)
+
+/**
+ * The authenticated user, attached to the call as the auth principal.
+ * Station access is decided per request from [grants].
  */
 data class AuthUser(
     val id: Long,
     val username: String,
     val displayName: String,
-    val role: UserRole,
-    val clientCode: String?
-)
+    val grants: List<StationGrant>
+) {
+    fun grantFor(stationId: String): StationGrant? = grants.firstOrNull { it.stationId == stationId }
+    fun hasRoleAnywhere(role: UserRole): Boolean = grants.any { it.role == role }
+}

@@ -112,11 +112,13 @@ private fun daysInMonth(year: Int, month: Int): Int = when {
 }
 
 /**
- * Mirrors shared/.../data/SampleData.generateCellData byte-for-byte.
- * Order of random draws MUST match the original (weekend check → spotCount → avgDuration → commercials).
+ * Deterministic demo-data generator. [stationSeed] varies the RNG per hosted
+ * station so different schemas hold visibly different data; determinism per
+ * (station, month) is what makes concurrent seeding safe (see
+ * StationDb.ensureMonthSeeded).
  */
-fun generateMonth(breaks: List<BreakSlotRow>, year: Int, month: Int): List<CellRow> {
-    val random = kotlin.random.Random(year * 100 + month)
+fun generateMonth(breaks: List<BreakSlotRow>, year: Int, month: Int, stationSeed: Int = 0): List<CellRow> {
+    val random = kotlin.random.Random(stationSeed * 1_000_003 + year * 100 + month)
     val out = mutableListOf<CellRow>()
     for (day in 1..daysInMonth(year, month)) {
         val date = LocalDate.of(year, month, day)

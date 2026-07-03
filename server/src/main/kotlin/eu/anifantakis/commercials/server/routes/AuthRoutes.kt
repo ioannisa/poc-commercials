@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.server.routes
 
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.plugins.AUTH_BEARER
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
@@ -14,15 +15,23 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class LoginRequest(val username: String, val password: String)
 
+/** One station this user may access, with their role on it. */
 @Serializable
-data class LoginResponse(
-    val token: String,
+data class StationAccessDto(
+    val id: String,
+    val name: String,
     val role: String,
-    val displayName: String,
     val clientCode: String? = null
 )
 
-fun Route.authRoutes(authDb: AuthDb) {
+@Serializable
+data class LoginResponse(
+    val token: String,
+    val displayName: String,
+    val stations: List<StationAccessDto>
+)
+
+fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
     route("/api/auth") {
 
         // Open: this is how you GET a token
@@ -37,13 +46,26 @@ fun Route.authRoutes(authDb: AuthDb) {
                 return@post
             }
 
+            // Grants for stations no longer in stations.yaml are dropped -
+            // the display name comes from the YAML, and a grant without a
+            // hosted station is unusable anyway.
+            val stations = user.grants.mapNotNull { grant ->
+                registry.config(grant.stationId)?.let { station ->
+                    StationAccessDto(
+                        id = station.id,
+                        name = station.name,
+                        role = grant.role.name,
+                        clientCode = grant.clientCode
+                    )
+                }
+            }
+
             val token = withContext(Dispatchers.IO) { authDb.createToken(user.id) }
             call.respond(
                 LoginResponse(
                     token = token,
-                    role = user.role.name,
                     displayName = user.displayName,
-                    clientCode = user.clientCode
+                    stations = stations
                 )
             )
         }

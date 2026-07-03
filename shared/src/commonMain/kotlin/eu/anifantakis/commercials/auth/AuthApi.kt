@@ -21,16 +21,24 @@ import kotlinx.serialization.json.Json
 private data class LoginRequestDto(val username: String, val password: String)
 
 @Serializable
+private data class StationAccessDto(
+    val id: String,
+    val name: String,
+    val role: String,
+    val clientCode: String? = null,
+)
+
+@Serializable
 private data class LoginResponseDto(
     val token: String,
-    val role: String,
     val displayName: String,
-    val clientCode: String? = null,
+    val stations: List<StationAccessDto> = emptyList(),
 )
 
 /**
  * Client for the server's /api/auth endpoints. On successful login the
- * session is stored in the injected [AuthSession] (encrypted, persistent).
+ * session - including the user's per-station access list - is stored in the
+ * injected [AuthSession] (encrypted, persistent).
  */
 class AuthApi(private val session: AuthSession) {
 
@@ -51,8 +59,18 @@ class AuthApi(private val session: AuthSession) {
             when {
                 response.status.isSuccess() -> {
                     val dto: LoginResponseDto = response.body()
-                    session.store(dto.token, dto.role, dto.displayName, dto.clientCode)
-                    Result.success(Unit)
+                    if (dto.stations.isEmpty()) {
+                        Result.failure(Exception("No stations are assigned to this account"))
+                    } else {
+                        session.store(
+                            token = dto.token,
+                            displayName = dto.displayName,
+                            stations = dto.stations.map {
+                                StationAccess(it.id, it.name, it.role, it.clientCode)
+                            }
+                        )
+                        Result.success(Unit)
+                    }
                 }
                 response.status == HttpStatusCode.Unauthorized ->
                     Result.failure(Exception("Invalid username or password"))

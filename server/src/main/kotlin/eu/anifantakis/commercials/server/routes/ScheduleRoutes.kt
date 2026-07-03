@@ -1,10 +1,10 @@
 package eu.anifantakis.commercials.server.routes
 
 import eu.anifantakis.commercials.server.auth.UserRole
-import eu.anifantakis.commercials.server.plugins.authUser
+import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
-import eu.anifantakis.commercials.server.scheduler.SchedulerDb
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -52,11 +52,18 @@ data class ScheduleDto(
     val cells: List<CellDto>
 )
 
-fun Route.scheduleRoutes(db: SchedulerDb) {
+/**
+ * Schedule data, station-scoped: every request carries `?station=<id>`; the
+ * caller must hold a grant on that station, and the grant's role drives
+ * filtering (customers only ever receive their own commercials).
+ */
+fun Route.scheduleRoutes(registry: StationRegistry) {
     route("/api") {
         get("/breaks") {
+            val access = call.stationAccessOrRespond(registry) ?: return@get
+
             // JDBC is blocking - keep it off Ktor's request threads
-            val breaks = withContext(Dispatchers.IO) { db.loadBreaks() }.map {
+            val breaks = withContext(Dispatchers.IO) { access.db.loadBreaks() }.map {
                 BreakSlotDto(
                     id = it.id,
                     hour = it.hour,
@@ -77,19 +84,21 @@ fun Route.scheduleRoutes(db: SchedulerDb) {
                 return@get
             }
 
+            val access = call.stationAccessOrRespond(registry) ?: return@get
+
             // JDBC is blocking - keep it off Ktor's request threads
             val (cells, commercialsByKey) = withContext(Dispatchers.IO) {
-                db.ensureMonthSeeded(year, month)
-                db.loadMonth(year, month)
+                access.db.ensureMonthSeeded(year, month)
+                access.db.loadMonth(year, month)
             }
 
             // CUSTOMER_VIEWER data scoping: they only ever receive their own
-            // commercials. Cell aggregates (spot count, duration) are
-            // recomputed from the filtered list, and cells with none of their
-            // spots are omitted entirely - the client renders the filtered
-            // world as-is, so reports built from it are scoped too.
-            val user = call.authUser()
-            val onlyClientCode = user.clientCode?.takeIf { user.role == UserRole.CUSTOMER_VIEWER }
+            // commercials on this station. Cell aggregates (spot count,
+            // duration) are recomputed from the filtered list, and cells with
+            // none of their spots are omitted entirely - the client renders
+            // the filtered world as-is, so reports built from it are scoped too.
+            val grant = access.grant
+            val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
 
             val dtos = cells.mapNotNull { cell ->
                 var coms = commercialsByKey[cell.breakId to cell.date].orEmpty()

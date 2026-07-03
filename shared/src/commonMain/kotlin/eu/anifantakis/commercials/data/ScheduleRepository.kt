@@ -79,7 +79,11 @@ class ScheduleRepository(private val session: AuthSession) {
     }
 
     suspend fun getBreaks(): List<BreakSlot> {
-        val dtos: List<BreakSlotDto> = client.get("${AppConfig.require().serverBaseUrl}/api/breaks").body()
+        val dtos: List<BreakSlotDto> = client.get("${AppConfig.require().serverBaseUrl}/api/breaks") {
+            // Data is station-scoped: the server checks the grant and reads
+            // from that station's schema
+            parameter("station", session.selectedStation?.id ?: "")
+        }.body()
         return dtos.map {
             BreakSlot(
                 id = it.id,
@@ -95,6 +99,7 @@ class ScheduleRepository(private val session: AuthSession) {
         val dto: ScheduleDto = client.get("${AppConfig.require().serverBaseUrl}/api/schedule") {
             parameter("year", year)
             parameter("month", month)
+            parameter("station", session.selectedStation?.id ?: "")
         }.body()
 
         return dto.cells.associate { cell ->

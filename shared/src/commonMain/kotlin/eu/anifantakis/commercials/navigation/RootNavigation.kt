@@ -79,15 +79,19 @@ fun RootNavigation() {
         if (authSession.isLoggedIn) breaks = scheduleRepository.getBreaks()
     }
 
-    var originalCellData by remember(year, month) {
+    // Also keyed on the session revision: a station switch (or user switch)
+    // must start from a clean grid - cells are keyed by breakId+date, which
+    // collide across stations, so stale edits/modified flags would otherwise
+    // leak from the previously selected station.
+    var originalCellData by remember(year, month, authRevision) {
         mutableStateOf<Map<SchedulerKey, SchedulerCellData>>(emptyMap())
     }
 
-    val cellData = remember(year, month) {
+    val cellData = remember(year, month, authRevision) {
         mutableStateMapOf<SchedulerKey, SchedulerCellData>()
     }
 
-    val modifiedCells = remember(year, month) {
+    val modifiedCells = remember(year, month, authRevision) {
         mutableStateSetOf<SchedulerKey>()
     }
 

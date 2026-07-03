@@ -27,6 +27,7 @@ ktor = "3.5.1"
 logback = "1.5.37"
 mysql-connector = "9.7.0"
 hikaricp = "6.3.0"
+kaml = "0.104.0"
 
 jasperreports = "7.0.7"
 
@@ -122,6 +123,9 @@ mysql-connector-j = { module = "com.mysql:mysql-connector-j", version.ref = "mys
 
 # Connection pooling (server-only)
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
+
+# YAML for kotlinx-serialization (server-only: stations.yaml)
+kaml = { module = "com.charleskorn.kaml:kaml", version.ref = "kaml" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

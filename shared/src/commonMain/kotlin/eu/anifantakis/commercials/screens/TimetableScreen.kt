@@ -7,6 +7,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
@@ -78,8 +80,10 @@ fun TimetableScreen(
     onLogout: () -> Unit
 ) {
     // View-only roles (Report Viewer / Customer Viewer) see everything their
-    // data allows but cannot modify it
+    // data allows but cannot modify it. The role is PER STATION, so reading
+    // revision makes edit gating react to station switches too.
     val authSession = koinInject<AuthSession>()
+    @Suppress("UNUSED_EXPRESSION") authSession.revision
     val canEdit = authSession.role.canEdit
 
     // Daily totals - recalculate when cellData changes
@@ -436,6 +440,62 @@ fun TimetableScreen(
 private fun dayMenuLabel(date: LocalDate): String =
     "${date.day.toString().padStart(2, '0')}/${date.monthNumber.toString().padStart(2, '0')}"
 
+/**
+ * Shows which station's data is on screen. With a single grant it's a plain
+ * label; with several it becomes a dropdown - selecting one switches the
+ * whole app to that station's schema (data refetch + role re-evaluation are
+ * driven by the session revision bump in [AuthSession.selectStation]).
+ */
+@Composable
+private fun StationSelector(authSession: AuthSession) {
+    val current = authSession.selectedStation ?: return
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        if (authSession.stations.size > 1) {
+            TextButton(onClick = { expanded = true }) {
+                Text(
+                    text = current.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1565C0)
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "Switch station",
+                    tint = Color(0xFF1565C0)
+                )
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                authSession.stations.forEach { station ->
+                    DropdownMenuItem(
+                        text = { Text(station.name) },
+                        leadingIcon = {
+                            if (station.id == current.id) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            } else {
+                                Spacer(Modifier.size(16.dp))
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            authSession.selectStation(station.id)
+                        }
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = current.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1565C0),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+    }
+}
+
 @Composable
 private fun KeyboardEnabledHeader(
     year: Int,
@@ -500,8 +560,13 @@ private fun KeyboardEnabledHeader(
                     )
                 }
 
-                // Logged-in user + logout
+                // Station switcher (dropdown only when the user can access
+                // more than one station)
                 val authSession = koinInject<AuthSession>()
+                @Suppress("UNUSED_EXPRESSION") authSession.revision
+                StationSelector(authSession)
+
+                // Logged-in user + logout
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = authSession.displayName,

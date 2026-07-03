@@ -3,11 +3,13 @@ package eu.anifantakis.commercials.server.config
 import java.io.File
 import java.util.Properties
 
+/**
+ * Server process settings from config.properties. Database connections do
+ * NOT live here - the central schema and the hosted stations are all defined
+ * in stations.yaml (see stations/StationRegistry.kt).
+ */
 data class ServerConfig(
-    val port: Int,
-    val mysqlJdbcUrl: String,
-    val mysqlUsername: String,
-    val mysqlPassword: String
+    val port: Int
 )
 
 object ServerConfigLoader {
@@ -33,14 +35,7 @@ object ServerConfigLoader {
             props.getProperty(key) ?: System.getenv(envKey) ?: default
 
         return ServerConfig(
-            port = read("server.port", "POC_PORT", "8080").toIntOrNull() ?: 8080,
-            mysqlJdbcUrl = read(
-                "mysql.jdbcUrl",
-                "POC_DB_URL",
-                "jdbc:mysql://localhost:3306/commercials?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
-            ),
-            mysqlUsername = read("mysql.username", "POC_DB_USER", "root"),
-            mysqlPassword = read("mysql.password", "POC_DB_PASSWORD", "rootpass123")
+            port = read("server.port", "POC_PORT", "8080").toIntOrNull() ?: 8080
         )
     }
 }

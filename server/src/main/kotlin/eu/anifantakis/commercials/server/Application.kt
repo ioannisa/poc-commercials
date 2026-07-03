@@ -9,7 +9,8 @@ import eu.anifantakis.commercials.server.plugins.configureSecurity
 import eu.anifantakis.commercials.server.plugins.configureSerialization
 import eu.anifantakis.commercials.server.plugins.configureStatusPages
 import eu.anifantakis.commercials.server.plugins.configureCORS
-import eu.anifantakis.commercials.server.scheduler.SchedulerDb
+import eu.anifantakis.commercials.server.scheduler.CentralDb
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -32,11 +33,13 @@ fun Application.module() {
         modules(serverModule)
     }
 
-    val schedulerDb by inject<SchedulerDb>()
+    val centralDb by inject<CentralDb>()
     val authDb by inject<AuthDb>()
+    val registry by inject<StationRegistry>()
 
-    schedulerDb.bootstrap()
-    authDb.bootstrap()
+    // Central auth tables + demo users/grants for the hosted stations.
+    // Station schemas bootstrap lazily on first access (StationRegistry.db).
+    authDb.bootstrap(registry.ids)
 
     configureCallLogging()
     configureStatusPages()
@@ -45,8 +48,9 @@ fun Application.module() {
     configureCORS()
     configureRouting()
 
-    // Release the DB connection pool when the server shuts down
+    // Release all DB connection pools when the server shuts down
     monitor.subscribe(ApplicationStopped) {
-        schedulerDb.close()
+        registry.closeAll()
+        centralDb.close()
     }
 }

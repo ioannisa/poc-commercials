@@ -2,47 +2,43 @@ package eu.anifantakis.commercials.server.scheduler
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import eu.anifantakis.commercials.server.config.ServerConfig
-import org.koin.core.annotation.Provided
+import eu.anifantakis.commercials.server.stations.StationConfig
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.LocalDate
-import javax.sql.DataSource
 
 /**
- * Koin singleton. [config] is @Provided: it comes from a file-loading factory
- * (classic-DSL definition), which the compile-time graph checker can't index.
+ * One station's schedule database: a dedicated connection pool over that
+ * station's schema (its own jdbcUrl/credentials from stations.yaml) plus the
+ * schedule queries. Every hosted station has an identical table structure;
+ * instances are created and cached by StationRegistry - NOT a Koin
+ * definition, since the set of stations is data, not wiring.
  */
-class SchedulerDb(@Provided private val config: ServerConfig) {
+class StationDb(private val station: StationConfig) {
 
-    /**
-     * Pooled instead of one physical connection per call: without pooling,
-     * every query paid a fresh TCP + MySQL auth handshake, and a burst of
-     * concurrent requests (this server is the sole engine for Wasm/JS, so
-     * every screen load goes through it) had no bound on concurrent
-     * connections opened against MySQL.
-     */
-    private val dataSource: DataSource by lazy {
-        HikariDataSource(
-            HikariConfig().apply {
-                jdbcUrl = config.mysqlJdbcUrl
-                username = config.mysqlUsername
-                password = config.mysqlPassword
-                driverClassName = "com.mysql.cj.jdbc.Driver"
-                maximumPoolSize = 10
-                minimumIdle = 1
-                connectionTimeout = 10_000
-                poolName = "scheduler-db"
-            }
-        )
-    }
+    private val dataSource = HikariDataSource(
+        HikariConfig().apply {
+            jdbcUrl = station.jdbcUrl
+            username = station.username
+            password = station.password
+            driverClassName = "com.mysql.cj.jdbc.Driver"
+            // Several station pools coexist - keep each modest
+            maximumPoolSize = 5
+            minimumIdle = 1
+            connectionTimeout = 10_000
+            // Do not fail-fast at pool construction: connections are
+            // validated on first use, so an unreachable MySQL (or a test
+            // environment without one) doesn't crash instance creation
+            initializationFailTimeout = -1
+            poolName = "station-${station.id}"
+        }
+    )
 
     /** A pooled connection; closing it (e.g. via `.use {}`) returns it to the pool. */
     fun connection(): Connection = dataSource.getConnection()
 
-    /** Closes the pool on application shutdown. */
     fun close() {
-        (dataSource as? HikariDataSource)?.close()
+        dataSource.close()
     }
 
     fun bootstrap() {
@@ -257,18 +253,20 @@ class SchedulerDb(@Provided private val config: ServerConfig) {
      * Concurrency: two requests for the same unseeded month can both pass the
      * `monthHasCells` check before either commits (check-then-act race - each
      * request uses its own connection, so there's no in-process serialization
-     * point). Since generation is deterministic (RNG seeded from year/month),
-     * both requests would generate byte-for-byte identical rows; if a
-     * concurrent insert already committed the same rows first, this request's
-     * INSERT hits a duplicate primary key and we treat that as "already
-     * seeded by someone else" rather than a failure. This is also correct
-     * across multiple server instances, unlike an in-process lock.
+     * point). Since generation is deterministic (RNG seeded from station +
+     * year/month), both requests would generate byte-for-byte identical rows;
+     * if a concurrent insert already committed the same rows first, this
+     * request's INSERT hits a duplicate primary key and we treat that as
+     * "already seeded by someone else" rather than a failure. This is also
+     * correct across multiple server instances, unlike an in-process lock.
      */
     fun ensureMonthSeeded(year: Int, month: Int) {
         connection().use { c ->
             if (monthHasCells(c, year, month)) return
             val breaks = loadBreaks()
-            val generated = generateMonth(breaks, year, month)
+            // Seed differs per station so hosted schemas hold visibly
+            // different demo data
+            val generated = generateMonth(breaks, year, month, stationSeed = station.id.hashCode())
             c.autoCommit = false
             try {
                 c.prepareStatement(
@@ -343,5 +341,4 @@ class SchedulerDb(@Provided private val config: ServerConfig) {
         }
         return false
     }
-
 }
