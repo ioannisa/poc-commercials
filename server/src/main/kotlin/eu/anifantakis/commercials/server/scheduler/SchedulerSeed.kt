@@ -1,6 +1,5 @@
 package eu.anifantakis.commercials.server.scheduler
 
-import java.time.DayOfWeek
 import java.time.LocalDate
 
 enum class BreakZone { PRIME, STANDARD, SPECIAL, DEFAULT }
@@ -13,6 +12,11 @@ data class BreakSlotRow(
     val zone: BreakZone
 )
 
+/**
+ * READ-MODEL row shapes returned by StationDb.loadMonth - the grid the client
+ * renders. Since the normalized-schema evolution these are DERIVED from
+ * placements ⋈ spots ⋈ customers ⋈ contracts, not stored.
+ */
 data class CellRow(
     val breakId: Long,
     val date: LocalDate,
@@ -42,14 +46,25 @@ private const val ZONE_ORANGE = 0xFFFFE4B5.toInt()
 private const val ZONE_YELLOW = 0xFFFFFF99.toInt()
 private const val COLOR_WHITE = 0xFFFFFFFF.toInt()
 
-private fun zoneColorFor(zone: BreakZone): Int = when (zone) {
+fun breakZoneColorArgb(zone: BreakZone): Int = when (zone) {
     BreakZone.PRIME -> ZONE_PINK
     BreakZone.STANDARD -> ZONE_BLUE
     BreakZone.SPECIAL -> ZONE_GREEN
     BreakZone.DEFAULT -> COLOR_WHITE
 }
 
-fun breakZoneColorArgb(zone: BreakZone): Int = zoneColorFor(zone)
+/**
+ * Cell background colour, computed at READ time from the break's zone, the
+ * weekday and the cell's spot count (same rules the old stored demo data
+ * used, so the grid looks identical).
+ */
+fun cellColorArgb(zone: BreakZone, isWeekend: Boolean, spotCount: Int): Int = when {
+    zone == BreakZone.PRIME -> ZONE_PINK
+    zone == BreakZone.SPECIAL -> ZONE_GREEN
+    isWeekend -> ZONE_ORANGE
+    spotCount > 10 -> ZONE_YELLOW
+    else -> COLOR_WHITE
+}
 
 private fun formatTime(hour: Int, minute: Int): String =
     "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
@@ -77,33 +92,43 @@ fun generateBreaks(): List<BreakSlotRow> {
     return out
 }
 
-private val clients = listOf(
-    "30002310" to "ΚΟΙΝΩΝΙΚΑ ΠΕΛΑΤΕΣ ΔΙΑΦΟΡΟΙ",
-    "30001604" to "ΥΙΟΙ Κ. ΠΑΤΣΟΥΡΑΚΗ Ο.Ε",
-    "30002918" to "ΑΝΤΟΝΑΚΑΚΗ ΑΙΚΑΤ & ΚΟΝ. Ο.Ε",
-    "30003875" to "NOVA ΑΠΟΛΥΜΑΝΤΙΚΗ Ε.Ε",
-    "30004521" to "ΚΡΗΤΗ ΞΕΝΟΔΟΧΕΙΑ Α.Ε",
-    "30005123" to "SUPER MARKET ΧΑΛΚΙΑΔΑΚΗΣ",
-    "30006789" to "ΙΑΤΡΙΚΟ ΚΕΝΤΡΟ ΗΡΑΚΛΕΙΟΥ"
+// ────────────────────────────── demo catalog ────────────────────────────────
+// Deterministic per station: the same customers/spots on every boot, so month
+// seeding stays idempotent and concurrent-safe. Mirrors the legacy world:
+// customers (with ΑΦΜ), gift contracts, and a spot catalog (≙ `messages`).
+
+data class CustomerSeed(val code: String, val name: String, val vat: String)
+
+val demoCustomers = listOf(
+    CustomerSeed("30002310", "ΚΟΙΝΩΝΙΚΑ ΠΕΛΑΤΕΣ ΔΙΑΦΟΡΟΙ", "099111222"),
+    CustomerSeed("30001604", "ΥΙΟΙ Κ. ΠΑΤΣΟΥΡΑΚΗ Ο.Ε", "099333444"),
+    CustomerSeed("30002918", "ΑΝΤΟΝΑΚΑΚΗ ΑΙΚΑΤ & ΚΟΝ. Ο.Ε", "099555666"),
+    CustomerSeed("30003875", "NOVA ΑΠΟΛΥΜΑΝΤΙΚΗ Ε.Ε", "099777888"),
+    CustomerSeed("30004521", "ΚΡΗΤΗ ΞΕΝΟΔΟΧΕΙΑ Α.Ε", "099999000"),
+    CustomerSeed("30005123", "SUPER MARKET ΧΑΛΚΙΑΔΑΚΗΣ", "098123456"),
+    CustomerSeed("30006789", "ΙΑΤΡΙΚΟ ΚΕΝΤΡΟ ΗΡΑΚΛΕΙΟΥ", "098654321"),
 )
 
-private val messages = listOf(
+val demoMessages = listOf(
     "ΥΠΕΡΗΦΑΝΕΙΑ TB...",
     "ΠΑΤΣΟΥΡΑΚΗΣ ΕΠΙΠΛΟ 04/2025 (Χ) TB ΣΠΟΤ",
     "ΑΝΤΟΝΑΚΑΚΗΣ ΟΠΤΙΚΑ 03/2025 (Χ) TB ΣΠΟΤ",
     "NOVA ΑΠΟΛΥΜΑΝΤΙΚΗ ΚΑΤΣΑΡΙΔΕΣ 2020 ...TB ΣΠΟΤ",
     "ΦΡΑΓΚΟΥΛΗΣ - ΠΕΡΡΗΣ 17/12 ΧΟΡΗΓΙΑ TB",
     "ΚΡΗΤΗ ΞΕΝΟΔΟΧΕΙΑ ΚΑΛΟΚΑΙΡΙ 2025 TB",
-    "ΙΑΤΡΙΚΟ ΚΕΝΤΡΟ CHECK UP TB ΣΠΟΤ"
+    "ΙΑΤΡΙΚΟ ΚΕΝΤΡΟ CHECK UP TB ΣΠΟΤ",
 )
 
-private val types = listOf(
+val demoSpotTypes = listOf(
     "Διαφημίσεις τηλεόρασης",
     "Χορηγίες",
-    "Κοινωνικά μηνύματα"
+    "Κοινωνικά μηνύματα",
 )
 
-private val durations = listOf(20, 28, 30, 32, 36, 40, 50)
+val demoDurations = listOf(20, 28, 30, 32, 36, 40, 50)
+
+/** How many catalog spots each station gets. */
+const val DEMO_SPOTS_PER_STATION = 28
 
 private fun daysInMonth(year: Int, month: Int): Int = when {
     month == 2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
@@ -111,55 +136,49 @@ private fun daysInMonth(year: Int, month: Int): Int = when {
     else -> 31
 }
 
+/** A catalog spot as needed by placement generation. */
+data class SpotRef(val id: Long, val durationSeconds: Int)
+
+/** A generated placement, ready to insert (write model, ≙ legacy `schedule`). */
+data class PlacementSeed(
+    val spotId: Long,
+    val breakId: Long,
+    val date: LocalDate,
+    val position: Int,
+    val durationSeconds: Int,
+)
+
 /**
- * Deterministic demo-data generator. [stationSeed] varies the RNG per hosted
- * station so different schemas hold visibly different data; determinism per
- * (station, month) is what makes concurrent seeding safe (see
- * StationDb.ensureMonthSeeded).
+ * Deterministic demo placement generator. [stationSeed] varies the RNG per
+ * hosted station so different schemas hold visibly different data;
+ * determinism per (station, month) is what makes concurrent seeding safe
+ * (see StationDb.ensureMonthSeeded).
  */
-fun generateMonth(breaks: List<BreakSlotRow>, year: Int, month: Int, stationSeed: Int = 0): List<CellRow> {
+fun generateMonthPlacements(
+    breaks: List<BreakSlotRow>,
+    spots: List<SpotRef>,
+    year: Int,
+    month: Int,
+    stationSeed: Int = 0,
+): List<PlacementSeed> {
+    if (spots.isEmpty()) return emptyList()
     val random = kotlin.random.Random(stationSeed * 1_000_003 + year * 100 + month)
-    val out = mutableListOf<CellRow>()
+    val out = mutableListOf<PlacementSeed>()
     for (day in 1..daysInMonth(year, month)) {
         val date = LocalDate.of(year, month, day)
-        val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
         for (b in breaks) {
             if (random.nextFloat() > 0.35f) continue
             val spotCount = random.nextInt(1, 16)
-            val avgDuration = random.nextInt(20, 60)
-            val totalDuration = spotCount * avgDuration
-
-            val zoneColorArgb = when {
-                b.zone == BreakZone.PRIME -> ZONE_PINK
-                b.zone == BreakZone.SPECIAL -> ZONE_GREEN
-                isWeekend -> ZONE_ORANGE
-                spotCount > 10 -> ZONE_YELLOW
-                else -> COLOR_WHITE
-            }
-
-            val commercials = (0 until spotCount).map { i ->
-                val (code, name) = clients[random.nextInt(clients.size)]
-                CommercialRow(
-                    id = random.nextLong(),
-                    position = i,
-                    clientCode = code,
-                    clientName = name,
-                    message = messages[random.nextInt(messages.size)],
-                    durationSeconds = durations[random.nextInt(durations.size)],
-                    type = types[random.nextInt(types.size)],
-                    contract = "ΔΩΡΑ",
-                    flow = "ΡΟΗ"
+            for (position in 0 until spotCount) {
+                val spot = spots[random.nextInt(spots.size)]
+                out += PlacementSeed(
+                    spotId = spot.id,
+                    breakId = b.id,
+                    date = date,
+                    position = position,
+                    durationSeconds = spot.durationSeconds,
                 )
             }
-
-            out += CellRow(
-                breakId = b.id,
-                date = date,
-                spotCount = spotCount,
-                totalDurationSeconds = totalDuration,
-                zoneColorArgb = zoneColorArgb,
-                commercials = commercials
-            )
         }
     }
     return out

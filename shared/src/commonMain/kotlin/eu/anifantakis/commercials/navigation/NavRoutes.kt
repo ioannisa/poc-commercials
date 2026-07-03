@@ -17,6 +17,14 @@ sealed interface CommercialNavRoute : NavKey {
     @Serializable
     data object UserManagement : CommercialNavRoute, NavKey
 
+    /** Super-admin legacy-dump migration tool. */
+    @Serializable
+    data object Migration : CommercialNavRoute, NavKey
+
+    /** Super-admin hosted-databases administration (safe/hard delete). */
+    @Serializable
+    data object Databases : CommercialNavRoute, NavKey
+
     @Serializable
     data class CommercialDetail(
         val breakId: Long,

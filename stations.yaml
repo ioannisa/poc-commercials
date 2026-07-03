@@ -38,8 +38,8 @@
 #
 # Path override: -Dstations.config=<path> or POC_STATIONS env var.
 superAdmin:
-  username: superadmin
-  password: super-secret-change-me
+  username: su
+  password: 1234
   displayName: "Super Administrator"
 
 central:
@@ -65,3 +65,9 @@ stations:
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_channel4?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123
+  - id: my-sample
+    name: "My Sample"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_sample?useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: rootpass123
+

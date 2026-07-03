@@ -172,12 +172,15 @@ internal fun databaseTarget(jdbcUrl: String): String =
  */
 class StationRegistry(@Provided hosting: HostingConfig) {
 
-    private val configs: List<StationConfig> = hosting.stations
+    // Mutable (thread-safe) because stations can be REMOVED live: deleting a
+    // hosted database takes effect immediately, without a server restart
+    // (unlike additions, which come from stations.yaml at boot).
+    private val configs = java.util.concurrent.CopyOnWriteArrayList(hosting.stations)
     private val globalMaxPool: Int? = hosting.maxPoolSize
 
     private val pools = ConcurrentHashMap<String, StationDb>()
 
-    val all: List<StationConfig> get() = configs
+    val all: List<StationConfig> get() = configs.toList()
 
     val ids: List<String> get() = configs.map { it.id }
 
@@ -190,6 +193,29 @@ class StationRegistry(@Provided hosting: HostingConfig) {
             val maxPool = resolveMaxPoolSize(config.maxPoolSize, globalMaxPool, DEFAULT_STATION_MAX_POOL)
             StationDb(config, maxPool).also { it.bootstrap() }
         }
+    }
+
+    /**
+     * Hosts a station NOW (a fresh migration): API calls work immediately,
+     * no restart. The caller must have persisted it to stations.yaml too,
+     * or it disappears at the next boot.
+     */
+    fun add(config: StationConfig) {
+        require(configs.none { it.id == config.id }) { "Station '${config.id}' is already hosted" }
+        configs.add(config)
+    }
+
+    /**
+     * Unhosts a station NOW: its pool closes and every subsequent API call
+     * for it 404s ("unknown station"), including the super admin's implicit
+     * grants, which are synthesized from [ids] per request. Returns the
+     * removed config (the caller needs its credentials for a hard delete).
+     */
+    fun remove(id: String): StationConfig? {
+        val config = config(id) ?: return null
+        configs.removeIf { it.id == id }
+        pools.remove(id)?.close()
+        return config
     }
 
     fun closeAll() {

@@ -39,6 +39,28 @@ private data class ResetPasswordDto(val newPassword: String)
 @Serializable
 private data class SetGrantsDto(val grants: List<AdminGrant>)
 
+/** One hosted station database, as listed on the Databases screen. */
+@Serializable
+data class HostedStation(
+    val id: String,
+    val name: String,
+    val database: String,
+    val reachable: Boolean = true,
+    val placements: Long? = null,
+    val dateRange: String? = null,
+)
+
+@Serializable
+private data class DeleteStationDto(val mode: String, val confirmId: String)
+
+@Serializable
+data class DeleteStationResult(
+    val status: String = "",
+    val grantsRemoved: Int = 0,
+    val yamlEntryRemoved: Boolean = false,
+    val databaseDropped: Boolean = false,
+)
+
 /**
  * Client for the super-admin user-management endpoints. Uses the shared
  * authenticated client, so a rejected token bounces the app to Login and
@@ -88,5 +110,23 @@ class AdminApi(session: AuthSession) {
     suspend fun deleteUser(userId: Long): Result<Unit> = runCatching {
         httpClient.delete("$base/$userId")
         Unit
+    }
+
+    private val stationsBase: String get() = "${AppConfig.require().serverBaseUrl}/api/admin/stations"
+
+    suspend fun listStations(): Result<List<HostedStation>> = runCatching {
+        httpClient.get(stationsBase).body()
+    }
+
+    /**
+     * mode "safe": unhost only (yaml entry, user grants, live registry).
+     * mode "hard": additionally DROP the schema on its MySQL server.
+     * [confirmId] must repeat the station id - typed confirmation.
+     */
+    suspend fun deleteStation(id: String, mode: String, confirmId: String): Result<DeleteStationResult> = runCatching {
+        httpClient.post("$stationsBase/$id/delete") {
+            contentType(ContentType.Application.Json)
+            setBody(DeleteStationDto(mode, confirmId))
+        }.body()
     }
 }

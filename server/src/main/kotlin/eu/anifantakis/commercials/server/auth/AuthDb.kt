@@ -483,6 +483,18 @@ class AuthDb(
 
     // ───────────────────────────────────────────────────── user management ──
 
+    /**
+     * Revokes every user's access to a station - part of deleting a hosted
+     * database ("safe delete"). Idempotent; returns the number of grants removed.
+     */
+    fun deleteGrantsForStation(stationId: String): Int =
+        db.connection().use { c ->
+            c.prepareStatement("DELETE FROM user_station_grants WHERE station_id = ?").use { ps ->
+                ps.setString(1, stationId)
+                ps.executeUpdate()
+            }
+        }
+
     data class UserSummary(
         val id: Long,
         val username: String,

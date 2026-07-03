@@ -2,7 +2,10 @@ package eu.anifantakis.commercials.server.plugins
 
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
+import eu.anifantakis.commercials.server.migration.MigrationService
 import eu.anifantakis.commercials.server.routes.authRoutes
+import eu.anifantakis.commercials.server.routes.migrationRoutes
+import eu.anifantakis.commercials.server.routes.stationAdminRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
 import eu.anifantakis.commercials.server.routes.scheduleRoutes
@@ -20,6 +23,7 @@ fun Application.configureRouting() {
     val centralDb by inject<CentralDb>()
     val authDb by inject<AuthDb>()
     val registry by inject<StationRegistry>()
+    val migrationService by inject<MigrationService>()
 
     routing {
         // Open endpoints: health checks + login (how you obtain a token)
@@ -35,8 +39,10 @@ fun Application.configureRouting() {
 
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
-            // User management (super administrator only)
+            // User management + legacy migration (super administrator only)
             adminRoutes(authDb)
+            migrationRoutes(migrationService)
+            stationAdminRoutes(registry, authDb)
 
             // Report routes
             reportRoutes()

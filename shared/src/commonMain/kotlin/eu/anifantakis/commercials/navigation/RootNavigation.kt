@@ -30,7 +30,9 @@ import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.StableDate
 import eu.anifantakis.commercials.screens.CommercialDetailScreen
+import eu.anifantakis.commercials.screens.DatabasesScreen
 import eu.anifantakis.commercials.screens.LoginScreen
+import eu.anifantakis.commercials.screens.MigrationScreen
 import eu.anifantakis.commercials.screens.TimetableScreen
 import eu.anifantakis.commercials.screens.UserManagementScreen
 import kotlinx.collections.immutable.persistentListOf
@@ -49,6 +51,8 @@ private val navConfig = SavedStateConfiguration {
             subclass(CommercialNavRoute.Login::class, CommercialNavRoute.Login.serializer())
             subclass(CommercialNavRoute.Timetable::class, CommercialNavRoute.Timetable.serializer())
             subclass(CommercialNavRoute.UserManagement::class, CommercialNavRoute.UserManagement.serializer())
+            subclass(CommercialNavRoute.Migration::class, CommercialNavRoute.Migration.serializer())
+            subclass(CommercialNavRoute.Databases::class, CommercialNavRoute.Databases.serializer())
             subclass(CommercialNavRoute.CommercialDetail::class, CommercialNavRoute.CommercialDetail.serializer())
         }
     }
@@ -194,12 +198,30 @@ fun RootNavigation() {
                     },
                     onManageUsers = {
                         backStack.add(CommercialNavRoute.UserManagement)
+                    },
+                    onMigration = {
+                        backStack.add(CommercialNavRoute.Migration)
+                    },
+                    onDatabases = {
+                        backStack.add(CommercialNavRoute.Databases)
                     }
                 )
             }
 
             entry<CommercialNavRoute.UserManagement> {
                 UserManagementScreen(
+                    onBack = { backStack.removeLastOrNull() }
+                )
+            }
+
+            entry<CommercialNavRoute.Migration> {
+                MigrationScreen(
+                    onBack = { backStack.removeLastOrNull() }
+                )
+            }
+
+            entry<CommercialNavRoute.Databases> {
+                DatabasesScreen(
                     onBack = { backStack.removeLastOrNull() }
                 )
             }

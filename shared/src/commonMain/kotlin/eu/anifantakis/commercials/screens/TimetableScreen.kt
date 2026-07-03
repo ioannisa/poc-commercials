@@ -19,7 +19,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
@@ -84,7 +86,9 @@ fun TimetableScreen(
     onSelectionChange: (row: Int, col: Int) -> Unit,
     onCellClick: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit,
     onLogout: () -> Unit,
-    onManageUsers: () -> Unit
+    onManageUsers: () -> Unit,
+    onMigration: () -> Unit,
+    onDatabases: () -> Unit
 ) {
     // View-only roles (Report Viewer / Customer Viewer) see everything their
     // data allows but cannot modify it. The role is PER STATION, so reading
@@ -163,6 +167,8 @@ fun TimetableScreen(
             canEdit = canEdit,
             onLogout = onLogout,
             onManageUsers = onManageUsers,
+            onMigration = onMigration,
+            onDatabases = onDatabases,
             onPreviousMonth = {
                 if (month == 1) {
                     onMonthChange(12)
@@ -514,6 +520,8 @@ private fun KeyboardEnabledHeader(
     canEdit: Boolean,
     onLogout: () -> Unit,
     onManageUsers: () -> Unit,
+    onMigration: () -> Unit,
+    onDatabases: () -> Unit,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
@@ -578,7 +586,7 @@ private fun KeyboardEnabledHeader(
                 // Logged-in user: clicking the badge opens the account menu
                 // (change password / recovery codes, or user management for
                 // the super admin)
-                AccountBadge(authSession, onManageUsers)
+                AccountBadge(authSession, onManageUsers, onMigration, onDatabases)
                 IconButton(onClick = onLogout) {
                     Icon(
                         Icons.AutoMirrored.Filled.Logout,
@@ -771,7 +779,12 @@ private fun TimetableHeader(
  * managed in stations.yaml, not through the API.
  */
 @Composable
-private fun AccountBadge(authSession: AuthSession, onManageUsers: () -> Unit) {
+private fun AccountBadge(
+    authSession: AuthSession,
+    onManageUsers: () -> Unit,
+    onMigration: () -> Unit,
+    onDatabases: () -> Unit,
+) {
     val authApi = koinInject<AuthApi>()
     var menuOpen by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
@@ -802,6 +815,16 @@ private fun AccountBadge(authSession: AuthSession, onManageUsers: () -> Unit) {
                     text = { Text("Manage Users…") },
                     leadingIcon = { Icon(Icons.Default.ManageAccounts, null, modifier = Modifier.size(18.dp)) },
                     onClick = { menuOpen = false; onManageUsers() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Legacy Migration…") },
+                    leadingIcon = { Icon(Icons.Default.Storage, null, modifier = Modifier.size(18.dp)) },
+                    onClick = { menuOpen = false; onMigration() }
+                )
+                DropdownMenuItem(
+                    text = { Text("Hosted Databases…") },
+                    leadingIcon = { Icon(Icons.Default.Dns, null, modifier = Modifier.size(18.dp)) },
+                    onClick = { menuOpen = false; onDatabases() }
                 )
             } else {
                 DropdownMenuItem(
