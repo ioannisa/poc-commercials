@@ -72,6 +72,7 @@ kotlin {
             // composable signatures.
             api(project(":grids"))
             api(project(":appearance"))
+            api(project(":client-core"))
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

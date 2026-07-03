@@ -37,8 +37,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.auth.AdminApi
-import eu.anifantakis.commercials.auth.HostedStation
+import eu.anifantakis.commercials.admin.AdminApi
+import eu.anifantakis.commercials.admin.HostedStation
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 

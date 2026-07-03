@@ -11,7 +11,7 @@ import eu.anifantakis.lib.ksafe.KSafe
  * which MainActivity initializes before the UI); every other platform
  * constructs without arguments.
  */
-internal expect fun createKSafe(): KSafe
+expect fun createKSafe(): KSafe
 
 /**
  * Awaits the KSafe cache. `awaitCacheReady` exists only on the web targets

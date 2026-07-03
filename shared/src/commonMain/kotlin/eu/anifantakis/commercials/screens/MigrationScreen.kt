@@ -49,11 +49,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.AlertDialog
-import eu.anifantakis.commercials.auth.BrowseListing
-import eu.anifantakis.commercials.auth.MigrationApi
-import eu.anifantakis.commercials.auth.MigrationFlowChoice
-import eu.anifantakis.commercials.auth.MigrationStart
-import eu.anifantakis.commercials.auth.MigrationStatus
+import eu.anifantakis.commercials.admin.BrowseListing
+import eu.anifantakis.commercials.admin.MigrationApi
+import eu.anifantakis.commercials.admin.MigrationFlowChoice
+import eu.anifantakis.commercials.admin.MigrationStart
+import eu.anifantakis.commercials.admin.MigrationStatus
 import eu.anifantakis.commercials.ui.files.nativeFilePickerAvailable
 import eu.anifantakis.commercials.ui.files.pickFileNative
 import kotlinx.coroutines.delay

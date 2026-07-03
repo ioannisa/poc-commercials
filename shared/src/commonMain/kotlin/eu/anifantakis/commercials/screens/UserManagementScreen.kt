@@ -44,9 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.auth.AdminApi
-import eu.anifantakis.commercials.auth.AdminGrant
-import eu.anifantakis.commercials.auth.AdminUser
+import eu.anifantakis.commercials.admin.AdminApi
+import eu.anifantakis.commercials.admin.AdminGrant
+import eu.anifantakis.commercials.admin.AdminUser
 import eu.anifantakis.commercials.auth.AppRole
 import eu.anifantakis.commercials.auth.AuthSession
 import kotlinx.coroutines.launch
