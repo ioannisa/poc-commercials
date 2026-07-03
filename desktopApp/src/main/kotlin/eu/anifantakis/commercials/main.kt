@@ -43,7 +43,7 @@ fun main() {
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            title = "POCCTV",
+            title = "Commercials Manager",
         ) {
             var isLoading by remember { mutableStateOf(true) }
 

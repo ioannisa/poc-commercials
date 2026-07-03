@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,6 +13,7 @@ import eu.anifantakis.commercials.auth.AppRole
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.db.DbDemoButton
 import eu.anifantakis.commercials.navigation.RootNavigation
+import eu.anifantakis.commercials.ui.theme.AppTheme
 import org.koin.compose.koinInject
 
 @Composable
@@ -21,7 +21,12 @@ fun App() {
     val authSession = koinInject<AuthSession>()
 
     WithTextPrefetch {
-        MaterialTheme {
+        // Locked to light for now: the scheduler grids use hardcoded light
+        // cell colours (white backgrounds, dark text, fixed zone tints), so a
+        // dark surface underneath them looks broken. To re-enable OS-following
+        // dark mode, make those grid colours theme-aware and change this to
+        // AppTheme { ... } (its default already follows the OS).
+        AppTheme(darkTheme = false) {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()

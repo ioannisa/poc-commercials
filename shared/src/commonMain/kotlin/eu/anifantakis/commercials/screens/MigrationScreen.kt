@@ -54,6 +54,8 @@ import eu.anifantakis.commercials.auth.MigrationApi
 import eu.anifantakis.commercials.auth.MigrationFlowChoice
 import eu.anifantakis.commercials.auth.MigrationStart
 import eu.anifantakis.commercials.auth.MigrationStatus
+import eu.anifantakis.commercials.ui.files.nativeFilePickerAvailable
+import eu.anifantakis.commercials.ui.files.pickFileNative
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -168,7 +170,17 @@ fun MigrationScreen(onBack: () -> Unit) {
                             placeholder = { Text("/backups/commercials3.sql") },
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
-                        Button(onClick = { showBrowser = true }) { Text("Browse…") }
+                        // Desktop gets the real OS file dialog; web/mobile
+                        // fall back to browsing the server's filesystem.
+                        Button(onClick = {
+                            if (nativeFilePickerAvailable) {
+                                scope.launch {
+                                    pickFileNative("Select a legacy MySQL dump", "sql")?.let { dumpPath = it }
+                                }
+                            } else {
+                                showBrowser = true
+                            }
+                        }) { Text("Browse…") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
