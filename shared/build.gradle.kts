@@ -74,6 +74,7 @@ kotlin {
             api(project(":appearance"))
             api(project(":client-core"))
             api(project(":reports-client"))
+            api(project(":admin"))
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

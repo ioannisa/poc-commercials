@@ -30,11 +30,11 @@ import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.StableDate
 import eu.anifantakis.commercials.screens.CommercialDetailScreen
-import eu.anifantakis.commercials.screens.DatabasesScreen
+import eu.anifantakis.commercials.admin.DatabasesScreen
 import eu.anifantakis.commercials.screens.LoginScreen
-import eu.anifantakis.commercials.screens.MigrationScreen
+import eu.anifantakis.commercials.admin.MigrationScreen
 import eu.anifantakis.commercials.screens.TimetableScreen
-import eu.anifantakis.commercials.screens.UserManagementScreen
+import eu.anifantakis.commercials.admin.UserManagementScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject

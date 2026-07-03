@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.screens
+package eu.anifantakis.commercials.admin
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,8 +37,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.admin.AdminApi
-import eu.anifantakis.commercials.admin.HostedStation
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
