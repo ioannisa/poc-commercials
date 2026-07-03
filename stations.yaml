@@ -29,7 +29,19 @@
 #     - id: crete-tv
 #       maxPoolSize: 3      # override just this station
 #
+# superAdmin (REQUIRED): the break-glass administrator. Deliberately PLAINTEXT
+# here - same threat model as the DB credentials in this file, and the point:
+# the operator can always look it up and can never be locked out (this file IS
+# its recovery). The database stores only a PBKDF2 hash, re-synced at boot;
+# rotate by editing the password here and restarting (old sessions revoked).
+# This account manages users/grants and gets implicit access to every station.
+#
 # Path override: -Dstations.config=<path> or POC_STATIONS env var.
+superAdmin:
+  username: superadmin
+  password: super-secret-change-me
+  displayName: "Super Administrator"
+
 central:
   jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
   username: root

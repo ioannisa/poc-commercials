@@ -29,6 +29,8 @@ data class StationAccess(
 data class StoredSession(
     val token: String = "",
     val displayName: String = "",
+    /** Config-managed super administrator (may manage users). */
+    val isAdmin: Boolean = false,
     val stations: List<StationAccess> = emptyList(),
     val selectedStationId: String = "",
 )
@@ -75,6 +77,7 @@ class AuthSession(@Provided private val ksafe: KSafe) {
     val isLoggedIn: Boolean get() = stored.token.isNotEmpty()
     val token: String? get() = stored.token.ifEmpty { null }
     val displayName: String get() = stored.displayName
+    val isAdmin: Boolean get() = stored.isAdmin
 
     /** All stations this user may access, in server order. */
     val stations: List<StationAccess> get() = stored.stations
@@ -90,10 +93,11 @@ class AuthSession(@Provided private val ksafe: KSafe) {
     /** Customer scoping code ON THE SELECTED STATION (null unless customer viewer). */
     val clientCode: String? get() = selectedStation?.clientCode
 
-    fun store(token: String, displayName: String, stations: List<StationAccess>) {
+    fun store(token: String, displayName: String, isAdmin: Boolean, stations: List<StationAccess>) {
         stored = StoredSession(
             token = token,
             displayName = displayName,
+            isAdmin = isAdmin,
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: ""
         )

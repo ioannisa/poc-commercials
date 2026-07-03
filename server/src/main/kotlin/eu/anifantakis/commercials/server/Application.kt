@@ -37,9 +37,9 @@ fun Application.module() {
     val authDb by inject<AuthDb>()
     val registry by inject<StationRegistry>()
 
-    // Central auth tables + demo users/grants for the hosted stations.
+    // Central auth tables + demo users/grants + YAML super-admin sync.
     // Station schemas bootstrap lazily on first access (StationRegistry.db).
-    authDb.bootstrap(registry.ids)
+    authDb.bootstrap()
 
     configureCallLogging()
     configureStatusPages()

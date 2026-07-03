@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.server.plugins
 
 import eu.anifantakis.commercials.server.auth.AuthDb
+import eu.anifantakis.commercials.server.routes.adminRoutes
 import eu.anifantakis.commercials.server.routes.authRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
@@ -34,6 +35,9 @@ fun Application.configureRouting() {
 
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
+            // User management (super administrator only)
+            adminRoutes(authDb)
+
             // Report routes
             reportRoutes()
 

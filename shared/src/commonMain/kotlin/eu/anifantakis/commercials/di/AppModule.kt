@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.di
 
+import eu.anifantakis.commercials.auth.AdminApi
 import eu.anifantakis.commercials.auth.AuthApi
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.auth.createKSafe
@@ -27,6 +28,7 @@ val appModule = module {
 
     single<AuthSession>()
     single<AuthApi>()
+    single<AdminApi>()
     single<ScheduleRepository>()
     single<DbApi>()
 }

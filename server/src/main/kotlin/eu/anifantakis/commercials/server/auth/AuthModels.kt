@@ -25,11 +25,17 @@ data class StationGrant(
 /**
  * The authenticated user, attached to the call as the auth principal.
  * Station access is decided per request from [grants].
+ *
+ * @param isAdmin the config-managed super administrator (from stations.yaml):
+ *        may manage users, and receives synthesized NORMAL_USER grants on
+ *        every hosted station. Its password/recovery are managed in the YAML,
+ *        never via the API.
  */
 data class AuthUser(
     val id: Long,
     val username: String,
     val displayName: String,
+    val isAdmin: Boolean,
     val grants: List<StationGrant>
 ) {
     fun grantFor(stationId: String): StationGrant? = grants.firstOrNull { it.stationId == stationId }

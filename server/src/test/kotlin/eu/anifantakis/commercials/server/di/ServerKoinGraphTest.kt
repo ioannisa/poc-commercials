@@ -41,6 +41,9 @@ class ServerKoinGraphTest {
     @Test
     fun fullGraphResolves() = withStationsYaml(
         """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test
@@ -70,6 +73,9 @@ class ServerKoinGraphTest {
     @Test
     fun graphResolvesWithNoStations() = withStationsYaml(
         """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test
@@ -88,6 +94,9 @@ class ServerKoinGraphTest {
     @Test
     fun stationUsingCentralSchemaIsRejected() = withStationsYaml(
         """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?useUnicode=true"
           username: test

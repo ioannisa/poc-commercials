@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Visibility
@@ -25,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,27 +47,52 @@ import org.koin.compose.koinInject
 
 /**
  * Login gate shown before any data is loaded. On success the session (token,
- * role, display name) is already stored in AuthSession by [AuthApi.login];
+ * stations, roles) is already stored in AuthSession by [AuthApi.login];
  * [onLoggedIn] then swaps the navigation stack to the main app.
+ *
+ * Also hosts the "forgot password" flow: username + ONE unused recovery code
+ * (see the account menu, "Recovery codes") sets a new password. Users without
+ * saved codes are reset by the administrator instead.
  */
 @Composable
 fun LoginScreen(onLoggedIn: () -> Unit) {
     val scope = rememberCoroutineScope()
     val authApi = koinInject<AuthApi>()
 
+    var recoveryMode by remember { mutableStateOf(false) }
+
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var recoveryCode by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var infoMessage by remember { mutableStateOf<String?>(null) }
 
-    fun submit() {
+    fun submitLogin() {
         if (isLoading || username.isBlank() || password.isBlank()) return
         isLoading = true
         errorMessage = null
         scope.launch {
             authApi.login(username.trim(), password)
                 .onSuccess { onLoggedIn() }
+                .onFailure { errorMessage = it.message }
+            isLoading = false
+        }
+    }
+
+    fun submitRecovery() {
+        if (isLoading || username.isBlank() || recoveryCode.isBlank() || password.isBlank()) return
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            authApi.recoverPassword(username.trim(), recoveryCode, password)
+                .onSuccess {
+                    recoveryMode = false
+                    password = ""
+                    recoveryCode = ""
+                    infoMessage = "Password reset - log in with your new password"
+                }
                 .onFailure { errorMessage = it.message }
             isLoading = false
         }
@@ -91,7 +118,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Σύνδεση",
+                    text = if (recoveryMode) "Επαναφορά Κωδικού" else "Σύνδεση",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -108,12 +135,26 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                if (recoveryMode) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = recoveryCode,
+                        onValueChange = { recoveryCode = it },
+                        label = { Text("Recovery code") },
+                        placeholder = { Text("XXXX-XXXX-XXXX-XXXX") },
+                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                        singleLine = true,
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(if (recoveryMode) "New password" else "Password") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -139,37 +180,63 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                         fontSize = 13.sp
                     )
                 }
+                infoMessage?.let { message ->
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 13.sp
+                    )
+                }
 
                 Spacer(Modifier.height(20.dp))
 
                 Button(
-                    onClick = { submit() },
-                    enabled = !isLoading && username.isNotBlank() && password.isNotBlank(),
+                    onClick = { if (recoveryMode) submitRecovery() else submitLogin() },
+                    enabled = !isLoading && username.isNotBlank() && password.isNotBlank() &&
+                        (!recoveryMode || recoveryCode.isNotBlank()),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text("Login")
+                    Text(if (recoveryMode) "Reset password" else "Login")
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(8.dp))
 
-                // Demo accounts - one per access layer (POC convenience)
-                Text(
-                    text = "Demo accounts",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "admin / admin123 — Normal User\n" +
-                        "viewer / viewer123 — Report Viewer\n" +
-                        "customer / customer123 — Customer Viewer",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                TextButton(onClick = {
+                    recoveryMode = !recoveryMode
+                    errorMessage = null
+                    infoMessage = null
+                    password = ""
+                }) {
+                    Text(
+                        if (recoveryMode) "Back to login"
+                        else "Forgot password? Use a recovery code",
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (!recoveryMode) {
+                    Spacer(Modifier.height(16.dp))
+                    // Demo accounts - one per access layer (POC convenience)
+                    Text(
+                        text = "Demo accounts",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "admin / admin123 — Normal User\n" +
+                            "viewer / viewer123 — Report Viewer\n" +
+                            "customer / customer123 — Customer Viewer\n" +
+                            "superadmin — see stations.yaml",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

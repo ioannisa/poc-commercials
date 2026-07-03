@@ -76,6 +76,19 @@ suspend fun ApplicationCall.stationAccessOrRespond(registry: StationRegistry): S
 }
 
 /**
+ * Responds 403 and returns false unless the caller is the config-managed
+ * super administrator (user management endpoints).
+ */
+suspend fun ApplicationCall.requireAdmin(): Boolean {
+    if (authUser().isAdmin) return true
+    respond(
+        HttpStatusCode.Forbidden,
+        mapOf("error" to "Requires the super administrator")
+    )
+    return false
+}
+
+/**
  * Responds 403 and returns false unless the caller holds [role] on at least
  * one station. For endpoints that aren't station-scoped (e.g. the demo route).
  */

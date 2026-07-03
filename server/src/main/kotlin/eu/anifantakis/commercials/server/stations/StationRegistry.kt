@@ -53,10 +53,27 @@ data class StationConfig(
 )
 
 /**
+ * The break-glass administrator account, deliberately PLAINTEXT in
+ * stations.yaml (same threat model as the DB credentials around it: whoever
+ * reads this file already owns the databases). Only the server config holds
+ * the plaintext - the database stores a PBKDF2 hash of it, re-synced at every
+ * boot, so rotating it is "edit YAML, restart". This account manages users
+ * and can never be locked out: the YAML itself is its recovery mechanism.
+ */
+@Serializable
+data class SuperAdminConfig(
+    val username: String,
+    val password: String,
+    val displayName: String = "Super Administrator",
+)
+
+/**
  * The whole hosting layout:
  * - [central] is MANDATORY and STANDALONE: the server's own schema
  *   (users, tokens, per-station grants - e.g. `commercials_central`).
  *   It must never double as a station schema.
+ * - [superAdmin] is MANDATORY: the config-managed administrator (see
+ *   [SuperAdminConfig]). Validated non-null at load; use [admin].
  * - [stations] is 0..n: a server may host no stations at all (users can log
  *   in but have nothing to select) or many.
  * - [maxPoolSize] is the file-wide default HikariCP pool ceiling applied to
@@ -67,9 +84,13 @@ data class StationConfig(
 @Serializable
 data class HostingConfig(
     val central: DbConnectionConfig,
+    val superAdmin: SuperAdminConfig? = null,
     val stations: List<StationConfig> = emptyList(),
     val maxPoolSize: Int? = null,
-)
+) {
+    /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
+    val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
+}
 
 /**
  * Loads the hosting layout from stations.yaml (path via `stations.config`
@@ -90,6 +111,14 @@ fun loadHostingConfig(): HostingConfig {
     }
 
     val parsed = Yaml.default.decodeFromString(HostingConfig.serializer(), file.readText())
+
+    requireNotNull(parsed.superAdmin) {
+        "'${file.path}' must define the mandatory 'superAdmin' block (username + password) - " +
+            "the config-managed administrator account that creates users and resets passwords."
+    }
+    require(parsed.superAdmin.username.isNotBlank() && parsed.superAdmin.password.isNotBlank()) {
+        "superAdmin.username and superAdmin.password must be non-blank in '${file.path}'"
+    }
 
     val duplicates = parsed.stations.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicates.isEmpty()) { "Duplicate station ids in '${file.path}': $duplicates" }

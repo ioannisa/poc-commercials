@@ -13,6 +13,10 @@ sealed interface CommercialNavRoute : NavKey {
     @Serializable
     data object Timetable : CommercialNavRoute, NavKey
 
+    /** Super-admin user management. */
+    @Serializable
+    data object UserManagement : CommercialNavRoute, NavKey
+
     @Serializable
     data class CommercialDetail(
         val breakId: Long,

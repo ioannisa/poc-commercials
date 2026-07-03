@@ -34,6 +34,9 @@ class HostingConfigTest {
     fun parsesGlobalAndPerConnectionOverrides() = withStationsYaml(
         """
         maxPoolSize: 8
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test
@@ -64,6 +67,9 @@ class HostingConfigTest {
     @Test
     fun defaultsApplyWhenPoolSizeOmitted() = withStationsYaml(
         """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test
@@ -83,9 +89,25 @@ class HostingConfigTest {
         assertEquals(DEFAULT_STATION_MAX_POOL, resolveMaxPoolSize(cfg.stations[0].maxPoolSize, cfg.maxPoolSize, DEFAULT_STATION_MAX_POOL))
     }
 
+    /** The break-glass account is non-negotiable - no superAdmin, no server. */
+    @Test
+    fun rejectsMissingSuperAdmin() = withStationsYaml(
+        """
+        central:
+          jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
+          username: test
+          password: test
+        """.trimIndent()
+    ) {
+        assertFailsWith<IllegalArgumentException> { loadHostingConfig() }
+    }
+
     @Test
     fun rejectsNonPositivePoolSize() = withStationsYaml(
         """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
         central:
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test

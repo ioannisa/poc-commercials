@@ -32,6 +32,7 @@ import eu.anifantakis.commercials.grids.StableDate
 import eu.anifantakis.commercials.screens.CommercialDetailScreen
 import eu.anifantakis.commercials.screens.LoginScreen
 import eu.anifantakis.commercials.screens.TimetableScreen
+import eu.anifantakis.commercials.screens.UserManagementScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -47,6 +48,7 @@ private val navConfig = SavedStateConfiguration {
         polymorphic(NavKey::class) {
             subclass(CommercialNavRoute.Login::class, CommercialNavRoute.Login.serializer())
             subclass(CommercialNavRoute.Timetable::class, CommercialNavRoute.Timetable.serializer())
+            subclass(CommercialNavRoute.UserManagement::class, CommercialNavRoute.UserManagement.serializer())
             subclass(CommercialNavRoute.CommercialDetail::class, CommercialNavRoute.CommercialDetail.serializer())
         }
     }
@@ -189,7 +191,16 @@ fun RootNavigation() {
                             backStack.clear()
                             backStack.add(CommercialNavRoute.Login)
                         }
+                    },
+                    onManageUsers = {
+                        backStack.add(CommercialNavRoute.UserManagement)
                     }
+                )
+            }
+
+            entry<CommercialNavRoute.UserManagement> {
+                UserManagementScreen(
+                    onBack = { backStack.removeLastOrNull() }
                 )
             }
 
