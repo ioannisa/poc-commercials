@@ -52,6 +52,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
@@ -330,13 +331,13 @@ data class ClickConfig(
  * ```
  *
  * @param config Configuration for which click types to detect
- * @param onClick Called on primary (left) click
+ * @param onClick Called on primary (left) click with the keyboard modifiers held at click time
  * @param onDoubleClick Called on primary double-click
  * @param onRightClick Called on secondary (right) click with the click position
  */
 fun Modifier.multiButtonClickable(
     config: ClickConfig = ClickConfig(),
-    onClick: (() -> Unit)? = null,
+    onClick: ((PointerKeyboardModifiers) -> Unit)? = null,
     onDoubleClick: (() -> Unit)? = null,
     onRightClick: ((Offset) -> Unit)? = null
 ): Modifier = this.pointerInput(config, onClick, onDoubleClick, onRightClick) {
@@ -390,7 +391,7 @@ fun Modifier.multiButtonClickable(
 
             // Single primary click
             if (config.enablePrimaryClick && onClick != null) {
-                onClick()
+                onClick(currentEvent.keyboardModifiers)
             }
 
             // Store for potential double-click detection
@@ -446,7 +447,7 @@ fun Modifier.draggableRowGestures(
     onDrag: (Offset) -> Unit = {},
     onDragEnd: () -> Unit = {},
     onDragCancel: () -> Unit = {},
-    onClick: (() -> Unit)? = null,
+    onClick: ((PointerKeyboardModifiers) -> Unit)? = null,
     onDoubleClick: (() -> Unit)? = null,
     onRightClick: ((Offset) -> Unit)? = null,
     doubleClickTimeoutMs: Long = 400L
@@ -570,7 +571,7 @@ fun Modifier.draggableRowGestures(
             }
 
             // Single click
-            currentOnClick?.invoke()
+            currentOnClick?.invoke(currentEvent.keyboardModifiers)
             lastClickTime = upTime
             lastClickPosition = downPosition
         }

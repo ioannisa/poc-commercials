@@ -59,6 +59,10 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.isCtrlPressed as pointerIsCtrlPressed
+import androidx.compose.ui.input.pointer.isShiftPressed as pointerIsShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextRange
@@ -297,6 +301,7 @@ class EnhancedDataGridState<T>(
     var focusedRow by mutableStateOf(-1)
     var focusedColumn by mutableStateOf(-1)
     var scrollToFocusedRow by mutableStateOf(false)
+    var hoveredRow by mutableStateOf(-1)
 
     // Editing state
     val editingState = EditingState()
@@ -496,6 +501,9 @@ fun <T> EnhancedDataGrid(
     val horizontalScrollState = rememberScrollState()
 
     // Separate columns by frozen position
+    // PERFORMANCE: the split lists are materialized as ImmutableList ONCE here.
+    // Converting inline at every call site would allocate new instances on each
+    // recomposition, changing child parameters and defeating recomposition skipping.
     val (frozenLeftCols, scrollableCols, frozenRightCols) = remember(columns, state.columnStates, stickyColumns) {
         val ordered = columns
             .filter { col -> state.columnStates.find { it.id == col.id }?.visible != false }
@@ -513,11 +521,15 @@ fun <T> EnhancedDataGrid(
                     it.id !in stickyColumns.frozenRightColumns
         }
 
-        Triple(left, middle, right)
+        Triple(left.toImmutableList(), middle.toImmutableList(), right.toImmutableList())
     }
 
-    // Sort items
-    val sortedItems = remember(items, state.sortColumn, state.sortDirection, columns) {
+    val allVisibleCols = remember(frozenLeftCols, scrollableCols, frozenRightCols) {
+        (frozenLeftCols + scrollableCols + frozenRightCols).toImmutableList()
+    }
+
+    // Sort items - materialized as ImmutableList once (see note above)
+    val sortedItems: ImmutableList<T> = remember(items, state.sortColumn, state.sortDirection, columns) {
         val sortCol = columns.find { it.id == state.sortColumn }
         if (sortCol == null || state.sortDirection == SortDirection.NONE) {
             items
@@ -526,8 +538,8 @@ fun <T> EnhancedDataGrid(
                 sortCol.extractor(a).compareTo(sortCol.extractor(b))
             }
             when (state.sortDirection) {
-                SortDirection.ASCENDING -> items.sortedWith(comparator)
-                SortDirection.DESCENDING -> items.sortedWith(comparator.reversed())
+                SortDirection.ASCENDING -> items.sortedWith(comparator).toImmutableList()
+                SortDirection.DESCENDING -> items.sortedWith(comparator.reversed()).toImmutableList()
                 SortDirection.NONE -> items
             }
         }
@@ -554,10 +566,22 @@ fun <T> EnhancedDataGrid(
         onSelectionChanged?.invoke(state.selectedRows, selectedItems)
     }
 
-    // Scroll to focused row (only for keyboard navigation)
+    // Scroll to focused row (only for keyboard navigation).
+    // Desktop behavior: scroll minimally and only when the row is out of view,
+    // instead of always jumping the focused row to the top of the viewport.
     LaunchedEffect(state.focusedRow, state.scrollToFocusedRow) {
         if (state.scrollToFocusedRow && state.focusedRow >= 0) {
-            verticalScrollState.animateScrollToItem(state.focusedRow)
+            val firstVisible = verticalScrollState.firstVisibleItemIndex
+            val visibleCount = verticalScrollState.layoutInfo.visibleItemsInfo.size
+            val lastVisible = firstVisible + visibleCount - 1
+            when {
+                state.focusedRow < firstVisible ->
+                    verticalScrollState.animateScrollToItem(state.focusedRow)
+                state.focusedRow > lastVisible ->
+                    verticalScrollState.animateScrollToItem(
+                        (state.focusedRow - visibleCount + 1).coerceAtLeast(0)
+                    )
+            }
             state.scrollToFocusedRow = false
         }
     }
@@ -594,7 +618,7 @@ fun <T> EnhancedDataGrid(
                         }
                     }
                     // Find next editable column
-                    val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                    val allCols = allVisibleCols
                     val currentIndex = allCols.indexOfFirst { it.id == cell?.columnId }
                     val nextEditableCol = allCols.drop(currentIndex + 1).firstOrNull { it.editable }
                     if (nextEditableCol != null && cell != null) {
@@ -630,14 +654,14 @@ fun <T> EnhancedDataGrid(
                 true
             }
             Key.DirectionLeft -> {
-                val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                val allCols = allVisibleCols
                 if (state.focusedColumn > 0) {
                     state.focusedColumn--
                 }
                 true
             }
             Key.DirectionRight -> {
-                val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                val allCols = allVisibleCols
                 if (state.focusedColumn < allCols.lastIndex) {
                     state.focusedColumn++
                 }
@@ -646,7 +670,7 @@ fun <T> EnhancedDataGrid(
             Key.F2 -> {
                 // Start editing current cell
                 if (enableEditing && state.focusedRow >= 0 && state.focusedColumn >= 0) {
-                    val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                    val allCols = allVisibleCols
                     val col = allCols.getOrNull(state.focusedColumn)
                     if (col != null && col.editable) {
                         state.startEditing(state.focusedRow, col.id, columns, sortedItems)
@@ -657,7 +681,7 @@ fun <T> EnhancedDataGrid(
             Key.Enter -> {
                 if (enableEditing && state.focusedRow >= 0 && state.focusedColumn >= 0) {
                     // Start editing on Enter if cell is editable
-                    val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                    val allCols = allVisibleCols
                     val col = allCols.getOrNull(state.focusedColumn)
                     if (col != null && col.editable) {
                         state.startEditing(state.focusedRow, col.id, columns, sortedItems)
@@ -699,7 +723,7 @@ fun <T> EnhancedDataGrid(
             }
             Key.MoveEnd -> {
                 state.focusedRow = sortedItems.lastIndex.coerceAtLeast(0)
-                val allCols = frozenLeftCols + scrollableCols + frozenRightCols
+                val allCols = allVisibleCols
                 state.focusedColumn = allCols.lastIndex.coerceAtLeast(0)
                 state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
@@ -708,7 +732,9 @@ fun <T> EnhancedDataGrid(
                 true
             }
             Key.PageUp -> {
-                state.focusedRow = (state.focusedRow - 10).coerceAtLeast(0)
+                // Desktop behavior: page by the actual number of visible rows
+                val pageSize = verticalScrollState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                state.focusedRow = (state.focusedRow - pageSize).coerceAtLeast(0)
                 state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(state.focusedRow)
@@ -716,7 +742,8 @@ fun <T> EnhancedDataGrid(
                 true
             }
             Key.PageDown -> {
-                state.focusedRow = (state.focusedRow + 10).coerceAtMost(sortedItems.lastIndex.coerceAtLeast(0))
+                val pageSize = verticalScrollState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                state.focusedRow = (state.focusedRow + pageSize).coerceAtMost(sortedItems.lastIndex.coerceAtLeast(0))
                 state.scrollToFocusedRow = true
                 if (selectionMode == SelectionMode.SINGLE) {
                     state.selectedRows = setOf(state.focusedRow)
@@ -760,7 +787,7 @@ fun <T> EnhancedDataGrid(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Still show header
                 StickyHeaderRow(
-                    columns = (frozenLeftCols + scrollableCols + frozenRightCols).toImmutableList(),
+                    columns = allVisibleCols,
                     state = state,
                     showRowNumbers = showRowNumbers,
                     rowNumberWidth = rowNumberWidth,
@@ -768,9 +795,9 @@ fun <T> EnhancedDataGrid(
                     horizontalScrollState = horizontalScrollState,
                     frozenLeftWidth = frozenLeftWidth,
                     frozenRightWidth = frozenRightWidth,
-                    frozenLeftCols = frozenLeftCols.toImmutableList(),
-                    frozenRightCols = frozenRightCols.toImmutableList(),
-                    scrollableCols = scrollableCols.toImmutableList(),
+                    frozenLeftCols = frozenLeftCols,
+                    frozenRightCols = frozenRightCols,
+                    scrollableCols = scrollableCols,
                     stickyColumns = stickyColumns,
                     allColumns = columns,
                     onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
@@ -790,7 +817,7 @@ fun <T> EnhancedDataGrid(
                 // ===== STICKY HEADER =====
                 if (stickyRows.stickyHeader) {
                     StickyHeaderRow(
-                        columns = (frozenLeftCols + scrollableCols + frozenRightCols).toImmutableList(),
+                        columns = allVisibleCols,
                         state = state,
                         showRowNumbers = showRowNumbers,
                         rowNumberWidth = rowNumberWidth,
@@ -798,9 +825,9 @@ fun <T> EnhancedDataGrid(
                         horizontalScrollState = horizontalScrollState,
                         frozenLeftWidth = frozenLeftWidth,
                         frozenRightWidth = frozenRightWidth,
-                        frozenLeftCols = frozenLeftCols.toImmutableList(),
-                        frozenRightCols = frozenRightCols.toImmutableList(),
-                        scrollableCols = scrollableCols.toImmutableList(),
+                        frozenLeftCols = frozenLeftCols,
+                        frozenRightCols = frozenRightCols,
+                        scrollableCols = scrollableCols,
                         stickyColumns = stickyColumns,
                         allColumns = columns,
                         onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
@@ -815,8 +842,8 @@ fun <T> EnhancedDataGrid(
                         // Frozen left section (including row numbers)
                         if (frozenLeftWidth > 0.dp) {
                             FrozenLeftSection(
-                                items = sortedItems.toImmutableList(),
-                                columns = frozenLeftCols.toImmutableList(),
+                                items = sortedItems,
+                                columns = frozenLeftCols,
                                 state = state,
                                 showRowNumbers = showRowNumbers && stickyColumns.freezeRowNumbers,
                                 rowNumberWidth = rowNumberWidth,
@@ -832,7 +859,7 @@ fun <T> EnhancedDataGrid(
                                 contextMenuItems = contextMenuItems, // Pass menu items down
                                 rowKey = rowKey,
                                 allColumns = columns,
-                                allItems = sortedItems.toImmutableList(),
+                                allItems = sortedItems,
                                 onRowReorder = wrappedOnRowReorder
                             )
 
@@ -848,8 +875,8 @@ fun <T> EnhancedDataGrid(
                         // Scrollable middle section
                         Box(modifier = Modifier.weight(1f)) {
                             ScrollableMiddleSection(
-                                items = sortedItems.toImmutableList(),
-                                columns = scrollableCols.toImmutableList(),
+                                items = sortedItems,
+                                columns = scrollableCols,
                                 state = state,
                                 showRowNumbers = showRowNumbers && !stickyColumns.freezeRowNumbers,
                                 rowNumberWidth = rowNumberWidth,
@@ -866,8 +893,8 @@ fun <T> EnhancedDataGrid(
                                 contextMenuItems = contextMenuItems, // Pass menu items down
                                 rowKey = rowKey,
                                 allColumns = columns,
-                                allItems = sortedItems.toImmutableList(),
-                                frozenLeftCols = frozenLeftCols.toImmutableList(),
+                                allItems = sortedItems,
+                                frozenLeftCols = frozenLeftCols,
                                 onRowReorder = wrappedOnRowReorder
                             )
 
@@ -894,8 +921,8 @@ fun <T> EnhancedDataGrid(
                             )
 
                             FrozenRightSection(
-                                items = sortedItems.toImmutableList(),
-                                columns = frozenRightCols.toImmutableList(),
+                                items = sortedItems,
+                                columns = frozenRightCols,
                                 state = state,
                                 rowHeight = rowHeight,
                                 verticalScrollState = verticalScrollState,
@@ -909,9 +936,9 @@ fun <T> EnhancedDataGrid(
                                 contextMenuItems = contextMenuItems, // Pass menu items down
                                 rowKey = rowKey,
                                 allColumns = columns,
-                                allItems = sortedItems.toImmutableList(),
-                                frozenLeftCols = frozenLeftCols.toImmutableList(),
-                                scrollableCols = scrollableCols.toImmutableList(),
+                                allItems = sortedItems,
+                                frozenLeftCols = frozenLeftCols,
+                                scrollableCols = scrollableCols,
                                 onRowReorder = wrappedOnRowReorder
                             )
                         }
@@ -924,7 +951,7 @@ fun <T> EnhancedDataGrid(
 
                     StickyFooterRow(
                         totals = totalsRow(sortedItems),
-                        columns = (frozenLeftCols + scrollableCols + frozenRightCols).toImmutableList(),
+                        columns = allVisibleCols,
                         state = state,
                         showRowNumbers = showRowNumbers,
                         rowNumberWidth = rowNumberWidth,
@@ -932,9 +959,9 @@ fun <T> EnhancedDataGrid(
                         horizontalScrollState = horizontalScrollState,
                         frozenLeftWidth = frozenLeftWidth,
                         frozenRightWidth = frozenRightWidth,
-                        frozenLeftCols = frozenLeftCols.toImmutableList(),
-                        frozenRightCols = frozenRightCols.toImmutableList(),
-                        scrollableCols = scrollableCols.toImmutableList(),
+                        frozenLeftCols = frozenLeftCols,
+                        frozenRightCols = frozenRightCols,
+                        scrollableCols = scrollableCols,
                         stickyColumns = stickyColumns
                     )
                 }
@@ -982,7 +1009,7 @@ private fun <T> StickyHeaderRow(
                         onSort = { },
                         onResize = null,
                         columnId = "",
-                        allColumns = emptyList<ColumnDef<T>>().toImmutableList(),
+                        allColumns = persistentListOf<ColumnDef<T>>(),
                         onReorder = null,
                         columnDragState = null
                     )
@@ -1032,7 +1059,7 @@ private fun <T> StickyHeaderRow(
                     onSort = { },
                     onResize = null,
                     columnId = "",
-                    allColumns = emptyList<ColumnDef<T>>().toImmutableList(),
+                    allColumns = persistentListOf<ColumnDef<T>>(),
                     onReorder = null,
                     columnDragState = null
                 )
@@ -1312,15 +1339,25 @@ private fun <T> FrozenLeftSection(
                 enableEditing = enableEditing,
                 onCellValueChanged = onCellValueChanged,
                 selectionMode = selectionMode,
-                onClick = {
-                    state.selectRow(rowIndex, selectionMode)
+                onClick = { modifiers ->
+                    // Desktop behavior: Ctrl+Click toggles, Shift+Click range-selects
+                    state.selectRow(
+                        rowIndex,
+                        selectionMode,
+                        isCtrlPressed = modifiers.pointerIsCtrlPressed,
+                        isShiftPressed = modifiers.pointerIsShiftPressed
+                    )
                     onRowClick?.invoke(item, rowIndex)
                 },
                 onDoubleClick = {
                     onRowDoubleClick?.invoke(item, rowIndex)
                 },
                 onRightClick = { offset ->
-                    state.selectRow(rowIndex, selectionMode)
+                    // Desktop behavior: right-clicking an already-selected row keeps
+                    // the current (possibly multi-row) selection intact
+                    if (rowIndex !in state.selectedRows) {
+                        state.selectRow(rowIndex, selectionMode)
+                    }
                     onRowRightClick?.invoke(item, rowIndex, offset)
                 },
                 contextMenuItems = contextMenuItems,
@@ -1351,7 +1388,7 @@ private fun <T> FrozenLeftRow(
     enableEditing: Boolean,
     onCellValueChanged: ((T, String, String, String) -> Unit)?,
     selectionMode: SelectionMode,
-    onClick: () -> Unit,
+    onClick: (PointerKeyboardModifiers) -> Unit,
     onDoubleClick: () -> Unit,
     onRightClick: ((Offset) -> Unit)?,
     contextMenuItems: ((T, Int) -> List<ContextMenuEntry>)?,
@@ -1378,11 +1415,13 @@ private fun <T> FrozenLeftRow(
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
+    val isHovered = rowIndex == state.hoveredRow
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
         isFocused && isSelected -> GridColors.rowFocused
         isSelected -> GridColors.rowSelected
+        isHovered -> GridColors.rowHovered
         rowIndex % 2 == 1 -> GridColors.rowAlternate
         else -> Color.White
     }
@@ -1390,6 +1429,20 @@ private fun <T> FrozenLeftRow(
     Row(
         modifier = Modifier
             .height(rowHeight)
+            // Desktop behavior: track hover to highlight the row under the mouse
+            .pointerInput(rowIndex) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Enter -> state.hoveredRow = rowIndex
+                            PointerEventType.Exit ->
+                                if (state.hoveredRow == rowIndex) state.hoveredRow = -1
+                            else -> Unit
+                        }
+                    }
+                }
+            }
             .zIndex(if (isDragging) 10f else 0f)
             .graphicsLayer {
                 if (isDragging) {
@@ -1469,7 +1522,6 @@ private fun <T> FrozenLeftRow(
                 onCellValueChanged = onCellValueChanged,
                 allColumns = allColumns,
                 allItems = allItems,
-                onCellClick = onClick,
                 onCellRightClick = { offset ->
                     clickOffset = offset
                     menuVisible = true
@@ -1555,15 +1607,25 @@ private fun <T> ScrollableMiddleSection(
                 enableEditing = enableEditing,
                 onCellValueChanged = onCellValueChanged,
                 selectionMode = selectionMode,
-                onClick = {
-                    state.selectRow(rowIndex, selectionMode)
+                onClick = { modifiers ->
+                    // Desktop behavior: Ctrl+Click toggles, Shift+Click range-selects
+                    state.selectRow(
+                        rowIndex,
+                        selectionMode,
+                        isCtrlPressed = modifiers.pointerIsCtrlPressed,
+                        isShiftPressed = modifiers.pointerIsShiftPressed
+                    )
                     onRowClick?.invoke(item, rowIndex)
                 },
                 onDoubleClick = {
                     onRowDoubleClick?.invoke(item, rowIndex)
                 },
                 onRightClick = { offset ->
-                    state.selectRow(rowIndex, selectionMode)
+                    // Desktop behavior: right-clicking an already-selected row keeps
+                    // the current (possibly multi-row) selection intact
+                    if (rowIndex !in state.selectedRows) {
+                        state.selectRow(rowIndex, selectionMode)
+                    }
                     onRowRightClick?.invoke(item, rowIndex, offset)
                 },
                 contextMenuItems = contextMenuItems,
@@ -1594,7 +1656,7 @@ private fun <T> ScrollableMiddleRow(
     enableEditing: Boolean,
     onCellValueChanged: ((T, String, String, String) -> Unit)?,
     selectionMode: SelectionMode,
-    onClick: () -> Unit,
+    onClick: (PointerKeyboardModifiers) -> Unit,
     onDoubleClick: () -> Unit,
     onRightClick: ((Offset) -> Unit)?,
     contextMenuItems: ((T, Int) -> List<ContextMenuEntry>)?,
@@ -1621,11 +1683,13 @@ private fun <T> ScrollableMiddleRow(
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
+    val isHovered = rowIndex == state.hoveredRow
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
         isFocused && isSelected -> GridColors.rowFocused
         isSelected -> GridColors.rowSelected
+        isHovered -> GridColors.rowHovered
         rowIndex % 2 == 1 -> GridColors.rowAlternate
         else -> Color.White
     }
@@ -1633,6 +1697,20 @@ private fun <T> ScrollableMiddleRow(
     Row(
         modifier = Modifier
             .height(rowHeight)
+            // Desktop behavior: track hover to highlight the row under the mouse
+            .pointerInput(rowIndex) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Enter -> state.hoveredRow = rowIndex
+                            PointerEventType.Exit ->
+                                if (state.hoveredRow == rowIndex) state.hoveredRow = -1
+                            else -> Unit
+                        }
+                    }
+                }
+            }
             .zIndex(if (isDragging) 10f else 0f)
             .graphicsLayer {
                 if (isDragging) {
@@ -1723,7 +1801,6 @@ private fun <T> ScrollableMiddleRow(
                 onCellValueChanged = onCellValueChanged,
                 allColumns = allColumns,
                 allItems = allItems,
-                onCellClick = onClick,
                 onCellRightClick = { offset ->
                     clickOffset = offset
                     menuVisible = true
@@ -1795,22 +1872,32 @@ private fun <T> FrozenRightSection(
             FrozenRightRow(
                 itemWrapper = stableItem,
                 rowIndex = rowIndex,
-                columns = columns.toImmutableList(),
+                columns = columns,
                 state = state,
                 rowHeight = rowHeight,
                 hasFocus = hasFocus,
                 enableEditing = enableEditing,
                 onCellValueChanged = onCellValueChanged,
                 selectionMode = selectionMode,
-                onClick = {
-                    state.selectRow(rowIndex, selectionMode)
+                onClick = { modifiers ->
+                    // Desktop behavior: Ctrl+Click toggles, Shift+Click range-selects
+                    state.selectRow(
+                        rowIndex,
+                        selectionMode,
+                        isCtrlPressed = modifiers.pointerIsCtrlPressed,
+                        isShiftPressed = modifiers.pointerIsShiftPressed
+                    )
                     onRowClick?.invoke(item, rowIndex)
                 },
                 onDoubleClick = {
                     onRowDoubleClick?.invoke(item, rowIndex)
                 },
                 onRightClick = { offset ->
-                    state.selectRow(rowIndex, selectionMode)
+                    // Desktop behavior: right-clicking an already-selected row keeps
+                    // the current (possibly multi-row) selection intact
+                    if (rowIndex !in state.selectedRows) {
+                        state.selectRow(rowIndex, selectionMode)
+                    }
                     onRowRightClick?.invoke(item, rowIndex, offset)
                 },
                 contextMenuItems = contextMenuItems,
@@ -1839,7 +1926,7 @@ private fun <T> FrozenRightRow(
     enableEditing: Boolean,
     onCellValueChanged: ((T, String, String, String) -> Unit)?,
     selectionMode: SelectionMode,
-    onClick: () -> Unit,
+    onClick: (PointerKeyboardModifiers) -> Unit,
     onDoubleClick: () -> Unit,
     onRightClick: ((Offset) -> Unit)?,
     contextMenuItems: ((T, Int) -> List<ContextMenuEntry>)?,
@@ -1866,11 +1953,13 @@ private fun <T> FrozenRightRow(
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
+    val isHovered = rowIndex == state.hoveredRow
     val backgroundColor = when {
         isDragging -> MaterialTheme.colorScheme.primaryContainer
         isDropTarget -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
         isFocused && isSelected -> GridColors.rowFocused
         isSelected -> GridColors.rowSelected
+        isHovered -> GridColors.rowHovered
         rowIndex % 2 == 1 -> GridColors.rowAlternate
         else -> Color.White
     }
@@ -1878,6 +1967,20 @@ private fun <T> FrozenRightRow(
     Row(
         modifier = Modifier
             .height(rowHeight)
+            // Desktop behavior: track hover to highlight the row under the mouse
+            .pointerInput(rowIndex) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Enter -> state.hoveredRow = rowIndex
+                            PointerEventType.Exit ->
+                                if (state.hoveredRow == rowIndex) state.hoveredRow = -1
+                            else -> Unit
+                        }
+                    }
+                }
+            }
             .zIndex(if (isDragging) 10f else 0f)
             .graphicsLayer {
                 if (isDragging) {
@@ -1939,7 +2042,6 @@ private fun <T> FrozenRightRow(
                 onCellValueChanged = onCellValueChanged,
                 allColumns = allColumns,
                 allItems = allItems,
-                onCellClick = onClick,
                 onCellRightClick = { offset ->
                     clickOffset = offset
                     menuVisible = true
@@ -1983,7 +2085,6 @@ private fun <T> DataCell(
     onCellValueChanged: ((T, String, String, String) -> Unit)?,
     allColumns: ImmutableList<ColumnDef<T>>,
     allItems: ImmutableList<T>,
-    onCellClick: (() -> Unit)? = null,
     onCellRightClick: ((Offset) -> Unit)? = null
 ) {
     // Extract actual item from stable wrapper
@@ -2021,8 +2122,10 @@ private fun <T> DataCell(
             }
             .multiButtonClickable(
                 onClick = {
+                    // Only track the focused column here. Row selection is handled by
+                    // the row's own gesture handler, which also receives this click -
+                    // selecting here too would double-toggle Ctrl+Click selection.
                     state.focusedColumn = columnIndex
-                    onCellClick?.invoke()
                 },
                 onDoubleClick = {
                     if (enableEditing && column.editable) {

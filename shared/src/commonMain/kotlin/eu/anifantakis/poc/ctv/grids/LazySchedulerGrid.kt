@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +37,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -110,16 +110,19 @@ fun LazySchedulerGrid(
     }
 
     // Filter breaks to only show those with data (condensed mode)
+    // Single O(cells) pass to collect break ids with spots, then O(breaks) filter
     val visibleBreaks = remember(breaks, cellData, year, month) {
-        breaks.filter { breakSlot ->
-            cellData.keys.any { key ->
-                val (breakId, date) = key
-                breakId == breakSlot.id &&
-                        date.year == year &&
-                        date.month.ordinal + 1 == month &&
-                        (cellData[key]?.spotCount ?: 0) > 0
+        val breakIdsWithSpots = buildSet {
+            for ((key, data) in cellData) {
+                if (data.spotCount > 0 &&
+                    key.date.year == year &&
+                    key.date.month.ordinal + 1 == month
+                ) {
+                    add(key.breakId)
+                }
             }
-        }.ifEmpty {
+        }
+        breaks.filter { it.id in breakIdsWithSpots }.ifEmpty {
             breaks.take(20)
         }
     }
@@ -190,6 +193,28 @@ fun LazySchedulerGrid(
                 if (breakSlot != null && date != null) {
                     onDeleteSpot?.invoke(breakSlot, date)
                 }
+                true
+            }
+            Key.PageUp -> {
+                val pageSize = lazyListState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                updateSelection((selectedRow - pageSize).coerceAtLeast(0), selectedColumn)
+                true
+            }
+            Key.PageDown -> {
+                val pageSize = lazyListState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                updateSelection((selectedRow + pageSize).coerceIn(0, maxRow.coerceAtLeast(0)), selectedColumn)
+                true
+            }
+            Key.MoveHome -> {
+                // Home: first column; Ctrl+Home: top-left corner
+                if (event.isCtrlPressed) updateSelection(0, 0)
+                else updateSelection(selectedRow, 0)
+                true
+            }
+            Key.MoveEnd -> {
+                // End: last column; Ctrl+End: bottom-right corner
+                if (event.isCtrlPressed) updateSelection(maxRow.coerceAtLeast(0), maxCol)
+                else updateSelection(selectedRow, maxCol)
                 true
             }
             else -> false
@@ -328,31 +353,28 @@ fun LazySchedulerGrid(
                     ) {
                         Row(modifier = Modifier.width(totalDaysWidth)) {
                             allDays.forEachIndexed { colIndex, date ->
-                                key(breakSlot.id, colIndex) {
-                                    val cellKey = SchedulerKey(breakSlot.id, date)
-                                    val data = cellData[cellKey]
-                                    val isModified = modifiedCells.contains(cellKey)
+                                val cellKey = SchedulerKey(breakSlot.id, date)
+                                val data = cellData[cellKey]
+                                val isModified = modifiedCells.contains(cellKey)
 
-                                    // Pass the menu items provider lambda to the cell
-                                    // The cell will call this only when clicked
-                                    // PERFORMANCE: Wrap LocalDate in StableDate to satisfy Compose stability
-                                    GridCell(
-                                        data = data,
-                                        dateWrapper = StableDate(date),
-                                        width = dayColumnWidth,
-                                        isModified = isModified,
-                                        rowIndex = rowIndex,
-                                        colIndex = colIndex,
-                                        selectedRow = selectedRow,
-                                        selectedColumn = selectedColumn,
-                                        onSelect = { updateSelection(rowIndex, colIndex) },
-                                        onDoubleClick = { onCellDoubleClick?.invoke(breakSlot, date, data) },
-                                        // Pass the menu provider if the parent provided contextMenuItems
-                                        menuEntriesProvider = if (contextMenuItems != null) {
-                                            { contextMenuItems(breakSlot, date, data) }
-                                        } else null
-                                    )
-                                }
+                                // Pass the menu items provider lambda to the cell
+                                // The cell will call this only when clicked
+                                // PERFORMANCE: Wrap LocalDate in StableDate to satisfy Compose stability.
+                                // isSelected is resolved HERE so that a selection move only
+                                // recomposes the two affected cells - all others skip.
+                                GridCell(
+                                    data = data,
+                                    dateWrapper = StableDate(date),
+                                    width = dayColumnWidth,
+                                    isModified = isModified,
+                                    isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
+                                    onSelect = { updateSelection(rowIndex, colIndex) },
+                                    onDoubleClick = { onCellDoubleClick?.invoke(breakSlot, date, data) },
+                                    // Pass the menu provider if the parent provided contextMenuItems
+                                    menuEntriesProvider = if (contextMenuItems != null) {
+                                        { contextMenuItems(breakSlot, date, data) }
+                                    } else null
+                                )
                             }
                         }
                     }
@@ -467,10 +489,7 @@ private fun GridCell(
     dateWrapper: StableDate,
     width: Dp,
     isModified: Boolean,
-    rowIndex: Int,
-    colIndex: Int,
-    selectedRow: Int,
-    selectedColumn: Int,
+    isSelected: Boolean,
     onSelect: () -> Unit,
     onDoubleClick: () -> Unit,
     menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null
@@ -480,24 +499,21 @@ private fun GridCell(
 
     val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
     val spotCount = data?.spotCount ?: 0
-    val isSelected = rowIndex == selectedRow && colIndex == selectedColumn
 
     // Local menu state for right-click handling
     var menuVisible by remember { mutableStateOf(false) }
     var clickOffset by remember { mutableStateOf(Offset.Zero) }
     val density = LocalDensity.current
 
-    // Modified cells show black background
-    val bgColor = remember(isModified, data?.zoneColor, spotCount, isWeekend) {
-        when {
-            isModified -> Color.Black
-            data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor.copy(alpha = 0.4f)
-            spotCount > 10 -> Color(0xFFFF69B4).copy(alpha = 0.4f)
-            spotCount > 5 -> Color(0xFF90EE90).copy(alpha = 0.4f)
-            spotCount > 0 -> Color(0xFF87CEEB).copy(alpha = 0.4f)
-            isWeekend -> Color(0xFFFFE0B2).copy(alpha = 0.3f)
-            else -> Color.White
-        }
+    // Modified cells show black background (plain computation is cheaper than remember)
+    val bgColor = when {
+        isModified -> Color.Black
+        data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor.copy(alpha = 0.4f)
+        spotCount > 10 -> Color(0xFFFF69B4).copy(alpha = 0.4f)
+        spotCount > 5 -> Color(0xFF90EE90).copy(alpha = 0.4f)
+        spotCount > 0 -> Color(0xFF87CEEB).copy(alpha = 0.4f)
+        isWeekend -> Color(0xFFFFE0B2).copy(alpha = 0.3f)
+        else -> Color.White
     }
 
     val textColor = if (isModified) Color.White else Color.Black
@@ -549,7 +565,7 @@ private fun GridCell(
                 } else mod
             }
             .multiButtonClickable(
-                onClick = onSelect,
+                onClick = { onSelect() },
                 onDoubleClick = onDoubleClick,
                 onRightClick = null  // Right-click handled by separate modifier above
             ),
