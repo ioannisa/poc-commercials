@@ -1,58 +1,77 @@
 package eu.anifantakis.poc.ctv.grids
 
-import androidx.compose.foundation.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.ui.layout.boundsInParent
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.coroutines.launch
 
 // ============================================================================
 // CORE DATA STRUCTURES
@@ -886,36 +905,16 @@ private fun RichContextMenuEntry(
 
         is ContextMenuEntry.SubMenu -> {
             val isExpanded = expandedSubmenuIndex == entryIndex
-            var itemWidth by remember { mutableStateOf(0) }
-            var itemPositionX by remember { mutableStateOf(0f) }
-            var windowWidth by remember { mutableStateOf(0f) }
-            val density = LocalDensity.current
-
-            // Estimated submenu width (typical dropdown menu width)
-            val estimatedSubmenuWidth = with(density) { 200.dp.toPx() }
+            // Which side the submenu actually opened on, reported back by
+            // SubmenuPopup from its measured placement
+            var opensOnLeft by remember { mutableStateOf(false) }
 
             Box(
                 modifier = Modifier.onGloballyPositioned { coordinates ->
-                    itemWidth = coordinates.size.width
                     // Report bounds to parent for hover detection
                     onBoundsChanged(coordinates.boundsInParent())
-                    // Get position in root to calculate available space
-                    val positionInRoot = coordinates.positionInRoot()
-                    itemPositionX = positionInRoot.x
-                    // Get window width from the root coordinates
-                    var root = coordinates
-                    while (root.parentLayoutCoordinates != null) {
-                        root = root.parentLayoutCoordinates!!
-                    }
-                    windowWidth = root.size.width.toFloat()
                 }
             ) {
-                // Calculate if submenu should open on the left
-                val openOnLeft = remember(itemPositionX, itemWidth, windowWidth) {
-                    val rightEdgeAfterSubmenu = itemPositionX + itemWidth + estimatedSubmenuWidth
-                    rightEdgeAfterSubmenu > windowWidth && itemPositionX > estimatedSubmenuWidth
-                }
-
                 DropdownMenuItem(
                     text = {
                         Row(
@@ -931,7 +930,7 @@ private fun RichContextMenuEntry(
                                     LocalContentColor.current.copy(alpha = 0.38f)
                             )
                             Icon(
-                                imageVector = if (openOnLeft)
+                                imageVector = if (opensOnLeft)
                                     Icons.AutoMirrored.Filled.KeyboardArrowLeft
                                 else
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -964,30 +963,11 @@ private fun RichContextMenuEntry(
                     }
                 )
 
-                // Nested submenu - positioned based on available space
-                DropdownMenu(
+                // Nested submenu - anchored to the parent item, flips side/alignment as needed
+                SubmenuPopup(
                     expanded = isExpanded,
                     onDismissRequest = { onSubmenuExpandChange(false) },
-                    modifier = Modifier.pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                if (event.type == PointerEventType.Exit) {
-                                    // Close submenu when mouse exits its bounds
-                                    onSubmenuExpandChange(false)
-                                }
-                            }
-                        }
-                    },
-                    offset = with(density) {
-                        if (openOnLeft) {
-                            // Position submenu to the left of the parent item
-                            DpOffset(x = (-200).dp, y = (-40).dp)
-                        } else {
-                            // Position submenu to the right of the parent item
-                            DpOffset(x = itemWidth.toDp(), y = (-40).dp)
-                        }
-                    }
+                    onOpensLeftChange = { opensOnLeft = it }
                 ) {
                     // Nested entries use simplified handling (no hover tracking needed at this level)
                     entry.items.forEach { subEntry ->
@@ -1064,14 +1044,11 @@ private fun RichContextMenuEntrySimple(
         is ContextMenuEntry.SubMenu -> {
             // For nested submenus, use click to expand (simplified behavior)
             var subMenuExpanded by remember { mutableStateOf(false) }
-            var itemWidth by remember { mutableStateOf(0) }
-            val density = LocalDensity.current
+            // Which side the submenu actually opened on, reported back by
+            // SubmenuPopup from its measured placement
+            var opensOnLeft by remember { mutableStateOf(false) }
 
-            Box(
-                modifier = Modifier.onGloballyPositioned { coordinates ->
-                    itemWidth = coordinates.size.width
-                }
-            ) {
+            Box {
                 DropdownMenuItem(
                     text = {
                         Row(
@@ -1087,7 +1064,10 @@ private fun RichContextMenuEntrySimple(
                                     LocalContentColor.current.copy(alpha = 0.38f)
                             )
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                imageVector = if (opensOnLeft)
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                                else
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "Submenu",
                                 modifier = Modifier.size(16.dp),
                                 tint = LocalContentColor.current.copy(alpha = 0.6f)
@@ -1105,12 +1085,10 @@ private fun RichContextMenuEntrySimple(
                     }
                 )
 
-                DropdownMenu(
+                SubmenuPopup(
                     expanded = subMenuExpanded,
                     onDismissRequest = { subMenuExpanded = false },
-                    offset = with(density) {
-                        DpOffset(x = itemWidth.toDp(), y = (-40).dp)
-                    }
+                    onOpensLeftChange = { opensOnLeft = it }
                 ) {
                     entry.items.forEach { subEntry ->
                         RichContextMenuEntrySimple(
@@ -1123,6 +1101,98 @@ private fun RichContextMenuEntrySimple(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Popup container for nested submenus with classic desktop-menu positioning.
+ *
+ * Opens to the right of the parent item (flipping to the left when there is no
+ * room) with its first item top-aligned to the parent item. When the submenu
+ * would overflow the window bottom, it flips upward so its LAST item stays
+ * aligned with the parent item, as native desktop menus do.
+ */
+@Composable
+private fun SubmenuPopup(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onOpensLeftChange: (Boolean) -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit
+) {
+    if (!expanded) return
+
+    val density = LocalDensity.current
+    val currentOnOpensLeftChange by rememberUpdatedState(onOpensLeftChange)
+    val positionProvider = remember(density) {
+        object : PopupPositionProvider {
+            // Matches the menu's internal vertical content padding so that
+            // submenu items line up exactly with the parent item
+            val menuVerticalPaddingPx = with(density) { 8.dp.roundToPx() }
+
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize
+            ): IntOffset {
+                val opensLeft = anchorBounds.right + popupContentSize.width > windowSize.width
+                currentOnOpensLeftChange(opensLeft)
+
+                val x = (
+                    if (opensLeft) {
+                        anchorBounds.left - popupContentSize.width
+                    } else {
+                        anchorBounds.right
+                    }
+                ).coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width))
+
+                val topAligned = anchorBounds.top - menuVerticalPaddingPx
+                val bottomAligned = anchorBounds.bottom + menuVerticalPaddingPx - popupContentSize.height
+                val y = (
+                    if (topAligned + popupContentSize.height <= windowSize.height) {
+                        topAligned
+                    } else {
+                        bottomAligned
+                    }
+                ).coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height))
+
+                return IntOffset(x, y)
+            }
+        }
+    }
+
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = onDismissRequest,
+        // Must NOT be focusable: a focusable popup is modal on desktop and blocks
+        // pointer events to the parent menu, making its other items unclickable
+        properties = PopupProperties(focusable = false)
+    ) {
+        Surface(
+            shape = MenuDefaults.shape,
+            color = MenuDefaults.containerColor,
+            tonalElevation = MenuDefaults.TonalElevation,
+            shadowElevation = MenuDefaults.ShadowElevation,
+            modifier = Modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Exit) {
+                            // Close submenu when mouse exits its bounds
+                            onDismissRequest()
+                        }
+                    }
+                }
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .width(IntrinsicSize.Max)
+                    .verticalScroll(rememberScrollState()),
+                content = content
+            )
         }
     }
 }

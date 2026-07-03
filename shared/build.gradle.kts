@@ -11,7 +11,9 @@ plugins {
 }
 
 composeCompiler {
-    stabilityConfigurationFile.set(project.file("compose_compiler_config.conf"))
+    stabilityConfigurationFiles.add(
+        layout.projectDirectory.file("compose_compiler_config.conf")
+    )
 }
 
 kotlin {
