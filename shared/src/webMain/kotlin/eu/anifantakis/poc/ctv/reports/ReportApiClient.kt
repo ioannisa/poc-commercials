@@ -1,24 +1,26 @@
 package eu.anifantakis.poc.ctv.reports
 
-import eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData
-import eu.anifantakis.poc.ctv.reports.models.ReportConfig
+import eu.anifantakis.poc.ctv.config.AppConfig
+import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
  * HTTP client for calling the report server API.
- * Used by browser-based platforms (JS and WASM) to generate PDFs via the backend.
+ * Used by browser-based platforms (JS and WASM) to generate PDFs via the
+ * backend. Generic: any report id the server has a template for works here.
  */
 object ReportApiClient {
 
-    // Configure this to point to your report server
-    var serverBaseUrl: String = "http://localhost:8080"
+    // Same config source as every other network call in the app
+    // (config.properties -> AppConfig, loaded at application startup)
+    private val serverBaseUrl: String
+        get() = AppConfig.require().serverBaseUrl
 
     private val httpClient by lazy {
         HttpClient {
@@ -32,18 +34,12 @@ object ReportApiClient {
     }
 
     /**
-     * Generate a Program Flow PDF report via the server API
-     * @return PDF bytes on success, null on failure
+     * Generate a PDF report via the server API.
+     * @return PDF bytes on success, failure with the server error otherwise
      */
-    suspend fun generateProgramFlowPdf(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig,
-        fileName: String
-    ): Result<ByteArray> {
+    suspend fun generatePdf(request: ReportRequest): Result<ByteArray> {
         return try {
-            val request = toServerRequest(reportData, config, fileName)
-
-            val response = httpClient.post("$serverBaseUrl/api/reports/program-flow") {
+            val response = httpClient.post("$serverBaseUrl/api/reports/${request.reportId}") {
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }
@@ -60,45 +56,6 @@ object ReportApiClient {
     }
 
     /**
-     * Convert client-side report data to server API request format
-     */
-    private fun toServerRequest(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig,
-        fileName: String
-    ): ProgramFlowServerRequest {
-        // Group items by time slot
-        val groupedItems = reportData.items.groupBy { it.timeSlot }
-
-        val timeSlotGroups = groupedItems.map { (timeSlot, items) ->
-            val lastItem = items.lastOrNull()
-            TimeSlotGroupDto(
-                timeLabel = timeSlot,
-                items = items.map { item ->
-                    ProgramFlowItemDto(
-                        message = item.message,
-                        time = item.timeSlot,
-                        duration = item.duration,
-                        program = item.program,
-                        notes = item.notes
-                    )
-                },
-                totalDuration = lastItem?.groupTotalDuration ?: "00:00",
-                spotCount = lastItem?.groupSpotCount ?: items.size
-            )
-        }
-
-        return ProgramFlowServerRequest(
-            title = reportData.title,
-            date = reportData.date.toString(), // ISO format
-            emptyTimeIndicator = reportData.emptyTimeFormatted,
-            timeSlotGroups = timeSlotGroups,
-            fileName = fileName,
-            logoPath = config.logoPath
-        )
-    }
-
-    /**
      * Check if the report server is available
      */
     suspend fun checkServerStatus(): Boolean {
@@ -110,32 +67,3 @@ object ReportApiClient {
         }
     }
 }
-
-// DTOs matching the server API
-
-@Serializable
-data class ProgramFlowServerRequest(
-    val title: String,
-    val date: String,
-    val emptyTimeIndicator: String,
-    val timeSlotGroups: List<TimeSlotGroupDto>,
-    val fileName: String? = null,
-    val logoPath: String? = null
-)
-
-@Serializable
-data class TimeSlotGroupDto(
-    val timeLabel: String,
-    val items: List<ProgramFlowItemDto>,
-    val totalDuration: String,
-    val spotCount: Int
-)
-
-@Serializable
-data class ProgramFlowItemDto(
-    val message: String,
-    val time: String,
-    val duration: String,
-    val program: String,
-    val notes: String
-)

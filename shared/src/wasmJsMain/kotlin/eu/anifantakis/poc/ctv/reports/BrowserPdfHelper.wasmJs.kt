@@ -41,7 +41,9 @@ actual object BrowserPdfHelper {
     link.href = url;
     link.download = fileName;
     link.click();
-    URL.revokeObjectURL(url);
+    // Revoke AFTER the browser has had time to start the download -
+    // revoking synchronously can intermittently cancel it on some browsers
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 """)
 private external fun downloadPdfJs(uint8Array: Uint8Array, fileName: String)

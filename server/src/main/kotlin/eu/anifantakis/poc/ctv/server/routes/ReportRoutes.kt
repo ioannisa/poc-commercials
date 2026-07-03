@@ -1,63 +1,29 @@
 package eu.anifantakis.poc.ctv.server.routes
 
-import eu.anifantakis.poc.ctv.server.reports.JasperReportGenerator
-import eu.anifantakis.poc.ctv.server.reports.ProgramFlowReportRequest
+import eu.anifantakis.poc.ctv.reports.dto.ReportRequest
+import eu.anifantakis.poc.ctv.reports.engine.ReportEngine
 import io.ktor.http.*
+import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+/**
+ * Generic report endpoints: any report with a template in :reportcore is
+ * served here. Adding a report adds no server code - only the template
+ * (and its payload builder in :shared).
+ */
 fun Route.reportRoutes() {
     route("/api/reports") {
 
-        // Generate Program Flow PDF report
-        post("/program-flow") {
-            try {
-                val request = call.receive<ProgramFlowReportRequest>()
-
-                val pdfBytes = JasperReportGenerator.generateProgramFlowPdf(request)
-
-                call.response.header(
-                    HttpHeaders.ContentDisposition,
-                    ContentDisposition.Attachment.withParameter(
-                        ContentDisposition.Parameters.FileName,
-                        request.fileName ?: "program-flow-report.pdf"
-                    ).toString()
-                )
-
-                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
-
-            } catch (e: Exception) {
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    mapOf("error" to (e.message ?: "Failed to generate report"))
-                )
-            }
+        // Generate a PDF report for download
+        post("/{reportId}") {
+            call.generateReport(ContentDisposition.Attachment)
         }
 
         // Preview endpoint - returns PDF inline (for browser viewing)
-        post("/program-flow/preview") {
-            try {
-                val request = call.receive<ProgramFlowReportRequest>()
-
-                val pdfBytes = JasperReportGenerator.generateProgramFlowPdf(request)
-
-                call.response.header(
-                    HttpHeaders.ContentDisposition,
-                    ContentDisposition.Inline.withParameter(
-                        ContentDisposition.Parameters.FileName,
-                        request.fileName ?: "program-flow-report.pdf"
-                    ).toString()
-                )
-
-                call.respondBytes(pdfBytes, ContentType.Application.Pdf)
-
-            } catch (e: Exception) {
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    mapOf("error" to (e.message ?: "Failed to generate report"))
-                )
-            }
+        post("/{reportId}/preview") {
+            call.generateReport(ContentDisposition.Inline)
         }
 
         // Health check for reports
@@ -69,5 +35,50 @@ fun Route.reportRoutes() {
                 )
             )
         }
+    }
+}
+
+private suspend fun ApplicationCall.generateReport(disposition: ContentDisposition) {
+    try {
+        val request = receive<ReportRequest>()
+
+        if (request.reportId != parameters["reportId"]) {
+            respond(
+                HttpStatusCode.BadRequest,
+                mapOf("error" to "reportId in path and body do not match")
+            )
+            return
+        }
+        if (!ReportEngine.hasTemplate(request.reportId)) {
+            respond(
+                HttpStatusCode.NotFound,
+                mapOf("error" to "Unknown report '${request.reportId}'")
+            )
+            return
+        }
+
+        val pdfBytes = ReportEngine.generatePdf(request)
+
+        response.header(
+            HttpHeaders.ContentDisposition,
+            disposition.withParameter(
+                ContentDisposition.Parameters.FileName,
+                request.fileName ?: "${request.reportId}.pdf"
+            ).toString()
+        )
+
+        respondBytes(pdfBytes, ContentType.Application.Pdf)
+
+    } catch (e: IllegalArgumentException) {
+        // Engine validation: unknown parameter/field names, bad value types
+        respond(
+            HttpStatusCode.BadRequest,
+            mapOf("error" to (e.message ?: "Invalid report request"))
+        )
+    } catch (e: Exception) {
+        respond(
+            HttpStatusCode.InternalServerError,
+            mapOf("error" to (e.message ?: "Failed to generate report"))
+        )
     }
 }

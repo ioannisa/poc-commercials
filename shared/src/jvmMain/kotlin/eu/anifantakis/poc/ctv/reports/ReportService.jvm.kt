@@ -1,38 +1,37 @@
 package eu.anifantakis.poc.ctv.reports
 
-import eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData
-import eu.anifantakis.poc.ctv.reports.models.ReportConfig
+import eu.anifantakis.poc.ctv.reports.engine.ReportEngine
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
-import net.sf.jasperreports.engine.*
-import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource
-import net.sf.jasperreports.pdf.JRPdfExporter
-import net.sf.jasperreports.export.SimpleExporterInput
-import net.sf.jasperreports.export.SimpleOutputStreamExporterOutput
-import net.sf.jasperreports.pdf.SimplePdfExporterConfiguration
+import net.sf.jasperreports.engine.JasperPrintManager
 import java.awt.Desktop
 import java.io.File
-import java.io.InputStream
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
+/**
+ * JVM/Desktop implementation of ReportService.
+ * Generates any report in-process via the shared generic [ReportEngine]
+ * (same engine and templates the server uses).
+ */
 actual class ReportService actual constructor() {
 
-    actual suspend fun exportProgramFlowToPdf(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig,
+    actual suspend fun exportToPdf(
+        payload: ReportPayload,
         suggestedFileName: String
-    ): ReportResult = withContext(Dispatchers.IO) {
-        try {
-            // Show file save dialog
-            val outputFile = showSaveDialog(suggestedFileName) ?: return@withContext ReportResult.Cancelled
+    ): ReportResult {
+        return try {
+            // Swing components must be used on the EDT
+            val outputFile = withContext(Dispatchers.Swing) {
+                showSaveDialog(suggestedFileName)
+            } ?: return ReportResult.Cancelled
 
-            // Generate the report
-            val jasperPrint = generateJasperPrint(reportData, config)
-
-            // Export to PDF
-            exportToPdf(jasperPrint, outputFile)
+            withContext(Dispatchers.IO) {
+                val jasperPrint = ReportEngine.fill(payload.toWire(suggestedFileName))
+                ReportEngine.exportToPdfFile(jasperPrint, outputFile)
+            }
 
             ReportResult.Success("PDF exported successfully", outputFile.absolutePath)
         } catch (e: Exception) {
@@ -41,20 +40,14 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual suspend fun previewProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult = withContext(Dispatchers.IO) {
+    actual suspend fun preview(payload: ReportPayload): ReportResult = withContext(Dispatchers.IO) {
         try {
-            // Generate the report
-            val jasperPrint = generateJasperPrint(reportData, config)
+            val jasperPrint = ReportEngine.fill(payload.toWire())
 
             // Create temp PDF file for preview
             val tempFile = File.createTempFile("report_preview_", ".pdf")
             tempFile.deleteOnExit()
-
-            // Export to temp PDF
-            exportToPdf(jasperPrint, tempFile)
+            ReportEngine.exportToPdfFile(jasperPrint, tempFile)
 
             // Open in default PDF viewer
             if (Desktop.isDesktopSupported()) {
@@ -69,16 +62,17 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual suspend fun printProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult = withContext(Dispatchers.IO) {
-        try {
-            // Generate the report
-            val jasperPrint = generateJasperPrint(reportData, config)
+    actual suspend fun print(payload: ReportPayload): ReportResult {
+        return try {
+            val jasperPrint = withContext(Dispatchers.IO) {
+                ReportEngine.fill(payload.toWire())
+            }
 
-            // Print using JasperReports print manager
-            net.sf.jasperreports.engine.JasperPrintManager.printReport(jasperPrint, true)
+            // The print dialog is UI - show it from the EDT (the dialog is
+            // modal, so blocking the EDT for its duration is expected)
+            withContext(Dispatchers.Swing) {
+                JasperPrintManager.printReport(jasperPrint, true)
+            }
 
             ReportResult.Success("Print dialog opened")
         } catch (e: Exception) {
@@ -87,50 +81,7 @@ actual class ReportService actual constructor() {
         }
     }
 
-    actual fun isJasperReportsAvailable(): Boolean = true
-
-    private fun generateJasperPrint(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): JasperPrint {
-        // Load the JRXML template using context classloader
-        val templateStream: InputStream = Thread.currentThread().contextClassLoader
-            ?.getResourceAsStream("reports/ProgramFlowReport.jrxml")
-            ?: javaClass.getResourceAsStream("/reports/ProgramFlowReport.jrxml")
-            ?: throw IllegalStateException("Report template not found: reports/ProgramFlowReport.jrxml")
-
-        // JasperReports 7.x uses Jackson for XML parsing - load and compile
-        val content = templateStream.bufferedReader().use { it.readText() }
-        val jasperContext = net.sf.jasperreports.engine.DefaultJasperReportsContext.getInstance()
-        val contentStream = java.io.ByteArrayInputStream(content.toByteArray(Charsets.UTF_8))
-        val jasperDesign = net.sf.jasperreports.engine.xml.JRXmlLoader.load(jasperContext, contentStream)
-        val jasperReport = JasperCompileManager.getInstance(jasperContext).compile(jasperDesign)
-
-        // Prepare parameters
-        val parameters = mutableMapOf<String, Any?>()
-        parameters["REPORT_TITLE"] = reportData.title
-        parameters["REPORT_DATE"] = reportData.dateFormatted
-        parameters["EMPTY_TIME"] = reportData.emptyTimeFormatted
-        parameters["LOGO_PATH"] = config.logoPath
-
-        // Create data source from items
-        val dataSource = JRBeanCollectionDataSource(reportData.items)
-
-        // Fill the report
-        return JasperFillManager.fillReport(jasperReport, parameters, dataSource)
-    }
-
-    private fun exportToPdf(jasperPrint: JasperPrint, outputFile: File) {
-        val exporter = JRPdfExporter()
-        exporter.setExporterInput(SimpleExporterInput(jasperPrint))
-        exporter.setExporterOutput(SimpleOutputStreamExporterOutput(outputFile))
-
-        val configuration = SimplePdfExporterConfiguration()
-        configuration.isCreatingBatchModeBookmarks = true
-        exporter.setConfiguration(configuration)
-
-        exporter.exportReport()
-    }
+    actual fun isReportGenerationAvailable(): Boolean = true
 
     private fun showSaveDialog(suggestedFileName: String): File? {
         val fileChooser = JFileChooser()

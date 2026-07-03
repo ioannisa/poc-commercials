@@ -25,6 +25,14 @@ compose.desktop {
     application {
         mainClass = "eu.anifantakis.poc.ctv.MainKt"
 
+        buildTypes.release.proguard {
+            // JasperReports and commons-beanutils resolve report fields and
+            // renderers reflectively; ProGuard shrinking (enabled by default
+            // for packageRelease* tasks) breaks report generation in packaged
+            // release builds, so keep release distributions unminified.
+            isEnabled.set(false)
+        }
+
         javaHome = javaToolchains.launcherFor {
             languageVersion = JavaLanguageVersion.of(21)
             vendor = JvmVendorSpec.MICROSOFT

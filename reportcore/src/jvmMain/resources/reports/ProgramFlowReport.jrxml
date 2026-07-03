@@ -22,15 +22,13 @@
     </parameter>
     <parameter name="LOGO_PATH" class="java.lang.String" forPrompting="false"/>
 
-    <!-- Fields from ProgramFlowItem bean -->
+    <!-- Fields: the data contract of this report. Row values arrive as JSON
+         and are coerced to these classes by the generic ReportEngine. -->
     <field name="timeSlot" class="java.lang.String"/>
     <field name="message" class="java.lang.String"/>
     <field name="duration" class="java.lang.String"/>
-    <field name="durationSeconds" class="java.lang.Integer"/>
     <field name="program" class="java.lang.String"/>
     <field name="notes" class="java.lang.String"/>
-    <field name="firstInGroup" class="java.lang.Boolean"/>
-    <field name="lastInGroup" class="java.lang.Boolean"/>
     <field name="groupTotalDuration" class="java.lang.String"/>
     <field name="groupSpotCount" class="java.lang.Integer"/>
 
@@ -67,8 +65,14 @@
 
     <!-- Report Title/Header -->
     <title height="80">
-        <!-- Logo placeholder (left) -->
+        <!-- Logo image (left) - rendered from the LOGO_PATH parameter when provided -->
+        <element kind="image" x="0" y="5" width="100" height="40" scaleImage="RetainShape" hImageAlign="Left" onErrorType="Blank" uuid="12b2c3d4-e5f6-7890-abcd-ef1234567890">
+            <printWhenExpression><![CDATA[$P{LOGO_PATH} != null && !$P{LOGO_PATH}.trim().isEmpty()]]></printWhenExpression>
+            <expression><![CDATA[$P{LOGO_PATH}]]></expression>
+        </element>
+        <!-- Logo placeholder text, shown only when no LOGO_PATH is configured -->
         <element kind="staticText" x="0" y="5" width="100" height="30" forecolor="#E07000" vTextAlign="Middle" fontName="DejaVu Sans" fontSize="16.0" bold="true" uuid="11b2c3d4-e5f6-7890-abcd-ef1234567897">
+            <printWhenExpression><![CDATA[$P{LOGO_PATH} == null || $P{LOGO_PATH}.trim().isEmpty()]]></printWhenExpression>
             <text><![CDATA[LOGO]]></text>
         </element>
 

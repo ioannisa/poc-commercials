@@ -1,50 +1,31 @@
 package eu.anifantakis.poc.ctv.reports
 
-import eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData
-import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 import platform.Foundation.NSDate
 import platform.Foundation.timeIntervalSince1970
 
 /**
  * iOS implementation of ReportService.
- * JasperReports is not available on iOS - this returns unsupported messages.
- * For iOS, consider using server-side report generation.
+ * Report generation is not available on iOS; reports are generated on
+ * Desktop, or in the browser via the report server.
  */
 actual class ReportService actual constructor() {
 
-    actual suspend fun exportProgramFlowToPdf(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig,
+    actual suspend fun exportToPdf(
+        payload: ReportPayload,
         suggestedFileName: String
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on iOS. " +
-            "Use server-side report generation instead."
-        )
-    }
+    ): ReportResult = unsupported()
 
-    actual suspend fun previewProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on iOS. " +
-            "Use server-side report generation instead."
-        )
-    }
+    actual suspend fun preview(payload: ReportPayload): ReportResult = unsupported()
 
-    actual suspend fun printProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on iOS. " +
-            "Use server-side report generation instead."
-        )
-    }
+    actual suspend fun print(payload: ReportPayload): ReportResult = unsupported()
 
-    actual fun isJasperReportsAvailable(): Boolean = false
+    actual fun isReportGenerationAvailable(): Boolean = false
+
+    private fun unsupported() = ReportResult.Error(
+        "Report generation is not available on iOS. " +
+            "Use the Desktop app or the web app instead."
+    )
 }
 
 actual fun createReportService(): ReportService = ReportService()

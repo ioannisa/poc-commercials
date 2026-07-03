@@ -27,11 +27,8 @@ dependencies {
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
 
-    // JasperReports
-    implementation(libs.jasperreports)
-    implementation(libs.jasperreports.pdf)
-    implementation(libs.jasperreports.fonts)
-    implementation(libs.jasperreports.jdt)
+    // Report engine + wire DTOs (brings JasperReports transitively)
+    implementation(project(":reportcore"))
 
     // Logging
     implementation(libs.logback.classic)
@@ -53,4 +50,20 @@ ktor {
     fatJar {
         archiveFileName.set("server.jar")
     }
+}
+
+// JasperReports registers its extensions (PDF exporter, DejaVu fonts, core
+// handlers) through same-named `jasperreports_extension.properties` files at
+// the root of three different jars. Shadow's default "first wins" merge keeps
+// only one of them, silently dropping the font registration - Greek text then
+// breaks in PDFs from the deployed fat jar (while `:server:run` works, since
+// it uses the real classpath). Concatenating them preserves all registrations;
+// the keys are distinct per extension so appending is safe.
+tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>().configureEach {
+    // The Ktor plugin sets duplicatesStrategy=EXCLUDE, which drops duplicate
+    // entries before transformers ever see them - the append below would be a
+    // no-op. INCLUDE is Shadow's own default, chosen so transformers work.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    append("jasperreports_extension.properties")
+    mergeServiceFiles()
 }

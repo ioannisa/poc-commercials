@@ -1,48 +1,29 @@
 package eu.anifantakis.poc.ctv.reports
 
-import eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData
-import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 
 /**
  * Android implementation of ReportService.
- * JasperReports is not available on Android - this returns unsupported messages.
- * For Android, consider using server-side report generation or alternative libraries.
+ * Report generation is not available on Android; reports are generated on
+ * Desktop, or in the browser via the report server.
  */
 actual class ReportService actual constructor() {
 
-    actual suspend fun exportProgramFlowToPdf(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig,
+    actual suspend fun exportToPdf(
+        payload: ReportPayload,
         suggestedFileName: String
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on Android. " +
-            "Use server-side report generation instead."
-        )
-    }
+    ): ReportResult = unsupported()
 
-    actual suspend fun previewProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on Android. " +
-            "Use server-side report generation instead."
-        )
-    }
+    actual suspend fun preview(payload: ReportPayload): ReportResult = unsupported()
 
-    actual suspend fun printProgramFlow(
-        reportData: ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult {
-        return ReportResult.Error(
-            "JasperReports is not available on Android. " +
-            "Use server-side report generation instead."
-        )
-    }
+    actual suspend fun print(payload: ReportPayload): ReportResult = unsupported()
 
-    actual fun isJasperReportsAvailable(): Boolean = false
+    actual fun isReportGenerationAvailable(): Boolean = false
+
+    private fun unsupported() = ReportResult.Error(
+        "Report generation is not available on Android. " +
+            "Use the Desktop app or the web app instead."
+    )
 }
 
 actual fun createReportService(): ReportService = ReportService()

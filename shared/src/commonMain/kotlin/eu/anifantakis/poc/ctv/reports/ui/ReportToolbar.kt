@@ -18,6 +18,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import eu.anifantakis.poc.ctv.reports.ReportDataFactory
 import eu.anifantakis.poc.ctv.reports.createReportService
+import eu.anifantakis.poc.ctv.reports.toReportPayload
 import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 import kotlinx.coroutines.launch
@@ -38,7 +39,7 @@ fun ReportToolbar(
     var isLoading by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
 
-    val isJasperAvailable = reportService.isJasperReportsAvailable()
+    val isReportAvailable = reportService.isReportGenerationAvailable()
 
     Row(
         modifier = modifier,
@@ -52,16 +53,13 @@ fun ReportToolbar(
                     isLoading = true
                     resultMessage = null
 
-                    val reportData = ReportDataFactory.createProgramFlowData(
+                    val payload = ReportDataFactory.createProgramFlowData(
                         date = selectedDate.value,
                         breaks = breaks,
                         cellData = cellData
-                    )
+                    ).toReportPayload(ReportConfig())
 
-                    val result = reportService.previewProgramFlow(
-                        reportData = reportData,
-                        config = ReportConfig()
-                    )
+                    val result = reportService.preview(payload)
 
                     resultMessage = when (result) {
                         is ReportResult.Success -> result.message
@@ -72,7 +70,7 @@ fun ReportToolbar(
                     isLoading = false
                 }
             },
-            enabled = !isLoading && isJasperAvailable
+            enabled = !isLoading && isReportAvailable
         ) {
             Icon(
                 Icons.Default.Visibility,
@@ -90,16 +88,13 @@ fun ReportToolbar(
                     isLoading = true
                     resultMessage = null
 
-                    val reportData = ReportDataFactory.createProgramFlowData(
+                    val payload = ReportDataFactory.createProgramFlowData(
                         date = selectedDate.value,
                         breaks = breaks,
                         cellData = cellData
-                    )
+                    ).toReportPayload(ReportConfig())
 
-                    val result = reportService.printProgramFlow(
-                        reportData = reportData,
-                        config = ReportConfig()
-                    )
+                    val result = reportService.print(payload)
 
                     resultMessage = when (result) {
                         is ReportResult.Success -> result.message
@@ -110,7 +105,7 @@ fun ReportToolbar(
                     isLoading = false
                 }
             },
-            enabled = !isLoading && isJasperAvailable
+            enabled = !isLoading && isReportAvailable
         ) {
             Icon(
                 Icons.Default.Print,
@@ -128,19 +123,15 @@ fun ReportToolbar(
                     isLoading = true
                     resultMessage = null
 
-                    val reportData = ReportDataFactory.createProgramFlowData(
+                    val payload = ReportDataFactory.createProgramFlowData(
                         date = selectedDate.value,
                         breaks = breaks,
                         cellData = cellData
-                    )
+                    ).toReportPayload(ReportConfig())
 
                     val fileName = "ProgramFlow_${selectedDate.value}.pdf"
 
-                    val result = reportService.exportProgramFlowToPdf(
-                        reportData = reportData,
-                        config = ReportConfig(),
-                        suggestedFileName = fileName
-                    )
+                    val result = reportService.exportToPdf(payload, fileName)
 
                     resultMessage = when (result) {
                         is ReportResult.Success -> "PDF saved: ${result.filePath ?: "Success"}"
@@ -151,7 +142,7 @@ fun ReportToolbar(
                     isLoading = false
                 }
             },
-            enabled = !isLoading && isJasperAvailable
+            enabled = !isLoading && isReportAvailable
         ) {
             if (isLoading) {
                 CircularProgressIndicator(
@@ -170,9 +161,9 @@ fun ReportToolbar(
         }
 
         // Show message if JasperReports not available
-        if (!isJasperAvailable) {
+        if (!isReportAvailable) {
             Text(
-                text = "(JasperReports: Desktop only)",
+                text = "(Reports not available on this platform)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -1,50 +1,37 @@
 package eu.anifantakis.poc.ctv.reports
 
-import eu.anifantakis.poc.ctv.reports.models.ReportConfig
 import eu.anifantakis.poc.ctv.reports.models.ReportResult
 
 /**
- * Service for generating reports.
- * Uses expect/actual pattern for platform-specific implementations.
+ * Generic report generation service - one API for every report; screens build
+ * a [ReportPayload] (see ProgramFlowReport.kt for the pattern) and hand it in.
  *
- * On JVM: Uses JasperReports for professional PDF generation
- * On other platforms: Falls back to HTML-based generation or shows unsupported message
+ * Platform actuals:
+ * - JVM desktop: fills in-process via the shared JasperReports engine
+ * - Browsers (js/wasmJs): POST the payload to the report server
+ * - Android/iOS: report generation is not available; every call returns an error
  */
 expect class ReportService() {
     /**
-     * Generate and export a Program Flow report to PDF
-     *
-     * @param reportData The report data containing all items to display
-     * @param config Report configuration (logo, paper size, etc.)
-     * @param suggestedFileName The suggested file name for the PDF
-     * @return ReportResult indicating success or failure
+     * Generate a PDF and save it (desktop: save dialog; browser: download).
      */
-    suspend fun exportProgramFlowToPdf(
-        reportData: eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData,
-        config: ReportConfig,
-        suggestedFileName: String
-    ): ReportResult
+    suspend fun exportToPdf(payload: ReportPayload, suggestedFileName: String): ReportResult
 
     /**
-     * Preview a Program Flow report (opens in viewer)
+     * Generate a PDF and open it for viewing.
      */
-    suspend fun previewProgramFlow(
-        reportData: eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult
+    suspend fun preview(payload: ReportPayload): ReportResult
 
     /**
-     * Print a Program Flow report (opens print dialog)
+     * Generate the report and open the platform's print dialog.
      */
-    suspend fun printProgramFlow(
-        reportData: eu.anifantakis.poc.ctv.reports.models.ProgramFlowReportData,
-        config: ReportConfig
-    ): ReportResult
+    suspend fun print(payload: ReportPayload): ReportResult
 
     /**
-     * Check if JasperReports is available on this platform
+     * Whether this platform can generate reports at all. Optimistic on
+     * browsers (it does not probe the report server).
      */
-    fun isJasperReportsAvailable(): Boolean
+    fun isReportGenerationAvailable(): Boolean
 }
 
 /**

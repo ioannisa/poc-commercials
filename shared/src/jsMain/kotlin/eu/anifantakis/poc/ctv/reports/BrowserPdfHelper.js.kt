@@ -22,8 +22,9 @@ actual object BrowserPdfHelper {
         link.asDynamic().download = fileName
         link.asDynamic().click()
 
-        // Clean up
-        URL.revokeObjectURL(url)
+        // Clean up AFTER the browser has had time to start the download -
+        // revoking synchronously can intermittently cancel it on some browsers
+        window.setTimeout({ URL.revokeObjectURL(url) }, 10_000)
     }
 
     actual fun previewPdf(pdfBytes: ByteArray) {

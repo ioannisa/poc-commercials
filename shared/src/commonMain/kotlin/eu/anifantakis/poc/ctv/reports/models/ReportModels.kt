@@ -12,7 +12,12 @@ interface ReportData {
 }
 
 /**
- * Report configuration settings
+ * Report configuration settings.
+ *
+ * [logoPath] is rendered by the report template when set (falls back to a
+ * "LOGO" placeholder when null). NOTE: [paperSize] and [orientation] are not
+ * implemented yet - the Program Flow template is fixed to A4 portrait;
+ * supporting them requires per-variant template compilation.
  */
 data class ReportConfig(
     val logoPath: String? = null,

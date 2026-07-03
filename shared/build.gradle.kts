@@ -94,23 +94,29 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        // Report-producing targets (desktop generates in-process, browsers call
+        // the server): the payload -> wire-DTO adapter lives here so the JVM
+        // and web paths cannot drift apart. JasperReports itself comes
+        // transitively from :reportcore (jvm only).
+        val reportsMain by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                api(project(":reportcore"))
+            }
+        }
+
+        jvmMain.get().dependsOn(reportsMain)
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
 
             // Ktor client engine for JVM (desktop)
             implementation(libs.ktor.client.cio)
-
-            // JasperReports 7.x for PDF report generation (modular)
-            implementation(libs.jasperreports)
-            implementation(libs.jasperreports.pdf)
-            implementation(libs.jasperreports.fonts)
-            implementation(libs.jasperreports.jdt)
         }
 
         // Browser-based platforms: Ktor client for server-side report generation
         val webMain by creating {
-            dependsOn(commonMain.get())
+            dependsOn(reportsMain)
             dependencies {
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.js)
