@@ -19,6 +19,11 @@ import javax.crypto.spec.PBEKeySpec
  * token is a DB row - logout (or an admin DELETE) removes it and the very
  * next request with that token gets 401.
  *
+ * Tokens are stored HASHED (single SHA-256, see [tokenHash]): the raw value
+ * exists only on the client, so a database leak yields nothing usable as a
+ * credential. Unlike passwords, tokens don't need slow salted hashing -
+ * they're already 256 bits of CSPRNG output, so there is nothing to brute-force.
+ *
  * Koin singleton - constructor-injected with the pooled [CentralDb].
  */
 class AuthDb(private val db: CentralDb) {
@@ -41,6 +46,7 @@ class AuthDb(private val db: CentralDb) {
      */
     fun bootstrap(stationIds: List<String>) {
         db.connection().use { c ->
+            dropLegacyPlaintextTokenTable(c)
             c.createStatement().use { s ->
                 s.executeUpdate(
                     """
@@ -56,7 +62,7 @@ class AuthDb(private val db: CentralDb) {
                 s.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS auth_tokens (
-                        token VARCHAR(64) PRIMARY KEY,
+                        token_hash VARCHAR(64) PRIMARY KEY,
                         user_id BIGINT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT fk_tokens_user FOREIGN KEY (user_id)
@@ -80,6 +86,26 @@ class AuthDb(private val db: CentralDb) {
             }
             seedUsersIfEmpty(c)
             seedGrantsIfEmpty(c, stationIds)
+        }
+    }
+
+    /**
+     * Migration: earlier deployments stored RAW tokens in a `token` column.
+     * Tokens are disposable (users just log in again - the client's 401
+     * handler routes them there automatically), so the legacy table is simply
+     * dropped and recreated with the hashed shape. Idempotent: does nothing
+     * once the table has the new shape.
+     */
+    private fun dropLegacyPlaintextTokenTable(c: Connection) {
+        val legacy = c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = 'auth_tokens' AND column_name = 'token'
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps -> ps.executeQuery().use { it.next() } }
+        if (legacy) {
+            c.createStatement().use { it.executeUpdate("DROP TABLE auth_tokens") }
         }
     }
 
@@ -203,12 +229,15 @@ class AuthDb(private val db: CentralDb) {
         }
     }
 
-    /** Creates and stores a new non-expiring token for the user. */
+    /**
+     * Creates a new non-expiring token for the user. Only its SHA-256 is
+     * stored; the returned RAW token exists nowhere but the client.
+     */
     fun createToken(userId: Long): String {
         val token = randomBytes(32).toHex()
         db.connection().use { c ->
-            c.prepareStatement("INSERT INTO auth_tokens(token, user_id) VALUES(?,?)").use { ps ->
-                ps.setString(1, token)
+            c.prepareStatement("INSERT INTO auth_tokens(token_hash, user_id) VALUES(?,?)").use { ps ->
+                ps.setString(1, tokenHash(token))
                 ps.setLong(2, userId)
                 ps.executeUpdate()
             }
@@ -224,10 +253,10 @@ class AuthDb(private val db: CentralDb) {
                 """
                 SELECT u.id, u.username, u.display_name
                 FROM auth_tokens t JOIN users u ON u.id = t.user_id
-                WHERE t.token = ?
+                WHERE t.token_hash = ?
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, token)
+                ps.setString(1, tokenHash(token))
                 ps.executeQuery().use { rs ->
                     if (!rs.next()) null
                     else Triple(rs.getLong("id"), rs.getString("username"), rs.getString("display_name"))
@@ -246,8 +275,8 @@ class AuthDb(private val db: CentralDb) {
     /** Revokes a token (logout). */
     fun deleteToken(token: String) {
         db.connection().use { c ->
-            c.prepareStatement("DELETE FROM auth_tokens WHERE token = ?").use { ps ->
-                ps.setString(1, token)
+            c.prepareStatement("DELETE FROM auth_tokens WHERE token_hash = ?").use { ps ->
+                ps.setString(1, tokenHash(token))
                 ps.executeUpdate()
             }
         }
@@ -285,3 +314,15 @@ class AuthDb(private val db: CentralDb) {
     private fun String.hexToBytes(): ByteArray =
         chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 }
+
+/**
+ * How bearer tokens are stored at rest: a single SHA-256 over the raw token
+ * string. Fast hashing is correct here (unlike passwords): the input is
+ * already 256 bits of CSPRNG output, so there is nothing to brute-force, and
+ * an indexed hash lookup avoids any secret comparison in app code.
+ */
+internal fun tokenHash(token: String): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(token.encodeToByteArray())
+        .joinToString("") { byte -> ((byte.toInt() and 0xFF) + 0x100).toString(16).substring(1) }
+
