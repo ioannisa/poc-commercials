@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ktor)
+    // Compile-time DI safety, same as :shared
+    alias(libs.plugins.koinCompiler)
     application
 }
 
@@ -28,6 +30,11 @@ dependencies {
 
     // Kotlinx Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // Koin DI (annotations bring @Provided for the compile-time checker)
+    implementation(libs.koin.ktor)
+    implementation(libs.koin.logger.slf4j)
+    implementation(libs.koin.annotations)
 
     // Report engine + wire DTOs (brings JasperReports transitively)
     implementation(project(":reportcore"))

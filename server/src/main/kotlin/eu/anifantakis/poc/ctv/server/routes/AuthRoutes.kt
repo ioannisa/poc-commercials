@@ -22,7 +22,7 @@ data class LoginResponse(
     val clientCode: String? = null
 )
 
-fun Route.authRoutes() {
+fun Route.authRoutes(authDb: AuthDb) {
     route("/api/auth") {
 
         // Open: this is how you GET a token
@@ -30,14 +30,14 @@ fun Route.authRoutes() {
             val request = call.receive<LoginRequest>()
 
             val user = withContext(Dispatchers.IO) {
-                AuthDb.verifyCredentials(request.username, request.password)
+                authDb.verifyCredentials(request.username, request.password)
             }
             if (user == null) {
                 call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Invalid username or password"))
                 return@post
             }
 
-            val token = withContext(Dispatchers.IO) { AuthDb.createToken(user.id) }
+            val token = withContext(Dispatchers.IO) { authDb.createToken(user.id) }
             call.respond(
                 LoginResponse(
                     token = token,
@@ -55,7 +55,7 @@ fun Route.authRoutes() {
                 val token = call.request.headers[HttpHeaders.Authorization]
                     ?.removePrefix("Bearer")?.trim()
                 if (!token.isNullOrEmpty()) {
-                    withContext(Dispatchers.IO) { AuthDb.deleteToken(token) }
+                    withContext(Dispatchers.IO) { authDb.deleteToken(token) }
                 }
                 call.respond(mapOf("status" to "logged out"))
             }

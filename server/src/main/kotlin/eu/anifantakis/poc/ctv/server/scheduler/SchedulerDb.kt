@@ -2,13 +2,18 @@ package eu.anifantakis.poc.ctv.server.scheduler
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import eu.anifantakis.poc.ctv.server.config.ServerConfigLoader
+import eu.anifantakis.poc.ctv.server.config.ServerConfig
+import org.koin.core.annotation.Provided
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.LocalDate
 import javax.sql.DataSource
 
-object SchedulerDb {
+/**
+ * Koin singleton. [config] is @Provided: it comes from a file-loading factory
+ * (classic-DSL definition), which the compile-time graph checker can't index.
+ */
+class SchedulerDb(@Provided private val config: ServerConfig) {
 
     /**
      * Pooled instead of one physical connection per call: without pooling,
@@ -18,12 +23,11 @@ object SchedulerDb {
      * connections opened against MySQL.
      */
     private val dataSource: DataSource by lazy {
-        val cfg = ServerConfigLoader.get()
         HikariDataSource(
             HikariConfig().apply {
-                jdbcUrl = cfg.mysqlJdbcUrl
-                username = cfg.mysqlUsername
-                password = cfg.mysqlPassword
+                jdbcUrl = config.mysqlJdbcUrl
+                username = config.mysqlUsername
+                password = config.mysqlPassword
                 driverClassName = "com.mysql.cj.jdbc.Driver"
                 maximumPoolSize = 10
                 minimumIdle = 1

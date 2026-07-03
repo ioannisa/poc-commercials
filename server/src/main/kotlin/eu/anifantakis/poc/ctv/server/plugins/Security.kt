@@ -9,6 +9,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.koin.ktor.ext.inject
 
 const val AUTH_BEARER = "auth-bearer"
 
@@ -18,11 +19,13 @@ const val AUTH_BEARER = "auth-bearer"
  * auth_tokens table. Unknown/revoked tokens -> 401 automatically.
  */
 fun Application.configureSecurity() {
+    val authDb by inject<AuthDb>()
+
     install(Authentication) {
         bearer(AUTH_BEARER) {
             realm = "POCCTV"
             authenticate { credential ->
-                withContext(Dispatchers.IO) { AuthDb.findUserByToken(credential.token) }
+                withContext(Dispatchers.IO) { authDb.findUserByToken(credential.token) }
             }
         }
     }

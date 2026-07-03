@@ -52,11 +52,11 @@ data class ScheduleDto(
     val cells: List<CellDto>
 )
 
-fun Route.scheduleRoutes() {
+fun Route.scheduleRoutes(db: SchedulerDb) {
     route("/api") {
         get("/breaks") {
             // JDBC is blocking - keep it off Ktor's request threads
-            val breaks = withContext(Dispatchers.IO) { SchedulerDb.loadBreaks() }.map {
+            val breaks = withContext(Dispatchers.IO) { db.loadBreaks() }.map {
                 BreakSlotDto(
                     id = it.id,
                     hour = it.hour,
@@ -79,8 +79,8 @@ fun Route.scheduleRoutes() {
 
             // JDBC is blocking - keep it off Ktor's request threads
             val (cells, commercialsByKey) = withContext(Dispatchers.IO) {
-                SchedulerDb.ensureMonthSeeded(year, month)
-                SchedulerDb.loadMonth(year, month)
+                db.ensureMonthSeeded(year, month)
+                db.loadMonth(year, month)
             }
 
             // CUSTOMER_VIEWER data scoping: they only ever receive their own

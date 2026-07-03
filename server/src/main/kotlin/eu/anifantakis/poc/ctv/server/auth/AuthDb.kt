@@ -15,16 +15,20 @@ import javax.crypto.spec.PBEKeySpec
  * values with NO expiration by design; revocation still works because every
  * token is a DB row - logout (or an admin DELETE) removes it and the very
  * next request with that token gets 401.
+ *
+ * Koin singleton - constructor-injected with the pooled [SchedulerDb].
  */
-object AuthDb {
+class AuthDb(private val db: SchedulerDb) {
 
-    private const val PBKDF2_ITERATIONS = 100_000
-    private const val PBKDF2_KEY_BITS = 256
+    private companion object {
+        const val PBKDF2_ITERATIONS = 100_000
+        const val PBKDF2_KEY_BITS = 256
+    }
 
     private val secureRandom = SecureRandom()
 
     fun bootstrap() {
-        SchedulerDb.connection().use { c ->
+        db.connection().use { c ->
             c.createStatement().use { s ->
                 s.executeUpdate(
                     """
@@ -98,7 +102,7 @@ object AuthDb {
     fun verifyCredentials(username: String, password: String): AuthUser? {
         data class Row(val user: AuthUser, val hashHex: String, val saltHex: String)
 
-        val row = SchedulerDb.connection().use { c ->
+        val row = db.connection().use { c ->
             c.prepareStatement(
                 """
                 SELECT id, username, display_name, role, client_code, password_hash, password_salt
@@ -126,7 +130,7 @@ object AuthDb {
     /** Creates and stores a new non-expiring token for the user. */
     fun createToken(userId: Long): String {
         val token = randomBytes(32).toHex()
-        SchedulerDb.connection().use { c ->
+        db.connection().use { c ->
             c.prepareStatement("INSERT INTO auth_tokens(token, user_id) VALUES(?,?)").use { ps ->
                 ps.setString(1, token)
                 ps.setLong(2, userId)
@@ -139,7 +143,7 @@ object AuthDb {
     /** Resolves a bearer token to its user, or null if the token is unknown/revoked. */
     fun findUserByToken(token: String): AuthUser? {
         if (token.isBlank()) return null
-        return SchedulerDb.connection().use { c ->
+        return db.connection().use { c ->
             c.prepareStatement(
                 """
                 SELECT u.id, u.username, u.display_name, u.role, u.client_code
@@ -155,7 +159,7 @@ object AuthDb {
 
     /** Revokes a token (logout). */
     fun deleteToken(token: String) {
-        SchedulerDb.connection().use { c ->
+        db.connection().use { c ->
             c.prepareStatement("DELETE FROM auth_tokens WHERE token = ?").use { ps ->
                 ps.setString(1, token)
                 ps.executeUpdate()

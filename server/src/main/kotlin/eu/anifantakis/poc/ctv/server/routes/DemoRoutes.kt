@@ -19,14 +19,14 @@ data class DemoUserDto(val username: String, val password: String)
  * own MySQL credentials (from config.properties) — the client doesn't need
  * any DB knowledge. Failures are handled by the StatusPages plugin.
  */
-fun Route.demoRoutes() {
+fun Route.demoRoutes(db: SchedulerDb) {
     route("/api/demo") {
         get("/user") {
             // Exposes a raw DB row - admin-only
             if (!call.requireRole(UserRole.NORMAL_USER)) return@get
 
             val user = withContext(Dispatchers.IO) {
-                SchedulerDb.connection().use { c ->
+                db.connection().use { c ->
                     c.prepareStatement("SELECT username, password FROM test.user LIMIT 1").use { ps ->
                         ps.executeQuery().use { rs ->
                             if (!rs.next()) null
