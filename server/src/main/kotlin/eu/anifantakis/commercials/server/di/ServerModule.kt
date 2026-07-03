@@ -1,14 +1,17 @@
 package eu.anifantakis.commercials.server.di
 
+import eu.anifantakis.commercials.migration.MigrationHost
+import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.auth.AuthDb
-import eu.anifantakis.commercials.server.migration.MigrationService
 import eu.anifantakis.commercials.server.config.ServerConfig
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
+import eu.anifantakis.commercials.server.migration.ServerMigrationHost
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.HostingConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import eu.anifantakis.commercials.server.stations.loadHostingConfig
 import org.koin.dsl.module
+import org.koin.plugin.module.dsl.bind
 import org.koin.plugin.module.dsl.single
 
 /**
@@ -26,5 +29,9 @@ val serverModule = module {
     single<StationRegistry>()
     single<CentralDb>()
     single<AuthDb>()
+
+    // The :migration module's seam: it sees only the MigrationHost port,
+    // which the server implements over StationDb/StationRegistry.
+    single<ServerMigrationHost>().bind(MigrationHost::class)
     single<MigrationService>()
 }

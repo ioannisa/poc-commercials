@@ -2,7 +2,7 @@ package eu.anifantakis.commercials.server.plugins
 
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
-import eu.anifantakis.commercials.server.migration.MigrationService
+import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.routes.authRoutes
 import eu.anifantakis.commercials.server.routes.migrationRoutes
 import eu.anifantakis.commercials.server.routes.stationAdminRoutes

@@ -39,6 +39,9 @@ dependencies {
     // Report engine + wire DTOs (brings JasperReports transitively)
     implementation(project(":reportcore"))
 
+    // Legacy-dump migration engine/service/CLI (server implements its MigrationHost port)
+    implementation(project(":migration"))
+
     // Logging
     implementation(libs.logback.classic)
 

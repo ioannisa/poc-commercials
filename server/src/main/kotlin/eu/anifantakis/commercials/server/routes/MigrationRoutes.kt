@@ -1,6 +1,6 @@
 package eu.anifantakis.commercials.server.routes
 
-import eu.anifantakis.commercials.server.migration.MigrationService
+import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.plugins.requireAdmin
 import io.ktor.server.request.*
 import io.ktor.server.response.*

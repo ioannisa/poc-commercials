@@ -1,8 +1,8 @@
 package eu.anifantakis.commercials.server.routes
 
 import eu.anifantakis.commercials.server.auth.AuthDb
-import eu.anifantakis.commercials.server.migration.removeStationFromYaml
-import eu.anifantakis.commercials.server.migration.stationsYamlFile
+import eu.anifantakis.commercials.migration.removeStationFromYaml
+import eu.anifantakis.commercials.migration.stationsYamlFile
 import eu.anifantakis.commercials.server.plugins.requireAdmin
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import eu.anifantakis.commercials.server.stations.databaseTarget

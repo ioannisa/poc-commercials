@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.server.migration
+package eu.anifantakis.commercials.migration
 
 import java.io.BufferedReader
 import java.io.File

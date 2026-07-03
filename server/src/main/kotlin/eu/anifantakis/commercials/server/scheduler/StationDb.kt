@@ -15,7 +15,7 @@ import java.time.LocalDate
  * Instances are created and cached by StationRegistry - NOT a Koin
  * definition, since the set of stations is data, not wiring.
  *
- * SCHEMA (normalized, migration-ready - see docs/legacy-schema.md):
+ * SCHEMA (normalized, migration-ready - see migration/legacy-schema.md):
  *
  *   customers ──< contracts ──< contract_lines
  *       │                            │

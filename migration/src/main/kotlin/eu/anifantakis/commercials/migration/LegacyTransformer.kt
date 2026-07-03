@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.server.migration
+package eu.anifantakis.commercials.migration
 
 import java.sql.Connection
 import kotlin.random.Random
