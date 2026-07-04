@@ -39,8 +39,6 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
-import org.koin.compose.viewmodel.koinViewModel
-import org.koin.core.parameter.parametersOf
 import kotlinx.datetime.LocalDate
 
 /**
@@ -53,10 +51,8 @@ fun CommercialDetailScreenRoot(
     breakTime: String,
     date: LocalDate,
     spotCount: Int,
+    viewModel: CommercialDetailViewModel,
     onBack: () -> Unit,
-    viewModel: CommercialDetailViewModel = koinViewModel(
-        key = "commercial-detail-$breakId-$date",
-    ) { parametersOf(breakId, date) },
 ) {
     CommercialDetailScreen(
         breakId = breakId,

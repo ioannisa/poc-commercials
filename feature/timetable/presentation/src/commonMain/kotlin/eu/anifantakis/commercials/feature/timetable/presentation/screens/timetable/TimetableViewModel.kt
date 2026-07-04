@@ -12,13 +12,12 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
-import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
-import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
@@ -82,7 +81,6 @@ data class TimetableState(
     val finder: FinderUiState = FinderUiState(),
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
-    val editError: String? = null,
 )
 
 sealed interface TimetableIntent {
@@ -103,7 +101,6 @@ sealed interface TimetableIntent {
 
     data class AddSpotAt(val breakId: Long, val date: LocalDate) : TimetableIntent
     data class RemoveLastAt(val breakId: Long, val date: LocalDate) : TimetableIntent
-    data class ReorderCell(val breakId: Long, val date: LocalDate, val orderedIds: List<Long>) : TimetableIntent
 
     data object OpenFinder : TimetableIntent
     data object CloseFinder : TimetableIntent
@@ -126,17 +123,16 @@ sealed interface TimetableEffect {
 
 /**
  * The timetable SCREEN's ViewModel (grid + its finder dialog). The cells
- * themselves live in the shared [ScheduleCellsStore] so the detail screen's
- * own ViewModel sees and edits the same truth - per-screen ViewModels,
- * shared state only where it is genuinely shared.
+ * live in the flow-shared [TimetableCommonViewModel]: their slice of state
+ * is observed and merged below, and every cell MUTATION is delegated to it
+ * (star topology - screen ViewModels never talk to each other).
  */
 @Stable
 class TimetableViewModel(
     private val scheduleRepository: ScheduleRepository,
-    private val placementsRepository: PlacementsRepository,
     private val finderRepository: FinderRepository,
     private val partySearch: PartySearchRepository,
-    private val store: ScheduleCellsStore,
+    private val common: TimetableCommonViewModel,
     ksafe: KSafe,
 ) : BaseGlobalViewModel() {
 
@@ -159,10 +155,10 @@ class TimetableViewModel(
     private var searchJob: Job? = null
 
     init {
-        // The store is the single truth for cells; mirror it into this
-        // screen's state so the grid renders straight from TimetableState.
+        // The common ViewModel is the single truth for cells; mirror it into
+        // this screen's state so the grid renders straight from TimetableState.
         viewModelScope.launch {
-            store.state.collect { cs ->
+            common.state.collect { cs ->
                 _state.update {
                     it.copy(cells = cs.cells, modifiedCells = cs.modifiedCells, addedCounts = cs.addedCounts)
                 }
@@ -175,7 +171,7 @@ class TimetableViewModel(
             TimetableIntent.PreviousMonth -> changeMonth(-1)
             TimetableIntent.NextMonth -> changeMonth(+1)
             TimetableIntent.Reload -> {
-                store.clear()
+                common.clear()
                 _state.update {
                     TimetableState(year = it.year, month = it.month, showSpotTimes = it.showSpotTimes)
                 }
@@ -200,8 +196,7 @@ class TimetableViewModel(
             }
 
             is TimetableIntent.AddSpotAt -> addSpotAt(intent.breakId, intent.date)
-            is TimetableIntent.RemoveLastAt -> removeLastAt(intent.breakId, intent.date)
-            is TimetableIntent.ReorderCell -> reorderCell(intent.breakId, intent.date, intent.orderedIds)
+            is TimetableIntent.RemoveLastAt -> common.removeLast(intent.breakId, intent.date)
 
             TimetableIntent.OpenFinder -> _state.update { it.copy(showFinder = true) }
             TimetableIntent.CloseFinder -> _state.update { it.copy(showFinder = false) }
@@ -239,7 +234,7 @@ class TimetableViewModel(
                 is DataResult.Failure -> _state.update { it.copy(breaks = persistentListOf()) }
             }
         }
-        loadMonth()
+        common.loadMonth(_state.value.year, _state.value.month)
     }
 
     private fun changeMonth(delta: Int) {
@@ -248,57 +243,16 @@ class TimetableViewModel(
         var month = s.month + delta
         if (month == 0) { month = 12; year-- }
         if (month == 13) { month = 1; year++ }
-        store.clear()
-        _state.update { it.copy(year = year, month = month, editError = null) }
-        loadMonth()
+        common.clear()
+        _state.update { it.copy(year = year, month = month) }
+        common.loadMonth(year, month)
     }
 
-    private fun loadMonth() {
-        val s = _state.value
-        viewModelScope.launch {
-            when (val result = scheduleRepository.getMonth(s.year, s.month)) {
-                is DataResult.Success -> store.setMonthCells(result.data.cells.associate { c -> c.toUi() })
-                is DataResult.Failure -> store.clear()
-            }
-        }
-    }
-
-    // ── placement editing ('a' / 'r' / detail reorder) ──────────────────
+    // ── placement editing ('a' / 'r') - delegated to the common VM ──────
 
     private fun addSpotAt(breakId: Long, date: LocalDate) {
         val spot = _state.value.finder.selectedSpot ?: return   // 'a' is armed by the finder
-        _state.update { it.copy(editError = null) }
-        viewModelScope.launch {
-            when (val result = placementsRepository.add(spot.spotId, breakId, date)) {
-                is DataResult.Success -> store.applyAdd(SchedulerKey(breakId, date), result.data)
-                is DataResult.Failure ->
-                    _state.update { it.copy(editError = result.error.toDisplayMessage()) }
-            }
-        }
-    }
-
-    private fun removeLastAt(breakId: Long, date: LocalDate) {
-        val key = SchedulerKey(breakId, date)
-        val last = store.lastAddedIn(key) ?: return             // 'r' removes only our own adds
-        _state.update { it.copy(editError = null) }
-        viewModelScope.launch {
-            when (val result = placementsRepository.remove(last.id)) {
-                is DataResult.Success -> store.applyRemove(key, last)
-                is DataResult.Failure ->
-                    _state.update { it.copy(editError = result.error.toDisplayMessage()) }
-            }
-        }
-    }
-
-    private fun reorderCell(breakId: Long, date: LocalDate, orderedIds: List<Long>) {
-        store.applyReorder(SchedulerKey(breakId, date), orderedIds)
-        viewModelScope.launch {
-            when (val result = placementsRepository.reorder(breakId, date, orderedIds)) {
-                is DataResult.Success -> Unit
-                is DataResult.Failure ->
-                    _state.update { it.copy(editError = result.error.toDisplayMessage()) }
-            }
-        }
+        common.add(spot.spotId, breakId, date)
     }
 
     // ── finder (Εύρεση console) ─────────────────────────────────────────
@@ -318,11 +272,9 @@ class TimetableViewModel(
                 is DataResult.Success -> _state.update {
                     it.copy(finder = it.finder.copy(results = result.data.toImmutableList(), searching = false))
                 }
-                is DataResult.Failure -> _state.update {
-                    it.copy(
-                        editError = result.error.toDisplayMessage(),
-                        finder = it.finder.copy(searching = false),
-                    )
+                is DataResult.Failure -> {
+                    showSnackbar(result.error.toDisplayMessage())
+                    _state.update { it.copy(finder = it.finder.copy(searching = false)) }
                 }
             }
         }
@@ -349,11 +301,9 @@ class TimetableViewModel(
                 is DataResult.Success -> _state.update {
                     it.copy(finder = it.finder.copy(lines = result.data.toImmutableList(), loadingLines = false))
                 }
-                is DataResult.Failure -> _state.update {
-                    it.copy(
-                        editError = result.error.toDisplayMessage(),
-                        finder = it.finder.copy(loadingLines = false),
-                    )
+                is DataResult.Failure -> {
+                    showSnackbar(result.error.toDisplayMessage())
+                    _state.update { it.copy(finder = it.finder.copy(loadingLines = false)) }
                 }
             }
         }
@@ -375,11 +325,9 @@ class TimetableViewModel(
                 is DataResult.Success -> _state.update {
                     it.copy(finder = it.finder.copy(spots = result.data.toImmutableList(), loadingSpots = false))
                 }
-                is DataResult.Failure -> _state.update {
-                    it.copy(
-                        editError = result.error.toDisplayMessage(),
-                        finder = it.finder.copy(loadingSpots = false),
-                    )
+                is DataResult.Failure -> {
+                    showSnackbar(result.error.toDisplayMessage())
+                    _state.update { it.copy(finder = it.finder.copy(loadingSpots = false)) }
                 }
             }
         }

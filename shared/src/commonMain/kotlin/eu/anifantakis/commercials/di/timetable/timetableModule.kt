@@ -6,9 +6,9 @@ import eu.anifantakis.commercials.feature.timetable.data.ScheduleRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableViewModel
-import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
@@ -20,16 +20,25 @@ val timetableModule = module {
     singleOf(::PlacementsRepositoryImpl).bind<PlacementsRepository>()
     singleOf(::FinderRepositoryImpl).bind<FinderRepository>()
 
-    // the ONE shared piece between the grid and the detail screen
-    single { ScheduleCellsStore() }
+    // the flow-shared ViewModel: cells + all placement I/O. Resolved by the
+    // nav entries against the timetable flow's ViewModelStoreOwner and
+    // handed to the per-screen ViewModels below via parametersOf.
+    viewModelOf(::TimetableCommonViewModel)
 
-    viewModelOf(::TimetableViewModel)
+    viewModel { params ->
+        TimetableViewModel(
+            scheduleRepository = get(),
+            finderRepository = get(),
+            partySearch = get(),
+            common = params.get(),
+            ksafe = get(),
+        )
+    }
     viewModel { params ->
         CommercialDetailViewModel(
             breakId = params.get(),
             date = params.get(),
-            placementsRepository = get(),
-            store = get(),
+            common = params.get(),
         )
     }
 }

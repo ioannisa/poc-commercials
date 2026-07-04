@@ -4,20 +4,16 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
-import eu.anifantakis.commercials.core.domain.util.DataResult
-import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
-import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
-import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
-import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
+import eu.anifantakis.commercials.core.presentation.helper.toComposeState
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
 @Immutable
@@ -31,42 +27,32 @@ sealed interface CommercialDetailIntent {
 }
 
 /**
- * The detail screen's own ViewModel. The cell's commercials come from the
- * shared [ScheduleCellsStore] (the same truth the grid renders); reorders
- * apply optimistically there and persist through the repository.
+ * The detail screen's own ViewModel - a thin delegate: its cell's
+ * commercials are OBSERVED from the flow-shared [TimetableCommonViewModel]
+ * (the same truth the grid renders) and the reorder command is DELEGATED
+ * back to it (optimistic apply + persist + error policy live there, once).
  */
 @Stable
 class CommercialDetailViewModel(
-    breakId: Long,
-    date: LocalDate,
-    private val placementsRepository: PlacementsRepository,
-    private val store: ScheduleCellsStore,
+    private val breakId: Long,
+    private val date: LocalDate,
+    private val common: TimetableCommonViewModel,
 ) : BaseGlobalViewModel() {
 
     private val key = SchedulerKey(breakId, date)
-    private val breakIdArg = breakId
-    private val dateArg = date
 
-    val state by store.state
+    val state by common.state
         .map { CommercialDetailState(commercials = it.cells[key]?.commercials ?: persistentListOf()) }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
-            CommercialDetailState(store.state.value.cells[key]?.commercials ?: persistentListOf()),
+            CommercialDetailState(common.state.value.cells[key]?.commercials ?: persistentListOf()),
         )
         .toComposeState(viewModelScope)
 
     fun onAction(intent: CommercialDetailIntent) {
         when (intent) {
-            is CommercialDetailIntent.Reorder -> {
-                store.applyReorder(key, intent.orderedIds)
-                viewModelScope.launch {
-                    when (val result = placementsRepository.reorder(breakIdArg, dateArg, intent.orderedIds)) {
-                        is DataResult.Success -> Unit
-                        is DataResult.Failure -> showSnackbar(result.error.toDisplayMessage())
-                    }
-                }
-            }
+            is CommercialDetailIntent.Reorder -> common.reorder(breakId, date, intent.orderedIds)
         }
     }
 }

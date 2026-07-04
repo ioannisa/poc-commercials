@@ -82,7 +82,6 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
@@ -94,7 +93,7 @@ import org.koin.compose.viewmodel.koinViewModel
  */
 @Composable
 fun TimetableScreenRoot(
-    viewModel: TimetableViewModel = koinViewModel(),
+    viewModel: TimetableViewModel,
     onOpenDetail: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit,
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
@@ -251,9 +250,6 @@ private fun TimetableScreen(
                     IconButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) {
                         Icon(Icons.Default.Clear, contentDescription = "Καθαρισμός εύρεσης")
                     }
-                }
-                state.editError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, maxLines = 1)
                 }
             }
         }
