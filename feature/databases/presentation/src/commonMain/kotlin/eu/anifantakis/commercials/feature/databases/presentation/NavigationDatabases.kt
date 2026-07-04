@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.databases.presentation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
-import eu.anifantakis.commercials.feature.databases.presentation.databases.DatabasesScreenRoot
+import eu.anifantakis.commercials.feature.databases.presentation.screens.databases.DatabasesScreenRoot
 import kotlinx.serialization.Serializable
 
 @Serializable

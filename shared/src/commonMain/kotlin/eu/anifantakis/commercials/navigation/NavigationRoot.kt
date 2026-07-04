@@ -26,17 +26,16 @@ import eu.anifantakis.commercials.core.presentation.navigation.Navigator
 import eu.anifantakis.commercials.core.presentation.scaffold.ApplicationScaffold
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.AuthNavType
-import eu.anifantakis.commercials.feature.auth.presentation.account_dialogs.ChangePasswordDialogRoot
-import eu.anifantakis.commercials.feature.auth.presentation.account_dialogs.RecoveryCodesDialogRoot
+import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordDialogRoot
+import eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes.RecoveryCodesDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
 import eu.anifantakis.commercials.feature.migration_console.presentation.MigrationNavType
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
-import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.feature.preferences.presentation.PreferencesNavType
 import eu.anifantakis.commercials.feature.preferences.presentation.preferencesEntries
-import eu.anifantakis.commercials.feature.schedule_email.presentation.send_dialog.SendScheduleEmailDialogRoot
+import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailDialogRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.TimetableNavType
 import eu.anifantakis.commercials.feature.timetable.presentation.timetableEntries
 import eu.anifantakis.commercials.feature.user_management.presentation.UserManagementNavType
@@ -75,7 +74,6 @@ fun NavigationRoot() {
     val scope = rememberCoroutineScope()
     val authSession = koinInject<AuthSession>()
     val authRepository = koinInject<AuthRepository>()
-    val prefs = koinInject<UserPreferences>()
 
     // Token persists (no expiry), so a returning user skips the login screen
     val backStack = rememberNavBackStack(
@@ -135,8 +133,6 @@ fun NavigationRoot() {
 
                 timetableEntries(
                     navigator = navigator,
-                    showSpotTimes = prefs.showSpotTimes,
-                    onToggleShowTimes = { prefs.showSpotTimes = !prefs.showSpotTimes },
                     onOpenEmailDialog = { showEmailDialog = true },
                     onLogout = {
                         scope.launch {

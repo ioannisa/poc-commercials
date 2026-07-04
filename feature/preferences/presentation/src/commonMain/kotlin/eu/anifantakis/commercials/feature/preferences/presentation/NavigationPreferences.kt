@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.preferences.presentation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
-import eu.anifantakis.commercials.feature.preferences.presentation.preferences.PreferencesScreenRoot
+import eu.anifantakis.commercials.feature.preferences.presentation.screens.preferences.PreferencesScreenRoot
 import kotlinx.serialization.Serializable
 
 @Serializable

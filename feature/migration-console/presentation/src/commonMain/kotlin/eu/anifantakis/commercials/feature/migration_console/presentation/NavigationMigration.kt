@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.migration_console.presentation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
-import eu.anifantakis.commercials.feature.migration_console.presentation.migration.MigrationScreenRoot
+import eu.anifantakis.commercials.feature.migration_console.presentation.screens.migration.MigrationScreenRoot
 import kotlinx.serialization.Serializable
 
 @Serializable

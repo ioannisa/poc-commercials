@@ -31,16 +31,4 @@ class KSafeUserPreferences(@Provided private val ksafe: KSafe) : UserPreferences
             storedTheme = value.name
         }
 
-    // Legacy popup-menu option "spots count / spots times": grid cells show
-    // either the spot COUNT or the cell's summed spot TIME (342s -> 05:42).
-    private var storedShowTimes by ksafe(false, key = "grid_show_spot_times")
-
-    private var showTimesState by mutableStateOf(storedShowTimes)
-
-    override var showSpotTimes: Boolean
-        get() = showTimesState
-        set(value) {
-            showTimesState = value
-            storedShowTimes = value
-        }
 }

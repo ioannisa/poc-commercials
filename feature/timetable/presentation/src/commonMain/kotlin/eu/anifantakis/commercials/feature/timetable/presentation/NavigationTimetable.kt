@@ -3,8 +3,8 @@ package eu.anifantakis.commercials.feature.timetable.presentation
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
-import eu.anifantakis.commercials.feature.timetable.presentation.commercial_detail.CommercialDetailScreenRoot
-import eu.anifantakis.commercials.feature.timetable.presentation.timetable.TimetableScreenRoot
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 
@@ -25,22 +25,17 @@ sealed interface TimetableNavType : NavKey {
 /**
  * The grid and the break-detail console. Both screens have their own
  * ViewModel; the shared truth (the month's cells) lives in
- * ScheduleCellsStore behind them. App-owned concerns (prefs-backed
- * showSpotTimes, the schedule-email dialog, logout, preferences) come in
- * as values/callbacks.
+ * ScheduleCellsStore behind them. App-owned concerns (the schedule-email
+ * dialog, logout, preferences) come in as callbacks.
  */
 fun EntryProviderScope<NavKey>.timetableEntries(
     navigator: Navigator,
-    showSpotTimes: Boolean,
-    onToggleShowTimes: () -> Unit,
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
 ) {
     entry<TimetableNavType.Grid> {
         TimetableScreenRoot(
-            showSpotTimes = showSpotTimes,
-            onToggleShowTimes = onToggleShowTimes,
             onOpenDetail = { breakId, breakTime, date, spotCount ->
                 navigator.navigate(TimetableNavType.CommercialDetail(breakId, breakTime, date, spotCount))
             },

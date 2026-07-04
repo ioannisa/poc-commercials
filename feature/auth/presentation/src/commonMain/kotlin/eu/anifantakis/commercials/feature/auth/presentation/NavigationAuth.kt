@@ -2,7 +2,7 @@ package eu.anifantakis.commercials.feature.auth.presentation
 
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
-import eu.anifantakis.commercials.feature.auth.presentation.login.LoginScreenRoot
+import eu.anifantakis.commercials.feature.auth.presentation.screens.login.LoginScreenRoot
 import kotlinx.serialization.Serializable
 
 @Serializable

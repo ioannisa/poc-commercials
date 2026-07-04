@@ -11,7 +11,4 @@ enum class ThemePreference { LIGHT, DARK, SYSTEM }
  */
 interface UserPreferences {
     var theme: ThemePreference
-
-    /** Grid cells show spot COUNT or summed spot TIME (legacy popup option). */
-    var showSpotTimes: Boolean
 }
