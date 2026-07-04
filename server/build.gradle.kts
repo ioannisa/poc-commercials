@@ -44,7 +44,7 @@ dependencies {
     // Legacy-dump migration engine/service/CLI (server implements its MigrationHost port)
     implementation(project(":migration"))
 
-    // Database layer (stations.yaml, HikariCP pools, station/central schemas,
+    // Database layer (server.yaml, HikariCP pools, station/central schemas,
     // auth persistence) - brings the MySQL driver at runtime
     implementation(project(":persistence"))
 

@@ -247,7 +247,7 @@ private fun MigrationScreen(
                             checked = state.addToYaml,
                             onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) }
                         )
-                        Text("Add the station to stations.yaml", fontSize = 13.sp)
+                        Text("Add the station to server.yaml", fontSize = 13.sp)
                     }
                     if (state.addToYaml) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

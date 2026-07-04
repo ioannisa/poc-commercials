@@ -22,7 +22,7 @@ import java.sql.DriverManager
  *   4. transform scratch -> target (see LegacyTransformer; missing ERP data
  *      is faked deterministically and flagged synthetic=TRUE)
  *   5. drop the scratch schema (unless --keep-scratch)
- *   6. append the station to stations.yaml (unless --no-yaml)
+ *   6. append the station to server.yaml (unless --no-yaml)
  *
  * Requires MySQL 8+ on the TARGET server (window functions; MyISAM replay of
  * the 5.7-era dumps works fine there).
@@ -184,10 +184,10 @@ private fun runMigration(opts: Options) {
         }
     }
 
-    // ── 7. stations.yaml ────────────────────────────────────────────────
+    // ── 7. server.yaml ────────────────────────────────────────────────
     if (!opts.has("no-yaml")) {
-        val yamlPath = opts.optional("yaml") ?: "stations.yaml"
-        val stationId = opts.get("station-id", "Station id for stations.yaml (e.g. my-station)")
+        val yamlPath = opts.optional("yaml") ?: "server.yaml"
+        val stationId = opts.get("station-id", "Station id for server.yaml (e.g. my-station)")
         val stationName = opts.get("station-name", "Display name for the station dropdown")
         appendStationToYaml(
             file = File(yamlPath),

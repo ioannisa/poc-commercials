@@ -16,7 +16,7 @@ import org.koin.plugin.module.dsl.single
  * shared/.../di/PlatformModule.web.kt for the empirical comparison):
  * constructor-wired services use the typed `single<T>()` so the compiler
  * plugin validates the graph; factory-loaded values (ServerConfig from
- * config.properties, HostingConfig from stations.yaml) stay classic-DSL
+ * config.properties, HostingConfig from server.yaml) stay classic-DSL
  * and their consumers mark the parameter @Provided.
  */
 val serverModule = module {

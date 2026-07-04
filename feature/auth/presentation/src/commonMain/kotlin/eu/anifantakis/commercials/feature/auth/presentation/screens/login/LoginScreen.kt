@@ -187,7 +187,7 @@ private fun LoginScreen(
                         text = "admin / admin123 — Normal User\n" +
                             "viewer / viewer123 — Report Viewer\n" +
                             "customer / customer123 — Customer Viewer\n" +
-                            "superadmin — see stations.yaml",
+                            "superadmin — see server.yaml",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

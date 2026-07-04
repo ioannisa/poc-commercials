@@ -607,7 +607,7 @@ private fun KeyboardEnabledHeader(
 /**
  * The logged-in user badge. Regular users get self-service actions via the
  * Preferences screen (change password, recovery codes); the super admin's
- * credentials are managed in stations.yaml, not through the API.
+ * credentials are managed in server.yaml, not through the API.
  */
 @Composable
 private fun AccountBadge(authSession: AuthSession) {

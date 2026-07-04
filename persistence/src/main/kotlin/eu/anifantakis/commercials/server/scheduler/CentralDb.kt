@@ -10,7 +10,7 @@ import java.sql.Connection
 
 /**
  * The server's OWN standalone schema (the mandatory `central` block of
- * stations.yaml, e.g. `commercials_central`): application users, tokens, and
+ * server.yaml, e.g. `commercials_central`): application users, tokens, and
  * per-station grants live here - and ONLY here. Station schedule data lives
  * in the per-station pools instead (see StationDb / StationRegistry), and the
  * config loader rejects layouts where a station points at this schema.

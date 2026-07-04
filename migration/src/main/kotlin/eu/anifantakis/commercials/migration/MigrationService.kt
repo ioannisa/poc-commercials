@@ -31,7 +31,7 @@ internal fun prepareStationSchema(jdbcUrl: String, username: String, password: S
  * The engine behind the in-app Migration screen: one legacy-dump migration
  * at a time, driven by the super admin over the API and executed here on the
  * server (which is where the dump files, the MySQL credentials and
- * stations.yaml live - the browser only steers).
+ * server.yaml live - the browser only steers).
  *
  * State machine:
  *

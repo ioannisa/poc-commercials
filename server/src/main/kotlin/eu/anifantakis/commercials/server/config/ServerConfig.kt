@@ -6,7 +6,7 @@ import java.util.Properties
 /**
  * Server process settings from config.properties. Database connections do
  * NOT live here - the central schema and the hosted stations are all defined
- * in stations.yaml (see stations/StationRegistry.kt).
+ * in server.yaml (see stations/StationRegistry.kt).
  */
 data class ServerConfig(
     val port: Int

@@ -18,8 +18,8 @@ import kotlin.test.assertNotNull
  * starts Koin at runtime where the checker can't see it - so a missing
  * definition here must be caught by this test instead.
  *
- * Safe without MySQL: pools are only opened on first connection. stations.yaml
- * is REQUIRED, so the test provides a minimal one via the `stations.config`
+ * Safe without MySQL: pools are only opened on first connection. server.yaml
+ * is REQUIRED, so the test provides a minimal one via the `server.config`
  * system property.
  */
 class ServerKoinGraphTest {
@@ -29,11 +29,11 @@ class ServerKoinGraphTest {
             deleteOnExit()
             writeText(content)
         }
-        System.setProperty("stations.config", file.path)
+        System.setProperty("server.config", file.path)
         try {
             block()
         } finally {
-            System.clearProperty("stations.config")
+            System.clearProperty("server.config")
             file.delete()
         }
     }
@@ -114,16 +114,16 @@ class ServerKoinGraphTest {
         }
     }
 
-    /** stations.yaml itself is mandatory - no file, no server. */
+    /** server.yaml itself is mandatory - no file, no server. */
     @Test
     fun missingStationsFileIsRejected() {
-        System.setProperty("stations.config", "/nonexistent/stations-missing.yaml")
+        System.setProperty("server.config", "/nonexistent/server-missing.yaml")
         try {
             assertFailsWith<IllegalArgumentException> {
                 eu.anifantakis.commercials.server.stations.loadHostingConfig()
             }
         } finally {
-            System.clearProperty("stations.config")
+            System.clearProperty("server.config")
         }
     }
 }

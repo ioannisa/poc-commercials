@@ -7,7 +7,7 @@ import jakarta.mail.internet.InternetAddress
 import jakarta.mail.internet.MimeMessage
 import java.util.Properties
 
-/** SMTP settings, resolved by the host application (stations.yaml). */
+/** SMTP settings, resolved by the host application (server.yaml). */
 data class SmtpSettings(
     val host: String,
     val port: Int = 587,

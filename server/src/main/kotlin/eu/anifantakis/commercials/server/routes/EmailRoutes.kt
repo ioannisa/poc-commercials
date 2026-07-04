@@ -230,7 +230,7 @@ fun Route.emailRoutes(registry: StationRegistry) {
             if (smtp == null) {
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    mapOf("error" to "No SMTP settings configured - add an `smtp:` block (file-wide or on this station) in stations.yaml")
+                    mapOf("error" to "No SMTP settings configured - add an `smtp:` block (file-wide or on this station) in server.yaml")
                 )
                 return@post
             }

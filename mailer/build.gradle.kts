@@ -11,7 +11,7 @@
  *
  * Pure JVM library: data in, HTML/send out. Knows nothing about persistence
  * or HTTP - the server assembles the data and provides SMTP settings from
- * stations.yaml.
+ * server.yaml.
  */
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 

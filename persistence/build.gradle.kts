@@ -2,7 +2,7 @@
  * Persistence core - the server's database layer, shared by every server
  * feature (scheduling, auth, admin, migration's host adapter):
  *
- * - stations:  stations.yaml model + loader (HostingConfig, StationConfig,
+ * - stations:  server.yaml model + loader (HostingConfig, StationConfig,
  *              superAdmin block), pool-size resolution, StationRegistry
  *              (lazy per-station HikariCP pools, live add/remove)
  * - scheduler: StationDb (normalized station schema DDL + derived read
@@ -27,7 +27,7 @@ group = "eu.anifantakis.commercials"
 version = "1.0.0"
 
 dependencies {
-    // stations.yaml (kaml keeps us multiplatform-friendly and comment-tolerant)
+    // server.yaml (kaml keeps us multiplatform-friendly and comment-tolerant)
     implementation(libs.kaml)
     implementation(libs.kotlinx.serialization.json)
 

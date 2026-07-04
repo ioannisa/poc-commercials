@@ -40,7 +40,7 @@ data class SetGrantsRequest(val grants: List<GrantDto>)
 
 /**
  * User management - super administrator only (the config-managed account
- * from stations.yaml). Validation failures (bad username/password/grants,
+ * from server.yaml). Validation failures (bad username/password/grants,
  * duplicates, protected super-admin row) surface as 400 via StatusPages.
  */
 fun Route.adminRoutes(authDb: AuthDb) {

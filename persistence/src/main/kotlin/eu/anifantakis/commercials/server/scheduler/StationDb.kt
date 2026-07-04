@@ -11,7 +11,7 @@ import java.time.LocalDate
 
 /**
  * One station's database: a dedicated connection pool over that station's
- * schema (its own jdbcUrl/credentials from stations.yaml) plus the queries.
+ * schema (its own jdbcUrl/credentials from server.yaml) plus the queries.
  * Instances are created and cached by StationRegistry - NOT a Koin
  * definition, since the set of stations is data, not wiring.
  *
@@ -50,7 +50,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             password = station.password
             driverClassName = "com.mysql.cj.jdbc.Driver"
             // Several station pools coexist - ceiling resolved from
-            // stations.yaml (per-station override / file default / built-in)
+            // server.yaml (per-station override / file default / built-in)
             maximumPoolSize = maxPoolSize
             minimumIdle = 1
             connectionTimeout = 10_000

@@ -14,11 +14,11 @@ class HostingConfigTest {
         val file = File.createTempFile("stations-pool", ".yaml").apply {
             deleteOnExit(); writeText(content)
         }
-        System.setProperty("stations.config", file.path)
+        System.setProperty("server.config", file.path)
         try {
             block()
         } finally {
-            System.clearProperty("stations.config")
+            System.clearProperty("server.config")
             file.delete()
         }
     }

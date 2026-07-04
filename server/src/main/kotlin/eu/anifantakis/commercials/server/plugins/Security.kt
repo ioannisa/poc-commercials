@@ -50,7 +50,7 @@ data class StationAccess(val db: StationDb, val grant: StationGrant)
  * hosted stations. Responds and returns null on failure:
  * - 400 when the parameter is missing
  * - 403 when the user has no grant for that station
- * - 404 when the station isn't hosted (not in stations.yaml)
+ * - 404 when the station isn't hosted (not in server.yaml)
  */
 suspend fun ApplicationCall.stationAccessOrRespond(registry: StationRegistry): StationAccess? {
     val stationId = request.queryParameters["station"]

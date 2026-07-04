@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-/** Built-in connection-pool ceilings when nothing is set in stations.yaml. */
+/** Built-in connection-pool ceilings when nothing is set in server.yaml. */
 const val DEFAULT_CENTRAL_MAX_POOL = 10
 const val DEFAULT_STATION_MAX_POOL = 5
 
@@ -21,7 +21,7 @@ internal fun resolveMaxPoolSize(override: Int?, global: Int?, builtinDefault: In
 
 /**
  * A MySQL connection target (full JDBC URL + credentials, plaintext by
- * design: stations.yaml is server-side deployment config).
+ * design: server.yaml is server-side deployment config).
  *
  * @param maxPoolSize optional HikariCP pool ceiling override for this
  *        connection; falls back to the file-wide default, then the built-in.
@@ -72,7 +72,7 @@ data class SmtpConfig(
 
 /**
  * The break-glass administrator account, deliberately PLAINTEXT in
- * stations.yaml (same threat model as the DB credentials around it: whoever
+ * server.yaml (same threat model as the DB credentials around it: whoever
  * reads this file already owns the databases). Only the server config holds
  * the plaintext - the database stores a PBKDF2 hash of it, re-synced at every
  * boot, so rotating it is "edit YAML, restart". This account manages users
@@ -86,7 +86,7 @@ data class SuperAdminConfig(
 )
 
 /**
- * Bearer-token session policy (stations.yaml `session:` block).
+ * Bearer-token session policy (server.yaml `session:` block).
  *
  * - [expiration] `false` = tokens NEVER expire (revoked only by logout or a
  *   password change) - the original behaviour. `true` = a token dies after
@@ -136,21 +136,21 @@ data class HostingConfig(
 }
 
 /**
- * Loads the hosting layout from stations.yaml (path via `stations.config`
- * system property or `POC_STATIONS` env, default `./stations.yaml`).
+ * Loads the hosting layout from server.yaml (path via `server.config`
+ * system property or `POC_SERVER` env, default `./server.yaml`).
  *
  * The file - and its `central` block - are REQUIRED: the server cannot run
  * without its own schema. Station entries are optional.
  */
 fun loadHostingConfig(): HostingConfig {
     val log = LoggerFactory.getLogger("StationRegistry")
-    val explicit = System.getProperty("stations.config") ?: System.getenv("POC_STATIONS")
-    val file = File(explicit ?: "stations.yaml")
+    val explicit = System.getProperty("server.config") ?: System.getenv("POC_SERVER")
+    val file = File(explicit ?: "server.yaml")
 
     require(file.exists()) {
         "Required config '${file.path}' not found. It must define the mandatory 'central' database " +
             "(users/tokens/grants) and optionally 0..n hosted stations. " +
-            "Override the path with -Dstations.config=<path> or POC_STATIONS."
+            "Override the path with -Dserver.config=<path> or POC_SERVER."
     }
 
     val parsed = Yaml.default.decodeFromString(HostingConfig.serializer(), file.readText())
@@ -225,7 +225,7 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     // Mutable (thread-safe) because stations can be REMOVED live: deleting a
     // hosted database takes effect immediately, without a server restart
-    // (unlike additions, which come from stations.yaml at boot).
+    // (unlike additions, which come from server.yaml at boot).
     private val configs = java.util.concurrent.CopyOnWriteArrayList(hosting.stations)
     private val globalMaxPool: Int? = hosting.maxPoolSize
 
@@ -251,7 +251,7 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /**
      * Hosts a station NOW (a fresh migration): API calls work immediately,
-     * no restart. The caller must have persisted it to stations.yaml too,
+     * no restart. The caller must have persisted it to server.yaml too,
      * or it disappears at the next boot.
      */
     fun add(config: StationConfig) {

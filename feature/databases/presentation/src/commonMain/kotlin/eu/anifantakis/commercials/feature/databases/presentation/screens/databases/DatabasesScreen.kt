@@ -37,7 +37,7 @@ import org.koin.compose.viewmodel.koinViewModel
  * Hosted-databases administration (super admin): every registered station
  * with its schema, footprint and reachability - and deletion in two flavours:
  *
- * - SAFE delete: unhost only. Removes the stations.yaml entry, revokes every
+ * - SAFE delete: unhost only. Removes the server.yaml entry, revokes every
  *   user's grant on it and unregisters it live - the MySQL schema stays
  *   untouched on its server (re-add the yaml entry to bring it back).
  * - HARD delete: safe delete + DROP DATABASE on the station's MySQL server.
@@ -142,7 +142,7 @@ private fun DeleteStationDialog(
                     Column {
                         Text("Safe delete", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(
-                            "Unhost only: removes the stations.yaml entry and every user's access. " +
+                            "Unhost only: removes the server.yaml entry and every user's access. " +
                                 "The MySQL schema (${station.database}) stays untouched.",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

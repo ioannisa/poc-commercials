@@ -5,7 +5,7 @@
  * - LegacyTransformer: scratch -> normalized target (+ synthetic fakes)
  * - MigrationService:  the state machine behind the in-app Migration screen
  * - MigrationCli:      the interactive/scripted command-line front
- * - StationsYaml:      append/remove station entries in stations.yaml
+ * - StationsYaml:      append/remove station entries in server.yaml
  *
  * - MigrationRoutes:   the module's own Ktor endpoints (/api/admin/migration)
  *

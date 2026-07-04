@@ -46,7 +46,7 @@ data class DeleteStationResponse(
  *
  * Deletion is LIVE: the station vanishes from the registry immediately (every
  * API call for it 404s, and the super admin's implicit grants shrink with the
- * registry), its grants are revoked centrally, and its stations.yaml entry is
+ * registry), its grants are revoked centrally, and its server.yaml entry is
  * removed so it stays gone after a restart. "hard" additionally drops the
  * station's schema on ITS OWN MySQL server using the credentials that hosted
  * it. Regular users still see the station in their dropdown until their next
@@ -100,7 +100,7 @@ fun Route.stationAdminRoutes(registry: StationRegistry, authDb: AuthDb) {
                 if (request.mode == "hard") {
                     call.respond(
                         HttpStatusCode.BadRequest,
-                        mapOf("error" to "Station '$id' is not hosted right now - hard delete needs its credentials (restart the server first if it is in stations.yaml)")
+                        mapOf("error" to "Station '$id' is not hosted right now - hard delete needs its credentials (restart the server first if it is in server.yaml)")
                     )
                     return@post
                 }

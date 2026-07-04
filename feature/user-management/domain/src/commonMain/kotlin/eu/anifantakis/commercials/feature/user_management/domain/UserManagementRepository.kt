@@ -18,7 +18,7 @@ data class ManagedUser(
 /**
  * Super-admin user management: list, create, reset password, edit
  * per-station grants, delete. Only the super administrator gets non-403
- * responses; their own account lives in stations.yaml, not here.
+ * responses; their own account lives in server.yaml, not here.
  */
 interface UserManagementRepository {
     suspend fun listUsers(): DataResult<List<ManagedUser>, RemoteError>

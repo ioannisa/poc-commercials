@@ -106,7 +106,7 @@ private fun UserManagementScreen(
                                 if (user.isAdmin) {
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        "SUPER ADMIN (stations.yaml)",
+                                        "SUPER ADMIN (server.yaml)",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary

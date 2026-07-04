@@ -59,7 +59,7 @@
 #     days: 90
 #     sliding: true
 #
-# Path override: -Dstations.config=<path> or POC_STATIONS env var.
+# Path override: -Dserver.config=<path> or POC_SERVER env var.
 superAdmin:
   username: su
   password: 1234

@@ -47,7 +47,7 @@ by `KoinGraphTest`.
 ## Running
 
 ```shell
-./gradlew :server:run                    # Ktor server (stations.yaml + MySQL)
+./gradlew :server:run                    # Ktor server (server.yaml + MySQL)
 ./gradlew :desktopApp:run                # Desktop client
 ./gradlew :androidApp:assembleDebug      # Android APK
 ./gradlew :webApp:wasmJsBrowserDistribution   # Web bundle

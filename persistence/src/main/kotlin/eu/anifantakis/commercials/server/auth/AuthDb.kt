@@ -18,7 +18,7 @@ import javax.crypto.spec.PBEKeySpec
  *
  * Passwords are stored as PBKDF2-HMAC-SHA256 hashes with a per-user random
  * salt (never plaintext, even for demo users). Tokens are 256-bit random
- * values whose lifetime is governed by the stations.yaml `session:` block
+ * values whose lifetime is governed by the server.yaml `session:` block
  * (see [SessionConfig]): never-expire, a fixed window, or a sliding idle
  * timeout. Revocation is independent of expiry - every token is a DB row, so
  * logout (or a password change, which revokes ALL of the user's tokens)
@@ -30,7 +30,7 @@ import javax.crypto.spec.PBEKeySpec
  * slow salted hashing - they're high-entropy CSPRNG output, so there is
  * nothing to brute-force.
  *
- * THE SUPER ADMIN is config-managed (stations.yaml `superAdmin` block): its
+ * THE SUPER ADMIN is config-managed (server.yaml `superAdmin` block): its
  * plaintext lives only in that file; bootstrap upserts a users row holding
  * just the PBKDF2 hash and re-syncs it every boot (editing the YAML password
  * + restart = rotation, with all its sessions revoked). It cannot be deleted,
@@ -59,7 +59,7 @@ class AuthDb(
     private val secureRandom = SecureRandom()
 
     /*
-     * Bearer-token lifetime, driven by the stations.yaml `session:` block
+     * Bearer-token lifetime, driven by the server.yaml `session:` block
      * (see [SessionConfig]):
      * - expiration off -> tokens never expire (expires_at NULL); revoked only
      *   by logout or a password change.
@@ -474,7 +474,7 @@ class AuthDb(
         validatePassword(newPassword)
         db.connection().use { c ->
             val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin password is managed in stations.yaml, not via the API" }
+            require(!row.isAdmin) { "The super admin password is managed in server.yaml, not via the API" }
             val matches = MessageDigest.isEqual(
                 pbkdf2(currentPassword, row.saltHex.hexToBytes()),
                 row.hashHex.hexToBytes()
@@ -489,7 +489,7 @@ class AuthDb(
         validatePassword(newPassword)
         db.connection().use { c ->
             val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin password is managed in stations.yaml, not via the API" }
+            require(!row.isAdmin) { "The super admin password is managed in server.yaml, not via the API" }
             updatePassword(c, userId, newPassword)
         }
     }
@@ -516,7 +516,7 @@ class AuthDb(
     fun generateRecoveryCodes(userId: Long): List<String> {
         db.connection().use { c ->
             val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin recovers via stations.yaml, not recovery codes" }
+            require(!row.isAdmin) { "The super admin recovers via server.yaml, not recovery codes" }
 
             val codes = List(RECOVERY_CODE_COUNT) { generateRecoveryCode() }
             c.autoCommit = false
@@ -690,7 +690,7 @@ class AuthDb(
     fun deleteUser(userId: Long) {
         db.connection().use { c ->
             val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin cannot be deleted - it is managed in stations.yaml" }
+            require(!row.isAdmin) { "The super admin cannot be deleted - it is managed in server.yaml" }
             c.prepareStatement("DELETE FROM users WHERE id = ?").use { ps ->
                 ps.setLong(1, userId)
                 ps.executeUpdate()

@@ -3,15 +3,15 @@ package eu.anifantakis.commercials.migration
 import java.io.File
 
 /**
- * stations.yaml surgery for migrated stations. Text-based on purpose: a YAML
+ * server.yaml surgery for migrated stations. Text-based on purpose: a YAML
  * round-trip would destroy the file's comments, which document the operator's
  * deployment. Only the `stations:` list is ever touched.
  */
 
-/** Same stations.yaml resolution the server's config loading uses. */
+/** Same server.yaml resolution the server's config loading uses. */
 fun stationsYamlFile(): File {
-    val explicit = System.getProperty("stations.config") ?: System.getenv("POC_STATIONS")
-    return File(explicit ?: "stations.yaml")
+    val explicit = System.getProperty("server.config") ?: System.getenv("POC_SERVER")
+    return File(explicit ?: "server.yaml")
 }
 
 /**
@@ -26,7 +26,7 @@ fun appendStationToYaml(
     username: String,
     password: String,
 ) {
-    require(file.isFile) { "stations.yaml not found at ${file.path} (use --yaml <path> or --no-yaml)" }
+    require(file.isFile) { "server.yaml not found at ${file.path} (use --yaml <path> or --no-yaml)" }
     val text = file.readText()
     require(!Regex("^\\s*-\\s*id:\\s*$id\\s*$", RegexOption.MULTILINE).containsMatchIn(text)) {
         "Station id '$id' already exists in ${file.path}"

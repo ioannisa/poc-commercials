@@ -57,7 +57,7 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                 return@post
             }
 
-            // Grants for stations no longer in stations.yaml are dropped -
+            // Grants for stations no longer in server.yaml are dropped -
             // the display name comes from the YAML, and a grant without a
             // hosted station is unusable anyway.
             val stations = user.grants.mapNotNull { grant ->
