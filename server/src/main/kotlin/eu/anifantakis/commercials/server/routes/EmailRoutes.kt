@@ -33,6 +33,8 @@ data class EmailCustomerDto(
     val email: String?,
     val spotCount: Int,
     val placementCount: Int,
+    val vatNumber: String? = null,
+    val phone: String? = null,
 )
 
 @Serializable
@@ -117,6 +119,8 @@ fun Route.emailRoutes(registry: StationRegistry) {
                         email = it.email,
                         spotCount = it.spotCount,
                         placementCount = it.placementCount,
+                        vatNumber = it.vatNumber,
+                        phone = it.phone,
                     )
                 }
             }

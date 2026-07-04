@@ -25,6 +25,7 @@ import androidx.savedstate.serialization.SavedStateConfiguration
 import eu.anifantakis.commercials.auth.AuthApi
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.data.ScheduleRepository
+import eu.anifantakis.commercials.finder.SpotFinderApi
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
@@ -69,6 +70,7 @@ fun RootNavigation() {
     val authSession = koinInject<AuthSession>()
     val authApi = koinInject<AuthApi>()
     val scheduleRepository = koinInject<ScheduleRepository>()
+    val spotFinderApi = koinInject<SpotFinderApi>()
 
     // Token persists (no expiry), so a returning user skips the login screen
     val backStack = rememberNavBackStack(
@@ -253,6 +255,14 @@ fun RootNavigation() {
                         cellData[key] = existing.copy(commercials = reorderedList.toImmutableList())
                         if (reorderedList != originalCellData[key]?.commercials) {
                             modifiedCells.add(key)
+                        }
+                        // Persist: list indexes become placement positions
+                        // in the database (CommercialItem.id IS the
+                        // placement id, including freshly added spots).
+                        scope.launch {
+                            spotFinderApi
+                                .reorderPlacements(route.breakId, route.date, reorderedList.map { it.id })
+                                .onFailure { println("Reorder persist failed: ${it.message}") }
                         }
                     },
                     onBack = { backStack.removeLastOrNull() }

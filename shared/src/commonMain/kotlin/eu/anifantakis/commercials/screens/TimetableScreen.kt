@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
@@ -41,6 +42,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.automirrored.filled.Logout
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.data.SampleData
+import eu.anifantakis.commercials.finder.AddedCommercial
+import eu.anifantakis.commercials.finder.SpotFinderApi
 import eu.anifantakis.commercials.grids.*
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.reports.ReportDataFactory
@@ -152,6 +155,77 @@ fun TimetableScreen(
         }
     }
 
+    // ── spot finder + REAL add/remove (the legacy Εύρεση workflow) ──────
+    // Finder state survives dialog close (reopen restores the search);
+    // station switch resets it via the auth revision key.
+    val finderState = remember(authSession.revision) { SpotFinderState() }
+    var showFinder by remember { mutableStateOf(false) }
+    val finderApi = koinInject<SpotFinderApi>()
+    var editError by remember { mutableStateOf<String?>(null) }
+
+    // What THIS session added per cell (placement ids, newest last) - 'r'
+    // removes only things we added, most recent first.
+    val addedPlacements = remember(year, month, authSession.revision) {
+        mutableStateMapOf<SchedulerKey, List<AddedCommercial>>()
+    }
+
+    // 'a' adds the finder's selected spot as a REAL placement; without a
+    // selected spot it does nothing.
+    fun addSelectedSpotAt(breakSlot: BreakSlot, date: LocalDate) {
+        val spot = finderState.selectedSpot ?: return
+        editError = null
+        reportScope.launch {
+            finderApi.addPlacement(spot.spotId, breakSlot.id, date)
+                .onSuccess { added ->
+                    val key = SchedulerKey(breakSlot.id, date)
+                    val cur = cellData[key] ?: SchedulerCellData()
+                    cellData[key] = cur.copy(
+                        spotCount = cur.spotCount + 1,
+                        totalDurationSeconds = cur.totalDurationSeconds + added.durationSeconds,
+                        commercials = (cur.commercials + CommercialItem(
+                            id = added.id,
+                            clientCode = added.clientCode,
+                            clientName = added.clientName,
+                            message = added.message,
+                            durationSeconds = added.durationSeconds,
+                            type = added.type,
+                            contract = added.contract,
+                            flow = added.flow,
+                        )).toImmutableList()
+                    )
+                    addedPlacements[key] = addedPlacements[key].orEmpty() + added
+                    // the classic black "touched this session" marker
+                    modifiedCells.add(key)
+                }
+                .onFailure { editError = it.message }
+        }
+    }
+
+    // 'r' removes the most recent placement WE added in this cell.
+    fun removeLastAddedAt(breakSlot: BreakSlot, date: LocalDate) {
+        val key = SchedulerKey(breakSlot.id, date)
+        val stack = addedPlacements[key].orEmpty()
+        val last = stack.lastOrNull() ?: return
+        editError = null
+        reportScope.launch {
+            finderApi.removePlacement(last.id)
+                .onSuccess {
+                    val cur = cellData[key]
+                    if (cur != null) {
+                        cellData[key] = cur.copy(
+                            spotCount = (cur.spotCount - 1).coerceAtLeast(0),
+                            totalDurationSeconds = (cur.totalDurationSeconds - last.durationSeconds).coerceAtLeast(0),
+                            commercials = cur.commercials.filterNot { it.id == last.id }.toImmutableList()
+                        )
+                    }
+                    addedPlacements[key] = stack.dropLast(1)
+                    // nothing of ours left in the cell - clear the marker
+                    if (stack.size == 1) modifiedCells.remove(key)
+                }
+                .onFailure { editError = it.message }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -184,6 +258,52 @@ fun TimetableScreen(
                 }
             }
         )
+
+        // Finder toolbar: Εύρεση opens the Details Console; the dropdown
+        // switches among the selected contract's spots (what 'a' will add);
+        // the X clears the finder (a fresh Εύρεση starts clean).
+        if (canEdit) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+            ) {
+                OutlinedButton(onClick = { showFinder = true }) { Text("Εύρεση") }
+                Spacer(modifier = Modifier.width(8.dp))
+                var spotMenu by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = { spotMenu = true },
+                    enabled = finderState.spots.isNotEmpty()
+                ) {
+                    Text(
+                        finderState.selectedSpot?.description?.take(48) ?: "— κανένα σποτ —",
+                        maxLines = 1, fontSize = 12.sp
+                    )
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = spotMenu, onDismissRequest = { spotMenu = false }) {
+                    finderState.spots.forEach { spot ->
+                        DropdownMenuItem(
+                            text = { Text("${spot.description} (${spot.durationSeconds}″)", fontSize = 12.sp) },
+                            onClick = {
+                                finderState.selectedSpot = spot
+                                spotMenu = false
+                            }
+                        )
+                    }
+                }
+                if (finderState.selectedParty != null) {
+                    IconButton(onClick = { finderState.clear() }) {
+                        Icon(Icons.Default.Clear, contentDescription = "Καθαρισμός εύρεσης")
+                    }
+                }
+                editError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 11.sp, maxLines = 1)
+                }
+            }
+        }
+        if (showFinder) {
+            SpotFinderDialog(state = finderState, onDismiss = { showFinder = false })
+        }
 
         // The scheduler grid with keyboard navigation (using LazyColumn for performance)
         LazySchedulerGrid(
@@ -220,52 +340,14 @@ fun TimetableScreen(
                     )
                 }
             },
+            // 'a' persists the finder's selected spot as a placement; no
+            // selected spot -> nothing happens. 'r' removes the most recent
+            // placement this session added in the cell.
             onAddSpot = if (!canEdit) null else { breakSlot, date ->
-                // 'A' key pressed - add a new spot
-                val key = SchedulerKey(breakSlot.id, date)
-                val currentData = cellData[key] ?: SchedulerCellData()
-
-                // Create new commercial item
-                val newCommercial = CommercialItem(
-                    id = Clock.System.now().toEpochMilliseconds(),
-                    clientCode = "NEW",
-                    clientName = "NEW SPOT",
-                    message = "NEW SPOT",
-                    durationSeconds = 30,
-                    type = "New",
-                    contract = "",
-                    flow = ""
-                )
-
-                // Update cell data with +1 spot (duration too - the cell
-                // may be displaying summed spot times instead of the count)
-                cellData[key] = currentData.copy(
-                    spotCount = currentData.spotCount + 1,
-                    totalDurationSeconds = currentData.totalDurationSeconds + newCommercial.durationSeconds,
-                    commercials = (currentData.commercials + newCommercial).toImmutableList()
-                )
-
-                // Mark as modified (for black background)
-                modifiedCells.add(key)
-
-                println("Added spot at ${breakSlot.id}, $date - now ${cellData[key]?.spotCount} spots")
+                addSelectedSpotAt(breakSlot, date)
             },
             onDeleteSpot = if (!canEdit) null else { breakSlot, date ->
-                // 'D' key pressed - revert to original
-                val key = SchedulerKey(breakSlot.id, date)
-
-                // Restore original data
-                val originalData = originalCellData[key]
-                if (originalData != null) {
-                    cellData[key] = originalData
-                } else {
-                    cellData.remove(key)
-                }
-
-                // Remove from modified set (restore original background)
-                modifiedCells.remove(key)
-
-                println("Reverted spot at ${breakSlot.id}, $date")
+                removeLastAddedAt(breakSlot, date)
             },
             dailyTotals = dailyTotals,
             contextMenuItems = { breakSlot, date, data ->
@@ -330,55 +412,29 @@ fun TimetableScreen(
                     if (canEdit) {
                         add(ContextMenuEntry.Separator)
 
-                        // Edit submenu
+                        // Edit submenu - same real add/remove the 'a'/'r'
+                        // keys drive (add needs a spot armed via Εύρεση)
                         add(ContextMenuEntry.SubMenu(
                         label = "Edit",
                         icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
                         items = listOf(
                             ContextMenuEntry.Item(
-                                label = "Add Spot",
+                                label = finderState.selectedSpot
+                                    ?.let { "Add «${it.description.take(30)}»" }
+                                    ?: "Add Spot (επιλέξτε από Εύρεση)",
                                 icon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) },
-                                shortcut = "A"
+                                shortcut = "A",
+                                enabled = finderState.selectedSpot != null
                             ) {
-                                val currentData = cellData[key] ?: SchedulerCellData()
-                                val newCommercial = CommercialItem(
-                                    id = Clock.System.now().toEpochMilliseconds(),
-                                    clientCode = "NEW",
-                                    clientName = "NEW SPOT",
-                                    message = "NEW SPOT",
-                                    durationSeconds = 30,
-                                    type = "New",
-                                    contract = "",
-                                    flow = ""
-                                )
-                                cellData[key] = currentData.copy(
-                                    spotCount = currentData.spotCount + 1,
-                                    totalDurationSeconds = currentData.totalDurationSeconds + newCommercial.durationSeconds,
-                                    commercials = (currentData.commercials + newCommercial).toImmutableList()
-                                )
-                                modifiedCells.add(key)
+                                addSelectedSpotAt(breakSlot, date)
                             },
                             ContextMenuEntry.Item(
-                                label = "Delete Spot",
+                                label = "Remove Last Added",
                                 icon = { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)) },
-                                enabled = spotCount > 0
+                                shortcut = "R",
+                                enabled = addedPlacements[key].orEmpty().isNotEmpty()
                             ) {
-                                println("Delete spot from: ${breakSlot.id} on $date")
-                            },
-                            ContextMenuEntry.Separator,
-                            ContextMenuEntry.Item(
-                                label = "Revert Changes",
-                                icon = { Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp)) },
-                                shortcut = "D",
-                                enabled = isModified
-                            ) {
-                                val originalData = originalCellData[key]
-                                if (originalData != null) {
-                                    cellData[key] = originalData
-                                } else {
-                                    cellData.remove(key)
-                                }
-                                modifiedCells.remove(key)
+                                removeLastAddedAt(breakSlot, date)
                             }
                         )
                         ))
@@ -581,7 +637,7 @@ private fun KeyboardEnabledHeader(
                 // Keyboard shortcut hints
                 Column {
                     Text(
-                        text = if (canEdit) "Arrows: Navigate | Enter: Open | A: Add | D: Delete"
+                        text = if (canEdit) "Arrows: Navigate | Enter: Open | A: Add | R: Remove"
                         else "Arrows: Navigate | Enter: Open (view only)",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

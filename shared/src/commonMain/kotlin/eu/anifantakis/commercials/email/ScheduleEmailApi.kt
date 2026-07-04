@@ -21,6 +21,8 @@ data class EmailCustomer(
     val email: String? = null,
     val spotCount: Int = 0,
     val placementCount: Int = 0,
+    val vatNumber: String? = null,
+    val phone: String? = null,
 )
 
 @Serializable

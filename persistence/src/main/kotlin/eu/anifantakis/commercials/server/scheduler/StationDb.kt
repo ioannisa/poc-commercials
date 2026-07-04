@@ -655,6 +655,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         val code: String,
         val name: String,
         val email: String?,
+        val vatNumber: String?,
+        val phone: String?,
         val spotCount: Int,
         val placementCount: Int,
     )
@@ -680,13 +682,13 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT cu.code, cu.name, cu.email,
+                SELECT cu.code, cu.name, cu.email, cu.vat_number, cu.phone,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placement_count
                 FROM customers cu
                 ${partyJoin(byTrader)}
                 JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE (cu.name LIKE ? OR cu.code LIKE ?)
-                GROUP BY cu.id, cu.code, cu.name, cu.email
+                GROUP BY cu.id, cu.code, cu.name, cu.email, cu.vat_number, cu.phone
                 ORDER BY placement_count DESC, cu.name
                 LIMIT ?
                 """.trimIndent()
@@ -702,6 +704,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                                 code = rs.getString("code"),
                                 name = rs.getString("name"),
                                 email = rs.getString("email")?.ifBlank { null },
+                                vatNumber = rs.getString("vat_number")?.ifBlank { null },
+                                phone = rs.getString("phone")?.ifBlank { null },
                                 spotCount = rs.getInt("spot_count"),
                                 placementCount = rs.getInt("placement_count"),
                             )
@@ -736,6 +740,260 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         while (rs.next()) add(ActivityMonth(rs.getInt("y"), rs.getInt("m"), rs.getInt("cnt")))
                     }
                 }
+            }
+        }
+
+    // ──────────────────────────────────────── spot finder (Εύρεση) ──
+
+    /**
+     * One row per contract LINE ("product") - what the legacy Details
+     * Console listed under ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ. Product identity (είδος,
+     * pricing) lives in the ERP and is not migrated yet, so the line is
+     * presented by its contract number + line number, with computable
+     * stats (spots, aired placements, aired seconds).
+     */
+    data class ContractLineRow(
+        val lineId: Long,
+        val contractNumber: String,
+        val isGift: Boolean,
+        val lineNo: Int,
+        val desiredQty: Int,
+        val spotCount: Int,
+        val placements: Int,
+        val totalSeconds: Long,
+        val entryDate: String?,
+    )
+
+    /**
+     * The party's contract lines: for a CUSTOMER the lines whose spots
+     * belong to them; for a TRADER the lines of the contracts they pay.
+     */
+    fun partyContractLines(code: String, byTrader: Boolean): List<ContractLineRow> {
+        val partyFilter =
+            if (byTrader) "JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"
+            else "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+        return connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty,
+                       COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placements,
+                       COALESCE(SUM(p.duration_seconds), 0) AS total_secs
+                FROM contract_lines cl
+                JOIN contracts ct ON ct.id = cl.contract_id
+                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE
+                $partyFilter
+                LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty
+                ORDER BY ct.number, cl.line_no
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, code)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            ContractLineRow(
+                                lineId = rs.getLong("line_id"),
+                                contractNumber = rs.getString("number"),
+                                isGift = rs.getBoolean("is_gift"),
+                                lineNo = rs.getInt("line_no"),
+                                desiredQty = rs.getInt("desired_qty"),
+                                spotCount = rs.getInt("spot_count"),
+                                placements = rs.getInt("placements"),
+                                totalSeconds = rs.getLong("total_secs"),
+                                entryDate = rs.getString("entry_date"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    data class LineSpotRow(
+        val spotId: Long,
+        val description: String,
+        val durationSeconds: Int,
+        val placements: Int,
+        /** Aired seconds (Αναλωμένα Secs in the legacy console). */
+        val totalSeconds: Long,
+    )
+
+    /** The spots (creatives) hanging off one contract line. */
+    fun contractLineSpots(lineId: Long): List<LineSpotRow> =
+        connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT s.id, s.description, s.duration_seconds, COUNT(p.id) AS placements,
+                       COALESCE(SUM(p.duration_seconds), 0) AS total_secs
+                FROM spots s
+                LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                WHERE s.contract_line_id = ? AND s.hidden = FALSE
+                GROUP BY s.id, s.description, s.duration_seconds
+                ORDER BY s.description, s.id
+                """.trimIndent()
+            ).use { ps ->
+                ps.setLong(1, lineId)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            LineSpotRow(
+                                spotId = rs.getLong("id"),
+                                description = rs.getString("description"),
+                                durationSeconds = rs.getInt("duration_seconds"),
+                                placements = rs.getInt("placements"),
+                                totalSeconds = rs.getLong("total_secs"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    /**
+     * Appends [spotId] at the END of the (break, date) cell - next free
+     * position, duration copied from the spot (like the legacy add). The
+     * (break_id, show_date, position) unique key turns concurrent adds into
+     * a retry with the next position. Returns the new placement as the same
+     * row shape the month grid serves, or null if the spot doesn't exist.
+     */
+    fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? {
+        connection().use { c ->
+            val duration = c.prepareStatement(
+                "SELECT duration_seconds FROM spots WHERE id = ? AND hidden = FALSE"
+            ).use { ps ->
+                ps.setLong(1, spotId)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else return null }
+            }
+
+            repeat(3) {
+                val nextPos = c.prepareStatement(
+                    "SELECT COALESCE(MAX(position) + 1, 0) FROM placements WHERE break_id = ? AND show_date = ?"
+                ).use { ps ->
+                    ps.setLong(1, breakId)
+                    ps.setDate(2, java.sql.Date.valueOf(date))
+                    ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
+                }
+                try {
+                    val id = c.prepareStatement(
+                        """
+                        INSERT INTO placements(spot_id, break_id, show_date, position, duration_seconds)
+                        VALUES(?,?,?,?,?)
+                        """.trimIndent(),
+                        Statement.RETURN_GENERATED_KEYS
+                    ).use { ps ->
+                        ps.setLong(1, spotId)
+                        ps.setLong(2, breakId)
+                        ps.setDate(3, java.sql.Date.valueOf(date))
+                        ps.setInt(4, nextPos)
+                        ps.setInt(5, duration)
+                        ps.executeUpdate()
+                        ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
+                    }
+                    return placementRow(c, id)
+                } catch (e: SQLException) {
+                    if (!isDuplicateKeyViolation(e)) throw e
+                    // someone else took the position - recompute and retry
+                }
+            }
+            throw SQLException("Could not allocate a position in break $breakId / $date after 3 attempts")
+        }
+    }
+
+    /** One placement in the month-grid row shape (same joins as loadMonth). */
+    private fun placementRow(c: Connection, placementId: Long): CommercialRow? =
+        c.prepareStatement(
+            """
+            SELECT p.id, p.spot_id, p.position, p.duration_seconds,
+                   s.description, s.spot_type, s.flow,
+                   cu.code AS client_code, cu.name AS client_name,
+                   ct.number AS contract_number, ct.is_gift,
+                   pay.code AS payer_code, pay.name AS payer_name,
+                   pr.color_argb AS program_color, pr.name AS program_name
+            FROM placements p
+            JOIN spots s      ON s.id = p.spot_id
+            JOIN customers cu ON cu.id = s.customer_id
+            LEFT JOIN contract_lines cl ON cl.id = s.contract_line_id
+            LEFT JOIN contracts ct      ON ct.id = cl.contract_id
+            LEFT JOIN customers pay     ON pay.id = ct.customer_id
+            LEFT JOIN programs pr       ON pr.id = p.program_id
+            WHERE p.id = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setLong(1, placementId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
+                CommercialRow(
+                    id = rs.getLong("id"),
+                    spotId = rs.getLong("spot_id"),
+                    position = rs.getInt("position"),
+                    clientCode = rs.getString("client_code"),
+                    clientName = rs.getString("client_name"),
+                    message = rs.getString("description"),
+                    durationSeconds = rs.getInt("duration_seconds"),
+                    type = rs.getString("spot_type"),
+                    contract = if (rs.getBoolean("is_gift")) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
+                    flow = rs.getString("flow"),
+                    programName = rs.getString("program_name"),
+                    programColorArgb = programColor,
+                    payerCode = rs.getString("payer_code"),
+                    payerName = rs.getString("payer_name"),
+                )
+            }
+        }
+
+    /**
+     * Rewrites a cell's ordering: [orderedIds] must be a permutation of the
+     * cell's CURRENT placement ids (returns false otherwise - the client's
+     * view was stale). New positions are the list indexes. Positions collide
+     * mid-renumber under the (break, date, position) unique key, so all rows
+     * are first bumped far away, in one transaction.
+     */
+    fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean =
+        connection().use { c ->
+            val current = c.prepareStatement(
+                "SELECT id FROM placements WHERE break_id = ? AND show_date = ?"
+            ).use { ps ->
+                ps.setLong(1, breakId)
+                ps.setDate(2, java.sql.Date.valueOf(date))
+                ps.executeQuery().use { rs ->
+                    buildSet { while (rs.next()) add(rs.getLong(1)) }
+                }
+            }
+            if (orderedIds.size != current.size || orderedIds.toSet() != current) return false
+
+            c.autoCommit = false
+            try {
+                c.prepareStatement(
+                    "UPDATE placements SET position = position + 100000 WHERE break_id = ? AND show_date = ?"
+                ).use { ps ->
+                    ps.setLong(1, breakId)
+                    ps.setDate(2, java.sql.Date.valueOf(date))
+                    ps.executeUpdate()
+                }
+                c.prepareStatement("UPDATE placements SET position = ? WHERE id = ?").use { ps ->
+                    orderedIds.forEachIndexed { index, id ->
+                        ps.setInt(1, index)
+                        ps.setLong(2, id)
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                c.commit()
+                true
+            } catch (e: Exception) {
+                c.rollback(); throw e
+            } finally {
+                c.autoCommit = true
+            }
+        }
+
+    /** True if the placement existed and is gone now. */
+    fun deletePlacement(placementId: Long): Boolean =
+        connection().use { c ->
+            c.prepareStatement("DELETE FROM placements WHERE id = ?").use { ps ->
+                ps.setLong(1, placementId)
+                ps.executeUpdate() > 0
             }
         }
 

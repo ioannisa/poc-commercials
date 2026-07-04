@@ -42,6 +42,7 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -162,6 +163,20 @@ fun LazySchedulerGrid(
         val maxRow = visibleBreaks.size - 1
         val maxCol = daysInMonth - 1
 
+        fun invokeAdd(): Boolean {
+            val breakSlot = visibleBreaks.getOrNull(selectedRow)
+            val date = allDays.getOrNull(selectedColumn)
+            if (breakSlot != null && date != null) onAddSpot?.invoke(breakSlot, date)
+            return true
+        }
+
+        fun invokeRemove(): Boolean {
+            val breakSlot = visibleBreaks.getOrNull(selectedRow)
+            val date = allDays.getOrNull(selectedColumn)
+            if (breakSlot != null && date != null) onDeleteSpot?.invoke(breakSlot, date)
+            return true
+        }
+
         return when (event.key) {
             Key.DirectionUp -> {
                 val newRow = (selectedRow - 1).coerceIn(0, maxRow.coerceAtLeast(0))
@@ -192,22 +207,8 @@ fun LazySchedulerGrid(
                 }
                 true
             }
-            Key.A -> {
-                val breakSlot = visibleBreaks.getOrNull(selectedRow)
-                val date = allDays.getOrNull(selectedColumn)
-                if (breakSlot != null && date != null) {
-                    onAddSpot?.invoke(breakSlot, date)
-                }
-                true
-            }
-            Key.D, Key.Delete, Key.Backspace -> {
-                val breakSlot = visibleBreaks.getOrNull(selectedRow)
-                val date = allDays.getOrNull(selectedColumn)
-                if (breakSlot != null && date != null) {
-                    onDeleteSpot?.invoke(breakSlot, date)
-                }
-                true
-            }
+            Key.A -> invokeAdd()
+            Key.R, Key.D, Key.Delete, Key.Backspace -> invokeRemove()
             Key.PageUp -> {
                 val pageSize = lazyListState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
                 updateSelection((selectedRow - pageSize).coerceAtLeast(0), selectedColumn)
@@ -230,7 +231,14 @@ fun LazySchedulerGrid(
                 else updateSelection(selectedRow, maxCol)
                 true
             }
-            else -> false
+            // Greek keyboard layouts: Key.A/Key.R match the PHYSICAL key on
+            // most platforms, but not all - fall back to the typed character
+            // so add/remove work with Α/α and Ρ/ρ too, any case.
+            else -> when (event.utf16CodePoint.toChar().uppercaseChar()) {
+                'A', 'Α' -> invokeAdd()
+                'R', 'Ρ' -> invokeRemove()
+                else -> false
+            }
         }
     }
 

@@ -1,16 +1,19 @@
 package eu.anifantakis.commercials.server.routes
 
 import eu.anifantakis.commercials.server.auth.UserRole
+import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 @Serializable
 data class BreakSlotDto(
@@ -50,6 +53,45 @@ data class ScheduleDto(
     val year: Int,
     val month: Int,
     val cells: List<CellDto>
+)
+
+@Serializable
+data class ContractLineDto(
+    val lineId: Long,
+    val contractNumber: String,
+    val isGift: Boolean,
+    val lineNo: Int,
+    val desiredQty: Int,
+    val spotCount: Int,
+    val placements: Int,
+    val totalSeconds: Long,
+    val entryDate: String? = null,
+)
+
+@Serializable
+data class FinderSpotDto(
+    val spotId: Long,
+    val description: String,
+    val durationSeconds: Int,
+    val placements: Int,
+    val totalSeconds: Long = 0,
+)
+
+@Serializable
+data class AddPlacementRequest(
+    val spotId: Long,
+    val breakId: Long,
+    /** ISO yyyy-MM-dd */
+    val date: String,
+)
+
+@Serializable
+data class ReorderPlacementsRequest(
+    val breakId: Long,
+    /** ISO yyyy-MM-dd */
+    val date: String,
+    /** The cell's placement ids in the new display order. */
+    val orderedIds: List<Long>,
 )
 
 /**
@@ -136,5 +178,130 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
 
             call.respond(ScheduleDto(year = year, month = month, cells = dtos))
         }
+
+        // ── spot finder (the legacy "Εύρεση" Details Console) ───────────
+        // Editing tools: NORMAL_USER only, like the email routes.
+
+        // The party's contract lines ("products" - ERP identity pending,
+        // presented by contract number + line no with computed stats)
+        get("/finder/contracts") {
+            val access = call.editorAccessOrRespond(registry) ?: return@get
+            val byTrader = when (call.request.queryParameters["kind"] ?: "customer") {
+                "customer" -> false
+                "trader" -> true
+                else -> {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "kind must be 'customer' or 'trader'"))
+                    return@get
+                }
+            }
+            val clientCode = call.request.queryParameters["clientCode"]
+            if (clientCode.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "clientCode required"))
+                return@get
+            }
+            val lines = withContext(Dispatchers.IO) {
+                access.db.partyContractLines(clientCode, byTrader).map {
+                    ContractLineDto(
+                        it.lineId, it.contractNumber, it.isGift, it.lineNo,
+                        it.desiredQty, it.spotCount, it.placements, it.totalSeconds,
+                        it.entryDate,
+                    )
+                }
+            }
+            call.respond(lines)
+        }
+
+        // The spots (creatives) of one contract line
+        get("/finder/spots") {
+            val access = call.editorAccessOrRespond(registry) ?: return@get
+            val lineId = call.request.queryParameters["lineId"]?.toLongOrNull()
+            if (lineId == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "numeric lineId required"))
+                return@get
+            }
+            val spots = withContext(Dispatchers.IO) {
+                access.db.contractLineSpots(lineId).map {
+                    FinderSpotDto(it.spotId, it.description, it.durationSeconds, it.placements, it.totalSeconds)
+                }
+            }
+            call.respond(spots)
+        }
+
+        // ── placement editing (the grid's 'a'/'r' keys) ─────────────────
+
+        // Appends the spot at the end of the (break, date) cell; responds
+        // with the new placement in the same shape the month grid serves -
+        // CommercialDto.id IS the placement id the client passes to DELETE.
+        post("/schedule/placements") {
+            val access = call.editorAccessOrRespond(registry) ?: return@post
+            val req = call.receive<AddPlacementRequest>()
+            val date = runCatching { LocalDate.parse(req.date) }.getOrNull()
+            if (date == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
+                return@post
+            }
+            val row = withContext(Dispatchers.IO) { access.db.addPlacement(req.spotId, req.breakId, date) }
+            if (row == null) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown spot ${req.spotId} on this station"))
+                return@post
+            }
+            call.respond(
+                CommercialDto(
+                    id = row.id,
+                    position = row.position,
+                    clientCode = row.clientCode,
+                    clientName = row.clientName,
+                    message = row.message,
+                    durationSeconds = row.durationSeconds,
+                    type = row.type,
+                    contract = row.contract,
+                    flow = row.flow,
+                )
+            )
+        }
+
+        // Persists the ordering the operator arranged in the break detail
+        // screen - list indexes become positions.
+        put("/schedule/placements/order") {
+            val access = call.editorAccessOrRespond(registry) ?: return@put
+            val req = call.receive<ReorderPlacementsRequest>()
+            val date = runCatching { LocalDate.parse(req.date) }.getOrNull()
+            if (date == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
+                return@put
+            }
+            val ok = withContext(Dispatchers.IO) {
+                access.db.reorderPlacements(req.breakId, date, req.orderedIds)
+            }
+            if (ok) call.respond(HttpStatusCode.NoContent)
+            else call.respond(
+                HttpStatusCode.Conflict,
+                mapOf("error" to "orderedIds do not match the cell's current placements - reload the month")
+            )
+        }
+
+        delete("/schedule/placements/{id}") {
+            val access = call.editorAccessOrRespond(registry) ?: return@delete
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "numeric id required"))
+                return@delete
+            }
+            val deleted = withContext(Dispatchers.IO) { access.db.deletePlacement(id) }
+            if (deleted) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No placement $id"))
+        }
     }
+}
+
+/** Editing the schedule is staff work - NORMAL_USER on the station required. */
+private suspend fun io.ktor.server.application.ApplicationCall.editorAccessOrRespond(
+    registry: StationRegistry,
+): StationAccess? {
+    val access = stationAccessOrRespond(registry) ?: return null
+    if (access.grant.role != UserRole.NORMAL_USER) {
+        respond(HttpStatusCode.Forbidden, mapOf("error" to "Requires full access on this station"))
+        return null
+    }
+    return access
 }

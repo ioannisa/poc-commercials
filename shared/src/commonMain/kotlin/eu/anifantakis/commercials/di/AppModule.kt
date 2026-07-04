@@ -9,6 +9,7 @@ import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.auth.createKSafe
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
+import eu.anifantakis.commercials.finder.SpotFinderApi
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.KoinAppDeclaration
@@ -32,6 +33,7 @@ val appModule = module {
     single<AuthSession>()
     single<UserPreferences>()
     single<ScheduleEmailApi>()
+    single<SpotFinderApi>()
     single<AuthApi>()
     single<AdminApi>()
     single<MigrationApi>()
