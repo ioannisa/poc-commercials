@@ -9,8 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.auth.AppRole
-import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.db.DbDemoButton
 import androidx.compose.foundation.isSystemInDarkTheme
 import eu.anifantakis.commercials.navigation.RootNavigation

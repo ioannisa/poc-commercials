@@ -49,6 +49,11 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // Session/config/ksafe moved to :core:data (kmp-developer
+            // multi-module layout); what remains here (AuthApi,
+            // UserPreferences) re-exports it until features absorb them.
+            api(projects.core.data)
+
             // AuthSession's revision is Compose-observable state
             implementation(libs.compose.runtime)
 

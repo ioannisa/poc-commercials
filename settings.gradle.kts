@@ -2,6 +2,7 @@ rootProject.name = "commercials-manager"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google {
             mavenContent {
@@ -35,6 +36,13 @@ dependencyResolutionManagement {
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
+
+// kmp-developer multi-module layout: :core:* + :feature:<name>:<layer>.
+// :shared plays the ":app" wiring role (name kept - the iOS framework is
+// baseName "Shared"); :grids / :reports-client / :appearance serve as
+// standalone core modules.
+include(":core:domain")
+include(":core:data")
 
 include(":shared")
 include(":androidApp")

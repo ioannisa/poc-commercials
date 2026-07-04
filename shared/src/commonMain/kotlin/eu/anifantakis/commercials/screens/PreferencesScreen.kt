@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.auth.AuthApi
-import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.prefs.ThemePreference
 import eu.anifantakis.commercials.prefs.UserPreferences
 import org.koin.compose.koinInject

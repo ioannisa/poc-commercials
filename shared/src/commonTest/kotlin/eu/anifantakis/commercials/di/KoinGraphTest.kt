@@ -1,7 +1,7 @@
 package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.auth.AuthApi
-import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
 import eu.anifantakis.commercials.reports.ReportService

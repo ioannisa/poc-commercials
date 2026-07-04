@@ -1,9 +1,9 @@
 package eu.anifantakis.commercials.data
 
 import androidx.compose.ui.graphics.Color
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.auth.authenticatedJsonClient
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.BreakZone
 import eu.anifantakis.commercials.grids.CommercialItem

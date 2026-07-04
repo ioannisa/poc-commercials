@@ -2,8 +2,8 @@ package eu.anifantakis.commercials
 
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeViewport
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.di.initKoin
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch

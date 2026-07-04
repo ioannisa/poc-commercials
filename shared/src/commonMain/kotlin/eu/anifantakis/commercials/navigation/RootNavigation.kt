@@ -23,7 +23,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.savedstate.serialization.SavedStateConfiguration
 import eu.anifantakis.commercials.auth.AuthApi
-import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.finder.SpotFinderApi
 import eu.anifantakis.commercials.grids.BreakSlot

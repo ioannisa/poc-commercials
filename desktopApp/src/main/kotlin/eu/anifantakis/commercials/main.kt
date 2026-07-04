@@ -27,8 +27,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.di.initKoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking

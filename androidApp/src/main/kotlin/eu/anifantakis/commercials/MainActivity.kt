@@ -6,9 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.config.AndroidAppContext
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.config.AndroidAppContext
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.di.initKoin
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform

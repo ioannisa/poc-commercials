@@ -1,7 +1,7 @@
 package eu.anifantakis.commercials.reports
 
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.reports.dto.ReportBatchRequest
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import io.ktor.client.*

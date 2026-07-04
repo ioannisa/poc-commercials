@@ -1,8 +1,8 @@
 package eu.anifantakis.commercials.admin
 
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.auth.authenticatedJsonClient
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get

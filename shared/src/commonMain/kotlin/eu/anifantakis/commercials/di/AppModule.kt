@@ -5,8 +5,8 @@ import eu.anifantakis.commercials.auth.AuthApi
 import eu.anifantakis.commercials.email.ScheduleEmailApi
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.auth.createKSafe
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
 import eu.anifantakis.commercials.finder.SpotFinderApi

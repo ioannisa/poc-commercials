@@ -40,7 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.automirrored.filled.Logout
-import eu.anifantakis.commercials.auth.AuthSession
+import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.data.SampleData
 import eu.anifantakis.commercials.finder.AddedCommercial
 import eu.anifantakis.commercials.finder.SpotFinderApi

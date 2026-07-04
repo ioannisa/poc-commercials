@@ -1,6 +1,8 @@
 package eu.anifantakis.commercials.auth
 
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.session.StationAccess
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation

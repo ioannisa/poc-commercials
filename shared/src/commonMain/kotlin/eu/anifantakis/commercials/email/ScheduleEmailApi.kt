@@ -1,8 +1,8 @@
 package eu.anifantakis.commercials.email
 
-import eu.anifantakis.commercials.auth.AuthSession
-import eu.anifantakis.commercials.auth.authenticatedJsonClient
-import eu.anifantakis.commercials.config.AppConfig
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
