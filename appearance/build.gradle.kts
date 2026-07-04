@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
@@ -45,6 +46,18 @@ kotlin {
         browser()
     }
 
+
+    // default hierarchy template + a webMain group (js + wasmJs)
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("web") {
+                withJs()
+                withWasmJs()
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -56,17 +69,7 @@ kotlin {
             // The native FileDialog is shown on the AWT event thread
             implementation(libs.kotlinx.coroutinesSwing)
         }
-        // js + wasmJs share one "no native picker" actual
-        val webMain by creating {
-            dependsOn(commonMain.get())
-        }
-        jsMain.get().dependsOn(webMain)
-        wasmJsMain.get().dependsOn(webMain)
-
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-        }
-        iosArm64Main.get().dependsOn(iosMain)
-        iosSimulatorArm64Main.get().dependsOn(iosMain)
+        // js + wasmJs share one "no native picker" actual via the webMain
+        // group above; iosMain comes from the default template.
     }
 }

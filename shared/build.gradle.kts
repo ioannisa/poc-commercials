@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -27,6 +28,9 @@ kotlin {
         }
 
         androidResources { enable = true }
+
+        // commonTest (KoinGraphTest) also runs as android host unit tests
+        withHostTest {}
     }
 
     listOf(
@@ -48,6 +52,18 @@ kotlin {
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
         browser()
+    }
+
+
+    // default hierarchy template + a webMain group (js + wasmJs)
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("web") {
+                withJs()
+                withWasmJs()
+            }
+        }
     }
 
     sourceSets {
@@ -147,8 +163,7 @@ kotlin {
         }
 
         // Browser-based platforms: Ktor client for server-side report generation
-        val webMain by creating {
-            dependsOn(commonMain.get())
+        val webMain by getting {
             dependencies {
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.js)
@@ -157,17 +172,10 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
             }
         }
-        jsMain.get().dependsOn(webMain)
-        wasmJsMain.get().dependsOn(webMain)
 
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-            dependencies {
-                implementation(libs.ktor.client.darwin)
-            }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
-        iosArm64Main.get().dependsOn(iosMain)
-        iosSimulatorArm64Main.get().dependsOn(iosMain)
     }
 }
 

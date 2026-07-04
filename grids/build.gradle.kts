@@ -66,10 +66,6 @@ kotlin {
             // Desktop scrollbar APIs (VerticalScrollbar, rememberScrollbarAdapter)
             implementation(compose.desktop.currentOs)
         }
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-        }
-        iosArm64Main.get().dependsOn(iosMain)
-        iosSimulatorArm64Main.get().dependsOn(iosMain)
+        // iosMain comes from the default hierarchy template
     }
 }

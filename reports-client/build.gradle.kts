@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
@@ -48,6 +49,22 @@ kotlin {
         browser()
     }
 
+
+    // default hierarchy template + the module's custom sharing: reportsMain
+    // holds the real report engine (jvm + web); android/ios keep stubs.
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("reports") {
+                withJvm()
+                group("web") {
+                    withJs()
+                    withWasmJs()
+                }
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -64,14 +81,12 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.compose)
         }
-        val reportsMain by creating {
-            dependsOn(commonMain.get())
+        val reportsMain by getting {
             dependencies {
                 api(project(":reportcore"))
             }
         }
 
-        jvmMain.get().dependsOn(reportsMain)
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
@@ -80,8 +95,7 @@ kotlin {
             implementation(libs.kotlin.test)
         }
 
-        val webMain by creating {
-            dependsOn(reportsMain)
+        val webMain by getting {
             dependencies {
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.client.js)
@@ -89,13 +103,6 @@ kotlin {
                 implementation(libs.ktor.serialization.json)
             }
         }
-        jsMain.get().dependsOn(webMain)
-        wasmJsMain.get().dependsOn(webMain)
-
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-        }
-        iosArm64Main.get().dependsOn(iosMain)
-        iosSimulatorArm64Main.get().dependsOn(iosMain)
+        // iosMain comes from the default hierarchy template
     }
 }

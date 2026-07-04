@@ -38,23 +38,16 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
         }
-        // js + wasmJs share sources (AppConfig fetches /config over HTTP)
-        val webMain by creating {
-            dependsOn(commonMain.get())
+        // js + wasmJs share sources (AppConfig fetches /config over HTTP);
+        // the webMain intermediate comes from the convention plugin's
+        // hierarchy template, iosMain from the default template.
+        val webMain by getting {
             dependencies {
                 implementation(libs.ktor.client.js)
             }
         }
-        jsMain.get().dependsOn(webMain)
-        wasmJsMain.get().dependsOn(webMain)
-
-        val iosMain by creating {
-            dependsOn(commonMain.get())
-            dependencies {
-                implementation(libs.ktor.client.darwin)
-            }
+        iosMain.dependencies {
+            implementation(libs.ktor.client.darwin)
         }
-        iosArm64Main.get().dependsOn(iosMain)
-        iosSimulatorArm64Main.get().dependsOn(iosMain)
     }
 }

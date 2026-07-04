@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -24,6 +25,9 @@ kotlin {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
+        // commonTest sources also run as android host (JVM) unit tests -
+        // without this AGP warns whenever a module has commonTest
+        withHostTest {}
     }
 
     iosArm64()
@@ -46,5 +50,18 @@ kotlin {
 
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
+    // Default hierarchy template (iosMain etc.) EXTENDED with a webMain
+    // group shared by js + wasmJs - modules add web sources without manual
+    // dependsOn edges (which would disable the template and warn).
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("web") {
+                withJs()
+                withWasmJs()
+            }
+        }
     }
 }
