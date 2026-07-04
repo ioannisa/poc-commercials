@@ -8,20 +8,12 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.kotlinSerialization)
-    // Compile-time DI safety: validates the Koin graph during compilation
-    alias(libs.plugins.koinCompiler)
 }
 
 composeCompiler {
     stabilityConfigurationFiles.add(
         layout.projectDirectory.file("compose_compiler_config.conf")
     )
-}
-
-koinCompiler {
-    // Print detected Koin components during compilation (proof the
-    // compile-time DI validation is active)
-    userLogs = true
 }
 
 kotlin {
@@ -67,6 +59,15 @@ kotlin {
             implementation(libs.ktor.client.cio)
         }
         commonMain.dependencies {
+            // kmp-developer multi-module layout: core + features; :shared is
+            // the ":app" wiring module and may depend on everything.
+            api(projects.core.domain)
+            api(projects.core.data)
+            api(projects.core.presentation)
+            api(projects.feature.auth.domain)
+            api(projects.feature.auth.data)
+            api(projects.feature.auth.presentation)
+
             // Extracted feature modules. `api`: their types (BreakSlot,
             // SchedulerCellData, AppTheme, ...) appear in shared's own
             // composable signatures.
@@ -112,6 +113,7 @@ kotlin {
             // modules' entry points (KoinPlatform.getKoin()) use Koin types.
             api(libs.koin.core)
             implementation(libs.koin.compose)
+            implementation(libs.koin.compose.viewmodel)
             implementation(libs.koin.annotations)
         }
         commonTest.dependencies {

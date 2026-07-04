@@ -43,6 +43,10 @@ plugins {
 // standalone core modules.
 include(":core:domain")
 include(":core:data")
+include(":core:presentation")
+include(":feature:auth:domain")
+include(":feature:auth:data")
+include(":feature:auth:presentation")
 
 include(":shared")
 include(":androidApp")

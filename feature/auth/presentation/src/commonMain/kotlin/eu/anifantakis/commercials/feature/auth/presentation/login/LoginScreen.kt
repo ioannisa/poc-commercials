@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.screens
+package eu.anifantakis.commercials.feature.auth.presentation.login
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,11 +28,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -41,63 +36,37 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.auth.AuthApi
-import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
+import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
+import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * Login gate shown before any data is loaded. On success the session (token,
- * stations, roles) is already stored in AuthSession by [AuthApi.login];
- * [onLoggedIn] then swaps the navigation stack to the main app.
- *
- * Also hosts the "forgot password" flow: username + ONE unused recovery code
- * (see the account menu, "Recovery codes") sets a new password. Users without
- * saved codes are reset by the administrator instead.
+ * Login gate shown before any data is loaded. On success the session
+ * (token, stations, roles) has been stored by the repository; [onLoggedIn]
+ * then swaps the navigation stack to the main app. Also hosts the "forgot
+ * password" flow (username + ONE unused recovery code sets a new password).
  */
 @Composable
-fun LoginScreen(onLoggedIn: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val authApi = koinInject<AuthApi>()
-
-    var recoveryMode by remember { mutableStateOf(false) }
-
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var recoveryCode by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var infoMessage by remember { mutableStateOf<String?>(null) }
-
-    fun submitLogin() {
-        if (isLoading || username.isBlank() || password.isBlank()) return
-        isLoading = true
-        errorMessage = null
-        scope.launch {
-            authApi.login(username.trim(), password)
-                .onSuccess { onLoggedIn() }
-                .onFailure { errorMessage = it.message }
-            isLoading = false
+fun LoginScreenRoot(
+    onLoggedIn: () -> Unit,
+    viewModel: LoginViewModel = koinViewModel(),
+) {
+    ObserveEffects(viewModel.events) { effect ->
+        when (effect) {
+            LoginEffect.LoggedIn -> onLoggedIn()
         }
     }
 
-    fun submitRecovery() {
-        if (isLoading || username.isBlank() || recoveryCode.isBlank() || password.isBlank()) return
-        isLoading = true
-        errorMessage = null
-        scope.launch {
-            authApi.recoverPassword(username.trim(), recoveryCode, password)
-                .onSuccess {
-                    recoveryMode = false
-                    password = ""
-                    recoveryCode = ""
-                    infoMessage = "Password reset - log in with your new password"
-                }
-                .onFailure { errorMessage = it.message }
-            isLoading = false
-        }
-    }
+    LoginScreen(
+        state = viewModel.state,
+        onIntent = viewModel::onAction,
+    )
+}
 
+@Composable
+private fun LoginScreen(
+    state: LoginState,
+    onIntent: (LoginIntent) -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -118,7 +87,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (recoveryMode) "Επαναφορά Κωδικού" else "Σύνδεση",
+                    text = if (state.recoveryMode) "Επαναφορά Κωδικού" else "Σύνδεση",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -126,25 +95,25 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
 
                 OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
+                    value = state.username,
+                    onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
                     label = { Text("Username") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     singleLine = true,
-                    enabled = !isLoading,
+                    enabled = !state.isLoading,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (recoveryMode) {
+                if (state.recoveryMode) {
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
-                        value = recoveryCode,
-                        onValueChange = { recoveryCode = it },
+                        value = state.recoveryCode,
+                        onValueChange = { onIntent(LoginIntent.RecoveryCodeChanged(it)) },
                         label = { Text("Recovery code") },
                         placeholder = { Text("XXXX-XXXX-XXXX-XXXX") },
                         leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
                         singleLine = true,
-                        enabled = !isLoading,
+                        enabled = !state.isLoading,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -152,74 +121,60 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
 
                 OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text(if (recoveryMode) "New password" else "Password") },
+                    value = state.password,
+                    onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
+                    label = { Text(if (state.recoveryMode) "New password" else "Password") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        IconButton(onClick = { onIntent(LoginIntent.TogglePasswordVisibility) }) {
                             Icon(
-                                if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                if (state.passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (state.passwordVisible) "Hide password" else "Show password"
                             )
                         }
                     },
                     visualTransformation =
-                        if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        if (state.passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     singleLine = true,
-                    enabled = !isLoading,
+                    enabled = !state.isLoading,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                errorMessage?.let { message ->
+                state.errorMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp
-                    )
+                    Text(text = message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
-                infoMessage?.let { message ->
+                state.infoMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = message,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 13.sp
-                    )
+                    Text(text = message, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
 
                 Spacer(Modifier.height(20.dp))
 
                 Button(
-                    onClick = { if (recoveryMode) submitRecovery() else submitLogin() },
-                    enabled = !isLoading && username.isNotBlank() && password.isNotBlank() &&
-                        (!recoveryMode || recoveryCode.isNotBlank()),
+                    onClick = { onIntent(LoginIntent.Submit) },
+                    enabled = state.canSubmit,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (isLoading) {
+                    if (state.isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (recoveryMode) "Reset password" else "Login")
+                    Text(if (state.recoveryMode) "Reset password" else "Login")
                 }
 
                 Spacer(Modifier.height(8.dp))
 
-                TextButton(onClick = {
-                    recoveryMode = !recoveryMode
-                    errorMessage = null
-                    infoMessage = null
-                    password = ""
-                }) {
+                TextButton(onClick = { onIntent(LoginIntent.ToggleRecoveryMode) }) {
                     Text(
-                        if (recoveryMode) "Back to login"
+                        if (state.recoveryMode) "Back to login"
                         else "Forgot password? Use a recovery code",
                         fontSize = 12.sp
                     )
                 }
 
-                if (!recoveryMode) {
+                if (!state.recoveryMode) {
                     Spacer(Modifier.height(16.dp))
                     // Demo accounts - one per access layer (POC convenience)
                     Text(

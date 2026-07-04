@@ -4,9 +4,9 @@ import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.UnsupportedReportService
 import org.koin.core.module.Module
 import org.koin.dsl.module
-import org.koin.plugin.module.dsl.bind
-import org.koin.plugin.module.dsl.single
+import org.koin.core.module.dsl.singleOf
+import org.koin.dsl.bind
 
 actual val platformModule: Module = module {
-    single<UnsupportedReportService>().bind(ReportService::class)
+    singleOf(::UnsupportedReportService).bind<ReportService>()
 }

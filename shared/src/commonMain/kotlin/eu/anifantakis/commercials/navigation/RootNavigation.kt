@@ -22,7 +22,8 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.savedstate.serialization.SavedStateConfiguration
-import eu.anifantakis.commercials.auth.AuthApi
+import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.presentation.login.LoginScreenRoot
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.finder.SpotFinderApi
@@ -32,7 +33,7 @@ import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.StableDate
 import eu.anifantakis.commercials.screens.CommercialDetailScreen
 import eu.anifantakis.commercials.admin.DatabasesScreen
-import eu.anifantakis.commercials.screens.LoginScreen
+
 import eu.anifantakis.commercials.screens.PreferencesScreen
 import eu.anifantakis.commercials.admin.MigrationScreen
 import eu.anifantakis.commercials.screens.TimetableScreen
@@ -68,7 +69,7 @@ private val navConfig = SavedStateConfiguration {
 fun RootNavigation() {
     val scope = rememberCoroutineScope()
     val authSession = koinInject<AuthSession>()
-    val authApi = koinInject<AuthApi>()
+    val authRepository = koinInject<AuthRepository>()
     val scheduleRepository = koinInject<ScheduleRepository>()
     val spotFinderApi = koinInject<SpotFinderApi>()
 
@@ -162,7 +163,7 @@ fun RootNavigation() {
         entryProvider = entryProvider {
 
             entry<CommercialNavRoute.Login> {
-                LoginScreen(
+                LoginScreenRoot(
                     onLoggedIn = {
                         backStack.clear()
                         backStack.add(CommercialNavRoute.Timetable)
@@ -198,7 +199,7 @@ fun RootNavigation() {
                     },
                     onLogout = {
                         scope.launch {
-                            authApi.logout()   // revokes the token server-side, clears the session
+                            authRepository.logout()   // revokes the token server-side, clears the session
                             breaks = emptyList()
                             originalCellData = emptyMap()
                             cellData.clear()

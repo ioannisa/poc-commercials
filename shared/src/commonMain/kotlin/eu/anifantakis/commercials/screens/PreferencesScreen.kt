@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.auth.AuthApi
+import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.prefs.ThemePreference
 import eu.anifantakis.commercials.prefs.UserPreferences
@@ -58,7 +58,7 @@ fun PreferencesScreen(
 ) {
     val prefs = koinInject<UserPreferences>()
     val authSession = koinInject<AuthSession>()
-    val authApi = koinInject<AuthApi>()
+    val authRepository = koinInject<AuthRepository>()
 
     var showChangePassword by remember { mutableStateOf(false) }
     var showRecoveryCodes by remember { mutableStateOf(false) }
@@ -123,10 +123,10 @@ fun PreferencesScreen(
     }
 
     if (showChangePassword) {
-        ChangePasswordDialog(authApi = authApi, onDismiss = { showChangePassword = false })
+        ChangePasswordDialog(authRepository = authRepository, onDismiss = { showChangePassword = false })
     }
     if (showRecoveryCodes) {
-        RecoveryCodesDialog(authApi = authApi, onDismiss = { showRecoveryCodes = false })
+        RecoveryCodesDialog(authRepository = authRepository, onDismiss = { showRecoveryCodes = false })
     }
 }
 

@@ -23,7 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.auth.AuthApi
+import eu.anifantakis.commercials.core.domain.util.onFailure
+import eu.anifantakis.commercials.core.domain.util.onSuccess
+import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.presentation.toDisplayMessage
 import kotlinx.coroutines.launch
 
 /**
@@ -32,7 +35,7 @@ import kotlinx.coroutines.launch
  * observer then routes the app back to Login automatically.
  */
 @Composable
-fun ChangePasswordDialog(authApi: AuthApi, onDismiss: () -> Unit) {
+fun ChangePasswordDialog(authRepository: AuthRepository, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var current by remember { mutableStateOf("") }
     var new1 by remember { mutableStateOf("") }
@@ -83,9 +86,9 @@ fun ChangePasswordDialog(authApi: AuthApi, onDismiss: () -> Unit) {
                 onClick = {
                     busy = true; error = null
                     scope.launch {
-                        authApi.changePassword(current, new1)
+                        authRepository.changePassword(current, new1)
                             .onSuccess { onDismiss() }   // session cleared -> Login screen
-                            .onFailure { error = it.message; busy = false }
+                            .onFailure { error = it.toDisplayMessage(); busy = false }
                     }
                 }
             ) {
@@ -104,7 +107,7 @@ fun ChangePasswordDialog(authApi: AuthApi, onDismiss: () -> Unit) {
  * server keeps only hashes. Old codes stop working immediately.
  */
 @Composable
-fun RecoveryCodesDialog(authApi: AuthApi, onDismiss: () -> Unit) {
+fun RecoveryCodesDialog(authRepository: AuthRepository, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     var codes by remember { mutableStateOf<List<String>?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -145,9 +148,9 @@ fun RecoveryCodesDialog(authApi: AuthApi, onDismiss: () -> Unit) {
                     onClick = {
                         busy = true; error = null
                         scope.launch {
-                            authApi.regenerateRecoveryCodes()
+                            authRepository.regenerateRecoveryCodes()
                                 .onSuccess { codes = it }
-                                .onFailure { error = it.message }
+                                .onFailure { error = it.toDisplayMessage() }
                             busy = false
                         }
                     }

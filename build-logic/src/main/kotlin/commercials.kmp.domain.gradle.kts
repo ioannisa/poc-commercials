@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
  * Pure-Kotlin KMP domain module (kmp-developer RULE 1, enforced
@@ -13,7 +14,11 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    jvm()
+    jvm {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
 
     js {
         browser()

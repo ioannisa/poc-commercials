@@ -10,7 +10,6 @@ plugins {
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
-    id("io.insert-koin.compiler.plugin")
 }
 
 private val catalog = extensions.getByType<VersionCatalogsExtension>().named("libs")
@@ -30,6 +29,7 @@ kotlin {
             implementation(catalog.findLibrary("kotlinx-serialization-json").get())
             api(catalog.findLibrary("koin-core").get())
             implementation(catalog.findLibrary("koin-compose").get())
+            implementation(catalog.findLibrary("koin-compose-viewmodel").get())
         }
     }
 }

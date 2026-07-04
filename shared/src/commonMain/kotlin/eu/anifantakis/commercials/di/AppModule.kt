@@ -1,7 +1,6 @@
 package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.admin.AdminApi
-import eu.anifantakis.commercials.auth.AuthApi
 import eu.anifantakis.commercials.email.ScheduleEmailApi
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
@@ -10,35 +9,47 @@ import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
 import eu.anifantakis.commercials.finder.SpotFinderApi
+import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
+import eu.anifantakis.commercials.feature.auth.data.AuthRepositoryImpl
+import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.presentation.login.LoginViewModel
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
 import org.koin.mp.KoinPlatformTools
-import org.koin.plugin.module.dsl.single
+import org.koin.dsl.bind
+import org.koin.core.module.dsl.singleOf
+import org.koin.core.module.dsl.viewModelOf
 
 /**
  * Shared singletons, one instance for the app lifetime. Platform-specific
- * bindings (ReportService) live in [platformModule].
- *
- * Definitions use the Koin Compiler Plugin's typed DSL (`single<T>()`): the
- * plugin generates the constructor wiring at compile time and validates the
- * graph - a missing dependency is a build error, not a runtime crash.
+ * bindings (ReportService) live in [platformModule]. Classic constructor-
+ * reference DSL (kmp-developer di-koin convention); the graph is guarded by
+ * KoinGraphTest.
  */
 val appModule = module {
     // Factory call, not a constructor - classic lambda definition. The graph
     // checker can't index it, so KSafe consumers mark the parameter @Provided.
     single { createKSafe() }
 
-    single<AuthSession>()
-    single<UserPreferences>()
-    single<ScheduleEmailApi>()
-    single<SpotFinderApi>()
-    single<AuthApi>()
-    single<AdminApi>()
-    single<MigrationApi>()
-    single<ScheduleRepository>()
-    single<DbApi>()
+    singleOf(::AuthSession)
+
+    // App-wide MVI container (kmp-developer global state)
+    single { GlobalStateContainer() }
+
+    // :feature:auth - classic DSL (cross-module types; the compiler-plugin
+    // checker only indexes this module's typed definitions)
+    singleOf(::AuthRepositoryImpl).bind<AuthRepository>()
+    viewModelOf(::LoginViewModel)
+
+    singleOf(::UserPreferences)
+    singleOf(::ScheduleEmailApi)
+    singleOf(::SpotFinderApi)
+    singleOf(::AdminApi)
+    singleOf(::MigrationApi)
+    singleOf(::ScheduleRepository)
+    singleOf(::DbApi)
 }
 
 /** Per-platform bindings: ReportService (desktop engine / browser API / unsupported). */

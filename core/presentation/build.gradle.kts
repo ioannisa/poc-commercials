@@ -1,0 +1,17 @@
+/*
+ * :core:presentation - the presentation toolkit every feature presentation
+ * module stands on: MVI helpers (toComposeState, ObserveEffects) and the
+ * app-wide global state (GlobalStateContainer + BaseGlobalViewModel).
+ * Depends only on :core:domain (kmp-developer RULE 2).
+ */
+plugins {
+    id("commercials.kmp.feature")
+}
+
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            api(projects.core.domain)
+        }
+    }
+}
