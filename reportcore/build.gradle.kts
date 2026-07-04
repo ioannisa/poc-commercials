@@ -11,13 +11,19 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
  * Targets are limited to jvm/js/wasmJs on purpose: Android and iOS do not
  * produce reports (they show "unsupported"), so they never see this module.
  */
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
-    jvm()
+    jvm {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_21)
+        }
+    }
 
     js {
         browser()

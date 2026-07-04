@@ -16,6 +16,8 @@
  * Package names keep their historical `server.*` form on purpose: renaming
  * would churn every consumer for zero behavioural gain.
  */
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.kotlinSerialization)
@@ -40,4 +42,10 @@ dependencies {
     implementation(libs.slf4j.api)
 
     testImplementation(libs.kotlin.test)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+    }
 }

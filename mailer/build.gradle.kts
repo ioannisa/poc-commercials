@@ -13,6 +13,8 @@
  * or HTTP - the server assembles the data and provides SMTP settings from
  * stations.yaml.
  */
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.kotlinJvm)
 }
@@ -24,4 +26,10 @@ dependencies {
     implementation(libs.angus.mail)
 
     testImplementation(libs.kotlin.test)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_21)
+    }
 }

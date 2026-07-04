@@ -23,7 +23,7 @@ kotlin {
         compileSdk = catalog.findVersion("android-compileSdk").get().requiredVersion.toInt()
         minSdk = catalog.findVersion("android-minSdk").get().requiredVersion.toInt()
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
         // commonTest sources also run as android host (JVM) unit tests -
         // without this AGP warns whenever a module has commonTest
@@ -35,7 +35,7 @@ kotlin {
 
     jvm {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
     }
 
