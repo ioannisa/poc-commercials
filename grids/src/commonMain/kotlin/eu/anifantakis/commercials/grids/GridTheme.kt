@@ -49,6 +49,11 @@ data class GridPalette(
     val mutedText: Color,
     // scheduler specifics
     val weekendColumn: Color,
+    /** Weekend day NAMES (ΣΑ/ΚΥ) in the header - the legacy orange-red callout. */
+    val weekendHeaderText: Color,
+    /** The day-NUMBER strip under the day names - the legacy navy band. */
+    val dayNumberStrip: Color,
+    val onDayNumberStrip: Color,
     val selectedRowHeader: Color,
     val selectedColumnHeader: Color,
     val onSelectionHeader: Color,
@@ -100,6 +105,10 @@ val LightGridPalette = GridPalette(
     positiveValue = Color(0xFF388E3C),
     mutedText = Color.Gray,
     weekendColumn = Color(0xFFFFE0B2),
+    weekendHeaderText = Color(0xFFCC4400),
+    // The same "legacy header blue" the schedule email keeps as homage (#004080)
+    dayNumberStrip = Color(0xFF004080),
+    onDayNumberStrip = Color.White,
     selectedRowHeader = Color(0xFFE53935),
     selectedColumnHeader = Color(0xFFE53935),
     onSelectionHeader = Color.White,
@@ -133,6 +142,10 @@ val DarkGridPalette = GridPalette(
     positiveValue = Color(0xFF81C784),
     mutedText = Color(0xFF9AA0A8),
     weekendColumn = Color(0xFF4A3A26),
+    weekendHeaderText = Color(0xFFFFA45C),
+    // Muted navy, matching how the rest of the dark chrome is dimmed
+    dayNumberStrip = Color(0xFF1F4874),
+    onDayNumberStrip = Color.White,
     selectedRowHeader = Color(0xFFD94F4B),
     selectedColumnHeader = Color(0xFFD94F4B),
     onSelectionHeader = Color.White,

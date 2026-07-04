@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -341,13 +342,15 @@ fun LazySchedulerGrid(
                 val isRowSelected = rowIndex == selectedRow
 
                 Row(modifier = Modifier.fillMaxWidth().height(rowHeight)) {
-                    // Break time column (frozen - not in horizontal scroll)
+                    // Break time column (frozen - not in horizontal scroll):
+                    // same legacy navy band as the day-number strip, white
+                    // times, red on the selected row
                     FrozenHeaderBox(
                         modifier = Modifier
                             .width(breakColumnWidth)
                             .fillMaxHeight()
                             .background(
-                                if (isRowSelected) palette.selectedRowHeader else palette.frozenRowHeader
+                                if (isRowSelected) palette.selectedRowHeader else palette.dayNumberStrip
                             )
                             .border(0.5.dp, palette.cellBorder),
                         menuEntriesProvider = if (breakHeaderContextMenuItems != null) {
@@ -358,8 +361,8 @@ fun LazySchedulerGrid(
                         Text(
                             text = formatTime(breakSlot.time.hour, breakSlot.time.minute),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (isRowSelected) palette.onSelectionHeader else palette.cellText
+                            fontWeight = FontWeight.Bold,
+                            color = if (isRowSelected) palette.onSelectionHeader else palette.onDayNumberStrip
                         )
                     }
 
@@ -466,37 +469,53 @@ private fun LazyDayHeader(
 ) {
     val palette = gridPalette()
     val isWeekend = date.value.dayOfWeek == DayOfWeek.SATURDAY || date.value.dayOfWeek == DayOfWeek.SUNDAY
-    val bgColor = when {
+
+    // Legacy two-tone header: the day NAME rides the light chrome (weekend
+    // names called out in orange-red), while the day NUMBER sits on the navy
+    // strip the original app always had - white on blue, red when selected.
+    val nameBg = when {
         isSelected -> palette.selectedColumnHeader
         isWeekend -> palette.weekendColumn
         else -> palette.headerBackground
     }
+    val nameColor = when {
+        isSelected -> palette.onSelectionHeader
+        isWeekend -> palette.weekendHeaderText
+        else -> palette.cellText
+    }
+    val numberBg = if (isSelected) palette.selectedColumnHeader else palette.dayNumberStrip
 
     FrozenHeaderBox(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
-            .background(bgColor)
             .border(0.5.dp, palette.headerBorder),
         menuEntriesProvider = menuEntriesProvider,
         onMenuOpen = onMenuOpen
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = date.value.dayOfWeek.toGreekAbbrLazy(),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isSelected) palette.onSelectionHeader else palette.cellText
-            )
-            Text(
-                text = date.value.day.toString(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isSelected) palette.onSelectionHeader else palette.cellText
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(0.45f).background(nameBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = date.value.dayOfWeek.toGreekAbbrLazy(),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = nameColor
+                )
+            }
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(0.55f).background(numberBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = date.value.day.toString(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.onDayNumberStrip
+                )
+            }
         }
     }
 }
