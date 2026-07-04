@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
@@ -570,6 +571,19 @@ private fun KeyboardEnabledHeader(
                 val authSession = koinInject<AuthSession>()
                 @Suppress("UNUSED_EXPRESSION") authSession.revision
                 StationSelector(authSession)
+
+                // Email a party their schedule (staff action). One email,
+                // one table per spot; the dialog has its own search and
+                // year/month drill-down, independent of the shown month.
+                if (canEdit) {
+                    var showEmail by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showEmail = true }) {
+                        Icon(Icons.Default.Email, contentDescription = "Email customer schedule")
+                    }
+                    if (showEmail) {
+                        SendScheduleEmailDialog(onDismiss = { showEmail = false })
+                    }
+                }
 
                 // Logged-in user: clicking the badge opens the account menu
                 // (change password / recovery codes, or user management for

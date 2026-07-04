@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.migration.migrationRoutes
 import eu.anifantakis.commercials.server.plugins.requireAdmin
 import eu.anifantakis.commercials.server.routes.authRoutes
+import eu.anifantakis.commercials.server.routes.emailRoutes
 import eu.anifantakis.commercials.server.routes.stationAdminRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
@@ -44,6 +45,9 @@ fun Application.configureRouting() {
             adminRoutes(authDb)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })
             stationAdminRoutes(registry, authDb)
+
+            // Customer schedule emails (staff only)
+            emailRoutes(registry)
 
             // Report routes
             reportRoutes()

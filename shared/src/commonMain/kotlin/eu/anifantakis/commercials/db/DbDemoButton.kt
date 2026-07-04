@@ -24,26 +24,26 @@ fun DbDemoButton(modifier: Modifier = Modifier) {
     var result by remember { mutableStateOf<DbUser?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    Button(
-        modifier = modifier,
-        onClick = {
-            loading = true
-            error = null
-            result = null
-            showDialog = true
-            scope.launch {
-                try {
-                    result = dbApi.fetchDbUser()
-                } catch (t: Throwable) {
-                    error = t.message ?: t::class.simpleName ?: "Unknown error"
-                } finally {
-                    loading = false
-                }
-            }
-        }
-    ) {
-        Text("Get Data")
-    }
+//    Button(
+//        modifier = modifier,
+//        onClick = {
+//            loading = true
+//            error = null
+//            result = null
+//            showDialog = true
+//            scope.launch {
+//                try {
+//                    result = dbApi.fetchDbUser()
+//                } catch (t: Throwable) {
+//                    error = t.message ?: t::class.simpleName ?: "Unknown error"
+//                } finally {
+//                    loading = false
+//                }
+//            }
+//        }
+//    ) {
+//        Text("Get Data")
+//    }
 
     if (showDialog) {
         AlertDialog(

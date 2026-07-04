@@ -34,6 +34,11 @@ import java.time.LocalDate
  */
 class StationDb(private val station: StationConfig, maxPoolSize: Int) {
 
+    private companion object {
+        /** Full email bodies kept per customer; older bodies are evicted (summaries stay). */
+        const val EMAIL_BODY_RETENTION_PER_CUSTOMER = 10
+    }
+
     private val dataSource = HikariDataSource(
         HikariConfig().apply {
             jdbcUrl = station.jdbcUrl
@@ -197,6 +202,32 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         show_date DATE PRIMARY KEY,
                         comments TEXT NOT NULL,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
+                // ≙ legacy `emailhistory`: the audit archive of customer
+                // schedule emails. Summary rows are kept forever; the full
+                // HTML body is capped per customer (see logEmail) so the
+                // archive can't balloon like the legacy 1.2 GB email store.
+                s.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS email_log (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        customer_code VARCHAR(32) NOT NULL,
+                        customer_name VARCHAR(128) NOT NULL,
+                        recipient VARCHAR(255) NOT NULL,
+                        subject VARCHAR(255) NOT NULL,
+                        period_year INT NOT NULL,
+                        period_month INT NOT NULL,
+                        spot_count INT NOT NULL DEFAULT 0,
+                        transmission_count INT NOT NULL DEFAULT 0,
+                        body_html LONGTEXT NULL,
+                        sent_by VARCHAR(64) NOT NULL,
+                        sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        status VARCHAR(16) NOT NULL,
+                        error VARCHAR(512) NULL,
+                        KEY idx_email_log_customer (customer_code, period_year, period_month),
+                        KEY idx_email_log_sent (sent_at)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -430,6 +461,271 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             }
         }
 
+    // ───────────────────────────────────────────────── email audit log ──
+
+    data class EmailLogEntry(
+        val customerCode: String,
+        val customerName: String,
+        val recipient: String,
+        val subject: String,
+        val year: Int,
+        val month: Int,
+        val spotCount: Int,
+        val transmissionCount: Int,
+        val bodyHtml: String?,
+        val sentBy: String,
+        val status: String,      // SENT | FAILED
+        val error: String? = null,
+    )
+
+    data class EmailLogRow(
+        val id: Long,
+        val customerCode: String,
+        val customerName: String,
+        val recipient: String,
+        val subject: String,
+        val year: Int,
+        val month: Int,
+        val spotCount: Int,
+        val transmissionCount: Int,
+        val sentBy: String,
+        val sentAt: String,
+        val status: String,
+        val error: String?,
+    )
+
+    /**
+     * Records one send attempt (success or failure) in the audit archive.
+     * Metadata (who/what/when) is kept forever; the heavy HTML BODY is capped
+     * at [EMAIL_BODY_RETENTION_PER_CUSTOMER] per customer - archiving a new
+     * body evicts the oldest body over that limit (its summary row survives),
+     * so the archive can't grow unbounded the way the legacy `emailhistory`
+     * did (1.2 GB of retained bodies).
+     */
+    fun logEmail(entry: EmailLogEntry): Long =
+        connection().use { c ->
+            val id = c.prepareStatement(
+                """
+                INSERT INTO email_log(customer_code, customer_name, recipient, subject,
+                    period_year, period_month, spot_count, transmission_count, body_html,
+                    sent_by, status, error)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                """.trimIndent(),
+                java.sql.Statement.RETURN_GENERATED_KEYS
+            ).use { ps ->
+                ps.setString(1, entry.customerCode)
+                ps.setString(2, entry.customerName)
+                ps.setString(3, entry.recipient)
+                ps.setString(4, entry.subject)
+                ps.setInt(5, entry.year)
+                ps.setInt(6, entry.month)
+                ps.setInt(7, entry.spotCount)
+                ps.setInt(8, entry.transmissionCount)
+                if (entry.bodyHtml != null) ps.setString(9, entry.bodyHtml) else ps.setNull(9, java.sql.Types.LONGVARCHAR)
+                ps.setString(10, entry.sentBy)
+                ps.setString(11, entry.status)
+                if (entry.error != null) ps.setString(12, entry.error.take(512)) else ps.setNull(12, java.sql.Types.VARCHAR)
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
+            }
+            // Only SENT rows carry a body; evict the oldest bodies beyond the cap.
+            if (entry.bodyHtml != null) pruneEmailBodies(c, entry.customerCode)
+            id
+        }
+
+    /**
+     * Nulls the body_html of all but the newest [EMAIL_BODY_RETENTION_PER_CUSTOMER]
+     * bodied rows for a customer. The double-nested subquery is required: MySQL
+     * cannot target the same table it selects from in an UPDATE unless the
+     * selection is wrapped in a derived table.
+     */
+    private fun pruneEmailBodies(c: Connection, customerCode: String) {
+        c.prepareStatement(
+            """
+            UPDATE email_log SET body_html = NULL
+            WHERE customer_code = ? AND body_html IS NOT NULL AND id NOT IN (
+                SELECT id FROM (
+                    SELECT id FROM email_log
+                    WHERE customer_code = ? AND body_html IS NOT NULL
+                    ORDER BY sent_at DESC, id DESC
+                    LIMIT $EMAIL_BODY_RETENTION_PER_CUSTOMER
+                ) keep
+            )
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, customerCode)
+            ps.setString(2, customerCode)
+            ps.executeUpdate()
+        }
+    }
+
+    /** Recent send history (metadata only), newest first; optionally one customer. */
+    fun recentEmailLog(limit: Int, clientCode: String? = null): List<EmailLogRow> =
+        connection().use { c ->
+            val sql = buildString {
+                append("SELECT id, customer_code, customer_name, recipient, subject, period_year, period_month, ")
+                append("spot_count, transmission_count, sent_by, sent_at, status, error FROM email_log ")
+                if (clientCode != null) append("WHERE customer_code = ? ")
+                append("ORDER BY sent_at DESC, id DESC LIMIT ?")
+            }
+            c.prepareStatement(sql).use { ps ->
+                var i = 1
+                if (clientCode != null) ps.setString(i++, clientCode)
+                ps.setInt(i, limit.coerceIn(1, 500))
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            EmailLogRow(
+                                id = rs.getLong("id"),
+                                customerCode = rs.getString("customer_code"),
+                                customerName = rs.getString("customer_name"),
+                                recipient = rs.getString("recipient"),
+                                subject = rs.getString("subject"),
+                                year = rs.getInt("period_year"),
+                                month = rs.getInt("period_month"),
+                                spotCount = rs.getInt("spot_count"),
+                                transmissionCount = rs.getInt("transmission_count"),
+                                sentBy = rs.getString("sent_by"),
+                                sentAt = rs.getString("sent_at"),
+                                status = rs.getString("status"),
+                                error = rs.getString("error"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    /** The stored HTML body of a logged send (re-view exactly as delivered). */
+    fun emailLogBody(id: Long): String? =
+        connection().use { c ->
+            c.prepareStatement("SELECT body_html FROM email_log WHERE id = ?").use { ps ->
+                ps.setLong(1, id)
+                ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
+            }
+        }
+
+    data class CustomerContact(val name: String, val email: String?)
+
+    data class PartyRow(
+        val code: String,
+        val name: String,
+        val email: String?,
+        val spotCount: Int,
+        val placementCount: Int,
+    )
+
+    /**
+     * Substring search (`%query%`, case-insensitive via the ci collation)
+     * over ALL parties that ever aired anything, busiest first with
+     * all-time counts. Not month-scoped: the operator finds the party
+     * first, then picks a year/month from [partyActivity].
+     *
+     * [byTrader] false searches CUSTOMERS - the party whose spot airs
+     * (legacy `cusID`); true searches TRADERS - the party paying the
+     * contract (legacy `traid`). Usually the same company, but in
+     * "triangular" deals an agency holds the contract for another company's
+     * spots, so the two sets differ. Both live in `customers`; the
+     * distinction is the join path.
+     */
+    fun searchParties(
+        query: String,
+        byTrader: Boolean,
+        limit: Int = 25,
+    ): List<PartyRow> =
+        connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT cu.code, cu.name, cu.email,
+                       COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placement_count
+                FROM customers cu
+                ${partyJoin(byTrader)}
+                JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                WHERE (cu.name LIKE ? OR cu.code LIKE ?)
+                GROUP BY cu.id, cu.code, cu.name, cu.email
+                ORDER BY placement_count DESC, cu.name
+                LIMIT ?
+                """.trimIndent()
+            ).use { ps ->
+                val pattern = likeContains(query)
+                ps.setString(1, pattern)
+                ps.setString(2, pattern)
+                ps.setInt(3, limit.coerceIn(1, 100))
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            PartyRow(
+                                code = rs.getString("code"),
+                                name = rs.getString("name"),
+                                email = rs.getString("email")?.ifBlank { null },
+                                spotCount = rs.getInt("spot_count"),
+                                placementCount = rs.getInt("placement_count"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    data class ActivityMonth(val year: Int, val month: Int, val placements: Int)
+
+    /**
+     * The months in which a party has airings, newest first with counts -
+     * feeds the year/month drill-down after the party is picked.
+     */
+    fun partyActivity(code: String, byTrader: Boolean): List<ActivityMonth> =
+        connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT YEAR(p.show_date) AS y, MONTH(p.show_date) AS m, COUNT(*) AS cnt
+                FROM customers cu
+                ${partyJoin(byTrader)}
+                JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                WHERE cu.code = ?
+                GROUP BY y, m
+                ORDER BY y DESC, m DESC
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, code)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(ActivityMonth(rs.getInt("y"), rs.getInt("m"), rs.getInt("cnt")))
+                    }
+                }
+            }
+        }
+
+    /** The `customers cu` -> `spots s` join path for the two party kinds. */
+    private fun partyJoin(byTrader: Boolean): String =
+        if (byTrader)
+            """
+            JOIN contracts ct       ON ct.customer_id = cu.id
+            JOIN contract_lines cl  ON cl.contract_id = ct.id
+            JOIN spots s            ON s.contract_line_id = cl.id AND s.hidden = FALSE
+            """.trimIndent()
+        else
+            "JOIN spots s ON s.customer_id = cu.id AND s.hidden = FALSE"
+
+    /** `%query%` with LIKE wildcards neutralized (MySQL's default escape is `\`). */
+    private fun likeContains(query: String): String {
+        val escaped = query.trim()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        return "%$escaped%"
+    }
+
+    /** Customer lookup for the schedule email (default recipient + salutation). */
+    fun customerByCode(code: String): CustomerContact? =
+        connection().use { c ->
+            c.prepareStatement("SELECT name, email FROM customers WHERE code = ?").use { ps ->
+                ps.setString(1, code)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) CustomerContact(rs.getString(1), rs.getString(2)?.ifBlank { null }) else null
+                }
+            }
+        }
+
     fun loadBreaks(): List<BreakSlotRow> =
         connection().use { c ->
             c.prepareStatement(
@@ -487,16 +783,18 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT p.id, p.break_id, p.show_date, p.position, p.duration_seconds,
+                SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
                        s.description, s.spot_type, s.flow,
                        cu.code AS client_code, cu.name AS client_name,
                        ct.number AS contract_number, ct.is_gift,
-                       pr.color_argb AS program_color
+                       pay.code AS payer_code, pay.name AS payer_name,
+                       pr.color_argb AS program_color, pr.name AS program_name
                 FROM placements p
                 JOIN spots s      ON s.id = p.spot_id
                 JOIN customers cu ON cu.id = s.customer_id
                 LEFT JOIN contract_lines cl ON cl.id = s.contract_line_id
                 LEFT JOIN contracts ct      ON ct.id = cl.contract_id
+                LEFT JOIN customers pay     ON pay.id = ct.customer_id
                 LEFT JOIN programs pr       ON pr.id = p.program_id
                 WHERE p.show_date >= ? AND p.show_date < ?
                   AND p.hidden = FALSE AND s.hidden = FALSE
@@ -516,6 +814,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         val list = commercialsByKey.getOrPut(breakId to date) { mutableListOf() }
                         list += CommercialRow(
                             id = rs.getLong("id"),
+                            spotId = rs.getLong("spot_id"),
                             position = rs.getInt("position"),
                             clientCode = rs.getString("client_code"),
                             clientName = rs.getString("client_name"),
@@ -523,7 +822,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                             durationSeconds = rs.getInt("duration_seconds"),
                             type = rs.getString("spot_type"),
                             contract = if (isGift) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
-                            flow = rs.getString("flow")
+                            flow = rs.getString("flow"),
+                            programName = rs.getString("program_name"),
+                            programColorArgb = programColor,
+                            payerCode = rs.getString("payer_code"),
+                            payerName = rs.getString("payer_name"),
                         )
                     }
                 }

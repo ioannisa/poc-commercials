@@ -50,6 +50,24 @@ data class StationConfig(
     val username: String,
     val password: String,
     val maxPoolSize: Int? = null,
+    /** Overrides the file-wide smtp block for this station's customer emails. */
+    val smtp: SmtpConfig? = null,
+)
+
+/**
+ * SMTP settings for customer schedule emails (≙ legacy `emailsetup`).
+ * Optional: without one, email endpoints answer with a clear 400. A station
+ * block overrides the file-wide default (each station traditionally sent
+ * from its own address, e.g. dmaria@cretetv.gr).
+ */
+@Serializable
+data class SmtpConfig(
+    val host: String,
+    val port: Int = 587,
+    val username: String? = null,
+    val password: String? = null,
+    val from: String,
+    val startTls: Boolean = true,
 )
 
 /**
@@ -87,6 +105,8 @@ data class HostingConfig(
     val superAdmin: SuperAdminConfig? = null,
     val stations: List<StationConfig> = emptyList(),
     val maxPoolSize: Int? = null,
+    /** File-wide SMTP default for customer emails (stations may override). */
+    val smtp: SmtpConfig? = null,
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -177,6 +197,9 @@ class StationRegistry(@Provided hosting: HostingConfig) {
     // (unlike additions, which come from stations.yaml at boot).
     private val configs = java.util.concurrent.CopyOnWriteArrayList(hosting.stations)
     private val globalMaxPool: Int? = hosting.maxPoolSize
+
+    /** File-wide SMTP default for customer emails (station blocks override). */
+    val defaultSmtp: SmtpConfig? = hosting.smtp
 
     private val pools = ConcurrentHashMap<String, StationDb>()
 

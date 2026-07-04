@@ -36,6 +36,18 @@
 # rotate by editing the password here and restarting (old sessions revoked).
 # This account manages users/grants and gets implicit access to every station.
 #
+# smtp (OPTIONAL): outgoing mail for customer schedule emails. File-wide
+# default here; any station block may carry its own `smtp:` to send from its
+# own address (the legacy behaviour). Without one, email endpoints refuse
+# with a clear message. Example:
+#
+#   smtp:
+#     host: smtp.example.gr
+#     port: 587
+#     username: mailer@example.gr
+#     password: app-password
+#     from: station@example.gr
+#
 # Path override: -Dstations.config=<path> or POC_STATIONS env var.
 superAdmin:
   username: su
@@ -70,4 +82,3 @@ stations:
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_migrated?useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123
-

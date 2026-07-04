@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.admin.AdminApi
 import eu.anifantakis.commercials.auth.AuthApi
+import eu.anifantakis.commercials.email.ScheduleEmailApi
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
 import eu.anifantakis.commercials.auth.AuthSession
@@ -30,6 +31,7 @@ val appModule = module {
 
     single<AuthSession>()
     single<UserPreferences>()
+    single<ScheduleEmailApi>()
     single<AuthApi>()
     single<AdminApi>()
     single<MigrationApi>()

@@ -46,6 +46,9 @@ dependencies {
     // auth persistence) - brings the MySQL driver at runtime
     implementation(project(":persistence"))
 
+    // Customer schedule emails (HTML renderer + SMTP sender)
+    implementation(project(":mailer"))
+
     // Logging
     implementation(libs.logback.classic)
 

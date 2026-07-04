@@ -30,6 +30,7 @@ hikaricp = "6.3.0"
 kaml = "0.104.0"
 
 jasperreports = "7.0.7"
+javafx = "21.0.6"
 
 nav3Core = "1.1.4"
 jetbrainsNav3 = "1.1.1"
@@ -70,6 +71,7 @@ koin-annotations = { module = "io.insert-koin:koin-annotations", version.ref = "
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 koin-logger-slf4j = { module = "io.insert-koin:koin-logger-slf4j", version.ref = "koin" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version = "2.0.16" }
+angus-mail = { module = "org.eclipse.angus:angus-mail", version = "2.0.3" }
 
 # Google Fonts
 androidx-ui-text-google-fonts = { module = "androidx.compose.ui:ui-text-google-fonts", version.ref = "googleFonts" }

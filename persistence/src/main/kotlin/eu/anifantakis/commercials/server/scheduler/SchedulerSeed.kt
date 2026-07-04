@@ -28,6 +28,8 @@ data class CellRow(
 
 data class CommercialRow(
     val id: Long,
+    /** The spot (creative) this placement airs - customer emails are per spot. */
+    val spotId: Long,
     val position: Int,
     val clientCode: String,
     val clientName: String,
@@ -35,7 +37,17 @@ data class CommercialRow(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
-    val flow: String
+    val flow: String,
+    /** Programme identity (name + operator colour), when the placement has one. */
+    val programName: String? = null,
+    val programColorArgb: Int? = null,
+    /**
+     * The contract's paying party (legacy `traid` - usually the customer
+     * itself, but an agency in "triangular" deals). Null when the spot has no
+     * contract line.
+     */
+    val payerCode: String? = null,
+    val payerName: String? = null,
 )
 
 // ARGB ints matching Compose Color hex values in shared/.../data/SampleData.kt.
