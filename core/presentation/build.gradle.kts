@@ -15,3 +15,12 @@ kotlin {
         }
     }
 }
+
+kotlin {
+    sourceSets {
+        jvmMain.dependencies {
+            // The native FileDialog is shown on the AWT event thread
+            implementation(libs.kotlinx.coroutinesSwing)
+        }
+    }
+}

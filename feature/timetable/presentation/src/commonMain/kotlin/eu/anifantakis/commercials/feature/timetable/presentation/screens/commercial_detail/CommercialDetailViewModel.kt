@@ -10,8 +10,8 @@ import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
-import eu.anifantakis.commercials.grids.CommercialItem
-import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.SharingStarted

@@ -28,7 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.grids.*
+import eu.anifantakis.commercials.core.presentation.grids.*
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportConfig

@@ -46,8 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.ui.files.nativeFilePickerAvailable
-import eu.anifantakis.commercials.ui.files.pickFileNative
+import eu.anifantakis.commercials.core.presentation.files.nativeFilePickerAvailable
+import eu.anifantakis.commercials.core.presentation.files.pickFileNative
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 

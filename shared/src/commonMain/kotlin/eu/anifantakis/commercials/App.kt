@@ -13,7 +13,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import eu.anifantakis.commercials.navigation.NavigationRoot
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
-import eu.anifantakis.commercials.ui.theme.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import org.koin.compose.koinInject
 
 @Composable

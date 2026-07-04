@@ -10,7 +10,7 @@ kotlin {
 
             // Core-role UI modules (user decision): the scheduler grid
             // engine and the report toolbar/printing service.
-            api(projects.grids)
+            api(projects.core.presentation.grids)
             implementation(projects.reportsClient)
         }
     }

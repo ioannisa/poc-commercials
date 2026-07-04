@@ -7,7 +7,6 @@ kotlin {
         commonMain.dependencies {
             api(projects.feature.migrationConsole.domain)
             api(projects.core.presentation)
-            implementation(projects.appearance)
         }
     }
 }

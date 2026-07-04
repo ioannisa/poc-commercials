@@ -105,9 +105,8 @@ kotlin {
             // Extracted feature modules. `api`: their types (BreakSlot,
             // SchedulerCellData, AppTheme, ...) appear in shared's own
             // composable signatures.
-            api(project(":grids"))
-            api(project(":appearance"))
-            api(project(":reports-client"))
+            api(projects.core.presentation.grids)
+            api(projects.reportsClient)
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)

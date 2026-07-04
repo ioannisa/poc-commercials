@@ -19,9 +19,9 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpo
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
-import eu.anifantakis.commercials.grids.BreakSlot
-import eu.anifantakis.commercials.grids.SchedulerCellData
-import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.invoke
 import kotlinx.collections.immutable.ImmutableList

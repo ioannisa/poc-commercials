@@ -20,7 +20,8 @@ build-logic/                    convention plugins (kmp.library / kmp.domain / k
 core/
   domain                        DataResult, DataError, RemoteError, AppRole, party search contract
   data                          AuthSession, authenticated Ktor client, KSafe, AppConfig, party search impl
-  presentation                  MVI helpers, global state container, Navigator, ApplicationScaffold
+  presentation                  MVI helpers, global state, Navigator, ApplicationScaffold, theme, file pickers
+    grids                       nested pure-UI toolkit: the scheduler grid (LazySchedulerGrid, keyboard nav)
 feature/
   auth/                         login, change-password + recovery-codes dialogs
   timetable/                    scheduler grid + Εύρεση finder + break-detail console
@@ -29,17 +30,19 @@ feature/
   user-management/              super admin: accounts, grants, password resets
   migration-console/            super admin: legacy mysqldump → hosted station
   databases/                    super admin: hosted schemas, safe/hard delete
-grids/ reports-client/ appearance/   core-role UI modules (scheduler grid, printing, theme/file pickers)
 shared/                         the app layer: App, NavigationRoot, Koin assembly (iOS framework "Shared")
 androidApp/ desktopApp/ webApp/ iosApp/   entry points
-server/ persistence/ migration/ mailer/ reportcore/   Ktor backend + MySQL + legacy import + SMTP
+reports-client/                 client printing service — cross-layer (UI + network + engine), so root, not :core
+server/ persistence/ migration/ mailer/   backend (Ktor + MySQL + legacy import + SMTP) — outside the client tree
+reportcore/                     shared client+server report engine (jvm renders on server, js/wasm in browser)
 ```
 
 Navigation is Navigation3: each feature declares `@Serializable <Feature>NavType`
 routes and an `<feature>Entries(...)` provider in its `Navigation<Feature>.kt`;
 `shared/navigation/NavigationRoot.kt` assembles them around a `Navigator` and
 wires cross-feature transitions as callbacks. DI is classic Koin DSL, one
-module per feature (`shared/di/AppModule.kt`), guarded by `KoinGraphTest`.
+module file per feature under `shared/.../di/` assembled by `initKoin`, guarded
+by `KoinGraphTest`.
 
 ## Running
 

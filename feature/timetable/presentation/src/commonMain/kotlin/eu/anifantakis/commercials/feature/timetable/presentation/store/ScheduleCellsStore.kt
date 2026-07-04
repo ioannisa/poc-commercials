@@ -3,8 +3,8 @@ package eu.anifantakis.commercials.feature.timetable.presentation.store
 import androidx.compose.runtime.Immutable
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
-import eu.anifantakis.commercials.grids.SchedulerCellData
-import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentMapOf

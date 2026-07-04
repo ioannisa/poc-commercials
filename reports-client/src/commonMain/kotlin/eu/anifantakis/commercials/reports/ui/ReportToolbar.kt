@@ -10,9 +10,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.grids.BreakSlot
-import eu.anifantakis.commercials.grids.SchedulerCellData
-import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import eu.anifantakis.commercials.reports.ReportDataFactory
