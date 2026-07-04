@@ -21,7 +21,9 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import eu.anifantakis.commercials.auth.AuthSession
 import eu.anifantakis.commercials.data.SampleData
 import eu.anifantakis.commercials.grids.*
+import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
@@ -106,6 +109,10 @@ fun TimetableScreen(
         "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος",
         "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"
     )
+
+    // Cells show spot COUNT or summed spot TIME (legacy "spots count /
+    // spots times" popup option) - persisted in KSafe via UserPreferences.
+    val prefs = koinInject<UserPreferences>()
 
     // Report printing from popup menus (day header, break header, cell)
     val reportScope = rememberCoroutineScope()
@@ -185,6 +192,7 @@ fun TimetableScreen(
             modifiedCells = modifiedCells.toImmutableSet(),
             year = year,
             month = month,
+            showTimes = prefs.showSpotTimes,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(8.dp),
@@ -297,6 +305,22 @@ fun TimetableScreen(
                         enabled = spotCount > 0
                     ) {
                         printBreak(breakSlot, date)
+                    })
+
+                    // Legacy popup option: cells show spot counts or the
+                    // summed spot times (05:42 for 342s). Persisted.
+                    add(ContextMenuEntry.Separator)
+                    add(ContextMenuEntry.Item(
+                        label = if (prefs.showSpotTimes) "Show Spot Counts" else "Show Spot Times",
+                        icon = {
+                            Icon(
+                                if (prefs.showSpotTimes) Icons.Default.Numbers else Icons.Default.Timer,
+                                null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    ) {
+                        prefs.showSpotTimes = !prefs.showSpotTimes
                     })
 
                     // Editing actions - Normal User only; viewer roles get a
@@ -563,6 +587,16 @@ private fun KeyboardEnabledHeader(
                         text = "Click grid to focus, then use keyboard",
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Cells: spot count <-> summed spot time (persisted; the
+                // icon shows the mode you'll switch TO)
+                val prefs = koinInject<UserPreferences>()
+                IconButton(onClick = { prefs.showSpotTimes = !prefs.showSpotTimes }) {
+                    Icon(
+                        if (prefs.showSpotTimes) Icons.Default.Numbers else Icons.Default.Timer,
+                        contentDescription = if (prefs.showSpotTimes) "Show spot counts" else "Show spot times"
                     )
                 }
 

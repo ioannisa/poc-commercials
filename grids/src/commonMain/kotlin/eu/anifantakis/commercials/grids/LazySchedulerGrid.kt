@@ -69,6 +69,12 @@ fun LazySchedulerGrid(
     year: Int,
     month: Int,
     modifier: Modifier = Modifier,
+    /**
+     * Cells show the summed spot TIME as MM:SS instead of the spot count
+     * (the legacy app's "spots count / spots times" popup option). The
+     * totals row always shows counts, like the original.
+     */
+    showTimes: Boolean = false,
     breakColumnWidth: Dp = 70.dp,
     dayColumnWidth: Dp = 42.dp,
     rowHeight: Dp = 28.dp,
@@ -379,6 +385,7 @@ fun LazySchedulerGrid(
                                     data = data,
                                     dateWrapper = StableDate(date),
                                     width = dayColumnWidth,
+                                    showTimes = showTimes,
                                     isModified = isModified,
                                     isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
                                     onSelect = { updateSelection(rowIndex, colIndex) },
@@ -559,6 +566,7 @@ private fun GridCell(
     data: SchedulerCellData?,
     dateWrapper: StableDate,
     width: Dp,
+    showTimes: Boolean,
     isModified: Boolean,
     isSelected: Boolean,
     onSelect: () -> Unit,
@@ -663,10 +671,14 @@ private fun GridCell(
     ) {
         if (spotCount > 0) {
             Text(
-                text = spotCount.toString(),
+                // "spots times" mode: the cell's summed durations as MM:SS
+                // (10 spots x 342s total -> 05:42), like the legacy app
+                text = if (showTimes && data != null) data.formattedDuration else spotCount.toString(),
                 fontSize = 10.sp,
                 fontWeight = if (isSelected || isModified) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
                 color = textColor
             )
         }
