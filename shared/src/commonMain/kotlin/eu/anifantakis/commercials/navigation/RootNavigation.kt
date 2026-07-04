@@ -19,16 +19,18 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
-import eu.anifantakis.commercials.admin.DatabasesScreen
-import eu.anifantakis.commercials.admin.MigrationScreen
-import eu.anifantakis.commercials.admin.UserManagementScreen
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.feature.databases.presentation.databases.DatabasesScreenRoot
+import eu.anifantakis.commercials.feature.migration_console.presentation.migration.MigrationScreenRoot
+import eu.anifantakis.commercials.feature.user_management.presentation.user_management.UserManagementScreenRoot
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.presentation.account_dialogs.ChangePasswordDialogRoot
+import eu.anifantakis.commercials.feature.auth.presentation.account_dialogs.RecoveryCodesDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.login.LoginScreenRoot
+import eu.anifantakis.commercials.feature.preferences.presentation.preferences.PreferencesScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.commercial_detail.CommercialDetailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.timetable.TimetableScreenRoot
-import eu.anifantakis.commercials.prefs.UserPreferences
-import eu.anifantakis.commercials.screens.PreferencesScreen
+import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.feature.schedule_email.presentation.send_dialog.SendScheduleEmailDialogRoot
 import kotlinx.coroutines.launch
 import kotlinx.serialization.modules.SerializersModule
@@ -80,6 +82,17 @@ fun RootNavigation() {
     var showEmailDialog by remember { mutableStateOf(false) }
     if (showEmailDialog) {
         SendScheduleEmailDialogRoot(onDismiss = { showEmailDialog = false })
+    }
+
+    // Account dialogs belong to :feature:auth; preferences only emits the
+    // callbacks, the app layer renders them.
+    var showChangePassword by remember { mutableStateOf(false) }
+    if (showChangePassword) {
+        ChangePasswordDialogRoot(onDismiss = { showChangePassword = false })
+    }
+    var showRecoveryCodes by remember { mutableStateOf(false) }
+    if (showRecoveryCodes) {
+        RecoveryCodesDialogRoot(onDismiss = { showRecoveryCodes = false })
     }
 
     NavDisplay(
@@ -137,8 +150,11 @@ fun RootNavigation() {
             }
 
             entry<CommercialNavRoute.Preferences> {
-                PreferencesScreen(
+                PreferencesScreenRoot(
+                    isAdmin = authSession.isAdmin,
                     onBack = { backStack.removeLastOrNull() },
+                    onChangePassword = { showChangePassword = true },
+                    onRecoveryCodes = { showRecoveryCodes = true },
                     onManageUsers = { backStack.add(CommercialNavRoute.UserManagement) },
                     onMigration = { backStack.add(CommercialNavRoute.Migration) },
                     onDatabases = { backStack.add(CommercialNavRoute.Databases) }
@@ -146,19 +162,21 @@ fun RootNavigation() {
             }
 
             entry<CommercialNavRoute.UserManagement> {
-                UserManagementScreen(
+                UserManagementScreenRoot(
+                    // the super admin sees every hosted station in their session
+                    stationChoices = authSession.stations.map { it.id to it.name },
                     onBack = { backStack.removeLastOrNull() }
                 )
             }
 
             entry<CommercialNavRoute.Migration> {
-                MigrationScreen(
+                MigrationScreenRoot(
                     onBack = { backStack.removeLastOrNull() }
                 )
             }
 
             entry<CommercialNavRoute.Databases> {
-                DatabasesScreen(
+                DatabasesScreenRoot(
                     onBack = { backStack.removeLastOrNull() }
                 )
             }

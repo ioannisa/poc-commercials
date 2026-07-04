@@ -9,19 +9,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.core.domain.auth.AppRole
-import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.db.DbDemoButton
 import androidx.compose.foundation.isSystemInDarkTheme
 import eu.anifantakis.commercials.navigation.RootNavigation
-import eu.anifantakis.commercials.prefs.ThemePreference
-import eu.anifantakis.commercials.prefs.UserPreferences
+import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
+import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.ui.theme.AppTheme
 import org.koin.compose.koinInject
 
 @Composable
 fun App() {
-    val authSession = koinInject<AuthSession>()
 
     val prefs = koinInject<UserPreferences>()
 
@@ -43,16 +39,6 @@ fun App() {
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     RootNavigation()
-
-                    // DB smoke test - admin-only on the server too
-                    @Suppress("UNUSED_EXPRESSION") authSession.revision  // recompose on login/logout
-                    if (authSession.isLoggedIn && authSession.role == AppRole.NORMAL_USER) {
-                        DbDemoButton(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp)
-                        )
-                    }
                 }
             }
         }

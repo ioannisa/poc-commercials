@@ -59,7 +59,7 @@ kotlin {
             // Grid models are the factory's input; session/config drive the
             // web client - both appear in public signatures.
             api(project(":grids"))
-            api(project(":client-core"))
+            api(projects.core.data)
 
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.compose)

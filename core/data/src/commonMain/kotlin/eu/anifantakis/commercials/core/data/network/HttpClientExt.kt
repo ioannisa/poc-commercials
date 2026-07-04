@@ -2,9 +2,11 @@ package eu.anifantakis.commercials.core.data.network
 
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.core.domain.util.RemoteError
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
@@ -62,6 +64,37 @@ fun statusToNetworkError(code: Int): DataError.Network = when (code) {
     503 -> DataError.Network.SERVICE_UNAVAILABLE
     504 -> DataError.Network.GATEWAY_TIMEOUT
     else -> DataError.Network.SERVER_ERROR
+}
+
+/**
+ * Like [dataCall], but server rejections keep their authoritative
+ * {"error": ...} message as [RemoteError.Server].
+ */
+suspend inline fun <T> remoteCall(block: () -> T): DataResult<T, RemoteError> = try {
+    DataResult.Success(block())
+} catch (e: SessionExpiredException) {
+    DataResult.Failure(RemoteError.Transport(DataError.Network.UNAUTHORIZED))
+} catch (e: ResponseException) {
+    DataResult.Failure(RemoteError.Server(e.response.serverErrorMessage()))
+} catch (e: SerializationException) {
+    DataResult.Failure(RemoteError.Transport(DataError.Network.SERIALIZATION))
+} catch (e: IOException) {
+    DataResult.Failure(RemoteError.Transport(DataError.Network.NO_INTERNET))
+} catch (e: Exception) {
+    if (e is CancellationException) throw e
+    DataResult.Failure(RemoteError.Transport(DataError.Network.UNKNOWN))
+}
+
+/** Best-effort extraction of the server's {"error": "..."} body. */
+suspend fun HttpResponse.serverErrorMessage(): String {
+    val body = try {
+        bodyAsText()
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        ""
+    }
+    val fromJson = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+    return fromJson ?: "Server error $status"
 }
 
 /**

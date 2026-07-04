@@ -4,7 +4,9 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
-import eu.anifantakis.commercials.db.DbApi
+import eu.anifantakis.commercials.feature.databases.domain.DatabasesRepository
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
+import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import eu.anifantakis.commercials.reports.ReportService
 import org.koin.dsl.koinApplication
 import kotlin.test.Test
@@ -28,7 +30,9 @@ class KoinGraphTest {
         assertNotNull(koin.get<AuthRepository>())
         assertNotNull(koin.get<ScheduleRepository>())
         assertNotNull(koin.get<PlacementsRepository>())
-        assertNotNull(koin.get<DbApi>())
+        assertNotNull(koin.get<UserManagementRepository>())
+        assertNotNull(koin.get<MigrationRepository>())
+        assertNotNull(koin.get<DatabasesRepository>())
         assertNotNull(koin.get<ReportService>())
 
         app.close()

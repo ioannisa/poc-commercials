@@ -73,15 +73,25 @@ kotlin {
             api(projects.feature.scheduleEmail.domain)
             api(projects.feature.scheduleEmail.data)
             api(projects.feature.scheduleEmail.presentation)
+            api(projects.feature.preferences.domain)
+            api(projects.feature.preferences.data)
+            api(projects.feature.preferences.presentation)
+            api(projects.feature.databases.domain)
+            api(projects.feature.databases.data)
+            api(projects.feature.databases.presentation)
+            api(projects.feature.userManagement.domain)
+            api(projects.feature.userManagement.data)
+            api(projects.feature.userManagement.presentation)
+            api(projects.feature.migrationConsole.domain)
+            api(projects.feature.migrationConsole.data)
+            api(projects.feature.migrationConsole.presentation)
 
             // Extracted feature modules. `api`: their types (BreakSlot,
             // SchedulerCellData, AppTheme, ...) appear in shared's own
             // composable signatures.
             api(project(":grids"))
             api(project(":appearance"))
-            api(project(":client-core"))
             api(project(":reports-client"))
-            api(project(":admin"))
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
