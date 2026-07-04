@@ -22,7 +22,7 @@ class KoinGraphTest {
     @Test
     fun fullGraphResolves() {
         val app = koinApplication {
-            modules(appModule, platformModule)
+            modules(allModules)
         }
         val koin = app.koin
 

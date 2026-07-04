@@ -28,6 +28,8 @@ kotlin {
             implementation(catalog.findLibrary("kotlinx-datetime").get())
             implementation(catalog.findLibrary("kotlinx-serialization-json").get())
             api(catalog.findLibrary("koin-core").get())
+            api(catalog.findLibrary("jetbrains-navigation3-ui").get())
+            api(catalog.findLibrary("jetbrains-lifecycle-viewmodel-navigation3").get())
             implementation(catalog.findLibrary("koin-compose").get())
             implementation(catalog.findLibrary("koin-compose-viewmodel").get())
         }

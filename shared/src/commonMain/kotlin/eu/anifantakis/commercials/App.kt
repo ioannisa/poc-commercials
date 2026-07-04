@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
-import eu.anifantakis.commercials.navigation.RootNavigation
+import eu.anifantakis.commercials.navigation.NavigationRoot
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.ui.theme.AppTheme
@@ -38,7 +38,7 @@ fun App() {
                     .safeContentPadding()
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    RootNavigation()
+                    NavigationRoot()
                 }
             }
         }

@@ -1,76 +1,65 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web, Desktop (JVM).
+# Commercials Manager (POC)
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+Kotlin/Compose Multiplatform re-implementation of a legacy Windows TV/radio
+ad-scheduling application. Targets: **Android, iOS, Desktop (JVM), Web (JS +
+Wasm)**, plus a **Ktor server** in front of per-station MySQL schemas.
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+## Architecture
 
-### Build and Run Android Application
+Feature-first Clean Architecture per the `kmp-developer` skill: every feature
+is three Gradle modules (`presentation → domain ← data`), dependencies are
+unidirectional and Gradle-enforced, features **never** depend on each other —
+anything shared by two features lives in `:core:*`. Screens follow MVI
+(`State` / `Intent` / `Effect`) with a public `<Name>ScreenRoot` and a private
+`<Name>Screen`; **every screen has its own ViewModel** — genuinely shared
+state gets a narrow store instead (e.g. `ScheduleCellsStore` between the grid
+and the break-detail console).
 
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
+```
+build-logic/                    convention plugins (kmp.library / kmp.domain / kmp.feature)
+core/
+  domain                        DataResult, DataError, RemoteError, AppRole, party search contract
+  data                          AuthSession, authenticated Ktor client, KSafe, AppConfig, party search impl
+  presentation                  MVI helpers, global state container, Navigator, ApplicationScaffold
+feature/
+  auth/                         login, change-password + recovery-codes dialogs
+  timetable/                    scheduler grid + Εύρεση finder + break-detail console
+  schedule-email/               ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ: activity drill-down, preview webview, send
+  preferences/                  theme + entry hub (KSafe-backed UserPreferences)
+  user-management/              super admin: accounts, grants, password resets
+  migration-console/            super admin: legacy mysqldump → hosted station
+  databases/                    super admin: hosted schemas, safe/hard delete
+grids/ reports-client/ appearance/   core-role UI modules (scheduler grid, printing, theme/file pickers)
+shared/                         the app layer: App, NavigationRoot, Koin assembly (iOS framework "Shared")
+androidApp/ desktopApp/ webApp/ iosApp/   entry points
+server/ persistence/ migration/ mailer/ reportcore/   Ktor backend + MySQL + legacy import + SMTP
+```
 
-### Build and Run Desktop (JVM) Application
+Navigation is Navigation3: each feature declares `@Serializable <Feature>NavType`
+routes and an `<feature>Entries(...)` provider in its `Navigation<Feature>.kt`;
+`shared/navigation/NavigationRoot.kt` assembles them around a `Navigator` and
+wires cross-feature transitions as callbacks. DI is classic Koin DSL, one
+module per feature (`shared/di/AppModule.kt`), guarded by `KoinGraphTest`.
 
-To build and run the development version of the desktop app, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:run
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:run
-  ```
+## Running
 
-### Build and Run Web Application
+```shell
+./gradlew :server:run                    # Ktor server (stations.yaml + MySQL)
+./gradlew :desktopApp:run                # Desktop client
+./gradlew :androidApp:assembleDebug      # Android APK
+./gradlew :webApp:wasmJsBrowserDistribution   # Web bundle
+```
 
-To build and run the development version of the web app, use the run configuration from the run widget
-in your IDE's toolbar or run it directly from the terminal:
-- for the Wasm target (faster, modern browsers):
-  - on macOS/Linux
-    ```shell
-    ./gradlew :composeApp:wasmJsBrowserDevelopmentRun
-    ```
-  - on Windows
-    ```shell
-    .\gradlew.bat :composeApp:wasmJsBrowserDevelopmentRun
-    ```
-- for the JS target (slower, supports older browsers):
-  - on macOS/Linux
-    ```shell
-    ./gradlew :composeApp:jsBrowserDevelopmentRun
-    ```
-  - on Windows
-    ```shell
-    .\gradlew.bat :composeApp:jsBrowserDevelopmentRun
-    ```
+iOS: open `/iosApp` in Xcode and run (the `Shared` framework comes from `:shared`).
 
-### Build and Run iOS Application
+## Conventions worth knowing
 
-To build and run the development version of the iOS app, use the run configuration from the run widget
-in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
-
----
-
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
-
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+- All remote calls return `DataResult<T, E>`; server error messages
+  (`{"error": ...}`) survive to the operator via `RemoteError.Server` /
+  feature-specific error types. `CancellationException` always rethrows.
+- Programme colours in the scheduler are **data** (operator-assigned in the
+  legacy app), never theme-adapted; text contrast is computed by luminance.
+- Mono-lingual Greek POC: UI strings are plain `String` (recorded deviation
+  from the skill's `StringKey` localization).
+- The Koin compiler plugin is intentionally NOT used (cross-module
+  definitions); `KoinGraphTest` guards the graph instead.
