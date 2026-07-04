@@ -237,9 +237,11 @@ fun TimetableScreen(
                     flow = ""
                 )
 
-                // Update cell data with +1 spot
+                // Update cell data with +1 spot (duration too - the cell
+                // may be displaying summed spot times instead of the count)
                 cellData[key] = currentData.copy(
                     spotCount = currentData.spotCount + 1,
+                    totalDurationSeconds = currentData.totalDurationSeconds + newCommercial.durationSeconds,
                     commercials = (currentData.commercials + newCommercial).toImmutableList()
                 )
 
@@ -351,6 +353,7 @@ fun TimetableScreen(
                                 )
                                 cellData[key] = currentData.copy(
                                     spotCount = currentData.spotCount + 1,
+                                    totalDurationSeconds = currentData.totalDurationSeconds + newCommercial.durationSeconds,
                                     commercials = (currentData.commercials + newCommercial).toImmutableList()
                                 )
                                 modifiedCells.add(key)
