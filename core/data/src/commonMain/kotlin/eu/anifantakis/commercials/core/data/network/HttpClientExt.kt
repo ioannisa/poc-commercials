@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.core.data.network
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.HttpResponse
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.CancellationException
@@ -37,26 +38,49 @@ suspend inline fun <reified T> responseToResult(response: HttpResponse): DataRes
             if (e is CancellationException) throw e
             DataResult.Failure(DataError.Network.UNKNOWN)
         }
-
-        400 -> DataResult.Failure(DataError.Network.BAD_REQUEST)
-        401 -> DataResult.Failure(DataError.Network.UNAUTHORIZED)
-        403 -> DataResult.Failure(DataError.Network.FORBIDDEN)
-        404 -> DataResult.Failure(DataError.Network.NOT_FOUND)
-        405 -> DataResult.Failure(DataError.Network.METHOD_NOT_ALLOWED)
-        406 -> DataResult.Failure(DataError.Network.NOT_ACCEPTABLE)
-        407 -> DataResult.Failure(DataError.Network.PROXY_AUTHENTICATION_REQUIRED)
-        408 -> DataResult.Failure(DataError.Network.REQUEST_TIMEOUT)
-        409 -> DataResult.Failure(DataError.Network.CONFLICT)
-        410 -> DataResult.Failure(DataError.Network.GONE)
-        413 -> DataResult.Failure(DataError.Network.PAYLOAD_TOO_LARGE)
-        429 -> DataResult.Failure(DataError.Network.TOO_MANY_REQUESTS)
-        in 400..499 -> DataResult.Failure(DataError.Network.CLIENT_ERROR)
-
-        500 -> DataResult.Failure(DataError.Network.INTERNAL_SERVER_ERROR)
-        501 -> DataResult.Failure(DataError.Network.NOT_IMPLEMENTED)
-        502 -> DataResult.Failure(DataError.Network.BAD_GATEWAY)
-        503 -> DataResult.Failure(DataError.Network.SERVICE_UNAVAILABLE)
-        504 -> DataResult.Failure(DataError.Network.GATEWAY_TIMEOUT)
-        else -> DataResult.Failure(DataError.Network.SERVER_ERROR)
+        else -> DataResult.Failure(statusToNetworkError(response.status.value))
     }
+}
+
+fun statusToNetworkError(code: Int): DataError.Network = when (code) {
+    400 -> DataError.Network.BAD_REQUEST
+    401 -> DataError.Network.UNAUTHORIZED
+    403 -> DataError.Network.FORBIDDEN
+    404 -> DataError.Network.NOT_FOUND
+    405 -> DataError.Network.METHOD_NOT_ALLOWED
+    406 -> DataError.Network.NOT_ACCEPTABLE
+    407 -> DataError.Network.PROXY_AUTHENTICATION_REQUIRED
+    408 -> DataError.Network.REQUEST_TIMEOUT
+    409 -> DataError.Network.CONFLICT
+    410 -> DataError.Network.GONE
+    413 -> DataError.Network.PAYLOAD_TOO_LARGE
+    429 -> DataError.Network.TOO_MANY_REQUESTS
+    in 400..499 -> DataError.Network.CLIENT_ERROR
+    500 -> DataError.Network.INTERNAL_SERVER_ERROR
+    501 -> DataError.Network.NOT_IMPLEMENTED
+    502 -> DataError.Network.BAD_GATEWAY
+    503 -> DataError.Network.SERVICE_UNAVAILABLE
+    504 -> DataError.Network.GATEWAY_TIMEOUT
+    else -> DataError.Network.SERVER_ERROR
+}
+
+/**
+ * Wraps a call made through [authenticatedJsonClient] (expectSuccess=true:
+ * non-2xx throws) into a [DataResult]. [SessionExpiredException] maps to
+ * UNAUTHORIZED - by then the session is cleared and the UI is already
+ * bouncing to Login.
+ */
+suspend inline fun <T> dataCall(block: () -> T): DataResult<T, DataError.Network> = try {
+    DataResult.Success(block())
+} catch (e: SessionExpiredException) {
+    DataResult.Failure(DataError.Network.UNAUTHORIZED)
+} catch (e: ResponseException) {
+    DataResult.Failure(statusToNetworkError(e.response.status.value))
+} catch (e: SerializationException) {
+    DataResult.Failure(DataError.Network.SERIALIZATION)
+} catch (e: IOException) {
+    DataResult.Failure(DataError.Network.NO_INTERNET)
+} catch (e: Exception) {
+    if (e is CancellationException) throw e
+    DataResult.Failure(DataError.Network.UNKNOWN)
 }

@@ -2,7 +2,8 @@ package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.data.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
+import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
 import eu.anifantakis.commercials.reports.ReportService
 import org.koin.dsl.koinApplication
@@ -26,6 +27,7 @@ class KoinGraphTest {
         assertNotNull(koin.get<AuthSession>())
         assertNotNull(koin.get<AuthRepository>())
         assertNotNull(koin.get<ScheduleRepository>())
+        assertNotNull(koin.get<PlacementsRepository>())
         assertNotNull(koin.get<DbApi>())
         assertNotNull(koin.get<ReportService>())
 

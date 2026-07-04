@@ -67,6 +67,9 @@ kotlin {
             api(projects.feature.auth.domain)
             api(projects.feature.auth.data)
             api(projects.feature.auth.presentation)
+            api(projects.feature.timetable.domain)
+            api(projects.feature.timetable.data)
+            api(projects.feature.timetable.presentation)
 
             // Extracted feature modules. `api`: their types (BreakSlot,
             // SchedulerCellData, AppTheme, ...) appear in shared's own

@@ -43,7 +43,7 @@ import eu.anifantakis.commercials.email.EmailCustomer
 import eu.anifantakis.commercials.email.EmailHtmlPreview
 import eu.anifantakis.commercials.email.EmailLogEntry
 import eu.anifantakis.commercials.email.EmailSpot
-import eu.anifantakis.commercials.email.PartyKind
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.email.ScheduleEmailApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

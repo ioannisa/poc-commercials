@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.screens
+package eu.anifantakis.commercials.feature.timetable.presentation.commercial_detail
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -39,7 +39,37 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
+import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 import kotlinx.datetime.LocalDate
+
+/**
+ * Break Console entry point: own ViewModel (per-screen), the cell's
+ * commercials observed from the shared ScheduleCellsStore.
+ */
+@Composable
+fun CommercialDetailScreenRoot(
+    breakId: Long,
+    breakTime: String,
+    date: LocalDate,
+    spotCount: Int,
+    onBack: () -> Unit,
+    viewModel: CommercialDetailViewModel = koinViewModel(
+        key = "commercial-detail-$breakId-$date",
+    ) { parametersOf(breakId, date) },
+) {
+    CommercialDetailScreen(
+        breakId = breakId,
+        breakTime = breakTime,
+        date = StableDate(date),
+        spotCount = spotCount,
+        commercials = viewModel.state.commercials,
+        onCommercialsReorder = { reordered ->
+            viewModel.onAction(CommercialDetailIntent.Reorder(reordered.map { it.id }))
+        },
+        onBack = onBack,
+    )
+}
 
 /**
  * Commercial detail screen showing the list of commercials for a specific break and date
@@ -47,7 +77,7 @@ import kotlinx.datetime.LocalDate
  * Now with reorder functionality using move up/down buttons
  */
 @Composable
-fun CommercialDetailScreen(
+private fun CommercialDetailScreen(
     breakId: Long,
     breakTime: String,
     date: StableDate,

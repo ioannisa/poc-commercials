@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.email
 
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
 import eu.anifantakis.commercials.core.data.config.AppConfig
 import io.ktor.client.call.body
@@ -48,15 +49,6 @@ data class EmailLogEntry(
     val status: String,
     val error: String? = null,
 )
-
-/** Whose schedule is being emailed - see [ScheduleEmailApi.search]. */
-enum class PartyKind(val wire: String) {
-    /** The spot's owner (legacy cusID). */
-    CUSTOMER("customer"),
-
-    /** The contract's payer (legacy traid) - an agency in "triangular" deals. */
-    TRADER("trader"),
-}
 
 @Serializable
 private data class SendRequest(

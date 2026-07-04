@@ -6,13 +6,22 @@ import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
-import eu.anifantakis.commercials.data.ScheduleRepository
 import eu.anifantakis.commercials.db.DbApi
-import eu.anifantakis.commercials.finder.SpotFinderApi
+import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryImpl
+import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.feature.auth.data.AuthRepositoryImpl
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.login.LoginViewModel
+import eu.anifantakis.commercials.feature.timetable.data.FinderRepositoryImpl
+import eu.anifantakis.commercials.feature.timetable.data.PlacementsRepositoryImpl
+import eu.anifantakis.commercials.feature.timetable.data.ScheduleRepositoryImpl
+import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
+import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
+import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository as TimetableScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.presentation.commercial_detail.CommercialDetailViewModel
+import eu.anifantakis.commercials.feature.timetable.presentation.store.ScheduleCellsStore
+import eu.anifantakis.commercials.feature.timetable.presentation.timetable.TimetableViewModel
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.dsl.KoinAppDeclaration
@@ -20,6 +29,7 @@ import org.koin.dsl.module
 import org.koin.mp.KoinPlatformTools
 import org.koin.dsl.bind
 import org.koin.core.module.dsl.singleOf
+import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
 
 /**
@@ -40,15 +50,29 @@ val appModule = module {
 
     // :feature:auth - classic DSL (cross-module types; the compiler-plugin
     // checker only indexes this module's typed definitions)
+    singleOf(::PartySearchRepositoryImpl).bind<PartySearchRepository>()
     singleOf(::AuthRepositoryImpl).bind<AuthRepository>()
+
+    // :feature:timetable
+    singleOf(::ScheduleRepositoryImpl).bind<TimetableScheduleRepository>()
+    singleOf(::PlacementsRepositoryImpl).bind<PlacementsRepository>()
+    singleOf(::FinderRepositoryImpl).bind<FinderRepository>()
+    single { ScheduleCellsStore() }
+    viewModelOf(::TimetableViewModel)
+    viewModel { params ->
+        CommercialDetailViewModel(
+            breakId = params.get(),
+            date = params.get(),
+            placementsRepository = get(),
+            store = get(),
+        )
+    }
     viewModelOf(::LoginViewModel)
 
     singleOf(::UserPreferences)
     singleOf(::ScheduleEmailApi)
-    singleOf(::SpotFinderApi)
     singleOf(::AdminApi)
     singleOf(::MigrationApi)
-    singleOf(::ScheduleRepository)
     singleOf(::DbApi)
 }
 
