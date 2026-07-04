@@ -97,6 +97,31 @@ data class SendScheduleEmailRequest(
  * implicitly everywhere).
  */
 fun Route.emailRoutes(registry: StationRegistry) {
+    // Party search is MASTER-DATA (customers/traders), not an email concern -
+    // the neutral path is the canonical one; /api/email/schedule/customers
+    // below remains as the historical alias.
+    route("/api/parties") {
+        get("/search") {
+            val access = call.staffAccessOrRespond(registry) ?: return@get
+            val byTrader = call.byTraderOrRespond() ?: return@get
+            val q = call.request.queryParameters["q"]?.trim().orEmpty()
+            if (q.length < 3) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "q with at least 3 characters required"))
+                return@get
+            }
+            val parties = withContext(Dispatchers.IO) {
+                access.db.searchParties(q, byTrader).map {
+                    EmailCustomerDto(
+                        code = it.code, name = it.name, email = it.email,
+                        spotCount = it.spotCount, placementCount = it.placementCount,
+                        vatNumber = it.vatNumber, phone = it.phone,
+                    )
+                }
+            }
+            call.respond(parties)
+        }
+    }
+
     route("/api/email/schedule") {
 
         // With thousands of customers a full list is useless - the client

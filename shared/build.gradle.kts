@@ -70,6 +70,9 @@ kotlin {
             api(projects.feature.timetable.domain)
             api(projects.feature.timetable.data)
             api(projects.feature.timetable.presentation)
+            api(projects.feature.scheduleEmail.domain)
+            api(projects.feature.scheduleEmail.data)
+            api(projects.feature.scheduleEmail.presentation)
 
             // Extracted feature modules. `api`: their types (BreakSlot,
             // SchedulerCellData, AppTheme, ...) appear in shared's own
@@ -131,23 +134,6 @@ kotlin {
             // Ktor client engine for JVM (desktop)
             implementation(libs.ktor.client.cio)
 
-            // JavaFX WebView backs the email-preview webview (Swing's HTML
-            // pane cannot handle the report's size). OpenJFX ships natives
-            // as Maven classifiers, so resolve the build machine's OS/arch -
-            // same currentOs approach as compose.desktop above; per-OS
-            // distributables get their natives by being built on that OS.
-            val fxOs = System.getProperty("os.name").lowercase()
-            val fxArch = System.getProperty("os.arch").lowercase()
-            val fxClassifier = when {
-                fxOs.contains("mac") && fxArch == "aarch64" -> "mac-aarch64"
-                fxOs.contains("mac") -> "mac"
-                fxOs.contains("win") -> "win"
-                fxArch == "aarch64" -> "linux-aarch64"
-                else -> "linux"
-            }
-            listOf("base", "graphics", "controls", "media", "web", "swing").forEach { module ->
-                implementation("org.openjfx:javafx-$module:${libs.versions.javafx.get()}:$fxClassifier")
-            }
         }
 
         // Browser-based platforms: Ktor client for server-side report generation

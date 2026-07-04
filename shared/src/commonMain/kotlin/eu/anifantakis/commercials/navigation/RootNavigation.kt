@@ -29,7 +29,7 @@ import eu.anifantakis.commercials.feature.timetable.presentation.commercial_deta
 import eu.anifantakis.commercials.feature.timetable.presentation.timetable.TimetableScreenRoot
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.screens.PreferencesScreen
-import eu.anifantakis.commercials.screens.SendScheduleEmailDialog
+import eu.anifantakis.commercials.feature.schedule_email.presentation.send_dialog.SendScheduleEmailDialogRoot
 import kotlinx.coroutines.launch
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
@@ -79,7 +79,7 @@ fun RootNavigation() {
     // only carries the launch button, so the app layer renders it here.
     var showEmailDialog by remember { mutableStateOf(false) }
     if (showEmailDialog) {
-        SendScheduleEmailDialog(onDismiss = { showEmailDialog = false })
+        SendScheduleEmailDialogRoot(onDismiss = { showEmailDialog = false })
     }
 
     NavDisplay(

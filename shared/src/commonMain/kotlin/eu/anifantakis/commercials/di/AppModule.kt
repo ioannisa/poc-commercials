@@ -1,7 +1,6 @@
 package eu.anifantakis.commercials.di
 
 import eu.anifantakis.commercials.admin.AdminApi
-import eu.anifantakis.commercials.email.ScheduleEmailApi
 import eu.anifantakis.commercials.prefs.UserPreferences
 import eu.anifantakis.commercials.admin.MigrationApi
 import eu.anifantakis.commercials.core.data.session.AuthSession
@@ -13,6 +12,10 @@ import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateCont
 import eu.anifantakis.commercials.feature.auth.data.AuthRepositoryImpl
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.login.LoginViewModel
+import eu.anifantakis.commercials.feature.schedule_email.data.ScheduleEmailRepositoryImpl
+import eu.anifantakis.commercials.feature.schedule_email.domain.ScheduleEmailRepository
+import eu.anifantakis.commercials.feature.schedule_email.presentation.preview.EmailPreviewViewModel
+import eu.anifantakis.commercials.feature.schedule_email.presentation.send_dialog.SendScheduleEmailViewModel
 import eu.anifantakis.commercials.feature.timetable.data.FinderRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.data.PlacementsRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.data.ScheduleRepositoryImpl
@@ -59,6 +62,11 @@ val appModule = module {
     singleOf(::FinderRepositoryImpl).bind<FinderRepository>()
     single { ScheduleCellsStore() }
     viewModelOf(::TimetableViewModel)
+    // :feature:schedule-email
+    singleOf(::ScheduleEmailRepositoryImpl).bind<ScheduleEmailRepository>()
+    viewModelOf(::SendScheduleEmailViewModel)
+    viewModel { params -> EmailPreviewViewModel(request = params.get(), repository = get()) }
+
     viewModel { params ->
         CommercialDetailViewModel(
             breakId = params.get(),
@@ -70,7 +78,6 @@ val appModule = module {
     viewModelOf(::LoginViewModel)
 
     singleOf(::UserPreferences)
-    singleOf(::ScheduleEmailApi)
     singleOf(::AdminApi)
     singleOf(::MigrationApi)
     singleOf(::DbApi)

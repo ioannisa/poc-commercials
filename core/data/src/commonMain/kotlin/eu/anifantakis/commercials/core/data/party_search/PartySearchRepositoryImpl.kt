@@ -44,7 +44,7 @@ class PartySearchRepositoryImpl(private val session: AuthSession) : PartySearchR
         dataCall {
             val station = session.selectedStation?.id ?: ""
             httpClient.get(
-                "${AppConfig.require().serverBaseUrl}/api/email/schedule/customers" +
+                "${AppConfig.require().serverBaseUrl}/api/parties/search" +
                     "?station=$station&kind=${kind.wire}&q=${query.encodeURLParameter()}"
             ).body<List<PartyDto>>()
         }.map { list -> list.map { it.toDomain() } }
