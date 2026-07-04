@@ -489,6 +489,21 @@ class LegacyTransformer(
             }
             ps.executeBatch()
         }
+
+        // Legacy calendar_excluded_docs: documents kept OFF printed reports.
+        // Verified across all dumps: these docids match NOTHING in the legacy
+        // DB itself (not docref, not schedule.docID, not messages.contractID)
+        // - they are the EXTERNAL ERP's document ids, fed to the staging
+        // commercials_calendar. Preserve the raw list per station so the
+        // future ERP import can set contracts.exclude_from_reports from it.
+        c.createStatement().use { st ->
+            st.executeUpdate("CREATE TABLE IF NOT EXISTS $t.erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB")
+            val kept = st.executeUpdate(
+                "INSERT IGNORE INTO $t.erp_excluded_docs(erp_docid) SELECT docid FROM $s.calendar_excluded_docs"
+            )
+            if (kept > 0) log("  $kept ERP doc ids preserved in erp_excluded_docs (report exclusions, applied at ERP import)")
+        }
+
         return rows.size to synthetic
     }
 

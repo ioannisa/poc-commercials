@@ -121,6 +121,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         number VARCHAR(64) NOT NULL,
                         doc_type INT NULL,
                         is_gift BOOLEAN NOT NULL DEFAULT FALSE,
+                        exclude_from_reports BOOLEAN NOT NULL DEFAULT FALSE,
                         customer_id BIGINT NOT NULL,
                         agency_id BIGINT NULL,
                         entry_date DATE NULL,
@@ -297,6 +298,12 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Schemas created before the migration tool lack these columns.
             ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
             ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // legacy calendar_excluded_docs: contracts whose spots stay OFF printed reports
+            ensureColumn(c, "contracts", "exclude_from_reports", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // raw ERP doc ids awaiting the ERP import (see LegacyTransformer)
+            c.createStatement().use {
+                it.executeUpdate("CREATE TABLE IF NOT EXISTS erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB")
+            }
             // ERP LEE id (second legacy id series): links end clients of
             // triangular contracts - see migration/legacy-schema.md, docref.
             ensureColumn(c, "customers", "legacy_lee_id", "BIGINT NULL")
@@ -906,7 +913,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             SELECT p.id, p.spot_id, p.position, p.duration_seconds,
                    s.description, s.spot_type, s.flow,
                    cu.code AS client_code, cu.name AS client_name,
-                   ct.number AS contract_number, ct.is_gift,
+                   ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                    pay.code AS payer_code, pay.name AS payer_name,
                    pr.color_argb AS program_color, pr.name AS program_name
             FROM placements p
@@ -933,6 +940,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     durationSeconds = rs.getInt("duration_seconds"),
                     type = rs.getString("spot_type"),
                     contract = if (rs.getBoolean("is_gift")) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
+                    excludeFromReports = rs.getBoolean("exclude_from_reports"),
                     flow = rs.getString("flow"),
                     programName = rs.getString("program_name"),
                     programColorArgb = programColor,
@@ -1088,7 +1096,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
                        s.description, s.spot_type, s.flow,
                        cu.code AS client_code, cu.name AS client_name,
-                       ct.number AS contract_number, ct.is_gift,
+                       ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                        pay.code AS payer_code, pay.name AS payer_name,
                        pr.color_argb AS program_color, pr.name AS program_name
                 FROM placements p
@@ -1124,6 +1132,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                             durationSeconds = rs.getInt("duration_seconds"),
                             type = rs.getString("spot_type"),
                             contract = if (isGift) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
+                            excludeFromReports = rs.getBoolean("exclude_from_reports"),
                             flow = rs.getString("flow"),
                             programName = rs.getString("program_name"),
                             programColorArgb = programColor,

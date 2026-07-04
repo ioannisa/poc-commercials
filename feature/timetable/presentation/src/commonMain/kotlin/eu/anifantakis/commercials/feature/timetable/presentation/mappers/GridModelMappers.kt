@@ -36,6 +36,7 @@ fun PlacedCommercial.toUi(): CommercialItem = CommercialItem(
     type = type,
     contract = contract,
     flow = flow,
+    excludeFromReports = excludeFromReports,
 )
 
 fun ScheduleCell.toUi(): Pair<SchedulerKey, SchedulerCellData> =

@@ -84,7 +84,9 @@ data class CommercialItem(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
-    val flow: String
+    val flow: String,
+    /** Legacy calendar_excluded_docs: shown in the grid, kept OFF printed reports. */
+    val excludeFromReports: Boolean = false,
 )
 
 // ============================================================================

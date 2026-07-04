@@ -22,6 +22,8 @@ data class PlacedCommercial(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
+    /** Legacy calendar_excluded_docs: aired normally, kept OFF printed reports. */
+    val excludeFromReports: Boolean = false,
     val flow: String,
 )
 

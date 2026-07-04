@@ -22,6 +22,7 @@ internal data class CommercialDto(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
+    val excludeFromReports: Boolean = false,
     val flow: String,
 )
 

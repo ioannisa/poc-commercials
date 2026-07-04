@@ -44,7 +44,9 @@ object ReportDataFactory {
         breaksWithData.forEach { breakSlot ->
             val key = SchedulerKey(breakSlot.id, date)
             val data = cellData[key] ?: SchedulerCellData()
-            val commercials = data.commercials
+            // calendar_excluded_docs contracts air but stay off printed reports
+            val commercials = data.commercials.filter { !it.excludeFromReports }
+            if (commercials.isEmpty()) return@forEach
 
             commercials.forEachIndexed { index, commercial ->
                 items.add(
@@ -104,6 +106,9 @@ object ReportDataFactory {
         breakTimeLabel: String,
         commercials: List<CommercialItem>
     ): ProgramFlowReportData {
+        // calendar_excluded_docs contracts air but stay off printed reports
+        @Suppress("NAME_SHADOWING")
+        val commercials = commercials.filter { !it.excludeFromReports }
         val totalDurationSeconds = commercials.sumOf { it.durationSeconds }
         val time = parseTimeLabel(breakTimeLabel)
 

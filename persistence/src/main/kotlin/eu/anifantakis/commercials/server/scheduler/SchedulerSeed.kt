@@ -37,6 +37,8 @@ data class CommercialRow(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
+    /** Legacy calendar_excluded_docs: aired normally but kept off printed reports. */
+    val excludeFromReports: Boolean = false,
     val flow: String,
     /** Programme identity (name + operator colour), when the placement has one. */
     val programName: String? = null,

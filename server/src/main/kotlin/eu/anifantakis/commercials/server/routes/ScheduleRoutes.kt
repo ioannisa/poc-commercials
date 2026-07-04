@@ -35,6 +35,7 @@ data class CommercialDto(
     val durationSeconds: Int,
     val type: String,
     val contract: String,
+    val excludeFromReports: Boolean = false,
     val flow: String
 )
 
@@ -170,6 +171,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                             durationSeconds = it.durationSeconds,
                             type = it.type,
                             contract = it.contract,
+                            excludeFromReports = it.excludeFromReports,
                             flow = it.flow
                         )
                     }
@@ -255,6 +257,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                     durationSeconds = row.durationSeconds,
                     type = row.type,
                     contract = row.contract,
+                    excludeFromReports = row.excludeFromReports,
                     flow = row.flow,
                 )
             )
