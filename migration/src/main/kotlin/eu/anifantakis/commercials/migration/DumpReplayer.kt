@@ -6,13 +6,15 @@ import java.sql.Connection
 
 /**
  * The legacy tables the migration actually reads. Everything else in the
- * dump is skipped during replay - notably `emailhistory`, which is ~70% of
- * the main dump's bytes (longtext email bodies) and irrelevant to scheduling.
+ * dump is skipped during replay. `emailhistory` is ~70% of the main dump's
+ * bytes (longtext bodies) but IS replayed: the send archive migrates too -
+ * summaries for every send, bodies capped per customer (see
+ * LegacyTransformer.migrateEmailHistory).
  */
 val LEGACY_TABLES_OF_INTEREST = setOf(
     "messages",                    // spot catalog
     "schedule",                    // placements
-    "docref",                      // ERP contract/document shadow
+    "docref",                      // ERP contract/document shadow (traid/targetleeid/pelatislee)
     "z_commercials",               // ERP doc lines <-> spots
     "sld",                         // doc types flagged gift
     "cus",                         // customer contact supplement
@@ -21,6 +23,9 @@ val LEGACY_TABLES_OF_INTEREST = setOf(
     "commercials_calendar_final",  // (used to RECOVER real customer names)
     "roh_comments",                // per-day flow comments
     "roh_print_history",           // flow print audit
+    "emailhistory",                // sent-report archive -> email_log (bodies capped)
+    "zones",                       // airtime price list (versioned by fromDate)
+    "zonefillers",                 // filler content prices
 )
 
 /**

@@ -34,8 +34,12 @@ import java.time.LocalDate
  */
 class StationDb(private val station: StationConfig, maxPoolSize: Int) {
 
-    private companion object {
-        /** Full email bodies kept per customer; older bodies are evicted (summaries stay). */
+    companion object {
+        /**
+         * Full email bodies kept per customer; older bodies are evicted
+         * (summaries stay). Public: the legacy migration applies the SAME
+         * cap when importing the old `emailhistory` archive.
+         */
         const val EMAIL_BODY_RETENTION_PER_CUSTOMER = 10
     }
 
@@ -95,6 +99,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     CREATE TABLE IF NOT EXISTS customers (
                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
                         legacy_id BIGINT NULL,
+                        legacy_lee_id BIGINT NULL,
                         code VARCHAR(32) NOT NULL UNIQUE,
                         name VARCHAR(128) NOT NULL,
                         vat_number VARCHAR(16) NULL,
@@ -196,6 +201,41 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
+                // Airtime commercial policy (≙ legacy zones/zonefillers):
+                // the price list, VERSIONED by valid_from - the legacy app
+                // kept every historical price row, and so do we.
+                s.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS zone_fillers (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        legacy_id BIGINT NULL,
+                        code VARCHAR(32) NOT NULL,
+                        label VARCHAR(64) NOT NULL,
+                        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        valid_from DATE NULL,
+                        KEY idx_zone_fillers_legacy (legacy_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
+                s.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS zones (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        legacy_id BIGINT NULL,
+                        code VARCHAR(32) NOT NULL,
+                        label VARCHAR(64) NOT NULL,
+                        from_time TIME NULL,
+                        end_time TIME NULL,
+                        filler_from_time TIME NULL,
+                        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        valid_from DATE NULL,
+                        public_sector BOOLEAN NOT NULL DEFAULT FALSE,
+                        filler_id BIGINT NULL,
+                        KEY idx_zones_legacy (legacy_id),
+                        CONSTRAINT fk_zones_filler FOREIGN KEY (filler_id) REFERENCES zone_fillers(id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
                 s.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS flow_comments (
@@ -257,6 +297,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Schemas created before the migration tool lack these columns.
             ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
             ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // ERP LEE id (second legacy id series): links end clients of
+            // triangular contracts - see migration/legacy-schema.md, docref.
+            ensureColumn(c, "customers", "legacy_lee_id", "BIGINT NULL")
+            ensureIndex(c, "customers", "idx_customers_lee_legacy", "legacy_lee_id")
             // Schemas created before programme colours (the ALTER path skips
             // the FK; fresh schemas get it via CREATE TABLE above).
             ensureColumn(c, "placements", "program_id", "BIGINT NULL")

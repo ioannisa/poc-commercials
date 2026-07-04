@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.migration
 
+import eu.anifantakis.commercials.server.scheduler.StationDb
 import java.sql.Connection
 import kotlin.random.Random
 
@@ -50,6 +51,16 @@ class LegacyTransformer(
         val zeroDateRows: Long,
         /** Programmes with their operator-assigned colours (≙ legacy programtypes). */
         val programs: Int = 0,
+        /** Docs where the paying trader differs from the end client. */
+        val triangularContracts: Int = 0,
+        /** End clients known to MySQL only as an ERP lee id (created synthetic). */
+        val endClientsSynthesized: Int = 0,
+        /** Archived legacy emails migrated (metadata always; bodies capped). */
+        val emails: Int = 0,
+        val emailBodiesKept: Int = 0,
+        /** Airtime price list rows (versioned; full history migrates). */
+        val zones: Int = 0,
+        val zoneFillers: Int = 0,
     )
 
     fun run(): Summary {
@@ -61,14 +72,17 @@ class LegacyTransformer(
         log("Migrating programmes (with their operator-assigned colours)...")
         val programs = migratePrograms()
 
+        log("Building the lee<->tra id mapping (triangular contracts)...")
+        val triangular = buildLeeTraMap()
+
         log("Migrating customers (recovering real names where possible)...")
-        val (customers, customersSynthetic) = migrateCustomers()
+        val (customers, customersSynthetic, endClients) = migrateCustomers()
 
         log("Migrating contracts and lines...")
         val (contracts, contractsSynthetic) = migrateContracts()
         val lines = migrateContractLines()
 
-        log("Migrating spot catalog...")
+        log("Migrating spot catalog (triangular spots land on their END client)...")
         val spots = migrateSpots()
 
         log("Migrating placements (this is the big one)...")
@@ -77,6 +91,12 @@ class LegacyTransformer(
         log("Migrating flow comments and print audit...")
         val comments = migrateFlowComments()
         val audits = migratePrintAudit()
+
+        log("Migrating email archive (bodies capped at ${StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER}/customer, summaries for all)...")
+        val (emails, emailBodiesKept) = migrateEmailHistory()
+
+        log("Migrating airtime price zones (full price history)...")
+        val (zones, zoneFillers) = migrateZones()
 
         writeMeta()
 
@@ -115,7 +135,48 @@ class LegacyTransformer(
             orphanedRows = orphaned,
             zeroDateRows = zeroDate,
             programs = programs,
+            triangularContracts = triangular,
+            endClientsSynthesized = endClients,
+            emails = emails,
+            emailBodiesKept = emailBodiesKept,
+            zones = zones,
+            zoneFillers = zoneFillers,
         )
+    }
+
+    // ─────────────────────────────────────────────── triangular contracts ──
+
+    /**
+     * LEE and TRA are two ERP id series for the same entities. On a
+     * non-triangular doc `targetleeid = pelatislee` (the payer's own lee),
+     * which yields a nearly 1:1 lee->tra dictionary. On a TRIANGULAR doc
+     * `targetleeid` is the END CLIENT's lee (`pelatislee` stays the payer's,
+     * despite the name - verified against the main dump, see
+     * migration/legacy-schema.md). The map lives in the scratch schema and
+     * is dropped with it. Returns this flow's triangular doc count.
+     */
+    private fun buildLeeTraMap(): Int {
+        c.createStatement().use { st ->
+            st.executeUpdate("DROP TABLE IF EXISTS $s.lee_tra_map")
+            st.executeUpdate(
+                """
+                CREATE TABLE $s.lee_tra_map (lee BIGINT PRIMARY KEY, traid BIGINT NOT NULL)
+                AS SELECT targetleeid AS lee, MIN(traid) AS traid
+                   FROM $s.docref
+                   WHERE targetleeid = pelatislee AND targetleeid > 0 AND traid > 0
+                   GROUP BY targetleeid
+                """.trimIndent()
+            )
+        }
+        return c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT COUNT(DISTINCT d.docid) FROM $s.docref d
+                WHERE d.targetleeid <> d.pelatislee AND d.targetleeid > 0
+                  AND EXISTS (SELECT 1 FROM $s.messages m WHERE m.contractID = d.docid AND m.forTV = $forTv)
+                """.trimIndent()
+            ).use { rs -> rs.next(); rs.getInt(1) }
+        }
     }
 
     // ───────────────────────────────────────────────────────── programmes ──
@@ -225,6 +286,17 @@ class LegacyTransformer(
                 WHERE m.forTV = $forTv AND d.traid > 0
                 """.trimIndent()
             ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
+            // END CLIENTS of this flow's triangular docs whose lee resolves
+            // to a tra id - they need a customer row even if they never
+            // bought anything directly on this flow.
+            st.executeQuery(
+                """
+                SELECT DISTINCT map.traid FROM $s.docref d
+                JOIN $s.lee_tra_map map ON map.lee = d.targetleeid
+                JOIN $s.messages m ON m.contractID = d.docid
+                WHERE m.forTV = $forTv AND d.targetleeid <> d.pelatislee
+                """.trimIndent()
+            ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
         }
         return ids
     }
@@ -278,7 +350,7 @@ class LegacyTransformer(
         return out
     }
 
-    private fun migrateCustomers(): Pair<Int, Int> {
+    private fun migrateCustomers(): Triple<Int, Int, Int> {
         val ids = referencedCustomerIds()
         val names = recoveredNames()
         val contactById = contacts()
@@ -310,7 +382,55 @@ class LegacyTransformer(
             }
             ps.executeBatch()
         }
-        return ids.size to synthetic
+
+        // Stamp each customer's lee id from the dictionary. A traid mapped
+        // by several lees takes the smallest one, so no lee lands on two
+        // customers (the dictionary itself is unique per lee).
+        c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $t.customers tc
+                JOIN (SELECT traid, MIN(lee) AS lee FROM $s.lee_tra_map GROUP BY traid) m
+                  ON m.traid = tc.legacy_id
+                SET tc.legacy_lee_id = m.lee
+                """.trimIndent()
+            )
+        }
+
+        // END CLIENTS of triangular docs whose lee has NO tra mapping: they
+        // never bought directly, so MySQL knows them only as a lee id (their
+        // name lives in Oracle alone). Synthesize them, keyed by lee.
+        val unresolvedLees = c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT DISTINCT d.targetleeid FROM $s.docref d
+                JOIN $s.messages m ON m.contractID = d.docid
+                WHERE m.forTV = $forTv AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
+                  AND NOT EXISTS (SELECT 1 FROM $s.lee_tra_map map WHERE map.lee = d.targetleeid)
+                ORDER BY d.targetleeid
+                """.trimIndent()
+            ).use { rs -> buildList { while (rs.next()) add(rs.getLong(1)) } }
+        }
+        c.prepareStatement(
+            """
+            INSERT INTO $t.customers(legacy_lee_id, code, name, vat_number, phone, email, notes, synthetic)
+            VALUES(?,?,?,?,?,?,?,TRUE)
+            """.trimIndent()
+        ).use { ps ->
+            for (lee in unresolvedLees) {
+                ps.setLong(1, lee)
+                ps.setString(2, "LEE-$lee")
+                ps.setString(3, fakeCompanyName(lee))
+                ps.setString(4, fakeVat(lee))
+                ps.setString(5, fakePhone(lee))
+                ps.setString(6, "endclient$lee@example.gr")
+                ps.setString(7, "$SYNTHETIC_NOTE - end client of triangular contracts, known here only as ERP lee id $lee")
+                ps.addBatch()
+            }
+            if (unresolvedLees.isNotEmpty()) ps.executeBatch()
+        }
+
+        return Triple(ids.size + unresolvedLees.size, synthetic + unresolvedLees.size, unresolvedLees.size)
     }
 
     // ─────────────────────────────────────────────────────── contracts ──
@@ -387,16 +507,27 @@ class LegacyTransformer(
 
     // ──────────────────────────────────────────────────── spots/placements ──
 
+    /**
+     * The spot belongs to its END CLIENT ("My Advert Company has a contract
+     * FOR the customer Unilever, FOR WHOM the spot is scheduled"). Legacy
+     * `messages.cusID` is the PAYER (== docref.traid 99.9%), so on
+     * triangular docs the customer is resolved through `targetleeid`
+     * instead; the payer stays reachable via the contract
+     * (contracts.customer_id = traid).
+     */
     private fun migrateSpots(): Int =
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
                 INSERT INTO $t.spots(legacy_id, customer_id, contract_line_id, description,
                                      duration_seconds, spot_type, flow, hidden, force_position, memo)
-                SELECT m.id, tcu.id, tl.id, m.descr, m.duration,
+                SELECT m.id, COALESCE(tend.id, tcu.id), tl.id, m.descr, m.duration,
                        COALESCE(pt.descr, ''), 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
                 FROM $s.messages m
                 JOIN $t.customers tcu ON tcu.legacy_id = GREATEST(m.cusID, 0)
+                LEFT JOIN $s.docref d ON d.docid = m.contractID
+                                     AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
+                LEFT JOIN $t.customers tend ON tend.legacy_lee_id = d.targetleeid
                 LEFT JOIN $t.contracts tct ON tct.legacy_docid = m.contractID
                 LEFT JOIN $t.contract_lines tl ON tl.contract_id = tct.id AND tl.line_no = m.contractNO
                 LEFT JOIN $s.programtypes pt ON pt.id = m.messageTypeID
@@ -455,6 +586,134 @@ class LegacyTransformer(
         }
     }
 
+    // ─────────────────────────────────────────────────── email archive ──
+
+    /**
+     * Legacy `emailhistory` -> `email_log`. Every send keeps its summary
+     * row (who/what/when - the audit trail the operators rely on to avoid
+     * double-sends), but the heavy HTML BODY survives only for the newest
+     * [StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER] per customer - the same
+     * cap the live email sender enforces, so the archive can never balloon
+     * back to the legacy 1.2 GB.
+     *
+     * `emailhistory` has no forTV: the archive belongs to the legacy DB as
+     * a whole, so it lands with whichever flow migrates it. The period
+     * ("Μάρτιος 2006") is parsed in Kotlin - accents and case vary.
+     */
+    private fun migrateEmailHistory(): Pair<Int, Int> {
+        if (!tableExists("emailhistory")) return 0 to 0
+
+        // Distinct period labels -> (year, month), parsed here and joined
+        // in SQL, so the big INSERT..SELECT stays set-based.
+        val labels = c.createStatement().use { st ->
+            st.executeQuery("SELECT DISTINCT periodRequested FROM $s.emailhistory").use { rs ->
+                buildList { while (rs.next()) add(rs.getString(1) ?: "") }
+            }
+        }
+        c.createStatement().use { st ->
+            st.executeUpdate("DROP TABLE IF EXISTS $s.email_periods")
+            st.executeUpdate(
+                "CREATE TABLE $s.email_periods (label VARCHAR(100) PRIMARY KEY, py INT NOT NULL, pm INT NOT NULL)"
+            )
+        }
+        c.prepareStatement("INSERT IGNORE INTO $s.email_periods(label, py, pm) VALUES(?,?,?)").use { ps ->
+            for (label in labels) {
+                val (y, m) = parseGreekPeriod(label)
+                ps.setString(1, label); ps.setInt(2, y); ps.setInt(3, m)
+                ps.addBatch()
+            }
+            if (labels.isNotEmpty()) ps.executeBatch()
+        }
+
+        // The ROW_NUMBER subquery deliberately carries only (id, cusID,
+        // date) - sorting must never drag the longtext bodies through a
+        // temp table.
+        val cap = StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER
+        val migrated = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $t.email_log(customer_code, customer_name, recipient, subject,
+                    period_year, period_month, spot_count, transmission_count, body_html,
+                    sent_by, sent_at, status)
+                SELECT COALESCE(tcu.code, LPAD(e.cusID, 8, '0')),
+                       COALESCE(tcu.name, CONCAT('ΠΕΛΑΤΗΣ #', e.cusID)),
+                       e.recipientEmailAddress,
+                       LEFT(e.subject, 255),
+                       COALESCE(p.py, 0), COALESCE(p.pm, 0),
+                       0, 0,
+                       CASE WHEN r.rn <= $cap THEN NULLIF(e.body, '') END,
+                       LEFT(e.emailFrom, 64),
+                       IF(e.entryDate >= '1971-01-01', TIMESTAMP(e.entryDate, e.entryTime), '1971-01-01 00:00:00'),
+                       'SENT'
+                FROM $s.emailhistory e
+                JOIN (SELECT id, ROW_NUMBER() OVER (
+                          PARTITION BY cusID ORDER BY entryDate DESC, entryTime DESC, id DESC
+                      ) AS rn FROM $s.emailhistory) r ON r.id = e.id
+                LEFT JOIN $s.email_periods p ON p.label = e.periodRequested
+                LEFT JOIN $t.customers tcu ON tcu.legacy_id = e.cusID
+                """.trimIndent()
+            )
+        }
+        val bodiesKept = c.createStatement().use { st ->
+            st.executeQuery("SELECT COUNT(*) FROM $t.email_log WHERE body_html IS NOT NULL").use { rs ->
+                rs.next(); rs.getInt(1)
+            }
+        }
+        return migrated to bodiesKept
+    }
+
+    // ───────────────────────────────────────────────── zones (pricing) ──
+
+    /**
+     * The airtime price list, WITH its full history: legacy zones/zonefillers
+     * are versioned by an integer fromDate (YYYYMMDD) - every price change
+     * since 2004 is a new row, and all of them migrate. Fillers first (zones
+     * reference them); legacy `fillerID = -1` means none.
+     */
+    private fun migrateZones(): Pair<Int, Int> {
+        if (!tableExists("zones")) return 0 to 0
+        val fillers = if (tableExists("zonefillers")) {
+            c.createStatement().use { st ->
+                st.executeUpdate(
+                    """
+                    INSERT INTO $t.zone_fillers(legacy_id, code, label, price, valid_from)
+                    SELECT id, LEFT(code, 32), LEFT(descr, 64), price,
+                           STR_TO_DATE(NULLIF(fromDATE, 0), '%Y%m%d')
+                    FROM $s.zonefillers
+                    WHERE forTV = $forTv
+                    """.trimIndent()
+                )
+            }
+        } else 0
+        val zones = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $t.zones(legacy_id, code, label, from_time, end_time, filler_from_time,
+                                     price, valid_from, public_sector, filler_id)
+                SELECT z.id, LEFT(z.code, 32), LEFT(z.descr, 64),
+                       TIME(z.fromTime), TIME(z.endTime), TIME(z.fromFillerTime),
+                       z.price, STR_TO_DATE(NULLIF(z.fromDate, 0), '%Y%m%d'),
+                       COALESCE(z.dimosio, 0), tf.id
+                FROM $s.zones z
+                LEFT JOIN $t.zone_fillers tf ON tf.legacy_id = NULLIF(z.fillerID, -1)
+                WHERE z.forTV = $forTv
+                """.trimIndent()
+            )
+        }
+        return zones to fillers
+    }
+
+    /** "Μάρτιος 2006" -> 2006 to 3; unparsable parts become 0. */
+    private fun parseGreekPeriod(label: String): Pair<Int, Int> {
+        val normalized = label.uppercase()
+            .map { GREEK_TONOS_FOLD[it] ?: it }
+            .filterNot { it == '́' || it == '̈' }  // combining tonos/dialytika ("Μαΐου")
+            .joinToString("")
+        val year = Regex("(19|20)\\d{2}").find(normalized)?.value?.toInt() ?: 0
+        val month = GREEK_MONTH_STEMS.indexOfFirst { normalized.contains(it) } + 1
+        return year to month
+    }
+
     private fun writeMeta() {
         c.createStatement().use { st ->
             st.executeUpdate(
@@ -478,6 +737,18 @@ class LegacyTransformer(
     companion object {
         const val SYNTHETIC_NOTE =
             "SYNTHETIC placeholder - real data lives in the ERP (Oracle) and was not part of the legacy MySQL dump"
+
+        /** Uppercased Greek tonos/dialytika vowels folded to their base letter. */
+        private val GREEK_TONOS_FOLD = mapOf(
+            'Ά' to 'Α', 'Έ' to 'Ε', 'Ή' to 'Η', 'Ί' to 'Ι', 'Ό' to 'Ο',
+            'Ύ' to 'Υ', 'Ώ' to 'Ω', 'Ϊ' to 'Ι', 'Ϋ' to 'Υ',
+        )
+
+        /** Index+1 = month number; stems survive tonos-folding and casing. */
+        private val GREEK_MONTH_STEMS = listOf(
+            "ΙΑΝΟΥΑΡ", "ΦΕΒΡΟΥΑΡ", "ΜΑΡΤ", "ΑΠΡΙΛ", "ΜΑΙΟ", "ΙΟΥΝ",
+            "ΙΟΥΛ", "ΑΥΓΟΥΣΤ", "ΣΕΠΤΕΜΒΡ", "ΟΚΤΩΒΡ", "ΝΟΕΜΒΡ", "ΔΕΚΕΜΒΡ",
+        )
 
         private val FAKE_SURNAMES = listOf(
             "ΠΑΠΑΔΑΚΗΣ", "ΜΑΡΙΝΑΚΗΣ", "ΓΕΩΡΓΙΑΔΗΣ", "ΑΝΤΩΝΙΟΥ", "ΝΙΚΟΛΑΟΥ",

@@ -18,7 +18,7 @@ import java.sql.DriverManager
  *   2. create the normalized tables (single-sourced DDL from :persistence,
  *      NO demo seeding)
  *   3. replay the dump's relevant tables into a scratch schema (streaming;
- *      emailhistory & friends are skipped entirely)
+ *      includes the email archive - irrelevant tables are skipped)
  *   4. transform scratch -> target (see LegacyTransformer; missing ERP data
  *      is faked deterministically and flagged synthetic=TRUE)
  *   5. drop the scratch schema (unless --keep-scratch)
@@ -160,10 +160,13 @@ private fun runMigration(opts: Options) {
             customers       ${summary.customers}  (${summary.customers - summary.customersSynthetic} recovered real names, ${summary.customersSynthetic} synthetic)
             contracts       ${summary.contracts}  (${summary.contractsSynthetic} synthetic)
             contract lines  ${summary.contractLines}
+            triangular docs ${summary.triangularContracts} (spots land on the END client; ${summary.endClientsSynthesized} end clients known only by lee id)
             spots           ${summary.spots}
             placements      ${summary.placements}
             flow comments   ${summary.flowComments}
             print audits    ${summary.printAudits}
+            emails archived ${summary.emails} (${summary.emailBodiesKept} bodies kept - cap per customer)
+            price zones     ${summary.zones} (+${summary.zoneFillers} fillers; full price history)
             date range      ${summary.dateRange}
             coverage        migrated ${summary.placements} of ${summary.dumpScheduleRows} dump rows (otherFlow=${summary.otherFlowRows}, orphaned=${summary.orphanedRows}, invalidDate=${summary.zeroDateRows})
             ─────────────────────────────────────────────────────

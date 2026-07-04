@@ -132,7 +132,7 @@ class MigrationService(private val registry: StationRegistry) {
         state = State.REPLAYING
         logLines.clear(); flows = emptyList(); summary = null; error = null
         log("Created/verified schema '${req.schema}' - normalized tables ready (demo seeding disabled).")
-        log("Replaying '${dump.name}' (${dump.length() / 1_048_576} MB) - irrelevant tables (e.g. emailhistory) are skipped...")
+        log("Replaying '${dump.name}' (${dump.length() / 1_048_576} MB) - includes the email archive; irrelevant tables are skipped...")
 
         thread(name = "migration-replay") {
             try {

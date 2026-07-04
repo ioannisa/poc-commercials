@@ -80,6 +80,27 @@ contracts/documents (docid, docno, dotid, lines) ──┤   docref             
 - `docref` — contract/doc shadow: `docid` PK, `docno`, `dotid` (doc type),
   `traid` (customer/trader id — same series as `cusID`), `targetleeid`,
   `pelatislee`.
+
+  **Triangular-contract semantics (verified 2026-07-04 on the main dump):**
+  LEE and TRA are two id series for the same entities (lee↔tra mapping from
+  non-triangular docs is ~1:1 — 2,711 lees / 2,719 pairs).
+  - `pelatislee` = the PAYER's lee ("ο πελάτης μας"): maps to the doc's own
+    `traid` in 5,270/5,271 checkable docs.
+  - `targetleeid` = the END CLIENT's lee (the campaign's target — e.g. the
+    agency pays, Unilever's spot airs).
+  - `messages.cusID` equals `docref.traid` in 39,475/39,524 TV messages
+    (99.9%): the legacy "customer" of a spot is the PAYER, not the end
+    client. The end client exists ONLY as `targetleeid`.
+  - `targetleeid <> pelatislee` marks a triangular doc: **3,004 of 12,299
+    TV docs (24%)**, covering 8,236 spots / 225,609 placements (8.4%) of
+    the migrated main outlet. 1,554 of those end clients also appear as
+    direct customers (resolvable via the lee↔tra mapping); the other 1,450
+    exist only as a lee id — their names live in Oracle alone.
+
+  The current migration drops `targetleeid` entirely (contracts get
+  `customer_id` = traid, `agency_id` stays NULL), so the end-client notion
+  of triangular deals is NOT carried over — see "What our schema must
+  grow", item 1.
 - `z_commercials` — ERP doc lines ↔ spots (`docid`, `lineno`, `mciid`, `traid`).
 - `sld` — `dotid` → `isGift` (gift/free spots per doc type; our demo's "ΔΩΡΑ").
 - `pelates_of_pelates` — ENGINE=MEMORY runtime cache from Oracle: per `docid`,
@@ -132,9 +153,22 @@ contracts/documents (docid, docno, dotid, lines) ──┤   docref             
 > `server/.../scheduler/StationDb.kt`. The grid the API serves is now DERIVED
 > at read time from `placements ⋈ spots ⋈ customers ⋈ contracts`; the old
 > `scheduler_cells`/`commercials` demo tables are dropped at bootstrap. Every
-> table carries `legacy_id` for the future migration. Item 6 (zones/pricing)
-> deferred until commercial-policy features are wanted; `flow_comments` /
+> table carries `legacy_id` for the future migration. `flow_comments` /
 > `print_audit` tables exist but have no API yet.
+>
+> **Update (2026-07-04):** triangular contracts now migrate correctly -
+> spots land on their END client (resolved via targetleeid and the lee↔tra
+> map; unresolved end clients become synthetic customers keyed by
+> `customers.legacy_lee_id`, code `LEE-<id>`), while the contract keeps the
+> PAYER. The legacy `emailhistory` archive migrates into `email_log`
+> (summaries for every send; bodies capped at
+> `StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER` per customer - same policy
+> as the live sender). Item 6 partially done: `zones` + `zone_fillers`
+> tables exist and the FULL versioned price history migrates; pricing
+> FEATURES remain future work. Deferred by decision: `usr` (central auth
+> already covers users), `generic` (letterhead), `zoneprograms*`,
+> `customermessages(log)`; `calendar_excluded_docs` pending decision;
+> `media_services` awaiting confirmation the workflow is dead.
 
 The point of the new app: absorb the Oracle-side entities so each station DB
 is self-sufficient. Per station schema:

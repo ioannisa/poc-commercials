@@ -48,6 +48,12 @@ data class MigrationSummaryDto(
     val orphanedRows: Long = 0,
     val zeroDateRows: Long = 0,
     val programs: Int = 0,
+    val triangularContracts: Int = 0,
+    val endClientsSynthesized: Int = 0,
+    val emails: Int = 0,
+    val emailBodiesKept: Int = 0,
+    val zones: Int = 0,
+    val zoneFillers: Int = 0,
 )
 
 @Serializable
@@ -159,7 +165,9 @@ private fun MigrationService.Snapshot.toDto() = MigrationStatusDto(
         MigrationSummaryDto(
             it.breaks, it.customers, it.customersSynthetic, it.contracts, it.contractsSynthetic,
             it.contractLines, it.spots, it.placements, it.flowComments, it.printAudits, it.dateRange,
-            it.dumpScheduleRows, it.otherFlowRows, it.orphanedRows, it.zeroDateRows, it.programs
+            it.dumpScheduleRows, it.otherFlowRows, it.orphanedRows, it.zeroDateRows, it.programs,
+            it.triangularContracts, it.endClientsSynthesized, it.emails, it.emailBodiesKept,
+            it.zones, it.zoneFillers
         )
     },
     error = error,
