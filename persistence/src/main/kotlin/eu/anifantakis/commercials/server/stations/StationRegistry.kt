@@ -86,6 +86,27 @@ data class SuperAdminConfig(
 )
 
 /**
+ * Bearer-token session policy (stations.yaml `session:` block).
+ *
+ * - [expiration] `false` = tokens NEVER expire (revoked only by logout or a
+ *   password change) - the original behaviour. `true` = a token dies after
+ *   [days] of the relevant window.
+ * - [days] the token lifetime in days when [expiration] is on.
+ * - [sliding] `true` = the window slides forward on use (an idle timeout: an
+ *   active user is never logged out mid-work); `false` = a fixed window from
+ *   login (hard logout [days] after login regardless of activity).
+ *
+ * Defaults: expiration on, 90 days, sliding - a working session is never
+ * interrupted, but a machine left logged in and untouched for 90 days lapses.
+ */
+@Serializable
+data class SessionConfig(
+    val expiration: Boolean = true,
+    val days: Int = 90,
+    val sliding: Boolean = true,
+)
+
+/**
  * The whole hosting layout:
  * - [central] is MANDATORY and STANDALONE: the server's own schema
  *   (users, tokens, per-station grants - e.g. `commercials_central`).
@@ -107,6 +128,8 @@ data class HostingConfig(
     val maxPoolSize: Int? = null,
     /** File-wide SMTP default for customer emails (stations may override). */
     val smtp: SmtpConfig? = null,
+    /** Bearer-token lifetime policy. Defaults to expiration on / 90 days / sliding. */
+    val session: SessionConfig = SessionConfig(),
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -140,6 +163,10 @@ fun loadHostingConfig(): HostingConfig {
         "superAdmin.username and superAdmin.password must be non-blank in '${file.path}'"
     }
 
+    require(!parsed.session.expiration || parsed.session.days > 0) {
+        "session.days must be > 0 in '${file.path}' when session.expiration is enabled (was ${parsed.session.days})"
+    }
+
     val duplicates = parsed.stations.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicates.isEmpty()) { "Duplicate station ids in '${file.path}': $duplicates" }
 
@@ -163,9 +190,13 @@ fun loadHostingConfig(): HostingConfig {
     }
 
     val centralPool = resolveMaxPoolSize(parsed.central.maxPoolSize, parsed.maxPoolSize, DEFAULT_CENTRAL_MAX_POOL)
+    val sessionPolicy = with(parsed.session) {
+        if (!expiration) "session: tokens never expire"
+        else "session: ${days}d${if (sliding) " sliding" else " fixed"}"
+    }
     log.info(
         "Hosting config from '${file.path}': central=$centralTarget (maxPool=$centralPool), " +
-            "${parsed.stations.size} station(s) " +
+            "$sessionPolicy, ${parsed.stations.size} station(s) " +
             parsed.stations.joinToString(prefix = "[", postfix = "]") {
                 "${it.id}(maxPool=${resolveMaxPoolSize(it.maxPoolSize, parsed.maxPoolSize, DEFAULT_STATION_MAX_POOL)})"
             }

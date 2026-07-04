@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.server.auth
 
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.HostingConfig
+import eu.anifantakis.commercials.server.stations.SessionConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import org.koin.core.annotation.Provided
 import java.security.MessageDigest
@@ -17,9 +18,11 @@ import javax.crypto.spec.PBEKeySpec
  *
  * Passwords are stored as PBKDF2-HMAC-SHA256 hashes with a per-user random
  * salt (never plaintext, even for demo users). Tokens are 256-bit random
- * values with NO expiration by design; revocation still works because every
- * token is a DB row - logout (or a password change, which revokes ALL of the
- * user's tokens) removes it and the very next request gets 401.
+ * values whose lifetime is governed by the stations.yaml `session:` block
+ * (see [SessionConfig]): never-expire, a fixed window, or a sliding idle
+ * timeout. Revocation is independent of expiry - every token is a DB row, so
+ * logout (or a password change, which revokes ALL of the user's tokens)
+ * removes it and the very next request gets 401.
  *
  * Tokens and recovery codes are stored HASHED (single SHA-256, see
  * [tokenHash]): the raw values exist only on the client, so a database leak
@@ -55,6 +58,19 @@ class AuthDb(
 
     private val secureRandom = SecureRandom()
 
+    /*
+     * Bearer-token lifetime, driven by the stations.yaml `session:` block
+     * (see [SessionConfig]):
+     * - expiration off -> tokens never expire (expires_at NULL); revoked only
+     *   by logout or a password change.
+     * - expiration on  -> a token dies [tokenTtlSeconds] after the relevant
+     *   window; with [slidingEnabled] the window is pushed forward on use
+     *   (idle timeout), otherwise it is fixed from login.
+     */
+    private val expiryEnabled: Boolean get() = hosting.session.expiration
+    private val slidingEnabled: Boolean get() = hosting.session.sliding
+    private val tokenTtlSeconds: Long get() = hosting.session.days.toLong() * 24 * 60 * 60
+
     // ────────────────────────────────────────────────────────── bootstrap ──
 
     /**
@@ -83,6 +99,7 @@ class AuthDb(
                         token_hash VARCHAR(64) PRIMARY KEY,
                         user_id BIGINT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP NULL DEFAULT NULL,
                         CONSTRAINT fk_tokens_user FOREIGN KEY (user_id)
                             REFERENCES users(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -114,6 +131,7 @@ class AuthDb(
                 )
             }
             ensureIsAdminColumn(c)
+            ensureExpiresAtColumn(c)
             seedUsersIfEmpty(c)
             seedGrantsIfEmpty(c, registry.ids)
             syncSuperAdmin(c)
@@ -141,6 +159,43 @@ class AuthDb(
             }
         }
     }
+
+    /**
+     * Migration: pre-expiry deployments lack the expires_at column; an early
+     * expiry build may have added it NOT NULL. Converge on nullable (NULL =
+     * "never expires"): add it if missing, or relax an existing NOT NULL.
+     * Existing sessions get a fresh window under an expiring policy, or NULL
+     * under a no-expiry policy - never evicted on deploy.
+     */
+    private fun ensureExpiresAtColumn(c: Connection) {
+        if (!columnExists(c, "auth_tokens", "expires_at")) {
+            c.createStatement().use {
+                it.executeUpdate("ALTER TABLE auth_tokens ADD COLUMN expires_at TIMESTAMP NULL DEFAULT NULL")
+            }
+            if (expiryEnabled) {
+                c.prepareStatement("UPDATE auth_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND)").use { ps ->
+                    ps.setLong(1, tokenTtlSeconds)
+                    ps.executeUpdate()
+                }
+            }
+        } else if (!columnIsNullable(c, "auth_tokens", "expires_at")) {
+            c.createStatement().use {
+                it.executeUpdate("ALTER TABLE auth_tokens MODIFY COLUMN expires_at TIMESTAMP NULL DEFAULT NULL")
+            }
+        }
+    }
+
+    private fun columnIsNullable(c: Connection, table: String, column: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT is_nullable FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, column)
+            ps.executeQuery().use { if (it.next()) it.getString(1) == "YES" else false }
+        }
 
     private fun columnExists(c: Connection, table: String, column: String): Boolean =
         c.prepareStatement(
@@ -322,29 +377,69 @@ class AuthDb(
     fun createToken(userId: Long): String {
         val token = randomBytes(32).toHex()
         db.connection().use { c ->
-            c.prepareStatement("INSERT INTO auth_tokens(token_hash, user_id) VALUES(?,?)").use { ps ->
-                ps.setString(1, tokenHash(token))
-                ps.setLong(2, userId)
-                ps.executeUpdate()
+            if (expiryEnabled) {
+                c.prepareStatement(
+                    "INSERT INTO auth_tokens(token_hash, user_id, expires_at) " +
+                        "VALUES(?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))"
+                ).use { ps ->
+                    ps.setString(1, tokenHash(token))
+                    ps.setLong(2, userId)
+                    ps.setLong(3, tokenTtlSeconds)
+                    ps.executeUpdate()
+                }
+            } else {
+                // No-expiry policy: NULL window (valid until logout / password change).
+                c.prepareStatement("INSERT INTO auth_tokens(token_hash, user_id, expires_at) VALUES(?, ?, NULL)").use { ps ->
+                    ps.setString(1, tokenHash(token))
+                    ps.setLong(2, userId)
+                    ps.executeUpdate()
+                }
             }
         }
         return token
     }
 
-    /** Resolves a bearer token to its user (with grants), or null if unknown/revoked. */
+    /**
+     * Resolves a bearer token to its user (with grants), or null if
+     * unknown/revoked/EXPIRED. On a valid hit the sliding window is pushed
+     * forward - but only once the token is past its half-life, so an active
+     * session costs at most one write per [tokenTtlSeconds]/2, not one per
+     * request.
+     */
     fun findUserByToken(token: String): AuthUser? {
         if (token.isBlank()) return null
+        val hash = tokenHash(token)
+        // No-expiry policy ignores the window entirely (any live token row is
+        // valid); an expiring policy rejects lapsed tokens (NULL never lapses).
+        val expiryClause = if (expiryEnabled) " AND (t.expires_at IS NULL OR t.expires_at > NOW())" else ""
         return db.connection().use { c ->
             val row = c.prepareStatement(
                 """
                 SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt
                 FROM auth_tokens t JOIN users u ON u.id = t.user_id
-                WHERE t.token_hash = ?
+                WHERE t.token_hash = ?$expiryClause
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, tokenHash(token))
+                ps.setString(1, hash)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
             } ?: return null
+
+            // Sliding renewal, throttled: extend only when the token has
+            // already consumed at least half its life (expires_at within the
+            // next half-TTL). A freshly-renewed (or NULL / no-expiry) token
+            // fails the WHERE and the statement is a no-op.
+            if (expiryEnabled && slidingEnabled) {
+                c.prepareStatement(
+                    "UPDATE auth_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) " +
+                        "WHERE token_hash = ? AND expires_at IS NOT NULL " +
+                        "AND expires_at < DATE_ADD(NOW(), INTERVAL ? SECOND)"
+                ).use { ps ->
+                    ps.setLong(1, tokenTtlSeconds)
+                    ps.setString(2, hash)
+                    ps.setLong(3, tokenTtlSeconds / 2)
+                    ps.executeUpdate()
+                }
+            }
 
             toAuthUser(c, row)
         }

@@ -48,11 +48,27 @@
 #     password: app-password
 #     from: station@example.gr
 #
+# session (OPTIONAL): bearer-token lifetime. Defaults: expiration on, 90 days,
+# sliding. `expiration: false` = tokens never expire (revoked only by logout or
+# a password change). When on, `days` is the lifetime and `sliding` decides
+# whether using the app renews the window (idle timeout: an active user is
+# never logged out mid-work) or the window is fixed from login. Example:
+#
+#   session:
+#     expiration: true
+#     days: 90
+#     sliding: true
+#
 # Path override: -Dstations.config=<path> or POC_STATIONS env var.
 superAdmin:
   username: su
   password: 1234
   displayName: "Super Administrator"
+
+session:
+  expiration: true   # false = bearer tokens never expire (until logout / password change)
+  days: 90           # token lifetime in days when expiration is enabled
+  sliding: true      # true = window slides forward on use (idle timeout); false = fixed from login
 
 central:
   jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
