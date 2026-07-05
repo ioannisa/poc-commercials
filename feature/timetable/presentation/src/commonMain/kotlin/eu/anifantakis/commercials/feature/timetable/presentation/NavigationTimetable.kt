@@ -13,7 +13,8 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import eu.anifantakis.commercials.core.presentation.helper.navStepConfig
+import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
+import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
@@ -52,7 +53,7 @@ sealed interface TimetableStepNavType : NavKey {
 // Serializers derived from the sealed hierarchy's CLOSED generated
 // serializer (all targets, compile-time) - adding a step route needs no
 // registration change here, ever.
-private val stepNavConfig = navStepConfig<TimetableStepNavType>()
+private val stepNavConfig = navConfigOf(navHierarchy<TimetableStepNavType>())
 
 /**
  * ONE root entry for the whole flow. App-owned concerns (the schedule-email

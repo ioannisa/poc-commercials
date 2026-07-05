@@ -54,7 +54,3 @@ fun navConfigOf(vararg hierarchies: NavHierarchy<out NavKey>): SavedStateConfigu
             }
         }
     }
-
-/** A nested flow's persistence config, derived from its sealed step hierarchy. */
-inline fun <reified F : NavKey> navStepConfig(): SavedStateConfiguration =
-    navConfigOf(navHierarchy<F>())
