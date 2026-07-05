@@ -35,3 +35,12 @@ kotlin {
         }
     }
 }
+
+// Compose stability config, applied to EVERY feature presentation module
+// (core:presentation + each :feature:*:presentation) so kotlinx-datetime
+// value types are skippable in composables (e.g. date: LocalDate params).
+composeCompiler {
+    stabilityConfigurationFiles.add(
+        rootProject.layout.projectDirectory.file("compose_compiler_config.conf")
+    )
+}

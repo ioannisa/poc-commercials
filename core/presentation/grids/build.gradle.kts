@@ -20,7 +20,7 @@ plugins {
 
 composeCompiler {
     stabilityConfigurationFiles.add(
-        layout.projectDirectory.file("compose_compiler_config.conf")
+        rootProject.layout.projectDirectory.file("compose_compiler_config.conf")
     )
 }
 
