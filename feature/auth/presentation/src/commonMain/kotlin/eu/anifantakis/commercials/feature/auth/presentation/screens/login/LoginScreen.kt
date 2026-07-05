@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.login
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,12 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -98,7 +93,7 @@ private fun LoginScreen(
                     value = state.username,
                     onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
                     label = { Text("Username") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                    leadingIcon = { Icon(AppIcons.person, contentDescription = null) },
                     singleLine = true,
                     enabled = !state.isLoading,
                     modifier = Modifier.fillMaxWidth()
@@ -111,7 +106,7 @@ private fun LoginScreen(
                         onValueChange = { onIntent(LoginIntent.RecoveryCodeChanged(it)) },
                         label = { Text("Recovery code") },
                         placeholder = { Text("XXXX-XXXX-XXXX-XXXX") },
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                        leadingIcon = { Icon(AppIcons.key, contentDescription = null) },
                         singleLine = true,
                         enabled = !state.isLoading,
                         modifier = Modifier.fillMaxWidth()
@@ -124,11 +119,11 @@ private fun LoginScreen(
                     value = state.password,
                     onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
                     label = { Text(if (state.recoveryMode) "New password" else "Password") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    leadingIcon = { Icon(AppIcons.lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { onIntent(LoginIntent.TogglePasswordVisibility) }) {
                             Icon(
-                                if (state.passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                if (state.passwordVisible) AppIcons.visibilityOff else AppIcons.visibility,
                                 contentDescription = if (state.passwordVisible) "Hide password" else "Show password"
                             )
                         }

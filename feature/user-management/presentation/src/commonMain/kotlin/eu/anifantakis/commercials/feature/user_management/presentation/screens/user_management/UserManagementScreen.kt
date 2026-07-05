@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.user_management.presentation.screens.user_management
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,12 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -87,12 +82,12 @@ private fun UserManagementScreen(
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onNavIntent(UserManagementScreenNavIntent.OnBack) }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(AppIcons.arrowBack, contentDescription = "Back")
             }
             Text("User Management", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             Button(onClick = { onIntent(UserManagementIntent.ShowCreate) }) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(AppIcons.add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("New User")
             }
@@ -136,14 +131,14 @@ private fun UserManagementScreen(
                         }
                         if (!user.isAdmin) {
                             IconButton(onClick = { onIntent(UserManagementIntent.ResetRequested(user)) }) {
-                                Icon(Icons.Default.LockReset, contentDescription = "Reset password")
+                                Icon(AppIcons.lockReset, contentDescription = "Reset password")
                             }
                             IconButton(onClick = { onIntent(UserManagementIntent.EditGrantsRequested(user)) }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit grants")
+                                Icon(AppIcons.edit, contentDescription = "Edit grants")
                             }
                             IconButton(onClick = { onIntent(UserManagementIntent.DeleteRequested(user)) }) {
                                 Icon(
-                                    Icons.Default.Delete,
+                                    AppIcons.delete,
                                     contentDescription = "Delete user",
                                     tint = MaterialTheme.colorScheme.error
                                 )

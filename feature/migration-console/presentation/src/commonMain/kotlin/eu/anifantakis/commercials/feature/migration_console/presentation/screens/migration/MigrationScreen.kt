@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.migration_console.presentation.screens.migration
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,10 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -112,7 +109,7 @@ private fun MigrationScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(AppIcons.arrowBack, contentDescription = "Back")
             }
             Text("Legacy Migration", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
@@ -395,7 +392,7 @@ private fun ServerFileBrowserDialog(
                                     .padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Folder, null, modifier = Modifier.height(18.dp))
+                                Icon(AppIcons.folder, null, modifier = Modifier.height(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("..", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
@@ -413,7 +410,7 @@ private fun ServerFileBrowserDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                if (entry.isDir) Icons.Default.Folder else Icons.Default.Description,
+                                if (entry.isDir) AppIcons.folder else AppIcons.description,
                                 null,
                                 modifier = Modifier.height(18.dp),
                                 tint = if (entry.isDir) MaterialTheme.colorScheme.primary

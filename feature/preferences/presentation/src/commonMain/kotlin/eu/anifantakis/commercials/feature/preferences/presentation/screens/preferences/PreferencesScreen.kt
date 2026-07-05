@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.preferences.presentation.screens.preferences
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,13 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.ManageAccounts
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,7 +93,7 @@ private fun PreferencesScreen(
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Icon(AppIcons.arrowBack, contentDescription = "Back")
                 }
                 Text("Preferences", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
@@ -128,8 +122,8 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("Account", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(Icons.Default.Lock, "Change Password", "Signs out every session") { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
-                        PreferenceEntry(Icons.Default.Key, "Recovery Codes", "One-time codes for \"forgot password\"") { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
+                        PreferenceEntry(AppIcons.lock, "Change Password", "Signs out every session") { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
+                        PreferenceEntry(AppIcons.key, "Recovery Codes", "One-time codes for \"forgot password\"") { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -141,9 +135,9 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("Maintenance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(Icons.Default.ManageAccounts, "Manage Users", "Accounts, grants, password resets") { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
-                        PreferenceEntry(Icons.Default.Storage, "Legacy Migration", "Import a legacy mysqldump as a station") { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
-                        PreferenceEntry(Icons.Default.Dns, "Hosted Databases", "Inspect and delete hosted stations") { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
+                        PreferenceEntry(AppIcons.manageAccounts, "Manage Users", "Accounts, grants, password resets") { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
+                        PreferenceEntry(AppIcons.storage, "Legacy Migration", "Import a legacy mysqldump as a station") { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
+                        PreferenceEntry(AppIcons.dns, "Hosted Databases", "Inspect and delete hosted stations") { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,21 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -242,7 +228,7 @@ private fun CommercialDetailScreen(
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                Icons.Default.KeyboardArrowUp,
+                                AppIcons.keyboardArrowUp,
                                 contentDescription = "Move up",
                                 modifier = Modifier.size(18.dp),
                                 tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
@@ -254,7 +240,7 @@ private fun CommercialDetailScreen(
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                Icons.Default.KeyboardArrowDown,
+                                AppIcons.keyboardArrowDown,
                                 contentDescription = "Move down",
                                 modifier = Modifier.size(18.dp),
                                 tint = if (index < localCommercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
@@ -397,7 +383,7 @@ private fun CommercialDetailScreen(
                     // Print this break's program flow
                     ContextMenuEntry.Item(
                         label = "Print Break",
-                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = localCommercials.isNotEmpty()
                     ) {
                         printBreak()
@@ -409,7 +395,7 @@ private fun CommercialDetailScreen(
                     // Edit action
                     ContextMenuEntry.Item(
                         label = "Edit Commercial",
-                        icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "⌘E",
                         enabled = canEdit
                     ) {
@@ -422,26 +408,26 @@ private fun CommercialDetailScreen(
                     // Clipboard submenu
                     ContextMenuEntry.SubMenu(
                         label = "Clipboard",
-                        icon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = "Copy",
-                                icon = { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp)) },
+                                icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘C"
                             ) {
                                 println("Copy: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = "Cut",
-                                icon = { Icon(Icons.Default.ContentCut, null, modifier = Modifier.size(16.dp)) },
+                                icon = { Icon(AppIcons.contentCut, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘X"
                             ) {
                                 println("Cut: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = "Paste",
-                                icon = { Icon(Icons.Default.ContentPaste, null, modifier = Modifier.size(16.dp)) },
+                                icon = { Icon(AppIcons.contentPaste, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘V"
                             ) {
                                 println("Paste at index $rowIndex")
@@ -452,12 +438,12 @@ private fun CommercialDetailScreen(
                     // Move submenu
                     ContextMenuEntry.SubMenu(
                         label = "Move",
-                        icon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = "Move Up",
-                                icon = { Icon(Icons.Default.KeyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                                icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                                 enabled = rowIndex > 0
                             ) {
                                 if (rowIndex > 0) {
@@ -466,7 +452,7 @@ private fun CommercialDetailScreen(
                             },
                             ContextMenuEntry.Item(
                                 label = "Move Down",
-                                icon = { Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
+                                icon = { Icon(AppIcons.keyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
                                 enabled = rowIndex < localCommercials.size - 1
                             ) {
                                 if (rowIndex < localCommercials.size - 1) {
@@ -499,7 +485,7 @@ private fun CommercialDetailScreen(
                     // Delete action
                     ContextMenuEntry.Item(
                         label = "Delete",
-                        icon = { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "⌫",
                         enabled = canEdit
                     ) {
@@ -512,24 +498,24 @@ private fun CommercialDetailScreen(
                     // More options
                     ContextMenuEntry.SubMenu(
                         label = "More",
-                        icon = { Icon(Icons.Default.MoreVert, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.moreVert, null, modifier = Modifier.size(16.dp)) },
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = "Preview",
-                                icon = { Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp)) }
+                                icon = { Icon(AppIcons.playArrow, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("Preview: ${item.message}")
                             },
                             ContextMenuEntry.Item(
                                 label = "View History",
-                                icon = { Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp)) }
+                                icon = { Icon(AppIcons.history, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("History for: ${item.clientName}")
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
                                 label = "Details",
-                                icon = { Icon(Icons.Default.Info, null, modifier = Modifier.size(16.dp)) }
+                                icon = { Icon(AppIcons.info, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("Details: Client=${item.clientCode}, Duration=${item.durationSeconds}s, Contract=${item.contract}")
                             }
@@ -580,7 +566,7 @@ private fun DetailHeader(
                     ) {
                         IconButton(onClick = onBack) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
+                                AppIcons.arrowBack,
                                 contentDescription = "Back"
                             )
                         }
@@ -656,7 +642,7 @@ private fun DetailHeader(
                         if (onPrint != null) {
                             OutlinedButton(onClick = onPrint) {
                                 Icon(
-                                    Icons.Default.Print,
+                                    AppIcons.print,
                                     contentDescription = "Print break",
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -670,7 +656,7 @@ private fun DetailHeader(
                             enabled = onPrevious != null
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
+                                AppIcons.arrowBack,
                                 contentDescription = "Previous",
                                 modifier = Modifier.size(16.dp)
                             )
@@ -685,7 +671,7 @@ private fun DetailHeader(
                             Text("Επόμενο")
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
-                                Icons.AutoMirrored.Filled.ArrowForward,
+                                AppIcons.arrowForward,
                                 contentDescription = "Next",
                                 modifier = Modifier.size(16.dp)
                             )

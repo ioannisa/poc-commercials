@@ -18,9 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -905,9 +902,9 @@ private fun RichContextMenuEntry(
                             )
                             Icon(
                                 imageVector = if (opensOnLeft)
-                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                                    GridIcons.keyboardArrowLeft
                                 else
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    GridIcons.keyboardArrowRight,
                                 contentDescription = "Submenu",
                                 modifier = Modifier.size(16.dp),
                                 tint = LocalContentColor.current.copy(alpha = 0.6f)
@@ -1039,9 +1036,9 @@ private fun RichContextMenuEntrySimple(
                             )
                             Icon(
                                 imageVector = if (opensOnLeft)
-                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                                    GridIcons.keyboardArrowLeft
                                 else
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    GridIcons.keyboardArrowRight,
                                 contentDescription = "Submenu",
                                 modifier = Modifier.size(16.dp),
                                 tint = LocalContentColor.current.copy(alpha = 0.6f)

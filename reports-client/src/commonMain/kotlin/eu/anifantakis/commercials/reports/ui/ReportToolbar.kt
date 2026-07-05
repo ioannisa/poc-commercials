@@ -1,10 +1,6 @@
 package eu.anifantakis.commercials.reports.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,7 +77,7 @@ fun ReportToolbar(
             enabled = !isLoading && isReportAvailable
         ) {
             Icon(
-                Icons.Default.Visibility,
+                ReportIcons.visibility,
                 contentDescription = "Preview Month Report",
                 modifier = Modifier.size(18.dp)
             )
@@ -95,7 +91,7 @@ fun ReportToolbar(
             enabled = !isLoading && isReportAvailable
         ) {
             Icon(
-                Icons.Default.Print,
+                ReportIcons.print,
                 contentDescription = "Print Month Report",
                 modifier = Modifier.size(18.dp)
             )
@@ -118,7 +114,7 @@ fun ReportToolbar(
                 )
             } else {
                 Icon(
-                    Icons.Default.Save,
+                    ReportIcons.save,
                     contentDescription = "Export Month to PDF",
                     modifier = Modifier.size(18.dp)
                 )
@@ -166,7 +162,7 @@ fun ReportIconButton(
         modifier = modifier
     ) {
         Icon(
-            Icons.Default.Print,
+            ReportIcons.print,
             contentDescription = "Generate Report"
         )
     }

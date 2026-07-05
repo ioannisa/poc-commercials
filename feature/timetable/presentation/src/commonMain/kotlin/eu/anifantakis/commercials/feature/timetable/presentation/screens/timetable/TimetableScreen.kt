@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,22 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Numbers
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -246,7 +231,7 @@ private fun TimetableScreen(
                         finder.selectedSpot?.description?.take(48) ?: "— κανένα σποτ —",
                         maxLines = 1, fontSize = 12.sp
                     )
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    Icon(AppIcons.arrowDropDown, contentDescription = null)
                 }
                 DropdownMenu(expanded = spotMenu, onDismissRequest = { spotMenu = false }) {
                     finder.spots.forEach { spot ->
@@ -261,7 +246,7 @@ private fun TimetableScreen(
                 }
                 if (finder.selectedParty != null) {
                     IconButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Καθαρισμός εύρεσης")
+                        Icon(AppIcons.clear, contentDescription = "Καθαρισμός εύρεσης")
                     }
                 }
             }
@@ -325,7 +310,7 @@ private fun TimetableScreen(
                     // Open/View details
                     add(ContextMenuEntry.Item(
                         label = "Open Details",
-                        icon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.openInNew, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "Enter",
                         enabled = spotCount > 0
                     ) {
@@ -342,7 +327,7 @@ private fun TimetableScreen(
                     // Print the whole day this cell belongs to
                     add(ContextMenuEntry.Item(
                         label = "Print Day ${dayMenuLabel(date)}",
-                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         printDay(date)
@@ -351,7 +336,7 @@ private fun TimetableScreen(
                     // Print this break's commercials
                     add(ContextMenuEntry.Item(
                         label = "Print Break",
-                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = spotCount > 0
                     ) {
                         printBreak(breakSlot, date)
@@ -364,7 +349,7 @@ private fun TimetableScreen(
                         label = if (showSpotTimes) "Show Spot Counts" else "Show Spot Times",
                         icon = {
                             Icon(
-                                if (showSpotTimes) Icons.Default.Numbers else Icons.Default.Timer,
+                                if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
                                 null,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -382,13 +367,13 @@ private fun TimetableScreen(
                         // keys drive (add needs a spot armed via Εύρεση)
                         add(ContextMenuEntry.SubMenu(
                             label = "Edit",
-                            icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)) },
+                            icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
                             items = listOf(
                                 ContextMenuEntry.Item(
                                     label = finder.selectedSpot
                                         ?.let { "Add «${it.description.take(30)}»" }
                                         ?: "Add Spot (επιλέξτε από Εύρεση)",
-                                    icon = { Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp)) },
+                                    icon = { Icon(AppIcons.add, null, modifier = Modifier.size(16.dp)) },
                                     shortcut = "A",
                                     enabled = finder.selectedSpot != null
                                 ) {
@@ -396,7 +381,7 @@ private fun TimetableScreen(
                                 },
                                 ContextMenuEntry.Item(
                                     label = "Remove Last Added",
-                                    icon = { Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp)) },
+                                    icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
                                     shortcut = "R",
                                     enabled = (state.addedCounts[key] ?: 0) > 0
                                 ) {
@@ -411,7 +396,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = "Print Day ${dayMenuLabel(date)}",
-                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         printDay(date)
@@ -424,7 +409,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = "Print Break $label (Entire Month)",
-                        icon = { Icon(Icons.Default.Print, null, modifier = Modifier.size(16.dp)) }
+                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) }
                     ) {
                         printBreakForMonth(breakSlot)
                     }
@@ -459,7 +444,7 @@ private fun StationSelector(authSession: AuthSession) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 Icon(
-                    Icons.Default.ArrowDropDown,
+                    AppIcons.arrowDropDown,
                     contentDescription = "Switch station",
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -470,7 +455,7 @@ private fun StationSelector(authSession: AuthSession) {
                         text = { Text(station.name) },
                         leadingIcon = {
                             if (station.id == current.id) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(AppIcons.check, contentDescription = null, modifier = Modifier.size(16.dp))
                             } else {
                                 Spacer(Modifier.size(16.dp))
                             }
@@ -526,7 +511,7 @@ private fun KeyboardEnabledHeader(
                 // Month navigation
                 IconButton(onClick = onPreviousMonth) {
                     Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
+                        AppIcons.arrowBack,
                         contentDescription = "Previous month"
                     )
                 }
@@ -540,7 +525,7 @@ private fun KeyboardEnabledHeader(
 
                 IconButton(onClick = onNextMonth) {
                     Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
+                        AppIcons.arrowForward,
                         contentDescription = "Next month"
                     )
                 }
@@ -566,7 +551,7 @@ private fun KeyboardEnabledHeader(
                 // icon shows the mode you'll switch TO)
                 IconButton(onClick = onToggleShowTimes) {
                     Icon(
-                        if (showSpotTimes) Icons.Default.Numbers else Icons.Default.Timer,
+                        if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
                         contentDescription = if (showSpotTimes) "Show spot counts" else "Show spot times"
                     )
                 }
@@ -582,7 +567,7 @@ private fun KeyboardEnabledHeader(
                 // renders it; this is just the launch point.
                 if (canEdit) {
                     IconButton(onClick = onEmail) {
-                        Icon(Icons.Default.Email, contentDescription = "Email customer schedule")
+                        Icon(AppIcons.email, contentDescription = "Email customer schedule")
                     }
                 }
 
@@ -592,13 +577,13 @@ private fun KeyboardEnabledHeader(
                 AccountBadge(authSession)
                 IconButton(onClick = onPreferences) {
                     Icon(
-                        Icons.Default.Settings,
+                        AppIcons.settings,
                         contentDescription = "Preferences"
                     )
                 }
                 IconButton(onClick = onLogout) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Logout,
+                        AppIcons.logout,
                         contentDescription = "Logout",
                         tint = MaterialTheme.colorScheme.error
                     )

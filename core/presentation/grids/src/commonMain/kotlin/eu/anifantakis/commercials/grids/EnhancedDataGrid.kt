@@ -23,12 +23,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -1264,7 +1258,7 @@ private fun <T> HeaderCell(
             if (isSorted && sortDirection != SortDirection.NONE) {
                 Icon(
                     imageVector = if (sortDirection == SortDirection.ASCENDING)
-                        Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                        GridIcons.arrowUpward else GridIcons.arrowDownward,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp).padding(start = 4.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -2199,7 +2193,7 @@ private fun <T> DataCell(
                 // Show edit icon on hover if editable
                 if (enableEditing && column.editable && isCellFocused) {
                     Icon(
-                        imageVector = Icons.Default.Edit,
+                        imageVector = GridIcons.edit,
                         contentDescription = "Edit",
                         modifier = Modifier.size(14.dp).padding(start = 4.dp),
                         tint = palette.mutedText
@@ -2286,7 +2280,7 @@ private fun EditableCell(
             modifier = Modifier.size(20.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Check,
+                imageVector = GridIcons.check,
                 contentDescription = "Save",
                 tint = palette.positiveValue,
                 modifier = Modifier.size(14.dp)
@@ -2299,7 +2293,7 @@ private fun EditableCell(
             modifier = Modifier.size(20.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Close,
+                imageVector = GridIcons.close,
                 contentDescription = "Cancel",
                 tint = palette.negativeValue,
                 modifier = Modifier.size(14.dp)
