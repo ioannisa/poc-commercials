@@ -13,5 +13,9 @@ kotlin {
             api(projects.core.presentation.grids)
             implementation(projects.reportsClient)
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
