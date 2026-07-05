@@ -13,6 +13,7 @@ import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
@@ -21,8 +22,6 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import eu.anifantakis.lib.ksafe.KSafe
-import eu.anifantakis.lib.ksafe.invoke
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -134,16 +133,13 @@ class TimetableViewModel(
     private val finderRepository: FinderRepository,
     private val partySearch: PartySearchRepository,
     private val common: TimetableCommon,
-    ksafe: KSafe,
+    private val prefs: TimetablePreferences,
 ) : BaseGlobalViewModel() {
 
     private val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 
-    // pre-refactor key - existing installations keep their choice
-    private var storedShowTimes by ksafe(false, key = "grid_show_spot_times")
-
     private val _state = MutableStateFlow(
-        TimetableState(year = today.year, month = today.monthNumber, showSpotTimes = storedShowTimes)
+        TimetableState(year = today.year, month = today.monthNumber, showSpotTimes = prefs.showSpotTimes)
     )
     val state by _state
         .onStart { loadAll() }
@@ -184,7 +180,7 @@ class TimetableViewModel(
 
             TimetableIntent.ToggleShowTimes -> {
                 val newValue = !_state.value.showSpotTimes
-                storedShowTimes = newValue
+                prefs.showSpotTimes = newValue
                 _state.update { it.copy(showSpotTimes = newValue) }
             }
 

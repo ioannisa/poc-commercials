@@ -5,7 +5,14 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
+import eu.anifantakis.commercials.core.domain.party_search.Party
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
+import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
+import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
@@ -14,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.datetime.LocalDate
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
@@ -124,4 +134,42 @@ class FakePlacementsRepository : PlacementsRepository {
         reorders += Triple(breakId, date, orderedIds)
         return reorderResult
     }
+}
+
+class FakeFinderRepository : FinderRepository {
+    var lines: List<ContractLine> = emptyList()
+    var spots: List<ContractLineSpot> = emptyList()
+    override suspend fun contractLines(clientCode: String, kind: PartyKind) = DataResult.Success(lines)
+    override suspend fun lineSpots(lineId: Long) = DataResult.Success(spots)
+}
+
+class FakePartySearchRepository : PartySearchRepository {
+    var results: List<Party> = emptyList()
+    override suspend fun search(query: String, kind: PartyKind) = DataResult.Success(results)
+}
+
+class FakeTimetablePreferences(override var showSpotTimes: Boolean = false) : TimetablePreferences
+
+/**
+ * Shared fake of the flow contract: records every verb call and lets tests
+ * drive [commonState]. The whole point of the screens depending on the
+ * interface rather than the concrete CommonViewModel.
+ */
+class FakeTimetableCommon : TimetableCommon {
+    private val _commonState = MutableStateFlow(TimetableCommonState())
+    override val commonState: StateFlow<TimetableCommonState> = _commonState.asStateFlow()
+
+    fun emit(state: TimetableCommonState) { _commonState.value = state }
+
+    var clears = 0
+    val loads = mutableListOf<Pair<Int, Int>>()
+    val adds = mutableListOf<Triple<Long, Long, LocalDate>>()
+    val removes = mutableListOf<Pair<Long, LocalDate>>()
+    val reorders = mutableListOf<Triple<Long, LocalDate, List<Long>>>()
+
+    override fun clear() { clears++ }
+    override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
+    override fun add(spotId: Long, breakId: Long, date: LocalDate) { adds += Triple(spotId, breakId, date) }
+    override fun removeLast(breakId: Long, date: LocalDate) { removes += (breakId to date) }
+    override fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(breakId, date, orderedIds) }
 }

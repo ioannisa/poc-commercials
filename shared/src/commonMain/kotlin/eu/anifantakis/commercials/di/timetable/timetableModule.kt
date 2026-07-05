@@ -1,12 +1,14 @@
 package eu.anifantakis.commercials.di.timetable
 
 import eu.anifantakis.commercials.feature.timetable.data.FinderRepositoryImpl
+import eu.anifantakis.commercials.feature.timetable.data.KSafeTimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.data.data_source.RemoteFinderDataSourceImpl
 import eu.anifantakis.commercials.feature.timetable.data.data_source.RemotePlacementsDataSourceImpl
 import eu.anifantakis.commercials.feature.timetable.data.data_source.RemoteScheduleDataSourceImpl
 import eu.anifantakis.commercials.feature.timetable.data.PlacementsRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.data.ScheduleRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
+import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFinderDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePlacementsDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
@@ -29,6 +31,7 @@ val timetableModule = module {
     singleOf(::ScheduleRepositoryImpl).bind<ScheduleRepository>()
     singleOf(::PlacementsRepositoryImpl).bind<PlacementsRepository>()
     singleOf(::FinderRepositoryImpl).bind<FinderRepository>()
+    singleOf(::KSafeTimetablePreferences).bind<TimetablePreferences>()
 
     // the flow-shared ViewModel: cells + all placement I/O. Resolved by the
     // nav entries against the timetable flow's ViewModelStoreOwner and
@@ -41,7 +44,7 @@ val timetableModule = module {
             finderRepository = get(),
             partySearch = get(),
             common = params.get(),
-            ksafe = get(),
+            prefs = get(),
         )
     }
     viewModel { params ->

@@ -1,7 +1,7 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
@@ -9,10 +9,6 @@ import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
-import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
@@ -76,20 +72,3 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
     }
 }
 
-/** A 10-line fake of the contract - the whole point of depending on the interface. */
-private class FakeTimetableCommon : TimetableCommon {
-    private val _commonState = MutableStateFlow(TimetableCommonState())
-    override val commonState: StateFlow<TimetableCommonState> = _commonState.asStateFlow()
-
-    fun emit(state: TimetableCommonState) { _commonState.value = state }
-
-    val reorders = mutableListOf<Triple<Long, LocalDate, List<Long>>>()
-
-    override fun clear() {}
-    override fun loadMonth(year: Int, month: Int) {}
-    override fun add(spotId: Long, breakId: Long, date: LocalDate) {}
-    override fun removeLast(breakId: Long, date: LocalDate) {}
-    override fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>) {
-        reorders += Triple(breakId, date, orderedIds)
-    }
-}
