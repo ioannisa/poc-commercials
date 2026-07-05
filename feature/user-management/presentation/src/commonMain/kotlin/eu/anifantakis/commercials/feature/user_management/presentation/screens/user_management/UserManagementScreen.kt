@@ -60,8 +60,21 @@ fun UserManagementScreenRoot(
         state = viewModel.state,
         stationChoices = stationChoices,
         onIntent = viewModel::onAction,
-        onBack = onBack,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                UserManagementScreenNavIntent.OnBack -> onBack()
+            }
+        },
     )
+}
+
+/**
+ * Navigation-only actions of this screen — ALWAYS routed through this single
+ * parameter (a predictable shape you can expect on every screen, ready to
+ * accept more nav without a refactor). Not a ViewModel [UserManagementIntent].
+ */
+private sealed interface UserManagementScreenNavIntent {
+    data object OnBack : UserManagementScreenNavIntent
 }
 
 @Composable
@@ -69,11 +82,11 @@ private fun UserManagementScreen(
     state: UserManagementState,
     stationChoices: List<Pair<String, String>>,
     onIntent: (UserManagementIntent) -> Unit,
-    onBack: () -> Unit,
+    onNavIntent: (UserManagementScreenNavIntent) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { onNavIntent(UserManagementScreenNavIntent.OnBack) }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Text("User Management", fontSize = 20.sp, fontWeight = FontWeight.Bold)

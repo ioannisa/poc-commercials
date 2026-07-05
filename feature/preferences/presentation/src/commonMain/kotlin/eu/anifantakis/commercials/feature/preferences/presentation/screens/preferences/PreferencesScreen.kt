@@ -57,13 +57,32 @@ fun PreferencesScreenRoot(
         theme = viewModel.theme,
         isAdmin = isAdmin,
         onIntent = viewModel::onAction,
-        onBack = onBack,
-        onChangePassword = onChangePassword,
-        onRecoveryCodes = onRecoveryCodes,
-        onManageUsers = onManageUsers,
-        onMigration = onMigration,
-        onDatabases = onDatabases,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                PreferencesScreenNavIntent.OnBack -> onBack()
+                PreferencesScreenNavIntent.OnChangePassword -> onChangePassword()
+                PreferencesScreenNavIntent.OnRecoveryCodes -> onRecoveryCodes()
+                PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
+                PreferencesScreenNavIntent.OnMigration -> onMigration()
+                PreferencesScreenNavIntent.OnDatabases -> onDatabases()
+            }
+        },
     )
+}
+
+/**
+ * Navigation-only actions of the preferences screen. Not ViewModel
+ * [PreferencesIntent]s (they touch no state), collapsed into ONE parameter
+ * so six nav callbacks don't bloat the signature. The Root maps each to the
+ * nav callback it received.
+ */
+private sealed interface PreferencesScreenNavIntent {
+    data object OnBack : PreferencesScreenNavIntent
+    data object OnChangePassword : PreferencesScreenNavIntent
+    data object OnRecoveryCodes : PreferencesScreenNavIntent
+    data object OnManageUsers : PreferencesScreenNavIntent
+    data object OnMigration : PreferencesScreenNavIntent
+    data object OnDatabases : PreferencesScreenNavIntent
 }
 
 @Composable
@@ -71,12 +90,7 @@ private fun PreferencesScreen(
     theme: ThemePreference,
     isAdmin: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
-    onBack: () -> Unit,
-    onChangePassword: () -> Unit,
-    onRecoveryCodes: () -> Unit,
-    onManageUsers: () -> Unit,
-    onMigration: () -> Unit,
-    onDatabases: () -> Unit,
+    onNavIntent: (PreferencesScreenNavIntent) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -84,7 +98,7 @@ private fun PreferencesScreen(
     ) {
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
                 Text("Preferences", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -114,8 +128,8 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("Account", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(Icons.Default.Lock, "Change Password", "Signs out every session", onChangePassword)
-                        PreferenceEntry(Icons.Default.Key, "Recovery Codes", "One-time codes for \"forgot password\"", onRecoveryCodes)
+                        PreferenceEntry(Icons.Default.Lock, "Change Password", "Signs out every session") { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
+                        PreferenceEntry(Icons.Default.Key, "Recovery Codes", "One-time codes for \"forgot password\"") { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -127,9 +141,9 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(16.dp)) {
                         Text("Maintenance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(Icons.Default.ManageAccounts, "Manage Users", "Accounts, grants, password resets", onManageUsers)
-                        PreferenceEntry(Icons.Default.Storage, "Legacy Migration", "Import a legacy mysqldump as a station", onMigration)
-                        PreferenceEntry(Icons.Default.Dns, "Hosted Databases", "Inspect and delete hosted stations", onDatabases)
+                        PreferenceEntry(Icons.Default.ManageAccounts, "Manage Users", "Accounts, grants, password resets") { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
+                        PreferenceEntry(Icons.Default.Storage, "Legacy Migration", "Import a legacy mysqldump as a station") { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
+                        PreferenceEntry(Icons.Default.Dns, "Hosted Databases", "Inspect and delete hosted stations") { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
                     }
                 }
             }

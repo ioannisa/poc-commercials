@@ -1,7 +1,16 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -17,9 +26,19 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -28,18 +47,27 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.core.presentation.grids.*
+import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
+import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
+import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
+import eu.anifantakis.commercials.core.presentation.grids.EnhancedDataGrid
+import eu.anifantakis.commercials.core.presentation.grids.SelectionMode
+import eu.anifantakis.commercials.core.presentation.grids.StableDate
+import eu.anifantakis.commercials.core.presentation.grids.StickyRowsConfig
+import eu.anifantakis.commercials.core.presentation.grids.formatDuration
+import eu.anifantakis.commercials.core.presentation.grids.gridPalette
+import eu.anifantakis.commercials.core.presentation.grids.rememberEnhancedDataGridState
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportConfig
 import eu.anifantakis.commercials.reports.print
 import eu.anifantakis.commercials.reports.toReportPayload
-import org.koin.compose.koinInject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import org.koin.compose.koinInject
 
 /**
  * Break Console entry point: own ViewModel (per-screen), the cell's
@@ -63,8 +91,21 @@ fun CommercialDetailScreenRoot(
         onCommercialsReorder = { reordered ->
             viewModel.onAction(CommercialDetailIntent.Reorder(reordered.map { it.id }))
         },
-        onBack = onBack,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                CommercialDetailScreenNavIntent.OnBack -> onBack()
+            }
+        },
     )
+}
+
+/**
+ * Navigation-only actions of the detail screen — always via this single
+ * parameter (predictable shape; ready to grow, e.g. a future prev/next
+ * break). Not a ViewModel [CommercialDetailIntent] (reorder is that).
+ */
+private sealed interface CommercialDetailScreenNavIntent {
+    data object OnBack : CommercialDetailScreenNavIntent
 }
 
 /**
@@ -80,7 +121,7 @@ private fun CommercialDetailScreen(
     spotCount: Int,
     commercials: ImmutableList<CommercialItem>,
     onCommercialsReorder: (List<CommercialItem>) -> Unit,
-    onBack: () -> Unit,
+    onNavIntent: (CommercialDetailScreenNavIntent) -> Unit,
     onPrevious: (() -> Unit)? = null,
     onNext: (() -> Unit)? = null
 ) {
@@ -317,7 +358,7 @@ private fun CommercialDetailScreen(
             totalDuration = totalDuration,
             flowDuration = flowDuration,
             exceptDuration = totalDuration - flowDuration,
-            onBack = onBack,
+            onBack = { onNavIntent(CommercialDetailScreenNavIntent.OnBack) },
             onPrevious = onPrevious,
             onNext = onNext,
             onPrint = { printBreak() }

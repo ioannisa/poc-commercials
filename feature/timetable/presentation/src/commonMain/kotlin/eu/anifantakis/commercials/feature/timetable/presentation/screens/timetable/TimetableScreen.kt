@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -122,21 +121,35 @@ fun TimetableScreenRoot(
     TimetableScreen(
         state = viewModel.state,
         onIntent = viewModel::onAction,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                TimetableScreenNavIntent.OnOpenEmailDialog -> onOpenEmailDialog()
+                TimetableScreenNavIntent.OnLogout -> onLogout()
+                TimetableScreenNavIntent.OnPreferences -> onPreferences()
+            }
+        },
         canEdit = canEdit,
-        onOpenEmailDialog = onOpenEmailDialog,
-        onLogout = onLogout,
-        onPreferences = onPreferences,
     )
+}
+
+/**
+ * Navigation-only actions of the grid screen. These are NOT ViewModel
+ * [TimetableIntent]s (they touch no state and the ViewModel never sees them),
+ * but collapsing them into ONE parameter keeps them from bloating the
+ * signature. The Root maps each to the nav callback it received.
+ */
+private sealed interface TimetableScreenNavIntent {
+    data object OnOpenEmailDialog : TimetableScreenNavIntent
+    data object OnLogout : TimetableScreenNavIntent
+    data object OnPreferences : TimetableScreenNavIntent
 }
 
 @Composable
 private fun TimetableScreen(
     state: TimetableState,
     onIntent: (TimetableIntent) -> Unit,
+    onNavIntent: (TimetableScreenNavIntent) -> Unit,
     canEdit: Boolean,
-    onOpenEmailDialog: () -> Unit,
-    onLogout: () -> Unit,
-    onPreferences: () -> Unit,
 ) {
     val year = state.year
     val month = state.month
@@ -207,9 +220,9 @@ private fun TimetableScreen(
             canEdit = canEdit,
             showSpotTimes = showSpotTimes,
             onToggleShowTimes = { onIntent(TimetableIntent.ToggleShowTimes) },
-            onEmail = onOpenEmailDialog,
-            onLogout = onLogout,
-            onPreferences = onPreferences,
+            onEmail = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) },
+            onLogout = { onNavIntent(TimetableScreenNavIntent.OnLogout) },
+            onPreferences = { onNavIntent(TimetableScreenNavIntent.OnPreferences) },
             onPreviousMonth = { onIntent(TimetableIntent.PreviousMonth) },
             onNextMonth = { onIntent(TimetableIntent.NextMonth) },
         )

@@ -69,7 +69,11 @@ fun MigrationScreenRoot(
     MigrationScreen(
         state = viewModel.state,
         onIntent = viewModel::onAction,
-        onBack = onBack,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                MigrationScreenNavIntent.OnBack -> onBack()
+            }
+        },
         onBrowseClicked = {
             if (nativeFilePickerAvailable) {
                 scope.launch {
@@ -84,11 +88,21 @@ fun MigrationScreenRoot(
     )
 }
 
+/**
+ * Navigation-only actions of this screen — ALWAYS routed through this single
+ * parameter (a predictable shape you can expect on every screen, ready to
+ * accept more nav without a refactor). Not a ViewModel [MigrationIntent];
+ * onBrowseClicked triggers a platform file picker, not navigation.
+ */
+private sealed interface MigrationScreenNavIntent {
+    data object OnBack : MigrationScreenNavIntent
+}
+
 @Composable
 private fun MigrationScreen(
     state: MigrationState,
     onIntent: (MigrationIntent) -> Unit,
-    onBack: () -> Unit,
+    onNavIntent: (MigrationScreenNavIntent) -> Unit,
     onBrowseClicked: () -> Unit,
 ) {
     val status = state.status
@@ -97,7 +111,7 @@ private fun MigrationScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Text("Legacy Migration", fontSize = 20.sp, fontWeight = FontWeight.Bold)

@@ -51,19 +51,32 @@ fun DatabasesScreenRoot(
     DatabasesScreen(
         state = viewModel.state,
         onIntent = viewModel::onAction,
-        onBack = onBack,
+        onNavIntent = { navIntent ->
+            when (navIntent) {
+                DatabasesScreenNavIntent.OnBack -> onBack()
+            }
+        },
     )
+}
+
+/**
+ * Navigation-only actions of this screen — ALWAYS routed through this single
+ * parameter (a predictable shape you can expect on every screen, ready to
+ * accept more nav without a refactor). Not a ViewModel [DatabasesIntent].
+ */
+private sealed interface DatabasesScreenNavIntent {
+    data object OnBack : DatabasesScreenNavIntent
 }
 
 @Composable
 private fun DatabasesScreen(
     state: DatabasesState,
     onIntent: (DatabasesIntent) -> Unit,
-    onBack: () -> Unit,
+    onNavIntent: (DatabasesScreenNavIntent) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Text("Hosted Databases", fontSize = 20.sp, fontWeight = FontWeight.Bold)
