@@ -76,7 +76,12 @@ kotlin {
             // Grid models are the factory's input; session/config drive the
             // web client - both appear in public signatures.
             api(projects.core.presentation.grids)
-            api(projects.core.data)
+            // implementation, NOT api: reports-client uses core:data internally
+            // (ReportApiClient's AuthSession, AppConfig) but must NOT re-export
+            // it - otherwise presentation modules that depend on reports-client
+            // inherit core:data on their classpath and can pierce the
+            // presentation⊥data boundary transitively (SOLID/DIP hygiene).
+            implementation(projects.core.data)
 
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.compose)
