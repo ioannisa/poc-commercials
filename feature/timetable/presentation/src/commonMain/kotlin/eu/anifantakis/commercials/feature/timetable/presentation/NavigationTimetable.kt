@@ -1,21 +1,46 @@
 package eu.anifantakis.commercials.feature.timetable.presentation
 
-import androidx.lifecycle.ViewModelStoreOwner
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
-import eu.anifantakis.commercials.core.presentation.navigation.Navigator
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
+import androidx.savedstate.serialization.SavedStateConfiguration
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
+/**
+ * The timetable flow appears in the ROOT graph as ONE route (kmp-developer
+ * Wiring A): the parent entry owns the [TimetableCommonViewModel] via the
+ * ViewModelStore decorator, so the flow's shared state and every step
+ * ViewModel live and die with this single entry - no manual owners.
+ */
 @Serializable
 sealed interface TimetableNavType : NavKey {
     @Serializable
-    data object Grid : TimetableNavType
+    data object TimetableFlow : TimetableNavType
+}
+
+/** Internal steps - known only inside the flow, invisible to the root graph. */
+@Serializable
+sealed interface TimetableStepNavType : NavKey {
+    @Serializable
+    data object Grid : TimetableStepNavType
 
     @Serializable
     data class CommercialDetail(
@@ -23,48 +48,101 @@ sealed interface TimetableNavType : NavKey {
         val breakTime: String,
         val date: LocalDate,
         val spotCount: Int,
-    ) : TimetableNavType
+    ) : TimetableStepNavType
+}
+
+// Non-JVM platforms need the step serializers registered explicitly, same
+// as the root navConfig (no reflection-based discovery on iOS/JS/WASM).
+private val stepNavConfig = SavedStateConfiguration {
+    serializersModule = SerializersModule {
+        polymorphic(NavKey::class) {
+            subclass(TimetableStepNavType.Grid::class, TimetableStepNavType.Grid.serializer())
+            subclass(TimetableStepNavType.CommercialDetail::class, TimetableStepNavType.CommercialDetail.serializer())
+        }
+    }
 }
 
 /**
- * The grid and the break-detail console. Both screens have their own
- * ViewModel; the flow-shared [TimetableCommonViewModel] (the month's cells
- * + all placement I/O) is resolved from [flowOwner] so BOTH entries get the
- * SAME instance, and is handed to each screen ViewModel via parametersOf.
- * App-owned concerns (the schedule-email dialog, logout, preferences) come
- * in as callbacks.
+ * ONE root entry for the whole flow. App-owned concerns (the schedule-email
+ * dialog, logout, preferences) come in as callbacks; navigation BETWEEN the
+ * flow's steps stays internal to [TimetableFlowHost].
  */
 fun EntryProviderScope<NavKey>.timetableEntries(
-    navigator: Navigator,
-    flowOwner: ViewModelStoreOwner,
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
 ) {
-    entry<TimetableNavType.Grid> {
-        val common = koinViewModel<TimetableCommonViewModel>(viewModelStoreOwner = flowOwner)
-        TimetableScreenRoot(
-            viewModel = koinViewModel { parametersOf(common) },
-            onOpenDetail = { breakId, breakTime, date, spotCount ->
-                navigator.navigate(TimetableNavType.CommercialDetail(breakId, breakTime, date, spotCount))
-            },
+    entry<TimetableNavType.TimetableFlow> {
+        // THIS entry is the CommonViewModel's owner: popping the flow
+        // destroys it, the nested stack, and every step ViewModel.
+        val common = koinViewModel<TimetableCommonViewModel>()
+        TimetableFlowHost(
+            common = common,
             onOpenEmailDialog = onOpenEmailDialog,
             onLogout = onLogout,
             onPreferences = onPreferences,
         )
     }
+}
 
-    entry<TimetableNavType.CommercialDetail> { route ->
-        val common = koinViewModel<TimetableCommonViewModel>(viewModelStoreOwner = flowOwner)
-        CommercialDetailScreenRoot(
-            breakId = route.breakId,
-            breakTime = route.breakTime,
-            date = route.date,
-            spotCount = route.spotCount,
-            viewModel = koinViewModel(
-                key = "commercial-detail-${route.breakId}-${route.date}",
-            ) { parametersOf(route.breakId, route.date, common) },
-            onBack = { navigator.goBack() },
-        )
-    }
+/**
+ * Hosts the flow's nested back stack (Grid ⇄ Detail). Each step resolves
+ * its OWN ViewModel and hands it the [TimetableCommon] contract - matched
+ * by type from parametersOf. Pure state-sharing flow: there are no
+ * commonEffects to collect.
+ */
+@Composable
+private fun TimetableFlowHost(
+    common: TimetableCommonViewModel,
+    onOpenEmailDialog: () -> Unit,
+    onLogout: () -> Unit,
+    onPreferences: () -> Unit,
+) {
+    val stepStack = rememberNavBackStack(stepNavConfig, TimetableStepNavType.Grid)
+
+    NavDisplay(
+        backStack = stepStack,
+        onBack = { if (stepStack.size > 1) stepStack.removeLastOrNull() },
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),   // both decorators AGAIN - nested display
+            rememberViewModelStoreNavEntryDecorator(),        // per-STEP ViewModel scoping
+        ),
+        transitionSpec = {
+            slideInHorizontally { it } + fadeIn() togetherWith
+                    slideOutHorizontally { -it } + fadeOut()
+        },
+        popTransitionSpec = {
+            slideInHorizontally { -it } + fadeIn() togetherWith
+                    slideOutHorizontally { it } + fadeOut()
+        },
+        entryProvider = entryProvider {
+
+            entry<TimetableStepNavType.Grid> {
+                TimetableScreenRoot(
+                    viewModel = koinViewModel { parametersOf(common) },
+                    onOpenDetail = { breakId, breakTime, date, spotCount ->
+                        stepStack.add(
+                            TimetableStepNavType.CommercialDetail(breakId, breakTime, date, spotCount)
+                        )
+                    },
+                    onOpenEmailDialog = onOpenEmailDialog,
+                    onLogout = onLogout,
+                    onPreferences = onPreferences,
+                )
+            }
+
+            entry<TimetableStepNavType.CommercialDetail> { route ->
+                CommercialDetailScreenRoot(
+                    breakId = route.breakId,
+                    breakTime = route.breakTime,
+                    date = route.date,
+                    spotCount = route.spotCount,
+                    viewModel = koinViewModel(
+                        key = "commercial-detail-${route.breakId}-${route.date}",
+                    ) { parametersOf(route.breakId, route.date, common) },
+                    onBack = { stepStack.removeLastOrNull() },
+                )
+            }
+        }
+    )
 }

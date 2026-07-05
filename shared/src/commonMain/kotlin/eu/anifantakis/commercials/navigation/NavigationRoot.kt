@@ -22,7 +22,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import androidx.savedstate.serialization.SavedStateConfiguration
 import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.core.presentation.helper.rememberFlowViewModelStoreOwner
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
 import eu.anifantakis.commercials.core.presentation.scaffold.ApplicationScaffold
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
@@ -53,8 +52,7 @@ private val navConfig = SavedStateConfiguration {
     serializersModule = SerializersModule {
         polymorphic(NavKey::class) {
             subclass(AuthNavType.Login::class, AuthNavType.Login.serializer())
-            subclass(TimetableNavType.Grid::class, TimetableNavType.Grid.serializer())
-            subclass(TimetableNavType.CommercialDetail::class, TimetableNavType.CommercialDetail.serializer())
+            subclass(TimetableNavType.TimetableFlow::class, TimetableNavType.TimetableFlow.serializer())
             subclass(PreferencesNavType.Preferences::class, PreferencesNavType.Preferences.serializer())
             subclass(UserManagementNavType.UserManagement::class, UserManagementNavType.UserManagement.serializer())
             subclass(MigrationNavType.Migration::class, MigrationNavType.Migration.serializer())
@@ -79,7 +77,7 @@ fun NavigationRoot() {
     // Token persists (no expiry), so a returning user skips the login screen
     val backStack = rememberNavBackStack(
         navConfig,
-        if (authSession.isLoggedIn) TimetableNavType.Grid else AuthNavType.Login
+        if (authSession.isLoggedIn) TimetableNavType.TimetableFlow else AuthNavType.Login
     )
     val navigator = remember { Navigator(backStack) }
 
@@ -109,10 +107,6 @@ fun NavigationRoot() {
         RecoveryCodesDialogRoot(onDismiss = { showRecoveryCodes = false })
     }
 
-    // Flow-shared ViewModel owner: the grid and detail entries resolve the
-    // same TimetableCommonViewModel from it (kmp-developer flow scope).
-    val timetableFlowOwner = rememberFlowViewModelStoreOwner("owner:TimetableFlow")
-
     ApplicationScaffold { scaffoldPadding ->
         NavDisplay(
             backStack = navigator.backStack,
@@ -133,12 +127,10 @@ fun NavigationRoot() {
             entryProvider = entryProvider {
 
                 authEntries(
-                    onLoggedIn = { navigator.resetTo(TimetableNavType.Grid) },
+                    onLoggedIn = { navigator.resetTo(TimetableNavType.TimetableFlow) },
                 )
 
                 timetableEntries(
-                    navigator = navigator,
-                    flowOwner = timetableFlowOwner,
                     onOpenEmailDialog = { showEmailDialog = true },
                     onLogout = {
                         scope.launch {

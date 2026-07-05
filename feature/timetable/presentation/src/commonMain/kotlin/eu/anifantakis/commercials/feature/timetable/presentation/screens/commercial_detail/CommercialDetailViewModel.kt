@@ -8,7 +8,7 @@ import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,25 +28,26 @@ sealed interface CommercialDetailIntent {
 
 /**
  * The detail screen's own ViewModel - a thin delegate: its cell's
- * commercials are OBSERVED from the flow-shared [TimetableCommonViewModel]
- * (the same truth the grid renders) and the reorder command is DELEGATED
- * back to it (optimistic apply + persist + error policy live there, once).
+ * commercials are OBSERVED through the flow-shared [TimetableCommon]
+ * contract (the same truth the grid renders) and the reorder command is
+ * DELEGATED back through it (optimistic apply + persist + error policy
+ * live in the CommonViewModel, once).
  */
 @Stable
 class CommercialDetailViewModel(
     private val breakId: Long,
     private val date: LocalDate,
-    private val common: TimetableCommonViewModel,
+    private val common: TimetableCommon,
 ) : BaseGlobalViewModel() {
 
     private val key = SchedulerKey(breakId, date)
 
-    val state by common.state
+    val state by common.commonState
         .map { CommercialDetailState(commercials = it.cells[key]?.commercials ?: persistentListOf()) }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
-            CommercialDetailState(common.state.value.cells[key]?.commercials ?: persistentListOf()),
+            CommercialDetailState(common.commonState.value.cells[key]?.commercials ?: persistentListOf()),
         )
         .toComposeState(viewModelScope)
 

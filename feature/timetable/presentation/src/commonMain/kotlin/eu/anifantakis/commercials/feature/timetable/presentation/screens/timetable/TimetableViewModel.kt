@@ -17,7 +17,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
@@ -123,16 +123,17 @@ sealed interface TimetableEffect {
 
 /**
  * The timetable SCREEN's ViewModel (grid + its finder dialog). The cells
- * live in the flow-shared [TimetableCommonViewModel]: their slice of state
- * is observed and merged below, and every cell MUTATION is delegated to it
- * (star topology - screen ViewModels never talk to each other).
+ * live behind the flow-shared [TimetableCommon] CONTRACT: their slice of
+ * state is observed and merged below, and every cell MUTATION is delegated
+ * through its verbs (star topology - screen ViewModels never talk to each
+ * other, and never see the concrete CommonViewModel).
  */
 @Stable
 class TimetableViewModel(
     private val scheduleRepository: ScheduleRepository,
     private val finderRepository: FinderRepository,
     private val partySearch: PartySearchRepository,
-    private val common: TimetableCommonViewModel,
+    private val common: TimetableCommon,
     ksafe: KSafe,
 ) : BaseGlobalViewModel() {
 
@@ -158,7 +159,7 @@ class TimetableViewModel(
         // The common ViewModel is the single truth for cells; mirror it into
         // this screen's state so the grid renders straight from TimetableState.
         viewModelScope.launch {
-            common.state.collect { cs ->
+            common.commonState.collect { cs ->
                 _state.update {
                     it.copy(cells = cs.cells, modifiedCells = cs.modifiedCells, addedCounts = cs.addedCounts)
                 }
