@@ -13,14 +13,12 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.savedstate.serialization.SavedStateConfiguration
+import eu.anifantakis.commercials.core.presentation.helper.navStepConfig
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -51,16 +49,10 @@ sealed interface TimetableStepNavType : NavKey {
     ) : TimetableStepNavType
 }
 
-// Non-JVM platforms need the step serializers registered explicitly, same
-// as the root navConfig (no reflection-based discovery on iOS/JS/WASM).
-private val stepNavConfig = SavedStateConfiguration {
-    serializersModule = SerializersModule {
-        polymorphic(NavKey::class) {
-            subclass(TimetableStepNavType.Grid::class, TimetableStepNavType.Grid.serializer())
-            subclass(TimetableStepNavType.CommercialDetail::class, TimetableStepNavType.CommercialDetail.serializer())
-        }
-    }
-}
+// Serializers derived from the sealed hierarchy's CLOSED generated
+// serializer (all targets, compile-time) - adding a step route needs no
+// registration change here, ever.
+private val stepNavConfig = navStepConfig<TimetableStepNavType>()
 
 /**
  * ONE root entry for the whole flow. App-owned concerns (the schedule-email

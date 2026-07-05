@@ -20,8 +20,9 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.savedstate.serialization.SavedStateConfiguration
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
+import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
 import eu.anifantakis.commercials.core.presentation.scaffold.ApplicationScaffold
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
@@ -41,25 +42,19 @@ import eu.anifantakis.commercials.feature.timetable.presentation.timetableEntrie
 import eu.anifantakis.commercials.feature.user_management.presentation.UserManagementNavType
 import eu.anifantakis.commercials.feature.user_management.presentation.userManagementEntries
 import kotlinx.coroutines.launch
-import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.koinInject
 
-// Required for non-JVM platforms (iOS, JS, WASM) — registers every feature's
-// route serializers explicitly since they cannot rely on reflection-based
-// discovery. New feature => new subclass lines here.
-private val navConfig = SavedStateConfiguration {
-    serializersModule = SerializersModule {
-        polymorphic(NavKey::class) {
-            subclass(AuthNavType.Login::class, AuthNavType.Login.serializer())
-            subclass(TimetableNavType.TimetableFlow::class, TimetableNavType.TimetableFlow.serializer())
-            subclass(PreferencesNavType.Preferences::class, PreferencesNavType.Preferences.serializer())
-            subclass(UserManagementNavType.UserManagement::class, UserManagementNavType.UserManagement.serializer())
-            subclass(MigrationNavType.Migration::class, MigrationNavType.Migration.serializer())
-            subclass(DatabasesNavType.Databases::class, DatabasesNavType.Databases.serializer())
-        }
-    }
-}
+// One line per FEATURE hierarchy (not per route): the sealed base's CLOSED
+// generated serializer covers every route of the feature on all targets -
+// adding a route inside a feature changes nothing here.
+private val navConfig = navConfigOf(
+    navHierarchy<AuthNavType>(),
+    navHierarchy<TimetableNavType>(),
+    navHierarchy<PreferencesNavType>(),
+    navHierarchy<UserManagementNavType>(),
+    navHierarchy<MigrationNavType>(),
+    navHierarchy<DatabasesNavType>(),
+)
 
 /**
  * The app layer's single assembly point: creates the [Navigator] over a
