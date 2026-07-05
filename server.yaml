@@ -93,6 +93,7 @@ stations:
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_channel4?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123
+
   - id: my-sample
     name: "My Sample"
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_migrated?useUnicode=true&characterEncoding=utf8"
