@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryIm
 import eu.anifantakis.commercials.core.data.party_search.data_source.RemotePartySearchDataSourceImpl
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePartySearchDataSource
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
@@ -19,7 +20,9 @@ val coreModule = module {
     // consumers mark the parameter @Provided.
     single { createKSafe() }
 
-    singleOf(::AuthSession)
+    // DIP: presentation injects the domain UserSession contract; the data
+    // layer (ApiHttpClient below) still gets the concrete AuthSession.
+    singleOf(::AuthSession).bind<UserSession>()
 
     // App-wide MVI container (kmp-developer global state)
     single { GlobalStateContainer() }

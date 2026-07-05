@@ -1,7 +1,7 @@
 package eu.anifantakis.commercials.feature.auth.data
 
 import eu.anifantakis.commercials.core.data.session.AuthSession
-import eu.anifantakis.commercials.core.data.session.StationAccess
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.core.domain.util.onSuccess

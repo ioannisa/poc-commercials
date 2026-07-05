@@ -32,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
@@ -112,7 +112,7 @@ private fun CommercialDetailScreen(
     onNext: (() -> Unit)? = null
 ) {
     // View-only roles can browse and print, but not reorder/edit
-    val authSession = koinInject<AuthSession>()
+    val authSession = koinInject<UserSession>()
     val canEdit = authSession.role.canEdit
 
     // Local mutable state for reordering - synced with parent

@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
@@ -92,7 +92,7 @@ fun TimetableScreenRoot(
 
     // Session revision drives reloads: login, logout and station switches
     // must refetch with the new token/role and drop per-station edits.
-    val authSession = koinInject<AuthSession>()
+    val authSession = koinInject<UserSession>()
     val revision = authSession.revision
     var lastRevision by remember { mutableStateOf(revision) }
     LaunchedEffect(revision) {
@@ -427,10 +427,10 @@ private fun dayMenuLabel(date: LocalDate): String =
  * Shows which station's data is on screen. With a single grant it's a plain
  * label; with several it becomes a dropdown - selecting one switches the
  * whole app to that station's schema (data refetch + role re-evaluation are
- * driven by the session revision bump in [AuthSession.selectStation]).
+ * driven by the session revision bump in [UserSession.selectStation]).
  */
 @Composable
-private fun StationSelector(authSession: AuthSession) {
+private fun StationSelector(authSession: UserSession) {
     val current = authSession.selectedStation ?: return
     var expanded by remember { mutableStateOf(false) }
 
@@ -558,7 +558,7 @@ private fun KeyboardEnabledHeader(
 
                 // Station switcher (dropdown only when the user can access
                 // more than one station)
-                val authSession = koinInject<AuthSession>()
+                val authSession = koinInject<UserSession>()
                 @Suppress("UNUSED_EXPRESSION") authSession.revision
                 StationSelector(authSession)
 
@@ -608,7 +608,7 @@ private fun KeyboardEnabledHeader(
  * credentials are managed in server.yaml, not through the API.
  */
 @Composable
-private fun AccountBadge(authSession: AuthSession) {
+private fun AccountBadge(authSession: UserSession) {
     Column(
         horizontalAlignment = Alignment.End,
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
