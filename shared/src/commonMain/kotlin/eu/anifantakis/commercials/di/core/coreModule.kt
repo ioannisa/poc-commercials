@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.di.core
 
+import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
 import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryImpl
 import eu.anifantakis.commercials.core.data.party_search.data_source.RemotePartySearchDataSourceImpl
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
@@ -21,6 +23,11 @@ val coreModule = module {
 
     // App-wide MVI container (kmp-developer global state)
     single { GlobalStateContainer() }
+
+    // ONE client per backend personality (CommonHttpClient subclasses):
+    // authenticated + station-stamped for the app API, plain for login/recovery
+    single { ApiHttpClient(session = get<AuthSession>()) }
+    single { PlainJsonHttpClient() }
 
     // Master-data party search (used by timetable finder + schedule email)
     singleOf(::RemotePartySearchDataSourceImpl).bind<RemotePartySearchDataSource>()

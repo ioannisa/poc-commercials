@@ -1,9 +1,6 @@
 package eu.anifantakis.commercials.feature.migration_console.data.data_source
 
-import eu.anifantakis.commercials.core.data.config.AppConfig
-import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
-import eu.anifantakis.commercials.core.data.network.remoteCall
-import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
@@ -11,16 +8,10 @@ import eu.anifantakis.commercials.feature.migration_console.domain.BrowseEntry
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowInfo
-import eu.anifantakis.commercials.feature.migration_console.domain.data_source.RemoteMigrationDataSource
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationSummary
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
+import eu.anifantakis.commercials.feature.migration_console.domain.data_source.RemoteMigrationDataSource
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -103,42 +94,29 @@ private fun StatusDto.toDomain() = MigrationStatus(
 private fun BrowseListingDto.toDomain() =
     BrowseListing(path, parent, entries.map { BrowseEntry(it.name, it.isDir, it.sizeBytes) })
 
-class RemoteMigrationDataSourceImpl(private val session: AuthSession) : RemoteMigrationDataSource {
+class RemoteMigrationDataSourceImpl(private val api: ApiHttpClient) : RemoteMigrationDataSource {
 
-    private val httpClient by lazy { authenticatedJsonClient(session) }
+    override suspend fun status(): DataResult<MigrationStatus, RemoteError> =
+        api.getRemote<StatusDto>("/api/admin/migration/status").map { it.toDomain() }
 
-    private val base: String get() = "${AppConfig.require().serverBaseUrl}/api/admin/migration"
+    override suspend fun start(request: MigrationStart): DataResult<MigrationStatus, RemoteError> =
+        api.postRemote<StartDto, StatusDto>(
+            "/api/admin/migration/start",
+            StartDto(
+                request.dumpPath, request.host, request.port,
+                request.username, request.password, request.schema, request.createSchema,
+            ),
+        ).map { it.toDomain() }
 
-    override suspend fun status(): DataResult<MigrationStatus, RemoteError> = remoteCall {
-        httpClient.get("$base/status").body<StatusDto>()
-    }.map { it.toDomain() }
+    override suspend fun chooseFlow(choice: MigrationFlowChoice): DataResult<MigrationStatus, RemoteError> =
+        api.postRemote<FlowChoiceDto, StatusDto>(
+            "/api/admin/migration/flow",
+            FlowChoiceDto(choice.forTv, choice.stationId, choice.stationName, choice.addToYaml),
+        ).map { it.toDomain() }
 
-    override suspend fun start(request: MigrationStart): DataResult<MigrationStatus, RemoteError> = remoteCall {
-        httpClient.post("$base/start") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                StartDto(
-                    request.dumpPath, request.host, request.port,
-                    request.username, request.password, request.schema, request.createSchema,
-                )
-            )
-        }.body<StatusDto>()
-    }.map { it.toDomain() }
+    override suspend fun reset(): DataResult<MigrationStatus, RemoteError> =
+        api.postRemote<StatusDto, StatusDto>("/api/admin/migration/reset").map { it.toDomain() }
 
-    override suspend fun chooseFlow(choice: MigrationFlowChoice): DataResult<MigrationStatus, RemoteError> = remoteCall {
-        httpClient.post("$base/flow") {
-            contentType(ContentType.Application.Json)
-            setBody(FlowChoiceDto(choice.forTv, choice.stationId, choice.stationName, choice.addToYaml))
-        }.body<StatusDto>()
-    }.map { it.toDomain() }
-
-    override suspend fun reset(): DataResult<MigrationStatus, RemoteError> = remoteCall {
-        httpClient.post("$base/reset").body<StatusDto>()
-    }.map { it.toDomain() }
-
-    override suspend fun browse(path: String?): DataResult<BrowseListing, RemoteError> = remoteCall {
-        httpClient.get("$base/browse") {
-            if (path != null) url.parameters.append("path", path)
-        }.body<BrowseListingDto>()
-    }.map { it.toDomain() }
+    override suspend fun browse(path: String?): DataResult<BrowseListing, RemoteError> =
+        api.getRemote<BrowseListingDto>("/api/admin/migration/browse", "path" to path).map { it.toDomain() }
 }

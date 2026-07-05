@@ -98,7 +98,7 @@ suspend fun HttpResponse.serverErrorMessage(): String {
 }
 
 /**
- * Wraps a call made through [authenticatedJsonClient] (expectSuccess=true:
+ * Wraps a call made through [ApiHttpClient] (expectSuccess=true:
  * non-2xx throws) into a [DataResult]. [SessionExpiredException] maps to
  * UNAUTHORIZED - by then the session is cleared and the UI is already
  * bouncing to Login.

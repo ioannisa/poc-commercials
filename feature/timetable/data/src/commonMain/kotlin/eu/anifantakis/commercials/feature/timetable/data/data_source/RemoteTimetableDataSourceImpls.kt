@@ -1,14 +1,10 @@
 package eu.anifantakis.commercials.feature.timetable.data.data_source
 
-import eu.anifantakis.commercials.core.data.config.AppConfig
-import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
-import eu.anifantakis.commercials.core.data.network.dataCall
-import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
-import eu.anifantakis.commercials.core.domain.util.asEmptyDataResult
 import eu.anifantakis.commercials.core.domain.util.map
 import eu.anifantakis.commercials.feature.timetable.data.dto.AddPlacementRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.BreakSlotDto
@@ -26,93 +22,63 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
-import io.ktor.client.call.body
-import io.ktor.client.request.delete
-import io.ktor.client.request.get
-import io.ktor.client.request.parameter
-import io.ktor.client.request.post
-import io.ktor.client.request.put
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import io.ktor.http.isSuccess
 import kotlinx.datetime.LocalDate
 
-private fun AuthSession.stationId(): String = selectedStation?.id ?: ""
+/*
+ * Base URL, bearer token and the station parameter all come from
+ * [ApiHttpClient] - these classes carry only paths, payloads and mapping.
+ */
 
-private fun baseUrl(): String = AppConfig.require().serverBaseUrl
+class RemoteScheduleDataSourceImpl(private val api: ApiHttpClient) : RemoteScheduleDataSource {
 
-class RemoteScheduleDataSourceImpl(private val session: AuthSession) : RemoteScheduleDataSource {
+    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> =
+        api.get<List<BreakSlotDto>>("/api/breaks")
+            .map { list -> list.map { it.toDomain() } }
 
-    private val client by lazy { authenticatedJsonClient(session) }
-
-    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> = dataCall {
-        client.get("${baseUrl()}/api/breaks") {
-            parameter("station", session.stationId())
-        }.body<List<BreakSlotDto>>()
-    }.map { list -> list.map { it.toDomain() } }
-
-    override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> = dataCall {
-        client.get("${baseUrl()}/api/schedule") {
-            parameter("year", year)
-            parameter("month", month)
-            parameter("station", session.stationId())
-        }.body<ScheduleDto>()
-    }.map { it.toDomain() }
+    override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
+        api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month)
+            .map { it.toDomain() }
 }
 
-class RemotePlacementsDataSourceImpl(private val session: AuthSession) : RemotePlacementsDataSource {
-
-    private val client by lazy { authenticatedJsonClient(session) }
+class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePlacementsDataSource {
 
     override suspend fun add(
         spotId: Long,
         breakId: Long,
         date: LocalDate,
-    ): DataResult<PlacedCommercial, DataError.Network> = dataCall {
-        client.post("${baseUrl()}/api/schedule/placements?station=${session.stationId()}") {
-            contentType(ContentType.Application.Json)
-            setBody(AddPlacementRequest(spotId, breakId, date.toString()))
-        }.body<CommercialDto>()
-    }.map { it.toDomain() }
+    ): DataResult<PlacedCommercial, DataError.Network> =
+        api.post<AddPlacementRequest, CommercialDto>(
+            "/api/schedule/placements",
+            AddPlacementRequest(spotId, breakId, date.toString()),
+        ).map { it.toDomain() }
 
-    override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> = dataCall {
-        val resp = client.delete("${baseUrl()}/api/schedule/placements/$placementId?station=${session.stationId()}")
-        check(resp.status.isSuccess())
-    }.asEmptyDataResult()
+    override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> =
+        api.deleteEmpty("/api/schedule/placements/$placementId")
 
     override suspend fun reorder(
         breakId: Long,
         date: LocalDate,
         orderedIds: List<Long>,
-    ): EmptyDataResult<DataError.Network> = dataCall {
-        val resp = client.put("${baseUrl()}/api/schedule/placements/order?station=${session.stationId()}") {
-            contentType(ContentType.Application.Json)
-            setBody(ReorderPlacementsRequest(breakId, date.toString(), orderedIds))
-        }
-        check(resp.status.isSuccess())
-    }.asEmptyDataResult()
+    ): EmptyDataResult<DataError.Network> =
+        api.putEmpty(
+            "/api/schedule/placements/order",
+            ReorderPlacementsRequest(breakId, date.toString(), orderedIds),
+        )
 }
 
-class RemoteFinderDataSourceImpl(private val session: AuthSession) : RemoteFinderDataSource {
-
-    private val client by lazy { authenticatedJsonClient(session) }
+class RemoteFinderDataSourceImpl(private val api: ApiHttpClient) : RemoteFinderDataSource {
 
     override suspend fun contractLines(
         clientCode: String,
         kind: PartyKind,
-    ): DataResult<List<ContractLine>, DataError.Network> = dataCall {
-        client.get("${baseUrl()}/api/finder/contracts") {
-            parameter("station", session.stationId())
-            parameter("kind", kind.wire)
-            parameter("clientCode", clientCode)
-        }.body<List<ContractLineDto>>()
-    }.map { list -> list.map { it.toDomain() } }
+    ): DataResult<List<ContractLine>, DataError.Network> =
+        api.get<List<ContractLineDto>>(
+            "/api/finder/contracts",
+            "kind" to kind.wire,
+            "clientCode" to clientCode,
+        ).map { list -> list.map { it.toDomain() } }
 
-    override suspend fun lineSpots(lineId: Long): DataResult<List<ContractLineSpot>, DataError.Network> = dataCall {
-        client.get("${baseUrl()}/api/finder/spots") {
-            parameter("station", session.stationId())
-            parameter("lineId", lineId)
-        }.body<List<FinderSpotDto>>()
-    }.map { list -> list.map { it.toDomain() } }
+    override suspend fun lineSpots(lineId: Long): DataResult<List<ContractLineSpot>, DataError.Network> =
+        api.get<List<FinderSpotDto>>("/api/finder/spots", "lineId" to lineId)
+            .map { list -> list.map { it.toDomain() } }
 }

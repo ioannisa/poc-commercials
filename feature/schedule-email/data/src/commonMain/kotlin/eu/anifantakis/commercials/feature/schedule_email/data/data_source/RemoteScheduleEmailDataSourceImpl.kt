@@ -1,31 +1,16 @@
 package eu.anifantakis.commercials.feature.schedule_email.data.data_source
 
-import eu.anifantakis.commercials.core.data.config.AppConfig
-import eu.anifantakis.commercials.core.data.network.SessionExpiredException
-import eu.anifantakis.commercials.core.data.network.authenticatedJsonClient
-import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
-import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.core.domain.util.RemoteError
+import eu.anifantakis.commercials.core.domain.util.map
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailActivityMonth
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailError
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailLogEntry
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailPreviewRequest
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailSpot
 import eu.anifantakis.commercials.feature.schedule_email.domain.data_source.RemoteScheduleEmailDataSource
-import io.ktor.client.call.body
-import io.ktor.client.plugins.ResponseException
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import io.ktor.http.encodeURLParameter
-import io.ktor.utils.io.errors.IOException
-import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -72,100 +57,72 @@ private fun LogDto.toDomain() = EmailLogEntry(
     spotCount, transmissionCount, sentBy, sentAt, status, error,
 )
 
-class RemoteScheduleEmailDataSourceImpl(private val session: AuthSession) : RemoteScheduleEmailDataSource {
+/** The generic remote failure, retold in this feature's vocabulary. */
+private fun RemoteError.toEmailError(): EmailError = when (this) {
+    is RemoteError.Server -> EmailError.Server(message)
+    is RemoteError.Transport -> EmailError.Network(error)
+}
 
-    private val httpClient by lazy { authenticatedJsonClient(session) }
+private fun <T> DataResult<T, RemoteError>.asEmail(): DataResult<T, EmailError> = when (this) {
+    is DataResult.Success -> this
+    is DataResult.Failure -> DataResult.Failure(error.toEmailError())
+}
 
-    private fun base(path: String): String {
-        val station = session.selectedStation?.id ?: ""
-        return "${AppConfig.require().serverBaseUrl}/api/email/schedule/$path?station=$station"
-    }
+class RemoteScheduleEmailDataSourceImpl(private val api: ApiHttpClient) : RemoteScheduleEmailDataSource {
 
     override suspend fun activity(
         clientCode: String,
         kind: PartyKind,
-    ): DataResult<List<EmailActivityMonth>, EmailError> = emailCall {
-        httpClient.get(base("activity") + "&kind=${kind.wire}&clientCode=$clientCode")
-            .body<List<ActivityDto>>().map { it.toDomain() }
-    }
+    ): DataResult<List<EmailActivityMonth>, EmailError> =
+        api.getRemote<List<ActivityDto>>(
+            "/api/email/schedule/activity",
+            "kind" to kind.wire,
+            "clientCode" to clientCode,
+        ).asEmail().map { list -> list.map { it.toDomain() } }
 
     override suspend fun spots(
         year: Int,
         month: Int,
         clientCode: String,
         kind: PartyKind,
-    ): DataResult<List<EmailSpot>, EmailError> = emailCall {
-        httpClient.get(base("spots") + "&year=$year&month=$month&kind=${kind.wire}&clientCode=$clientCode")
-            .body<List<SpotDto>>().map { it.toDomain() }
-    }
+    ): DataResult<List<EmailSpot>, EmailError> =
+        api.getRemote<List<SpotDto>>(
+            "/api/email/schedule/spots",
+            "year" to year, "month" to month, "kind" to kind.wire, "clientCode" to clientCode,
+        ).asEmail().map { list -> list.map { it.toDomain() } }
 
     override suspend fun history(
         limit: Int,
         clientCode: String?,
-    ): DataResult<List<EmailLogEntry>, EmailError> = emailCall {
-        val url = base("log") + "&limit=$limit" + (clientCode?.let { "&clientCode=$it" } ?: "")
-        httpClient.get(url).body<List<LogDto>>().map { it.toDomain() }
-    }
+    ): DataResult<List<EmailLogEntry>, EmailError> =
+        api.getRemote<List<LogDto>>(
+            "/api/email/schedule/log",
+            "limit" to limit, "clientCode" to clientCode,
+        ).asEmail().map { list -> list.map { it.toDomain() } }
 
-    override suspend fun previewHtml(request: EmailPreviewRequest): DataResult<String, EmailError> = emailCall {
-        val url = base("preview") +
-            "&year=${request.year}&month=${request.month}&kind=${request.kind.wire}" +
-            "&clientCode=${request.clientCode}" +
-            "&spotIds=${request.spotIds.joinToString(",")}" +
-            (request.personalMessage?.takeIf { it.isNotBlank() }
-                ?.let { "&personalMessage=${it.encodeURLParameter()}" } ?: "")
-        httpClient.get(url).bodyAsText()
-    }
+    override suspend fun previewHtml(request: EmailPreviewRequest): DataResult<String, EmailError> =
+        api.getTextRemote(
+            "/api/email/schedule/preview",
+            "year" to request.year,
+            "month" to request.month,
+            "kind" to request.kind.wire,
+            "clientCode" to request.clientCode,
+            "spotIds" to request.spotIds.joinToString(","),
+            "personalMessage" to request.personalMessage?.takeIf { it.isNotBlank() },
+        ).asEmail()
 
-    override suspend fun send(request: EmailPreviewRequest): DataResult<String, EmailError> = emailCall {
-        val resp: SendResponseDto = httpClient.post(
-            "${AppConfig.require().serverBaseUrl}/api/email/schedule/send" +
-                "?station=${session.selectedStation?.id ?: ""}"
-        ) {
-            contentType(ContentType.Application.Json)
-            setBody(
-                SendRequestDto(
-                    year = request.year,
-                    month = request.month,
-                    clientCode = request.clientCode,
-                    kind = request.kind.wire,
-                    spotIds = request.spotIds,
-                    to = request.recipient.takeIf { it.isNotBlank() },
-                    personalMessage = request.personalMessage?.takeIf { it.isNotBlank() },
-                )
-            )
-        }.body()
-        resp.status
-    }
-
-    /**
-     * Server rejections keep their authoritative message ({"error": ...} ->
-     * [EmailError.Server]); transport issues become [EmailError.Network].
-     */
-    private suspend inline fun <T> emailCall(block: () -> T): DataResult<T, EmailError> = try {
-        DataResult.Success(block())
-    } catch (e: SessionExpiredException) {
-        DataResult.Failure(EmailError.Network(DataError.Network.UNAUTHORIZED))
-    } catch (e: ResponseException) {
-        DataResult.Failure(EmailError.Server(e.response.errorMessage()))
-    } catch (e: SerializationException) {
-        DataResult.Failure(EmailError.Network(DataError.Network.SERIALIZATION))
-    } catch (e: IOException) {
-        DataResult.Failure(EmailError.Network(DataError.Network.NO_INTERNET))
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        DataResult.Failure(EmailError.Network(DataError.Network.UNKNOWN))
-    }
+    override suspend fun send(request: EmailPreviewRequest): DataResult<String, EmailError> =
+        api.postRemote<SendRequestDto, SendResponseDto>(
+            "/api/email/schedule/send",
+            SendRequestDto(
+                year = request.year,
+                month = request.month,
+                clientCode = request.clientCode,
+                kind = request.kind.wire,
+                spotIds = request.spotIds,
+                to = request.recipient.takeIf { it.isNotBlank() },
+                personalMessage = request.personalMessage?.takeIf { it.isNotBlank() },
+            ),
+        ).asEmail().map { it.status }
 }
 
-/** Best-effort extraction of the server's {"error": "..."} body. */
-private suspend fun HttpResponse.errorMessage(): String {
-    val body = try {
-        bodyAsText()
-    } catch (e: Exception) {
-        if (e is CancellationException) throw e
-        ""
-    }
-    val fromJson = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
-    return fromJson ?: "Server error $status"
-}

@@ -1,6 +1,6 @@
 package eu.anifantakis.commercials.feature.auth.data.data_source
 
-import eu.anifantakis.commercials.core.data.config.AppConfig
+import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
@@ -13,9 +13,7 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.domain.model.GrantedStation
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -26,25 +24,17 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.Json
 
 /**
  * Login and recovery are unauthenticated; the rest attach the bearer token
  * explicitly (this client exists before/outside the authenticated one).
  */
-class RemoteAuthDataSourceImpl : RemoteAuthDataSource {
+class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource {
 
-    private val httpClient by lazy {
-        HttpClient {
-            install(ContentNegotiation) {
-                json(Json { ignoreUnknownKeys = true })
-            }
-        }
-    }
+    private val httpClient = http.client
 
-    private fun url(path: String) = "${AppConfig.require().serverBaseUrl}/api/auth/$path"
+    private fun url(path: String) = "/api/auth/$path"
 
     override suspend fun login(username: String, password: String): DataResult<LoginResult, AuthError> = authCall {
         val response = httpClient.post(url("login")) {
