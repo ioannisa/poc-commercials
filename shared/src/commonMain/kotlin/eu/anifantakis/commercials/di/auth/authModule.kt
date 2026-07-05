@@ -1,7 +1,9 @@
 package eu.anifantakis.commercials.di.auth
 
 import eu.anifantakis.commercials.feature.auth.data.AuthRepositoryImpl
+import eu.anifantakis.commercials.feature.auth.data.data_source.RemoteAuthDataSourceImpl
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordViewModel
 import eu.anifantakis.commercials.feature.auth.presentation.screens.login.LoginViewModel
 import eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes.RecoveryCodesViewModel
@@ -11,6 +13,7 @@ import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val authModule = module {
+    singleOf(::RemoteAuthDataSourceImpl).bind<RemoteAuthDataSource>()
     singleOf(::AuthRepositoryImpl).bind<AuthRepository>()
     viewModelOf(::LoginViewModel)
     viewModelOf(::ChangePasswordViewModel)

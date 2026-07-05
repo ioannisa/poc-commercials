@@ -1,9 +1,11 @@
 package eu.anifantakis.commercials.di.core
 
 import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryImpl
+import eu.anifantakis.commercials.core.data.party_search.data_source.RemotePartySearchDataSourceImpl
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
+import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePartySearchDataSource
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
@@ -21,5 +23,6 @@ val coreModule = module {
     single { GlobalStateContainer() }
 
     // Master-data party search (used by timetable finder + schedule email)
+    singleOf(::RemotePartySearchDataSourceImpl).bind<RemotePartySearchDataSource>()
     singleOf(::PartySearchRepositoryImpl).bind<PartySearchRepository>()
 }

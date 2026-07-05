@@ -1,9 +1,15 @@
 package eu.anifantakis.commercials.di.timetable
 
 import eu.anifantakis.commercials.feature.timetable.data.FinderRepositoryImpl
+import eu.anifantakis.commercials.feature.timetable.data.data_source.RemoteFinderDataSourceImpl
+import eu.anifantakis.commercials.feature.timetable.data.data_source.RemotePlacementsDataSourceImpl
+import eu.anifantakis.commercials.feature.timetable.data.data_source.RemoteScheduleDataSourceImpl
 import eu.anifantakis.commercials.feature.timetable.data.PlacementsRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.data.ScheduleRepositoryImpl
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
+import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFinderDataSource
+import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePlacementsDataSource
+import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
@@ -16,6 +22,10 @@ import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val timetableModule = module {
+    // wire side (data sources) + organizers (repositories)
+    singleOf(::RemoteScheduleDataSourceImpl).bind<RemoteScheduleDataSource>()
+    singleOf(::RemotePlacementsDataSourceImpl).bind<RemotePlacementsDataSource>()
+    singleOf(::RemoteFinderDataSourceImpl).bind<RemoteFinderDataSource>()
     singleOf(::ScheduleRepositoryImpl).bind<ScheduleRepository>()
     singleOf(::PlacementsRepositoryImpl).bind<PlacementsRepository>()
     singleOf(::FinderRepositoryImpl).bind<FinderRepository>()
