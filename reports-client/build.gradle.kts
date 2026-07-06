@@ -86,9 +86,11 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.compose)
         }
-        val reportsMain by getting {
+        // custom hierarchy group (no generated accessor like webMain has) -
+        // configured via the lazy named() lookup rather than an eager delegate
+        named("reportsMain") {
             dependencies {
-                api(project(":reportcore"))
+                api(projects.reportcore)
             }
         }
 
@@ -100,13 +102,11 @@ kotlin {
             implementation(libs.kotlin.test)
         }
 
-        val webMain by getting {
-            dependencies {
-                implementation(libs.ktor.client.core)
-                implementation(libs.ktor.client.js)
-                implementation(libs.ktor.client.content.negotiation)
-                implementation(libs.ktor.serialization.json)
-            }
+        webMain.dependencies {
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.js)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
         }
         // iosMain comes from the default hierarchy template
     }

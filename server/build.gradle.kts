@@ -39,17 +39,17 @@ dependencies {
     implementation(libs.koin.annotations)
 
     // Report engine + wire DTOs (brings JasperReports transitively)
-    implementation(project(":reportcore"))
+    implementation(projects.reportcore)
 
     // Legacy-dump migration engine/service/CLI (server implements its MigrationHost port)
-    implementation(project(":migration"))
+    implementation(projects.migration)
 
     // Database layer (server.yaml, HikariCP pools, station/central schemas,
     // auth persistence) - brings the MySQL driver at runtime
-    implementation(project(":persistence"))
+    implementation(projects.persistence)
 
     // Customer schedule emails (HTML renderer + SMTP sender)
-    implementation(project(":mailer"))
+    implementation(projects.mailer)
 
     // Logging
     implementation(libs.logback.classic)

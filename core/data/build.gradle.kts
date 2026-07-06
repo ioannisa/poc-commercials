@@ -42,10 +42,8 @@ kotlin {
         // js + wasmJs share sources (AppConfig fetches /config over HTTP);
         // the webMain intermediate comes from the convention plugin's
         // hierarchy template, iosMain from the default template.
-        val webMain by getting {
-            dependencies {
-                implementation(libs.ktor.client.js)
-            }
+        webMain.dependencies {
+            implementation(libs.ktor.client.js)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

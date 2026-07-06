@@ -75,38 +75,36 @@ kotlin {
             implementation(libs.ktor.client.cio)
         }
         commonMain.dependencies {
-            // kmp-developer multi-module layout: core + features; :shared is
-            // the ":app" wiring module and may depend on everything.
-            api(projects.core.domain)
+            implementation(projects.core.domain)
             api(projects.core.data)
-            api(projects.core.presentation)
-            api(projects.feature.auth.domain)
-            api(projects.feature.auth.data)
-            api(projects.feature.auth.presentation)
-            api(projects.feature.timetable.domain)
-            api(projects.feature.timetable.data)
-            api(projects.feature.timetable.presentation)
-            api(projects.feature.scheduleEmail.domain)
-            api(projects.feature.scheduleEmail.data)
-            api(projects.feature.scheduleEmail.presentation)
-            api(projects.feature.preferences.domain)
-            api(projects.feature.preferences.data)
-            api(projects.feature.preferences.presentation)
-            api(projects.feature.databases.domain)
-            api(projects.feature.databases.data)
-            api(projects.feature.databases.presentation)
-            api(projects.feature.userManagement.domain)
-            api(projects.feature.userManagement.data)
-            api(projects.feature.userManagement.presentation)
-            api(projects.feature.migrationConsole.domain)
-            api(projects.feature.migrationConsole.data)
-            api(projects.feature.migrationConsole.presentation)
+            implementation(projects.core.presentation)
+            implementation(projects.feature.auth.domain)
+            implementation(projects.feature.auth.data)
+            implementation(projects.feature.auth.presentation)
+            implementation(projects.feature.timetable.domain)
+            implementation(projects.feature.timetable.data)
+            implementation(projects.feature.timetable.presentation)
+            implementation(projects.feature.scheduleEmail.domain)
+            implementation(projects.feature.scheduleEmail.data)
+            implementation(projects.feature.scheduleEmail.presentation)
+            implementation(projects.feature.preferences.domain)
+            implementation(projects.feature.preferences.data)
+            implementation(projects.feature.preferences.presentation)
+            implementation(projects.feature.databases.domain)
+            implementation(projects.feature.databases.data)
+            implementation(projects.feature.databases.presentation)
+            implementation(projects.feature.userManagement.domain)
+            implementation(projects.feature.userManagement.data)
+            implementation(projects.feature.userManagement.presentation)
+            implementation(projects.feature.migrationConsole.domain)
+            implementation(projects.feature.migrationConsole.data)
+            implementation(projects.feature.migrationConsole.presentation)
 
-            // Extracted feature modules. `api`: their types (BreakSlot,
-            // SchedulerCellData, AppTheme, ...) appear in shared's own
-            // composable signatures.
-            api(projects.core.presentation.grids)
-            api(projects.reportsClient)
+            // Cross-cutting UI modules used internally by :shared's own
+            // composables (grid widgets, the report toolbar) - not re-exported,
+            // since no entry app references them directly.
+            implementation(projects.core.presentation.grids)
+            implementation(projects.reportsClient)
 
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -162,14 +160,12 @@ kotlin {
         }
 
         // Browser-based platforms: Ktor client for server-side report generation
-        val webMain by getting {
-            dependencies {
-                implementation(libs.ktor.client.core)
-                implementation(libs.ktor.client.js)
-                implementation(libs.ktor.client.content.negotiation)
-                implementation(libs.ktor.serialization.json)
-                implementation(libs.kotlinx.serialization.json)
-            }
+        webMain.dependencies {
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.js)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.json)
+            implementation(libs.kotlinx.serialization.json)
         }
 
         iosMain.dependencies {

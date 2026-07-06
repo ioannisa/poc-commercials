@@ -26,7 +26,7 @@ group = "eu.anifantakis.commercials"
 version = "1.0.0"
 
 dependencies {
-    api(project(":persistence"))
+    api(projects.persistence)
 
     // The module contributes its own routes; the host installs them
     implementation(libs.ktor.server.core)
