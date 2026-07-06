@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email
 
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,7 +40,7 @@ import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailPreviewRequest
 import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview.EmailPreviewDialogRoot
-import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview.greekMonthName
+import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview.monthName
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -89,7 +93,7 @@ private fun SendScheduleEmailDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Αποστολή προγραμματισμού") },
+        title = { Text(Strings[StringKey.EMAIL_SEND_TITLE]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.done != null) {
@@ -105,7 +109,7 @@ private fun SendScheduleEmailDialog(
                         onClick = { onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.CUSTOMER)) }
                     )
                     Text(
-                        "Πελάτες", fontSize = 13.sp,
+                        Strings[StringKey.FINDER_TAB_CUSTOMERS], fontSize = 13.sp,
                         modifier = Modifier.clickable {
                             onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.CUSTOMER))
                         }
@@ -116,7 +120,7 @@ private fun SendScheduleEmailDialog(
                         onClick = { onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.TRADER)) }
                     )
                     Text(
-                        "Διαφημιστές", fontSize = 13.sp,
+                        Strings[StringKey.FINDER_TAB_ADVERTISERS], fontSize = 13.sp,
                         modifier = Modifier.clickable {
                             onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.TRADER))
                         }
@@ -127,8 +131,8 @@ private fun SendScheduleEmailDialog(
                     onValueChange = { onIntent(SendScheduleEmailIntent.QueryChanged(it)) },
                     label = {
                         Text(
-                            if (state.kind == PartyKind.CUSTOMER) "Αναζήτηση πελάτη (3+ χαρακτήρες)"
-                            else "Αναζήτηση διαφημιστή (3+ χαρακτήρες)"
+                            Strings[if (state.kind == PartyKind.CUSTOMER) StringKey.EMAIL_SEARCH_CUSTOMER
+                            else StringKey.EMAIL_SEARCH_ADVERTISER]
                         )
                     },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -142,7 +146,7 @@ private fun SendScheduleEmailDialog(
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 160.dp)) {
                         items(state.results, key = { it.code }) { c ->
                             Text(
-                                "${c.name} — ${c.spotCount} σποτ, ${c.placementCount} μεταδόσεις",
+                                Strings[StringKey.EMAIL_PARTY_SUMMARY].withArgs(listOf(c.name, c.spotCount, c.placementCount)),
                                 fontSize = 13.sp,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -153,14 +157,14 @@ private fun SendScheduleEmailDialog(
                     }
                 } else if (state.query.trim().length >= 3 && !state.searching) {
                     Text(
-                        "Κανένα αποτέλεσμα",
+                        Strings[StringKey.EMAIL_NO_RESULTS],
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 state.selectedParty?.let { sel ->
                     Text(
-                        (if (state.selectedKind == PartyKind.TRADER) "Διαφημιστής: " else "Πελάτης: ") + sel.name,
+                        Strings[if (state.selectedKind == PartyKind.TRADER) StringKey.EMAIL_LABEL_ADVERTISER else StringKey.EMAIL_LABEL_CUSTOMER] + sel.name,
                         fontSize = 12.sp, fontWeight = FontWeight.Bold
                     )
 
@@ -168,7 +172,7 @@ private fun SendScheduleEmailDialog(
                     if (state.loadingActivity) {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     } else if (state.activity.isEmpty()) {
-                        Text("Καμία κίνηση", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(Strings[StringKey.EMAIL_NO_ACTIVITY], fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Row(Modifier.fillMaxWidth().height(140.dp)) {
                             LazyColumn(Modifier.weight(0.35f).fillMaxHeight()) {
@@ -203,7 +207,7 @@ private fun SendScheduleEmailDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            greekMonthName(am.month),
+                                            monthName(am.month),
                                             fontSize = 13.sp,
                                             fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
                                             color = if (isSel) MaterialTheme.colorScheme.primary
@@ -226,13 +230,13 @@ private fun SendScheduleEmailDialog(
                     OutlinedTextField(
                         value = state.recipient,
                         onValueChange = { onIntent(SendScheduleEmailIntent.RecipientChanged(it)) },
-                        label = { Text("Παραλήπτης (email)") },
+                        label = { Text(Strings[StringKey.EMAIL_RECIPIENT_LABEL]) },
                         singleLine = true, modifier = Modifier.fillMaxWidth()
                     )
 
                     // spot checklist - each becomes a table in the one email
                     Text(
-                        "Σποτ που θα περιληφθούν (${state.chosenSpotIds.size}/${state.spots.size})",
+                        Strings[StringKey.EMAIL_SPOTS_INCLUDED].withArgs(listOf(state.chosenSpotIds.size, state.spots.size)),
                         fontSize = 12.sp, fontWeight = FontWeight.Bold
                     )
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 150.dp)) {
@@ -259,11 +263,11 @@ private fun SendScheduleEmailDialog(
                     OutlinedTextField(
                         value = state.note,
                         onValueChange = { onIntent(SendScheduleEmailIntent.NoteChanged(it)) },
-                        label = { Text("Προσωπικό μήνυμα (προαιρετικό)") },
+                        label = { Text(Strings[StringKey.EMAIL_PERSONAL_MESSAGE]) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "Θα σταλεί ΕΝΑ email με ${state.chosenSpotIds.size} πίνακες (ένας ανά σποτ).",
+                        Strings[StringKey.EMAIL_ONE_EMAIL_NOTE].withArgs(listOf(state.chosenSpotIds.size)),
                         fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -271,13 +275,13 @@ private fun SendScheduleEmailDialog(
                 // audit trail: prior sends to this party (anti double-send)
                 if (state.selectedParty != null && state.history.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
-                    Text("Ιστορικό αποστολών", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(Strings[StringKey.EMAIL_HISTORY], fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 96.dp)) {
                         items(state.history, key = { it.id }) { h ->
                             val failed = h.status != "SENT"
                             Text(
                                 "${h.sentAt.take(16)} · ${monthShort(h.month)} ${h.year} · ${h.recipient} · ${h.sentBy}" +
-                                    if (failed) " · ΑΠΕΤΥΧΕ" else "",
+                                    if (failed) Strings[StringKey.EMAIL_FAILED_SUFFIX] else "",
                                 fontSize = 11.sp,
                                 color = if (failed) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurfaceVariant
@@ -286,27 +290,30 @@ private fun SendScheduleEmailDialog(
                     }
                 }
 
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                state.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
         confirmButton = {
             if (state.done != null) {
-                TextButton(onClick = onDismiss) { Text("Κλείσιμο") }
+                TextButton(onClick = onDismiss) { Text(Strings[StringKey.COMMON_CLOSE]) }
             } else {
                 TextButton(
                     enabled = state.canPreview,
                     onClick = { onIntent(SendScheduleEmailIntent.RequestPreview) }
                 ) {
-                    Text("Προεπισκόπιση")
+                    Text(Strings[StringKey.EMAIL_PREVIEW_BUTTON])
                 }
             }
         },
         dismissButton = {
-            if (state.done == null) TextButton(onClick = onDismiss) { Text("Άκυρο") }
+            if (state.done == null) TextButton(onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }
 
 private fun monthShort(m: Int): String = listOf(
-    "Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαϊ", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ"
-).getOrElse(m - 1) { m.toString() }
+    StringKey.MONTH_SHORT_JANUARY, StringKey.MONTH_SHORT_FEBRUARY, StringKey.MONTH_SHORT_MARCH,
+    StringKey.MONTH_SHORT_APRIL, StringKey.MONTH_SHORT_MAY, StringKey.MONTH_SHORT_JUNE,
+    StringKey.MONTH_SHORT_JULY, StringKey.MONTH_SHORT_AUGUST, StringKey.MONTH_SHORT_SEPTEMBER,
+    StringKey.MONTH_SHORT_OCTOBER, StringKey.MONTH_SHORT_NOVEMBER, StringKey.MONTH_SHORT_DECEMBER,
+).getOrElse(m - 1) { null }?.localized() ?: m.toString()

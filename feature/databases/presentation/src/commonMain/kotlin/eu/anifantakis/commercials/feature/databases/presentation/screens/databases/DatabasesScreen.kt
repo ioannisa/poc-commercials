@@ -1,5 +1,8 @@
 package eu.anifantakis.commercials.feature.databases.presentation.screens.databases
 
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -74,21 +77,21 @@ private fun DatabasesScreen(
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) }) {
-                Icon(AppIcons.arrowBack, contentDescription = "Back")
+                Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text("Hosted Databases", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(Strings[StringKey.PREFERENCES_DATABASES], fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { onIntent(DatabasesIntent.Reload) }) {
-                Icon(AppIcons.refresh, contentDescription = "Reload")
+                Icon(AppIcons.refresh, contentDescription = Strings[StringKey.DATABASES_CD_RELOAD])
             }
         }
 
         state.message?.let {
-            Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+            Text(it.asString(), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
         state.error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(4.dp))
         }
 
@@ -111,8 +114,10 @@ private fun DatabasesScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                if (!station.reachable) "UNREACHABLE"
-                                else "${station.placements ?: 0} placements · ${station.dateRange ?: "empty"}",
+                                if (!station.reachable) Strings[StringKey.DATABASES_UNREACHABLE]
+                                else Strings[StringKey.DATABASES_STATION_SUMMARY].withArgs(
+                                    listOf(station.placements ?: 0, station.dateRange ?: Strings[StringKey.DATABASES_EMPTY_RANGE])
+                                ),
                                 fontSize = 12.sp,
                                 color = if (station.reachable) MaterialTheme.colorScheme.onSurface
                                         else MaterialTheme.colorScheme.error
@@ -121,7 +126,7 @@ private fun DatabasesScreen(
                         IconButton(onClick = { onIntent(DatabasesIntent.DeleteRequested(station)) }) {
                             Icon(
                                 AppIcons.delete,
-                                contentDescription = "Delete database",
+                                contentDescription = Strings[StringKey.DATABASES_CD_DELETE],
                                 tint = MaterialTheme.colorScheme.error
                             )
                         }
@@ -144,16 +149,15 @@ private fun DeleteStationDialog(
     val station = dialog.station
     AlertDialog(
         onDismissRequest = { onIntent(DatabasesIntent.DismissDelete) },
-        title = { Text("Delete '${station.name}'") },
+        title = { Text(Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name))) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = !dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(false)) })
                     Column {
-                        Text("Safe delete", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(Strings[StringKey.DATABASES_SAFE_DELETE], fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text(
-                            "Unhost only: removes the server.yaml entry and every user's access. " +
-                                "The MySQL schema (${station.database}) stays untouched.",
+                            Strings[StringKey.DATABASES_SAFE_DELETE_DESC].withArgs(listOf(station.database)),
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -161,9 +165,9 @@ private fun DeleteStationDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(true)) })
                     Column {
-                        Text("Hard delete", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                        Text(Strings[StringKey.DATABASES_HARD_DELETE], fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                         Text(
-                            "Safe delete + DROP DATABASE on the MySQL server. Irreversible.",
+                            Strings[StringKey.DATABASES_HARD_DELETE_DESC],
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -171,10 +175,10 @@ private fun DeleteStationDialog(
                 OutlinedTextField(
                     value = dialog.confirmId,
                     onValueChange = { onIntent(DatabasesIntent.ConfirmIdChanged(it)) },
-                    label = { Text("Type the station id to confirm: ${station.id}") },
+                    label = { Text(Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id))) },
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
-                dialog.error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                dialog.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
             }
         },
         confirmButton = {
@@ -189,7 +193,7 @@ private fun DeleteStationDialog(
             }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(DatabasesIntent.DismissDelete) }) { Text("Cancel") }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(DatabasesIntent.DismissDelete) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }

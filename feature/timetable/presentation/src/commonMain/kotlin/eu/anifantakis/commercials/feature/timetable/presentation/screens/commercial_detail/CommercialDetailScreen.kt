@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -183,29 +187,36 @@ private fun CommercialDetailScreen(
         }
     }
 
-    // Greek day names
-    val greekDays = mapOf(
-        DayOfWeek.MONDAY to "Δευτέρα",
-        DayOfWeek.TUESDAY to "Τρίτη",
-        DayOfWeek.WEDNESDAY to "Τετάρτη",
-        DayOfWeek.THURSDAY to "Πέμπτη",
-        DayOfWeek.FRIDAY to "Παρασκευή",
-        DayOfWeek.SATURDAY to "Σάββατο",
-        DayOfWeek.SUNDAY to "Κυριακή"
+    // Localized day names (Strings[] — recompose on language switch)
+    val dayNames = mapOf(
+        DayOfWeek.MONDAY to Strings[StringKey.DAY_MONDAY],
+        DayOfWeek.TUESDAY to Strings[StringKey.DAY_TUESDAY],
+        DayOfWeek.WEDNESDAY to Strings[StringKey.DAY_WEDNESDAY],
+        DayOfWeek.THURSDAY to Strings[StringKey.DAY_THURSDAY],
+        DayOfWeek.FRIDAY to Strings[StringKey.DAY_FRIDAY],
+        DayOfWeek.SATURDAY to Strings[StringKey.DAY_SATURDAY],
+        DayOfWeek.SUNDAY to Strings[StringKey.DAY_SUNDAY]
     )
 
-    val greekMonths = listOf(
-        "ΙΑΝΟΥΑΡΙΟΥ", "ΦΕΒΡΟΥΑΡΙΟΥ", "ΜΑΡΤΙΟΥ", "ΑΠΡΙΛΙΟΥ",
-        "ΜΑΙΟΥ", "ΙΟΥΝΙΟΥ", "ΙΟΥΛΙΟΥ", "ΑΥΓΟΥΣΤΟΥ",
-        "ΣΕΠΤΕΜΒΡΙΟΥ", "ΟΚΤΩΒΡΙΟΥ", "ΝΟΕΜΒΡΙΟΥ", "ΔΕΚΕΜΒΡΙΟΥ"
+    // Genitive month names for the day header (localized)
+    val monthOfNames = listOf(
+        Strings[StringKey.MONTH_OF_JANUARY], Strings[StringKey.MONTH_OF_FEBRUARY],
+        Strings[StringKey.MONTH_OF_MARCH], Strings[StringKey.MONTH_OF_APRIL],
+        Strings[StringKey.MONTH_OF_MAY], Strings[StringKey.MONTH_OF_JUNE],
+        Strings[StringKey.MONTH_OF_JULY], Strings[StringKey.MONTH_OF_AUGUST],
+        Strings[StringKey.MONTH_OF_SEPTEMBER], Strings[StringKey.MONTH_OF_OCTOBER],
+        Strings[StringKey.MONTH_OF_NOVEMBER], Strings[StringKey.MONTH_OF_DECEMBER]
     )
 
     // Create column definitions for the data grid
     // Captured here: column lambdas ((T) -> Color) are not composable, so the
     // theme-resolved palette must be read in composition and closed over.
-    // Keyed into the remember so a live theme switch rebuilds the columns.
+    // Keyed into the remember so a live theme OR LANGUAGE switch rebuilds
+    // the columns (headers resolve via .localized() inside the non-composable
+    // remember block).
     val palette = gridPalette()
-    val columns = remember(localCommercials, palette) {
+    val language = LocalLanguage.current
+    val columns = remember(localCommercials, palette, language) {
         listOf(
             // Reorder buttons column
             ColumnDef<CommercialItem>(
@@ -229,7 +240,7 @@ private fun CommercialDetailScreen(
                         ) {
                             Icon(
                                 AppIcons.keyboardArrowUp,
-                                contentDescription = "Move up",
+                                contentDescription = Strings[StringKey.DETAIL_CD_MOVE_UP],
                                 modifier = Modifier.size(18.dp),
                                 tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             )
@@ -241,7 +252,7 @@ private fun CommercialDetailScreen(
                         ) {
                             Icon(
                                 AppIcons.keyboardArrowDown,
-                                contentDescription = "Move down",
+                                contentDescription = Strings[StringKey.DETAIL_CD_MOVE_DOWN],
                                 modifier = Modifier.size(18.dp),
                                 tint = if (index < localCommercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             )
@@ -251,7 +262,7 @@ private fun CommercialDetailScreen(
             ),
             ColumnDef<CommercialItem>(
                 id = "index",
-                header = "ΑΡΙΘΜ.",
+                header = StringKey.DETAIL_COL_NUMBER.localized(),
                 width = 60.dp,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
@@ -268,21 +279,21 @@ private fun CommercialDetailScreen(
             ),
             ColumnDef(
                 id = "clientCode",
-                header = "Κωδ. Πελ.",
+                header = StringKey.DETAIL_COL_CUSTOMER_CODE.localized(),
                 width = 90.dp,
                 alignment = TextAlign.Start,
                 extractor = { it.clientCode }
             ),
             ColumnDef(
                 id = "clientName",
-                header = "Πελάτης",
+                header = StringKey.DETAIL_COL_CUSTOMER.localized(),
                 width = 220.dp,
                 alignment = TextAlign.Start,
                 extractor = { it.clientName }
             ),
             ColumnDef(
                 id = "message",
-                header = "Μήνυμα",
+                header = StringKey.DETAIL_COL_MESSAGE.localized(),
                 width = 280.dp,
                 alignment = TextAlign.Start,
                 extractor = { it.message }
@@ -297,14 +308,14 @@ private fun CommercialDetailScreen(
             ),
             ColumnDef(
                 id = "type",
-                header = "Τύπος",
+                header = StringKey.DETAIL_COL_TYPE.localized(),
                 width = 160.dp,
                 alignment = TextAlign.Start,
                 extractor = { it.type }
             ),
             ColumnDef(
                 id = "contract",
-                header = "Σύμβαση",
+                header = StringKey.DETAIL_COL_CONTRACT.localized(),
                 width = 80.dp,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
@@ -312,7 +323,7 @@ private fun CommercialDetailScreen(
             ),
             ColumnDef(
                 id = "flow",
-                header = "ΡΟΗ",
+                header = StringKey.DETAIL_COL_FLOW.localized(),
                 width = 60.dp,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
@@ -333,9 +344,9 @@ private fun CommercialDetailScreen(
     ) {
         // Header section matching the screenshot
         DetailHeader(
-            dayName = greekDays[date.value.dayOfWeek] ?: "",
+            dayName = dayNames[date.value.dayOfWeek] ?: "",
             dayNumber = date.value.day,
-            monthName = greekMonths[date.value.month.ordinal],
+            monthName = monthOfNames[date.value.month.ordinal],
             year = date.value.year,
             breakTime = breakTime,
             totalSpots = localCommercials.size,
@@ -354,6 +365,7 @@ private fun CommercialDetailScreen(
 
         // Data grid with commercials
         EnhancedDataGrid(
+            summaryLabel = Strings[StringKey.TIMETABLE_TOTAL_SHORT],
             items = localCommercials.toImmutableList(),
             columns = columns,
             modifier = Modifier
@@ -382,7 +394,7 @@ private fun CommercialDetailScreen(
                 listOf(
                     // Print this break's program flow
                     ContextMenuEntry.Item(
-                        label = "Print Break",
+                        label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = localCommercials.isNotEmpty()
                     ) {
@@ -394,7 +406,7 @@ private fun CommercialDetailScreen(
 
                     // Edit action
                     ContextMenuEntry.Item(
-                        label = "Edit Commercial",
+                        label = StringKey.DETAIL_MENU_EDIT_COMMERCIAL.localized(),
                         icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "⌘E",
                         enabled = canEdit
@@ -407,26 +419,26 @@ private fun CommercialDetailScreen(
 
                     // Clipboard submenu
                     ContextMenuEntry.SubMenu(
-                        label = "Clipboard",
+                        label = StringKey.DETAIL_MENU_CLIPBOARD.localized(),
                         icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
-                                label = "Copy",
+                                label = StringKey.COMMON_COPY.localized(),
                                 icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘C"
                             ) {
                                 println("Copy: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
-                                label = "Cut",
+                                label = StringKey.COMMON_CUT.localized(),
                                 icon = { Icon(AppIcons.contentCut, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘X"
                             ) {
                                 println("Cut: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
-                                label = "Paste",
+                                label = StringKey.COMMON_PASTE.localized(),
                                 icon = { Icon(AppIcons.contentPaste, null, modifier = Modifier.size(16.dp)) },
                                 shortcut = "⌘V"
                             ) {
@@ -437,12 +449,12 @@ private fun CommercialDetailScreen(
 
                     // Move submenu
                     ContextMenuEntry.SubMenu(
-                        label = "Move",
+                        label = StringKey.DETAIL_MENU_MOVE.localized(),
                         icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
-                                label = "Move Up",
+                                label = StringKey.DETAIL_MENU_MOVE_UP.localized(),
                                 icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                                 enabled = rowIndex > 0
                             ) {
@@ -451,7 +463,7 @@ private fun CommercialDetailScreen(
                                 }
                             },
                             ContextMenuEntry.Item(
-                                label = "Move Down",
+                                label = StringKey.DETAIL_MENU_MOVE_DOWN.localized(),
                                 icon = { Icon(AppIcons.keyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
                                 enabled = rowIndex < localCommercials.size - 1
                             ) {
@@ -461,7 +473,7 @@ private fun CommercialDetailScreen(
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
-                                label = "Move to Top",
+                                label = StringKey.DETAIL_MENU_MOVE_TOP.localized(),
                                 enabled = rowIndex > 0
                             ) {
                                 if (rowIndex > 0) {
@@ -469,7 +481,7 @@ private fun CommercialDetailScreen(
                                 }
                             },
                             ContextMenuEntry.Item(
-                                label = "Move to Bottom",
+                                label = StringKey.DETAIL_MENU_MOVE_BOTTOM.localized(),
                                 enabled = rowIndex < localCommercials.size - 1
                             ) {
                                 if (rowIndex < localCommercials.size - 1) {
@@ -484,7 +496,7 @@ private fun CommercialDetailScreen(
 
                     // Delete action
                     ContextMenuEntry.Item(
-                        label = "Delete",
+                        label = StringKey.COMMON_DELETE.localized(),
                         icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "⌫",
                         enabled = canEdit
@@ -497,24 +509,24 @@ private fun CommercialDetailScreen(
 
                     // More options
                     ContextMenuEntry.SubMenu(
-                        label = "More",
+                        label = StringKey.DETAIL_MENU_MORE.localized(),
                         icon = { Icon(AppIcons.moreVert, null, modifier = Modifier.size(16.dp)) },
                         items = listOf(
                             ContextMenuEntry.Item(
-                                label = "Preview",
+                                label = StringKey.DETAIL_MENU_PREVIEW.localized(),
                                 icon = { Icon(AppIcons.playArrow, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("Preview: ${item.message}")
                             },
                             ContextMenuEntry.Item(
-                                label = "View History",
+                                label = StringKey.DETAIL_MENU_HISTORY.localized(),
                                 icon = { Icon(AppIcons.history, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("History for: ${item.clientName}")
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
-                                label = "Details",
+                                label = StringKey.DETAIL_MENU_DETAILS.localized(),
                                 icon = { Icon(AppIcons.info, null, modifier = Modifier.size(16.dp)) }
                             ) {
                                 println("Details: Client=${item.clientCode}, Duration=${item.durationSeconds}s, Contract=${item.contract}")
@@ -567,7 +579,7 @@ private fun DetailHeader(
                         IconButton(onClick = onBack) {
                             Icon(
                                 AppIcons.arrowBack,
-                                contentDescription = "Back"
+                                contentDescription = Strings[StringKey.COMMON_BACK]
                             )
                         }
 
@@ -583,7 +595,7 @@ private fun DetailHeader(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "Ώρα Διαλείμματος",
+                                    text = Strings[StringKey.DETAIL_BREAK_TIME],
                                     fontSize = 12.sp
                                 )
                                 Text(
@@ -604,18 +616,18 @@ private fun DetailHeader(
                     ) {
                         StatColumn(
                             label = "",
-                            value1 = "ΟΛΑ",
-                            value2 = "ΡΟΗΣ",
-                            value3 = "ΕΞΑΙΡ."
+                            value1 = Strings[StringKey.DETAIL_TOTAL_ALL],
+                            value2 = Strings[StringKey.DETAIL_TOTAL_FLOW],
+                            value3 = Strings[StringKey.DETAIL_TOTAL_EXCLUDED]
                         )
                         StatColumn(
-                            label = "Σύνολο Spots",
+                            label = Strings[StringKey.DETAIL_TOTAL_SPOTS],
                             value1 = totalSpots.toString(),
                             value2 = flowSpots.toString(),
                             value3 = exceptSpots.toString()
                         )
                         StatColumn(
-                            label = "Συνολική Διάρκεια",
+                            label = Strings[StringKey.DETAIL_TOTAL_DURATION],
                             value1 = formatDuration(totalDuration),
                             value2 = formatDuration(flowDuration),
                             value3 = formatDuration(exceptDuration)
@@ -643,11 +655,11 @@ private fun DetailHeader(
                             OutlinedButton(onClick = onPrint) {
                                 Icon(
                                     AppIcons.print,
-                                    contentDescription = "Print break",
+                                    contentDescription = Strings[StringKey.DETAIL_CD_PRINT_BREAK],
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Εκτύπωση")
+                                Text(Strings[StringKey.DETAIL_PRINT])
                             }
                         }
 
@@ -657,22 +669,22 @@ private fun DetailHeader(
                         ) {
                             Icon(
                                 AppIcons.arrowBack,
-                                contentDescription = "Previous",
+                                contentDescription = Strings[StringKey.DETAIL_PREVIOUS],
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Προηγούμενο")
+                            Text(Strings[StringKey.DETAIL_PREVIOUS])
                         }
 
                         OutlinedButton(
                             onClick = { onNext?.invoke() },
                             enabled = onNext != null
                         ) {
-                            Text("Επόμενο")
+                            Text(Strings[StringKey.DETAIL_NEXT])
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 AppIcons.arrowForward,
-                                contentDescription = "Next",
+                                contentDescription = Strings[StringKey.DETAIL_NEXT],
                                 modifier = Modifier.size(16.dp)
                             )
                         }

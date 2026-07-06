@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.change_password
 
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Stable
 import androidx.compose.foundation.layout.Spacer
@@ -24,7 +28,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
-import eu.anifantakis.commercials.feature.auth.presentation.toDisplayMessage
+import eu.anifantakis.commercials.feature.auth.presentation.toUiText
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -37,7 +41,7 @@ data class ChangePasswordState(
     val new1: String = "",
     val new2: String = "",
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 ) {
     val canSubmit: Boolean get() = !busy && current.isNotBlank() && new1.length >= 6 && new1 == new2
 }
@@ -82,7 +86,7 @@ class ChangePasswordViewModel(
             when (val result = repository.changePassword(s.current, s.new1)) {
                 is DataResult.Success -> eventChannel.send(ChangePasswordEffect.Done)
                 is DataResult.Failure -> _state.update {
-                    it.copy(busy = false, error = result.error.toDisplayMessage())
+                    it.copy(busy = false, error = result.error.toUiText())
                 }
             }
         }
@@ -115,13 +119,13 @@ private fun ChangePasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { Text("Change password") },
+        title = { Text(Strings[StringKey.CHPASS_TITLE]) },
         text = {
             Column {
                 OutlinedTextField(
                     value = state.current,
                     onValueChange = { onIntent(ChangePasswordIntent.CurrentChanged(it)) },
-                    label = { Text("Current password") },
+                    label = { Text(Strings[StringKey.CHPASS_CURRENT]) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -129,7 +133,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = state.new1,
                     onValueChange = { onIntent(ChangePasswordIntent.New1Changed(it)) },
-                    label = { Text("New password (min 6 chars)") },
+                    label = { Text(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN]) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -137,13 +141,13 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = state.new2,
                     onValueChange = { onIntent(ChangePasswordIntent.New2Changed(it)) },
-                    label = { Text("Repeat new password") },
+                    label = { Text(Strings[StringKey.CHPASS_REPEAT]) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
                 state.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -159,11 +163,11 @@ private fun ChangePasswordDialog(
                 onClick = { onIntent(ChangePasswordIntent.Submit) }
             ) {
                 if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                else Text("Change")
+                else Text(Strings[StringKey.CHPASS_CHANGE])
             }
         },
         dismissButton = {
-            TextButton(enabled = !state.busy, onClick = onDismiss) { Text("Cancel") }
+            TextButton(enabled = !state.busy, onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }

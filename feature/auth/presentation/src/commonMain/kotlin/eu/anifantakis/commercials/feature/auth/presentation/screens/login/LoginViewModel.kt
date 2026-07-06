@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.login
 
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.viewModelScope
@@ -7,7 +9,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
-import eu.anifantakis.commercials.feature.auth.presentation.toDisplayMessage
+import eu.anifantakis.commercials.feature.auth.presentation.toUiText
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -21,8 +23,8 @@ data class LoginState(
     val recoveryMode: Boolean = false,
     val passwordVisible: Boolean = false,
     val isLoading: Boolean = false,
-    val errorMessage: String? = null,
-    val infoMessage: String? = null,
+    val errorMessage: UiText? = null,
+    val infoMessage: UiText? = null,
 ) {
     val canSubmit: Boolean
         get() = !isLoading && username.isNotBlank() && password.isNotBlank() &&
@@ -81,7 +83,7 @@ class LoginViewModel(
                 is DataResult.Success ->
                     eventChannel.send(LoginEffect.LoggedIn)
                 is DataResult.Failure ->
-                    _state.update { it.copy(errorMessage = result.error.toDisplayMessage()) }
+                    _state.update { it.copy(errorMessage = result.error.toUiText()) }
             }
             _state.update { it.copy(isLoading = false) }
         }
@@ -98,11 +100,11 @@ class LoginViewModel(
                         recoveryMode = false,
                         password = "",
                         recoveryCode = "",
-                        infoMessage = "Password reset - log in with your new password",
+                        infoMessage = UiText.Res(StringKey.LOGIN_RESET_DONE),
                     )
                 }
                 is DataResult.Failure ->
-                    _state.update { it.copy(errorMessage = result.error.toDisplayMessage()) }
+                    _state.update { it.copy(errorMessage = result.error.toUiText()) }
             }
             _state.update { it.copy(isLoading = false) }
         }

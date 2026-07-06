@@ -77,6 +77,7 @@ fun LazySchedulerGrid(
      * totals row always shows counts, like the original.
      */
     showTimes: Boolean = false,
+    labels: SchedulerLabels = SchedulerLabels(),
     breakColumnWidth: Dp = 70.dp,
     dayColumnWidth: Dp = 42.dp,
     rowHeight: Dp = 28.dp,
@@ -307,7 +308,7 @@ fun LazySchedulerGrid(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Ώρα/Μέρα",
+                    text = labels.timeDay,
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp
                 )
@@ -325,6 +326,7 @@ fun LazySchedulerGrid(
                         LazyDayHeader(
                             date = StableDate(date),
                             width = dayColumnWidth,
+                            labels = labels,
                             isSelected = colIndex == selectedColumn,
                             menuEntriesProvider = if (dayHeaderContextMenuItems != null) {
                                 { dayHeaderContextMenuItems(date) }
@@ -430,7 +432,7 @@ fun LazySchedulerGrid(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Σύνολα",
+                        text = labels.totals,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp
                     )
@@ -471,6 +473,7 @@ fun LazySchedulerGrid(
 private fun LazyDayHeader(
     date: StableDate,
     width: Dp,
+    labels: SchedulerLabels,
     isSelected: Boolean = false,
     menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null,
     onMenuOpen: (() -> Unit)? = null
@@ -507,7 +510,7 @@ private fun LazyDayHeader(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = date.value.dayOfWeek.toGreekAbbrLazy(),
+                    text = labels.dayAbbreviations[date.value.dayOfWeek] ?: date.value.dayOfWeek.toGreekAbbrLazy(),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
                     color = nameColor

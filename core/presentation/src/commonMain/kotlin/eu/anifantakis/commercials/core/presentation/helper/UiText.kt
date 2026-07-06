@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.presentation.helper
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.localizedCompose
@@ -21,6 +22,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
  * Lives in :core:presentation; it must NOT leak into :domain. Domain-produced
  * text stays a bare [StringKey], resolved in the UI.
  */
+@Immutable
 sealed interface UiText {
 
     /** A literal string decided at runtime (server payload, user input, …). */

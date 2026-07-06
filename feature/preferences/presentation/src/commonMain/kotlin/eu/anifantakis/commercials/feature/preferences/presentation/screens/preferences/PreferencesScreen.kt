@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
@@ -52,7 +53,7 @@ fun PreferencesScreenRoot(
 ) {
     PreferencesScreen(
         theme = viewModel.theme,
-        language = viewModel.language,
+        language = LocalLanguage.current ?: Language.FALLBACK,
         isAdmin = isAdmin,
         onIntent = viewModel::onAction,
         onNavIntent = { navIntent ->
@@ -98,9 +99,9 @@ private fun PreferencesScreen(
         Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) }) {
-                    Icon(AppIcons.arrowBack, contentDescription = "Back")
+                    Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
                 }
-                Text("Preferences", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(Strings[StringKey.PREFERENCES_TITLE], fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -108,14 +109,14 @@ private fun PreferencesScreen(
             // ── appearance ──────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Appearance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(Strings[StringKey.PREFERENCES_APPEARANCE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
-                    ThemeOption(theme, ThemePreference.LIGHT, "Light", "Always light", onIntent)
+                    ThemeOption(theme, ThemePreference.LIGHT, Strings[StringKey.PREFERENCES_THEME_LIGHT], Strings[StringKey.PREFERENCES_THEME_LIGHT_DESC], onIntent)
                     ThemeOption(
-                        theme, ThemePreference.DARK, "Dark",
-                        "Always dark (the scheduler keeps its light paper surface)", onIntent
+                        theme, ThemePreference.DARK, Strings[StringKey.PREFERENCES_THEME_DARK],
+                        Strings[StringKey.PREFERENCES_THEME_DARK_DESC], onIntent
                     )
-                    ThemeOption(theme, ThemePreference.SYSTEM, "System", "Follow the operating system setting", onIntent)
+                    ThemeOption(theme, ThemePreference.SYSTEM, Strings[StringKey.PREFERENCES_THEME_SYSTEM], Strings[StringKey.PREFERENCES_THEME_SYSTEM_DESC], onIntent)
                 }
             }
 
@@ -138,10 +139,10 @@ private fun PreferencesScreen(
             if (!isAdmin) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Account", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(Strings[StringKey.PREFERENCES_ACCOUNT], fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(AppIcons.lock, "Change Password", "Signs out every session") { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
-                        PreferenceEntry(AppIcons.key, "Recovery Codes", "One-time codes for \"forgot password\"") { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
+                        PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
+                        PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_RECOVERY_CODES], Strings[StringKey.PREFERENCES_RECOVERY_CODES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -151,11 +152,11 @@ private fun PreferencesScreen(
             if (isAdmin) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Maintenance", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(Strings[StringKey.PREFERENCES_MAINTENANCE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        PreferenceEntry(AppIcons.manageAccounts, "Manage Users", "Accounts, grants, password resets") { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
-                        PreferenceEntry(AppIcons.storage, "Legacy Migration", "Import a legacy mysqldump as a station") { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
-                        PreferenceEntry(AppIcons.dns, "Hosted Databases", "Inspect and delete hosted stations") { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
+                        PreferenceEntry(AppIcons.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
+                        PreferenceEntry(AppIcons.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
+                        PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
                     }
                 }
             }

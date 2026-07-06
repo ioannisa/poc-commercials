@@ -1,7 +1,12 @@
 package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview
 
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -49,7 +54,7 @@ fun EmailPreviewDialogRoot(
 
     EmailPreviewDialog(
         state = viewModel.state,
-        title = "Προεπισκόπιση — ${greekMonthName(request.month)} ${request.year} — $partyName",
+        title = Strings[StringKey.EMAIL_PREVIEW_TITLE].withArgs(listOf(monthName(request.month), request.year, partyName)),
         recipient = request.recipient,
         onIntent = viewModel::onAction,
         onClose = onClose,
@@ -90,7 +95,7 @@ private fun EmailPreviewDialog(
                     state.html != null ->
                         EmailHtmlPreview(state.html, Modifier.weight(1f).fillMaxWidth())
                     else -> Text(
-                        state.error ?: "Η προεπισκόπηση απέτυχε",
+                        (state.error ?: UiText.Res(StringKey.EMAIL_PREVIEW_FAILED)).asString(),
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)
                     )
@@ -101,15 +106,15 @@ private fun EmailPreviewDialog(
                 ) {
                     val err = state.error
                     if (err != null && state.html != null) {
-                        Text(err, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        Text(err.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     } else {
                         Text(
-                            "Προς: $recipient",
+                            Strings[StringKey.EMAIL_TO].withArgs(listOf(recipient)),
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    TextButton(enabled = !state.sending, onClick = onClose) { Text("Πίσω") }
+                    TextButton(enabled = !state.sending, onClick = onClose) { Text(Strings[StringKey.COMMON_BACK]) }
                     TextButton(
                         enabled = !state.sending && state.html != null,
                         onClick = { onIntent(EmailPreviewIntent.Send) }
@@ -117,7 +122,7 @@ private fun EmailPreviewDialog(
                         if (state.sending) {
                             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                         } else {
-                            Text("Αποστολή", fontWeight = FontWeight.Bold)
+                            Text(Strings[StringKey.EMAIL_SEND_BUTTON], fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -126,7 +131,9 @@ private fun EmailPreviewDialog(
     }
 }
 
-internal fun greekMonthName(m: Int): String = listOf(
-    "Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος",
-    "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος",
-).getOrElse(m - 1) { m.toString() }
+internal fun monthName(m: Int): String = listOf(
+    StringKey.MONTH_JANUARY, StringKey.MONTH_FEBRUARY, StringKey.MONTH_MARCH,
+    StringKey.MONTH_APRIL, StringKey.MONTH_MAY, StringKey.MONTH_JUNE,
+    StringKey.MONTH_JULY, StringKey.MONTH_AUGUST, StringKey.MONTH_SEPTEMBER,
+    StringKey.MONTH_OCTOBER, StringKey.MONTH_NOVEMBER, StringKey.MONTH_DECEMBER,
+).getOrElse(m - 1) { null }?.localized() ?: m.toString()

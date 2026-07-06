@@ -1,45 +1,66 @@
 package eu.anifantakis.commercials.core.presentation.string_resources
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.staticCompositionLocalOf
-import eu.anifantakis.commercials.core.presentation.string_resources.lang.EL_STRINGS
-import eu.anifantakis.commercials.core.presentation.string_resources.lang.EN_STRINGS
-import org.koin.mp.KoinPlatform
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 
 /**
- * The active UI language provided at the app root
- * (`CompositionLocalProvider(LocalLanguage provides manager.current)`). Reading
- * it in a composable recomposes that composable when the language switches.
+ * Provided at the app root by [LocalizationProvider]. Reading it in a composable
+ * subscribes that composable to language changes (the actual text comes from
+ * [LocalizationManager]; this is purely the recomposition trigger).
  */
-val LocalLanguage = staticCompositionLocalOf { Language.FALLBACK }
+val LocalLanguage: ProvidableCompositionLocal<Language?> = compositionLocalOf { Language.FALLBACK }
 
-/** Pure lookup over the static maps: chosen language → English → the key name. */
-internal fun resolve(key: StringKey, language: Language): String =
-    (if (language == Language.EL) EL_STRINGS else EN_STRINGS)[key]
-        ?: EN_STRINGS[key]
-        ?: key.name
-
-/**
- * Composable string reads — the app-wide accessor. `Strings[StringKey.X]`
- * recomposes on a language switch (it reads [LocalLanguage]).
- */
+/** The app-wide composable accessor: `Strings[StringKey.X]` (recomposes on switch). */
 object Strings {
     @Composable
-    operator fun get(key: StringKey): String = resolve(key, LocalLanguage.current)
+    @ReadOnlyComposable
+    operator fun get(key: StringKey): String {
+        LocalLanguage.current                         // subscribe to language changes
+        return LocalizationManager.getString(key)
+    }
+}
+
+/** Non-composable resolve (ViewModels, error mappers). */
+fun StringKey.localized(): String = LocalizationManager.getString(this)
+
+/** Composable resolve that recomposes on a language switch. */
+@Composable
+@ReadOnlyComposable
+fun StringKey.localizedCompose(): String {
+    LocalLanguage.current
+    return LocalizationManager.getString(this)
 }
 
 /**
- * Non-composable read (ViewModels, error mappers) — resolves in the CURRENT app
- * language via the [LocalizationManager] singleton. A snapshot: a value already
- * stored in state won't re-translate on a later switch (fine for transient text).
+ * Resolve a raw server wire-name to its localized string. Unknown wire-names
+ * resolve to UNMATCHED → "" → the raw string shows through — so you can
+ * scaffold UI with backend keys as placeholders BEFORE the strings exist, then
+ * add the key/translations later with no call-site change (golden-standard
+ * behavior).
  */
-fun StringKey.localized(): String =
-    resolve(this, KoinPlatform.getKoin().get<LocalizationManager>().current)
+fun String.localized(): String {
+    val localized = LocalizationManager.getString(StringKey.fromJson(this))
+    return localized.ifEmpty { this }
+}
 
-/** Composable read that subscribes to language changes (equivalent to `Strings[this]`). */
-@Composable
-fun StringKey.localizedCompose(): String = resolve(this, LocalLanguage.current)
-
-/** Apply positional args to a resolved string: `{0}`, `{1}`, … */
+/** Positional args into a resolved string: `{0}`, `{1}`, … */
 fun String.withArgs(args: List<Any>): String =
     args.foldIndexed(this) { i, acc, a -> acc.replace("{$i}", a.toString()) }
+
+/** Wraps the app so every `Strings[...]` recomposes when the language switches. */
+@Composable
+fun LocalizationProvider(content: @Composable () -> Unit) {
+    val language by LocalizationManager.currentLanguage.collectAsState()
+    CompositionLocalProvider(LocalLanguage provides language, content = content)
+}
+
+/** Current language as Compose state (for the language picker's selection). */
+@Composable
+fun rememberCurrentLanguage(): State<Language> =
+    LocalizationManager.currentLanguage.collectAsState()

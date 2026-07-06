@@ -1,11 +1,12 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Stable
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseCommonViewModel
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
@@ -76,7 +77,7 @@ class TimetableCommonViewModel(
                     is DataResult.Failure -> {
                         addedByCell.clear()
                         updateCommonState { TimetableCommonState() }
-                        showSnackbar(result.error.toDisplayMessage())
+                        showSnackbar(result.error.toUiText())
                     }
                 }
             }
@@ -84,7 +85,7 @@ class TimetableCommonViewModel(
             is TimetableCommonIntent.Add -> {
                 when (val result = placementsRepository.add(intent.spotId, intent.breakId, intent.date)) {
                     is DataResult.Success -> applyAdd(SchedulerKey(intent.breakId, intent.date), result.data)
-                    is DataResult.Failure -> showSnackbar(result.error.toDisplayMessage())
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
 
@@ -93,7 +94,7 @@ class TimetableCommonViewModel(
                 val last = addedByCell[key]?.lastOrNull() ?: return
                 when (val result = placementsRepository.remove(last.id)) {
                     is DataResult.Success -> applyRemove(key, last)
-                    is DataResult.Failure -> showSnackbar(result.error.toDisplayMessage())
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
 
@@ -113,7 +114,7 @@ class TimetableCommonViewModel(
                 }
                 when (val result = placementsRepository.reorder(intent.breakId, intent.date, intent.orderedIds)) {
                     is DataResult.Success -> Unit
-                    is DataResult.Failure -> showSnackbar(result.error.toDisplayMessage())
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
         }

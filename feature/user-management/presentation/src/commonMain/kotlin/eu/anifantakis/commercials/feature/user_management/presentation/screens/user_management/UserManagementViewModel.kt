@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.user_management.presentation.screens.user_management
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -7,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
@@ -48,7 +49,7 @@ data class CreateUserDialogState(
     val password: String = "",
     val grants: GrantsSelection = GrantsSelection(),
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 ) {
     val canSubmit: Boolean get() = !busy && username.isNotBlank() && displayName.isNotBlank() && password.length >= 6
 }
@@ -58,7 +59,7 @@ data class ResetPasswordDialogState(
     val user: ManagedUser,
     val password: String = "",
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 ) {
     val canSubmit: Boolean get() = !busy && password.length >= 6
 }
@@ -68,13 +69,13 @@ data class EditGrantsDialogState(
     val user: ManagedUser,
     val grants: GrantsSelection,
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 )
 
 @Immutable
 data class UserManagementState(
     val users: ImmutableList<ManagedUser> = persistentListOf(),
-    val message: String? = null,
+    val message: UiText? = null,
     val create: CreateUserDialogState? = null,
     val reset: ResetPasswordDialogState? = null,
     val editGrants: EditGrantsDialogState? = null,
@@ -188,7 +189,7 @@ class UserManagementViewModel(
         viewModelScope.launch {
             when (val result = repository.listUsers()) {
                 is DataResult.Success -> _state.update { it.copy(users = result.data.toImmutableList()) }
-                is DataResult.Failure -> _state.update { it.copy(message = result.error.toDisplayMessage()) }
+                is DataResult.Failure -> _state.update { it.copy(message = result.error.toUiText()) }
             }
         }
     }
@@ -207,7 +208,7 @@ class UserManagementViewModel(
                     reload()
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(create = it.create?.copy(busy = false, error = result.error.toDisplayMessage()))
+                    it.copy(create = it.create?.copy(busy = false, error = result.error.toUiText()))
                 }
             }
         }
@@ -224,7 +225,7 @@ class UserManagementViewModel(
                     reload()
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(reset = it.reset?.copy(busy = false, error = result.error.toDisplayMessage()))
+                    it.copy(reset = it.reset?.copy(busy = false, error = result.error.toUiText()))
                 }
             }
         }
@@ -241,7 +242,7 @@ class UserManagementViewModel(
                     reload()
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(editGrants = it.editGrants?.copy(busy = false, error = result.error.toDisplayMessage()))
+                    it.copy(editGrants = it.editGrants?.copy(busy = false, error = result.error.toUiText()))
                 }
             }
         }
@@ -252,7 +253,7 @@ class UserManagementViewModel(
         viewModelScope.launch {
             when (val result = repository.deleteUser(user.id)) {
                 is DataResult.Success -> Unit
-                is DataResult.Failure -> _state.update { it.copy(message = result.error.toDisplayMessage()) }
+                is DataResult.Failure -> _state.update { it.copy(message = result.error.toUiText()) }
             }
             _state.update { it.copy(delete = null) }
             reload()

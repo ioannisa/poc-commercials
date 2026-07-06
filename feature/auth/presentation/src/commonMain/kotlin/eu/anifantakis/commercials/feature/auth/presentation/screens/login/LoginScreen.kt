@@ -1,6 +1,8 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.login
 
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -82,7 +84,7 @@ private fun LoginScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = if (state.recoveryMode) "Επαναφορά Κωδικού" else "Σύνδεση",
+                    text = if (state.recoveryMode) Strings[StringKey.LOGIN_RECOVERY_TITLE] else Strings[StringKey.LOGIN_SIGN_IN_TITLE],
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -92,7 +94,7 @@ private fun LoginScreen(
                 OutlinedTextField(
                     value = state.username,
                     onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
-                    label = { Text("Username") },
+                    label = { Text(Strings[StringKey.LOGIN_USERNAME]) },
                     leadingIcon = { Icon(AppIcons.person, contentDescription = null) },
                     singleLine = true,
                     enabled = !state.isLoading,
@@ -104,7 +106,7 @@ private fun LoginScreen(
                     OutlinedTextField(
                         value = state.recoveryCode,
                         onValueChange = { onIntent(LoginIntent.RecoveryCodeChanged(it)) },
-                        label = { Text("Recovery code") },
+                        label = { Text(Strings[StringKey.LOGIN_RECOVERY_CODE]) },
                         placeholder = { Text("XXXX-XXXX-XXXX-XXXX") },
                         leadingIcon = { Icon(AppIcons.key, contentDescription = null) },
                         singleLine = true,
@@ -118,13 +120,13 @@ private fun LoginScreen(
                 OutlinedTextField(
                     value = state.password,
                     onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
-                    label = { Text(if (state.recoveryMode) "New password" else "Password") },
+                    label = { Text(Strings[if (state.recoveryMode) StringKey.LOGIN_NEW_PASSWORD else StringKey.LOGIN_PASSWORD]) },
                     leadingIcon = { Icon(AppIcons.lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { onIntent(LoginIntent.TogglePasswordVisibility) }) {
                             Icon(
                                 if (state.passwordVisible) AppIcons.visibilityOff else AppIcons.visibility,
-                                contentDescription = if (state.passwordVisible) "Hide password" else "Show password"
+                                contentDescription = Strings[if (state.passwordVisible) StringKey.LOGIN_CD_HIDE_PASSWORD else StringKey.LOGIN_CD_SHOW_PASSWORD]
                             )
                         }
                     },
@@ -138,11 +140,11 @@ private fun LoginScreen(
 
                 state.errorMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(text = message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(text = message.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
                 state.infoMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(text = message, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    Text(text = message.asString(), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -156,15 +158,15 @@ private fun LoginScreen(
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(if (state.recoveryMode) "Reset password" else "Login")
+                    Text(Strings[if (state.recoveryMode) StringKey.LOGIN_RESET_PASSWORD else StringKey.LOGIN_BUTTON])
                 }
 
                 Spacer(Modifier.height(8.dp))
 
                 TextButton(onClick = { onIntent(LoginIntent.ToggleRecoveryMode) }) {
                     Text(
-                        if (state.recoveryMode) "Back to login"
-                        else "Forgot password? Use a recovery code",
+                        Strings[if (state.recoveryMode) StringKey.LOGIN_BACK_TO_LOGIN
+                        else StringKey.LOGIN_FORGOT_PASSWORD],
                         fontSize = 12.sp
                     )
                 }
@@ -173,7 +175,7 @@ private fun LoginScreen(
                     Spacer(Modifier.height(16.dp))
                     // Demo accounts - one per access layer (POC convenience)
                     Text(
-                        text = "Demo accounts",
+                        text = Strings[StringKey.LOGIN_DEMO_ACCOUNTS],
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

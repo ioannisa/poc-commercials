@@ -21,6 +21,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
 import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
 import eu.anifantakis.commercials.core.presentation.navigation.Navigator
@@ -102,10 +103,18 @@ fun NavigationRoot() {
         RecoveryCodesDialogRoot(onDismiss = { showRecoveryCodes = false })
     }
 
+    // Critical-loading back-block (golden-standard AppLoadingIndicator rule):
+    // while an uninterruptible operation shows the overlay, swallow back
+    // presses here — NavDisplay's onBack is the single system-back entry
+    // point on every target, so no per-platform BackHandler is needed.
+    val globalStateContainer = koinInject<GlobalStateContainer>()
+
     ApplicationScaffold { scaffoldPadding ->
         NavDisplay(
             backStack = navigator.backStack,
-            onBack = { navigator.goBack() },
+            onBack = {
+                if (!globalStateContainer.state.value.isCriticalLoading) navigator.goBack()
+            },
             modifier = Modifier.padding(scaffoldPadding),
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),   // must be first

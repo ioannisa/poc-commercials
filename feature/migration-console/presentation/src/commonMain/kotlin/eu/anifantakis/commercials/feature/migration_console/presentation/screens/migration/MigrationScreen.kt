@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.migration_console.presentation.screens.migration
 
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,7 +78,7 @@ fun MigrationScreenRoot(
         onBrowseClicked = {
             if (nativeFilePickerAvailable) {
                 scope.launch {
-                    pickFileNative("Select a legacy MySQL dump", "sql")?.let {
+                    pickFileNative(StringKey.MIGRATION_SELECT_DUMP.localized(), "sql")?.let {
                         viewModel.onAction(MigrationIntent.DumpPathChanged(it))
                     }
                 }
@@ -109,9 +113,9 @@ private fun MigrationScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) }) {
-                Icon(AppIcons.arrowBack, contentDescription = "Back")
+                Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text("Legacy Migration", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(Strings[StringKey.PREFERENCES_MIGRATION], fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             if (state.running) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(20.dp))
             Spacer(Modifier.width(8.dp))
@@ -128,14 +132,12 @@ private fun MigrationScreen(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "✓ MIGRATION COMPLETE",
+                        Strings[StringKey.MIGRATION_COMPLETE_TITLE],
                         fontSize = 18.sp, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        "All data from the dump has been migrated into '${status.schema}'. " +
-                            "The station is hosted LIVE - grant users access now; it appears " +
-                            "in dropdowns at their next login.",
+                        Strings[StringKey.MIGRATION_COMPLETE_BODY].withArgs(listOf(status.schema ?: "")),
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
@@ -150,12 +152,12 @@ private fun MigrationScreen(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "✗ MIGRATION FAILED",
+                        Strings[StringKey.MIGRATION_FAILED_TITLE],
                         fontSize = 18.sp, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
                     Text(
-                        status.error ?: "See the log below.",
+                        status.error ?: Strings[StringKey.MIGRATION_SEE_LOG],
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer
                     )
                 }
@@ -166,41 +168,41 @@ private fun MigrationScreen(
         if (status.state == "IDLE") {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("1. Source dump & target database", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(Strings[StringKey.MIGRATION_STEP1], fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.dumpPath,
                             onValueChange = { onIntent(MigrationIntent.DumpPathChanged(it)) },
-                            label = { Text("Dump file path (on the server machine)") },
+                            label = { Text(Strings[StringKey.MIGRATION_DUMP_PATH]) },
                             placeholder = { Text("/backups/commercials3.sql") },
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
                         // Desktop gets the real OS file dialog; web/mobile
                         // fall back to browsing the server's filesystem.
-                        Button(onClick = onBrowseClicked) { Text("Browse…") }
+                        Button(onClick = onBrowseClicked) { Text(Strings[StringKey.MIGRATION_BROWSE]) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.host,
                             onValueChange = { onIntent(MigrationIntent.HostChanged(it)) },
-                            label = { Text("MySQL host") }, singleLine = true, modifier = Modifier.weight(2f)
+                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_HOST]) }, singleLine = true, modifier = Modifier.weight(2f)
                         )
                         OutlinedTextField(
                             value = state.port,
                             onValueChange = { onIntent(MigrationIntent.PortChanged(it)) },
-                            label = { Text("Port") }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = { Text(Strings[StringKey.MIGRATION_PORT]) }, singleLine = true, modifier = Modifier.weight(1f)
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.username,
                             onValueChange = { onIntent(MigrationIntent.UsernameChanged(it)) },
-                            label = { Text("MySQL username") }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_USERNAME]) }, singleLine = true, modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = state.password,
                             onValueChange = { onIntent(MigrationIntent.PasswordChanged(it)) },
-                            label = { Text("MySQL password") },
+                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_PASSWORD]) },
                             visualTransformation = PasswordVisualTransformation(),
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
@@ -208,7 +210,7 @@ private fun MigrationScreen(
                     OutlinedTextField(
                         value = state.schema,
                         onValueChange = { onIntent(MigrationIntent.SchemaChanged(it)) },
-                        label = { Text("Target schema name") },
+                        label = { Text(Strings[StringKey.MIGRATION_TARGET_SCHEMA]) },
                         placeholder = { Text("commercials_mystation") },
                         singleLine = true, modifier = Modifier.fillMaxWidth()
                     )
@@ -217,13 +219,13 @@ private fun MigrationScreen(
                             checked = state.createSchema,
                             onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) }
                         )
-                        Text("Create the schema if it does not exist", fontSize = 13.sp)
+                        Text(Strings[StringKey.MIGRATION_CREATE_SCHEMA], fontSize = 13.sp)
                     }
-                    state.formError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    state.formError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
                     Button(
                         enabled = state.canStart,
                         onClick = { onIntent(MigrationIntent.Start) }
-                    ) { Text("Start migration") }
+                    ) { Text(Strings[StringKey.MIGRATION_START]) }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -234,11 +236,11 @@ private fun MigrationScreen(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "2. Choose the flow to migrate into '${status.schema}'",
+                        Strings[StringKey.MIGRATION_STEP2].withArgs(listOf(status.schema ?: "")),
                         fontWeight = FontWeight.Bold, fontSize = 14.sp
                     )
                     Text(
-                        "A legacy database can serve both a TV and a radio flow - each becomes its own station.",
+                        Strings[StringKey.MIGRATION_FLOW_INFO],
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     status.flows.forEach { flow ->
@@ -248,7 +250,10 @@ private fun MigrationScreen(
                                 onClick = { onIntent(MigrationIntent.FlowSelected(flow.forTv)) }
                             )
                             Text(
-                                "${if (flow.forTv == 1) "TV" else "Radio"} — ${flow.spots} spots, ${flow.placements} placements",
+                                Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
+                                    Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
+                                    flow.spots, flow.placements,
+                                )),
                                 fontSize = 13.sp
                             )
                         }
@@ -258,29 +263,29 @@ private fun MigrationScreen(
                             checked = state.addToYaml,
                             onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) }
                         )
-                        Text("Add the station to server.yaml", fontSize = 13.sp)
+                        Text(Strings[StringKey.MIGRATION_ADD_TO_YAML], fontSize = 13.sp)
                     }
                     if (state.addToYaml) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = state.stationId,
                                 onValueChange = { onIntent(MigrationIntent.StationIdChanged(it)) },
-                                label = { Text("Station id (e.g. my-station)") },
+                                label = { Text(Strings[StringKey.MIGRATION_STATION_ID]) },
                                 singleLine = true, modifier = Modifier.weight(1f)
                             )
                             OutlinedTextField(
                                 value = state.stationName,
                                 onValueChange = { onIntent(MigrationIntent.StationNameChanged(it)) },
-                                label = { Text("Display name") },
+                                label = { Text(Strings[StringKey.USER_MGMT_DISPLAY_NAME]) },
                                 singleLine = true, modifier = Modifier.weight(1f)
                             )
                         }
                     }
-                    state.formError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    state.formError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
                     Button(
                         enabled = state.canChooseFlow,
                         onClick = { onIntent(MigrationIntent.ChooseFlow) }
-                    ) { Text("Migrate this flow") }
+                    ) { Text(Strings[StringKey.MIGRATION_MIGRATE_FLOW]) }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -290,27 +295,27 @@ private fun MigrationScreen(
         status.summary?.let { s ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Migration summary", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Break slots: ${s.breaks} (from real airing times)", fontSize = 13.sp)
-                    Text("Programmes: ${s.programs} (with their operator-assigned colours)", fontSize = 13.sp)
+                    Text(Strings[StringKey.MIGRATION_SUMMARY], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(Strings[StringKey.MIGRATION_SUM_BREAKS].withArgs(listOf(s.breaks)), fontSize = 13.sp)
+                    Text(Strings[StringKey.MIGRATION_SUM_PROGRAMS].withArgs(listOf(s.programs)), fontSize = 13.sp)
                     Text(
-                        "Customers: ${s.customers} (${s.customers - s.customersSynthetic} real names recovered, ${s.customersSynthetic} synthetic)",
+                        Strings[StringKey.MIGRATION_SUM_CUSTOMERS].withArgs(listOf(s.customers, s.customers - s.customersSynthetic, s.customersSynthetic)),
                         fontSize = 13.sp
                     )
-                    Text("Contracts: ${s.contracts} (${s.contractsSynthetic} synthetic) · lines: ${s.contractLines}", fontSize = 13.sp)
-                    Text("Spots: ${s.spots} · Placements: ${s.placements}", fontSize = 13.sp)
-                    Text("Flow comments: ${s.flowComments} · Print audits: ${s.printAudits}", fontSize = 13.sp)
-                    Text("Date range: ${s.dateRange}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(Strings[StringKey.MIGRATION_SUM_CONTRACTS].withArgs(listOf(s.contracts, s.contractsSynthetic, s.contractLines)), fontSize = 13.sp)
+                    Text(Strings[StringKey.MIGRATION_SUM_SPOTS].withArgs(listOf(s.spots, s.placements)), fontSize = 13.sp)
+                    Text(Strings[StringKey.MIGRATION_SUM_COMMENTS].withArgs(listOf(s.flowComments, s.printAudits)), fontSize = 13.sp)
+                    Text(Strings[StringKey.MIGRATION_SUM_RANGE].withArgs(listOf(s.dateRange)), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "Coverage: migrated ${s.placements} of ${s.dumpScheduleRows} placements found in the dump" +
-                            (if (s.otherFlowRows > 0) " · ${s.otherFlowRows} belong to the other flow (migrate them into a second station)" else "") +
-                            (if (s.orphanedRows > 0) " · ${s.orphanedRows} orphaned (reference spots the legacy app purged)" else "") +
-                            (if (s.zeroDateRows > 0) " · ${s.zeroDateRows} with invalid dates" else ""),
+                        Strings[StringKey.MIGRATION_COVERAGE].withArgs(listOf(s.placements, s.dumpScheduleRows)) +
+                            (if (s.otherFlowRows > 0) Strings[StringKey.MIGRATION_COVERAGE_OTHER_FLOW].withArgs(listOf(s.otherFlowRows)) else "") +
+                            (if (s.orphanedRows > 0) Strings[StringKey.MIGRATION_COVERAGE_ORPHANED].withArgs(listOf(s.orphanedRows)) else "") +
+                            (if (s.zeroDateRows > 0) Strings[StringKey.MIGRATION_COVERAGE_ZERO_DATES].withArgs(listOf(s.zeroDateRows)) else ""),
                         fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "Synthetic rows are flagged in the database so a future ERP import can replace them.",
+                        Strings[StringKey.MIGRATION_SYNTHETIC_NOTE],
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -319,12 +324,12 @@ private fun MigrationScreen(
         }
 
         status.error?.let {
-            Text("Error: $it", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Text(Strings[StringKey.MIGRATION_ERROR].withArgs(listOf(it)), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             Spacer(Modifier.height(8.dp))
         }
 
         if (status.state in setOf("DONE", "FAILED")) {
-            TextButton(onClick = { onIntent(MigrationIntent.Reset) }) { Text("Start another migration") }
+            TextButton(onClick = { onIntent(MigrationIntent.Reset) }) { Text(Strings[StringKey.MIGRATION_START_ANOTHER]) }
             Spacer(Modifier.height(8.dp))
         }
 
@@ -334,7 +339,7 @@ private fun MigrationScreen(
 
         // ── live log ────────────────────────────────────────────────────
         if (status.log.isNotEmpty()) {
-            Text("Progress", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(Strings[StringKey.MIGRATION_PROGRESS], fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(4.dp))
             val listState = rememberLazyListState()
             LaunchedEffect(status.log.size) {
@@ -370,7 +375,7 @@ private fun ServerFileBrowserDialog(
     val listing = browser.listing
     AlertDialog(
         onDismissRequest = { onIntent(MigrationIntent.CloseBrowser) },
-        title = { Text("Pick a dump file (server filesystem)") },
+        title = { Text(Strings[StringKey.MIGRATION_PICK_DUMP]) },
         text = {
             Column {
                 Text(
@@ -380,7 +385,7 @@ private fun ServerFileBrowserDialog(
                 )
                 browser.error?.let {
                     Spacer(Modifier.height(4.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
@@ -431,6 +436,6 @@ private fun ServerFileBrowserDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { Text(Strings[StringKey.COMMON_CANCEL]) } }
     )
 }

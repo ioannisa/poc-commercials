@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -10,7 +11,7 @@ import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailActivityMonth
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailError
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailLogEntry
@@ -49,7 +50,7 @@ data class SendScheduleEmailState(
     val recipient: String = "",
     val note: String = "",
     val history: ImmutableList<EmailLogEntry> = persistentListOf(),
-    val error: String? = null,
+    val error: UiText? = null,
     /** The server's status line after a successful send. */
     val done: String? = null,
 ) {
@@ -175,7 +176,7 @@ class SendScheduleEmailViewModel(
                     it.copy(results = result.data.toImmutableList(), searching = false)
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(error = result.error.toDisplayMessage(), searching = false)
+                    it.copy(error = result.error.toUiText(), searching = false)
                 }
             }
         }
@@ -208,7 +209,7 @@ class SendScheduleEmailViewModel(
                     )
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(error = result.error.toDisplayMessage(), loadingActivity = false)
+                    it.copy(error = result.error.toUiText(), loadingActivity = false)
                 }
             }
         }
@@ -234,14 +235,14 @@ class SendScheduleEmailViewModel(
                         includedSpotIds = result.data.map { sp -> sp.spotId }.toImmutableSet(),
                     )
                 }
-                is DataResult.Failure -> _state.update { it.copy(error = result.error.toDisplayMessage()) }
+                is DataResult.Failure -> _state.update { it.copy(error = result.error.toUiText()) }
             }
         }
     }
 }
 
 /** Email failures to operator text; server messages pass through verbatim. */
-fun EmailError.toDisplayMessage(): String = when (this) {
-    is EmailError.Server -> message
-    is EmailError.Network -> error.toDisplayMessage()
+fun EmailError.toUiText(): UiText = when (this) {
+    is EmailError.Server -> UiText.Dynamic(message)
+    is EmailError.Network -> error.toUiText()
 }

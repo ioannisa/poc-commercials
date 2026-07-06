@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -9,7 +10,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailPreviewRequest
 import eu.anifantakis.commercials.feature.schedule_email.domain.ScheduleEmailRepository
-import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.toDisplayMessage
+import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.toUiText
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,7 +25,7 @@ data class EmailPreviewState(
     val html: String? = null,
     val loading: Boolean = true,
     val sending: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 )
 
 sealed interface EmailPreviewIntent {
@@ -67,7 +68,7 @@ class EmailPreviewViewModel(
             when (val result = repository.previewHtml(request)) {
                 is DataResult.Success -> _state.update { it.copy(html = result.data, loading = false) }
                 is DataResult.Failure -> _state.update {
-                    it.copy(error = result.error.toDisplayMessage(), loading = false)
+                    it.copy(error = result.error.toUiText(), loading = false)
                 }
             }
         }
@@ -80,7 +81,7 @@ class EmailPreviewViewModel(
             when (val result = repository.send(request)) {
                 is DataResult.Success -> eventChannel.send(EmailPreviewEffect.Sent(result.data))
                 is DataResult.Failure -> _state.update {
-                    it.copy(sending = false, error = result.error.toDisplayMessage())
+                    it.copy(sending = false, error = result.error.toUiText())
                 }
             }
         }

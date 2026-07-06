@@ -1,5 +1,10 @@
 package eu.anifantakis.commercials.feature.user_management.presentation.screens.user_management
 
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
+import eu.anifantakis.commercials.core.presentation.util.toStringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -82,19 +87,19 @@ private fun UserManagementScreen(
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { onNavIntent(UserManagementScreenNavIntent.OnBack) }) {
-                Icon(AppIcons.arrowBack, contentDescription = "Back")
+                Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text("User Management", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(Strings[StringKey.USER_MGMT_TITLE], fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             Button(onClick = { onIntent(UserManagementIntent.ShowCreate) }) {
                 Icon(AppIcons.add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("New User")
+                Text(Strings[StringKey.USER_MGMT_NEW_USER])
             }
         }
 
         state.message?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -114,7 +119,7 @@ private fun UserManagementScreen(
                                 if (user.isAdmin) {
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        "SUPER ADMIN (server.yaml)",
+                                        Strings[StringKey.USER_MGMT_SUPER_ADMIN_BADGE],
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
@@ -124,22 +129,22 @@ private fun UserManagementScreen(
                             if (!user.isAdmin) {
                                 val summary = user.grants.joinToString("  ·  ") {
                                     val cc = it.clientCode?.let { c -> " ($c)" } ?: ""
-                                    "${it.stationId}: ${AppRole.parse(it.role).label}$cc"
-                                }.ifEmpty { "no station access" }
+                                    "${it.stationId}: ${AppRole.parse(it.role).toStringKey().localized()}$cc"
+                                }.ifEmpty { Strings[StringKey.USER_MGMT_NO_ACCESS] }
                                 Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                         if (!user.isAdmin) {
                             IconButton(onClick = { onIntent(UserManagementIntent.ResetRequested(user)) }) {
-                                Icon(AppIcons.lockReset, contentDescription = "Reset password")
+                                Icon(AppIcons.lockReset, contentDescription = Strings[StringKey.USER_MGMT_CD_RESET_PASSWORD])
                             }
                             IconButton(onClick = { onIntent(UserManagementIntent.EditGrantsRequested(user)) }) {
-                                Icon(AppIcons.edit, contentDescription = "Edit grants")
+                                Icon(AppIcons.edit, contentDescription = Strings[StringKey.USER_MGMT_CD_EDIT_GRANTS])
                             }
                             IconButton(onClick = { onIntent(UserManagementIntent.DeleteRequested(user)) }) {
                                 Icon(
                                     AppIcons.delete,
-                                    contentDescription = "Delete user",
+                                    contentDescription = Strings[StringKey.USER_MGMT_CD_DELETE_USER],
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -162,15 +167,15 @@ private fun UserManagementScreen(
     state.delete?.let { user ->
         AlertDialog(
             onDismissRequest = { onIntent(UserManagementIntent.DismissDelete) },
-            title = { Text("Delete '${user.username}'?") },
-            text = { Text("Their sessions, grants and recovery codes are removed. This cannot be undone.") },
+            title = { Text(Strings[StringKey.USER_MGMT_DELETE_TITLE].withArgs(listOf(user.username))) },
+            text = { Text(Strings[StringKey.USER_MGMT_DELETE_BODY]) },
             confirmButton = {
                 TextButton(onClick = { onIntent(UserManagementIntent.ConfirmDelete) }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(Strings[StringKey.COMMON_DELETE], color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onIntent(UserManagementIntent.DismissDelete) }) { Text("Cancel") }
+                TextButton(onClick = { onIntent(UserManagementIntent.DismissDelete) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
             }
         )
     }
@@ -197,14 +202,15 @@ private fun GrantsEditor(
             Text(stationName, fontSize = 13.sp, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { expanded = true }) {
                 Text(
-                    if (role == NO_ACCESS) NO_ACCESS else AppRole.parse(role).label,
+                    if (role == NO_ACCESS) Strings[StringKey.USER_MGMT_NO_ACCESS]
+                    else Strings[AppRole.parse(role).toStringKey()],
                     fontSize = 12.sp
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 (listOf(NO_ACCESS) + AppRole.entries.map { it.name }).forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(if (option == NO_ACCESS) NO_ACCESS else AppRole.parse(option).label) },
+                        text = { Text(if (option == NO_ACCESS) Strings[StringKey.USER_MGMT_NO_ACCESS] else Strings[AppRole.parse(option).toStringKey()]) },
                         onClick = {
                             onRoleChanged(stationId, option)
                             expanded = false
@@ -217,7 +223,7 @@ private fun GrantsEditor(
             OutlinedTextField(
                 value = grants.clientCodes[stationId] ?: "",
                 onValueChange = { onCodeChanged(stationId, it) },
-                label = { Text("Client code on $stationName") },
+                label = { Text(Strings[StringKey.USER_MGMT_CLIENT_CODE_ON].withArgs(listOf(stationName))) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -233,32 +239,32 @@ private fun CreateUserDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissCreate) },
-        title = { Text("New user") },
+        title = { Text(Strings[StringKey.USER_MGMT_NEW_USER_TITLE]) },
         text = {
             Column {
                 OutlinedTextField(
                     value = dialog.username,
                     onValueChange = { onIntent(UserManagementIntent.CreateUsernameChanged(it)) },
-                    label = { Text("Username") }, singleLine = true,
+                    label = { Text(Strings[StringKey.LOGIN_USERNAME]) }, singleLine = true,
                     enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.displayName,
                     onValueChange = { onIntent(UserManagementIntent.CreateDisplayNameChanged(it)) },
-                    label = { Text("Display name") }, singleLine = true,
+                    label = { Text(Strings[StringKey.USER_MGMT_DISPLAY_NAME]) }, singleLine = true,
                     enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.password,
                     onValueChange = { onIntent(UserManagementIntent.CreatePasswordChanged(it)) },
-                    label = { Text("Initial password (min 6 chars)") },
+                    label = { Text(Strings[StringKey.USER_MGMT_INITIAL_PASSWORD]) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                Text("Station access", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(Strings[StringKey.USER_MGMT_STATION_ACCESS], fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 GrantsEditor(
                     stationChoices = stationChoices,
                     grants = dialog.grants,
@@ -267,7 +273,7 @@ private fun CreateUserDialog(
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
             }
         },
@@ -275,10 +281,10 @@ private fun CreateUserDialog(
             TextButton(
                 enabled = dialog.canSubmit,
                 onClick = { onIntent(UserManagementIntent.ConfirmCreate) }
-            ) { Text("Create") }
+            ) { Text(Strings[StringKey.USER_MGMT_CREATE]) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissCreate) }) { Text("Cancel") }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissCreate) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }
@@ -290,24 +296,23 @@ private fun ResetPasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissReset) },
-        title = { Text("Reset password for '${dialog.user.username}'") },
+        title = { Text(Strings[StringKey.USER_MGMT_RESET_TITLE].withArgs(listOf(dialog.user.username))) },
         text = {
             Column {
                 Text(
-                    "Set a temporary password and hand it to the user - " +
-                        "their existing sessions are signed out.",
+                    Strings[StringKey.USER_MGMT_RESET_INFO],
                     fontSize = 13.sp
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.password,
                     onValueChange = { onIntent(UserManagementIntent.ResetPasswordChanged(it)) },
-                    label = { Text("New password (min 6 chars)") },
+                    label = { Text(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN]) },
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
             }
         },
@@ -315,10 +320,10 @@ private fun ResetPasswordDialog(
             TextButton(
                 enabled = dialog.canSubmit,
                 onClick = { onIntent(UserManagementIntent.ConfirmReset) }
-            ) { Text("Reset") }
+            ) { Text(Strings[StringKey.USER_MGMT_RESET]) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissReset) }) { Text("Cancel") }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissReset) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }
@@ -331,7 +336,7 @@ private fun EditGrantsDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissGrants) },
-        title = { Text("Station access for '${dialog.user.username}'") },
+        title = { Text(Strings[StringKey.USER_MGMT_GRANTS_TITLE].withArgs(listOf(dialog.user.username))) },
         text = {
             Column {
                 GrantsEditor(
@@ -342,7 +347,7 @@ private fun EditGrantsDialog(
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
             }
         },
@@ -350,10 +355,10 @@ private fun EditGrantsDialog(
             TextButton(
                 enabled = !dialog.busy,
                 onClick = { onIntent(UserManagementIntent.ConfirmGrants) }
-            ) { Text("Save") }
+            ) { Text(Strings[StringKey.COMMON_SAVE]) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissGrants) }) { Text("Cancel") }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissGrants) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }

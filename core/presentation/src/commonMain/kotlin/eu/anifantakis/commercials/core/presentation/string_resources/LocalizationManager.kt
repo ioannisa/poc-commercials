@@ -1,42 +1,46 @@
 package eu.anifantakis.commercials.core.presentation.string_resources
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.intl.Locale
-import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.El
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.En
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Owns the app's active [Language]: persisted across restarts (via the
- * [AppLanguageStore] seam — KSafe impl lives in :core:data) and
- * Compose-observable (a language switch recomposes everything that reads it).
- * Koin singleton — inject it, don't construct it.
- *
- * Initial language (product spec):
- *   1. the user's previously saved choice, else
- *   2. the system locale IF it is a supported language, else
- *   3. English ([Language.FALLBACK]).
+ * Global holder of the active language and string resolution. PURE in-memory
+ * (zero dependencies — accessible from the `localized()` extensions without a
+ * Koin lookup). Persistence is NOT its job: the app seeds it at startup from the
+ * one persisted KSafe entry (App.kt), and the language picker writes that entry
+ * (PreferencesViewModel) — persistence stays at the edges / data layer.
  */
-class LocalizationManager(private val store: AppLanguageStore) {
+object LocalizationManager {
 
-    /**
-     * The current language. Backed by Compose state, so composables reading it
-     * (directly or via [LocalLanguage]) recompose when it changes.
-     */
-    var current: Language by mutableStateOf(resolveInitial())
-        private set
+    private val providers: Map<Language, LanguageStrings> = mapOf(
+        Language.EL to El(),
+        Language.EN to En()
+    )
 
-    private fun resolveInitial(): Language =
-        Language.fromCode(store.languageCode.ifEmpty { null }) // 1) saved choice
-            ?: Language.fromCode(Locale.current.language)      // 2) system locale, if supported
-            ?: Language.FALLBACK                               // 3) English
+    private val _currentLanguage = MutableStateFlow(Language.FALLBACK)
+    val currentLanguage: StateFlow<Language> = _currentLanguage.asStateFlow()
+    val current: Language get() = _currentLanguage.value
 
-    /** Change and persist the app language. Triggers recomposition. */
+    fun getString(key: StringKey): String =
+        (providers[_currentLanguage.value] ?: providers.getValue(Language.FALLBACK)).getString(key)
+
+    /** Switch the active language (in-memory; caller persists). Recomposes readers. */
     fun setLanguage(language: Language) {
-        current = language
-        store.languageCode = language.code
+        _currentLanguage.value = language
     }
 
-    /** Resolve a key in the current language (non-composable path). */
-    fun get(key: StringKey): String = resolve(key, current)
+    fun availableLanguages(): List<Language> = providers.keys.toList()
+
+    /**
+     * The language to start in given the [savedCode] read from persistence:
+     * the saved choice, else the system locale if supported, else English.
+     */
+    fun resolveStartup(savedCode: String): Language =
+        Language.fromCode(savedCode.ifEmpty { null })   // 1) saved choice
+            ?: Language.fromCode(Locale.current.language) // 2) system locale, if supported
+            ?: Language.FALLBACK                          // 3) English
 }

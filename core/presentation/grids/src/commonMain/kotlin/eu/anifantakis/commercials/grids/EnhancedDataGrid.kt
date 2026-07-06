@@ -457,6 +457,8 @@ fun <T> EnhancedDataGrid(
 
     // Row configuration
     showRowNumbers: Boolean = false,
+    /** Header of the totals row's number column (legacy «Σ» = Σύνολο). */
+    summaryLabel: String = "Σ",
     rowNumberWidth: Dp = 50.dp,
     rowHeight: Dp = 36.dp,
     headerHeight: Dp = 40.dp,
@@ -950,6 +952,7 @@ fun <T> EnhancedDataGrid(
                         columns = allVisibleCols,
                         state = state,
                         showRowNumbers = showRowNumbers,
+                        summaryLabel = summaryLabel,
                         rowNumberWidth = rowNumberWidth,
                         rowHeight = rowHeight,
                         horizontalScrollState = horizontalScrollState,
@@ -2312,6 +2315,7 @@ private fun <T> StickyFooterRow(
     columns: ImmutableList<ColumnDef<T>>,
     state: EnhancedDataGridState<T>,
     showRowNumbers: Boolean,
+    summaryLabel: String,
     rowNumberWidth: Dp,
     rowHeight: Dp,
     horizontalScrollState: ScrollState,
@@ -2341,7 +2345,7 @@ private fun <T> StickyFooterRow(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Σ",
+                            text = summaryLabel,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -2379,7 +2383,7 @@ private fun <T> StickyFooterRow(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Σ",
+                        text = summaryLabel,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )

@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.reports.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -25,18 +26,36 @@ import org.koin.compose.koinInject
  * Preview, Print, and Export PDF all produce the ENTIRE month - one daily
  * Program Flow report per day that has spots, merged into one document.
  */
+/**
+ * Display labels for [ReportToolbar]. reports-client is a standalone module
+ * (no dependency on the app's localization), so callers inject localized
+ * labels; English defaults keep it usable standalone.
+ */
+@Immutable
+data class ReportToolbarLabels(
+    val preview: String = "Preview",
+    val print: String = "Print",
+    val exportPdf: String = "Export PDF",
+    val noSpots: String = "No spots in this month",
+    val pdfSavedPrefix: String = "PDF saved: ",
+    val cancelled: String = "Cancelled",
+    val notAvailable: String = "(Reports not available on this platform)",
+)
+
 @Composable
 fun ReportToolbar(
     year: Int,
     month: Int,
     breaks: ImmutableList<BreakSlot>,
     cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    labels: ReportToolbarLabels = ReportToolbarLabels(),
 ) {
     val scope = rememberCoroutineScope()
     val reportService = koinInject<ReportService>()
     var isLoading by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
+    var resultOk by remember { mutableStateOf(false) }
 
     val isReportAvailable = reportService.isReportGenerationAvailable()
 
@@ -51,15 +70,16 @@ fun ReportToolbar(
 
             val payloads = monthPayloads()
             val result = if (payloads.isEmpty()) {
-                ReportResult.Error("No spots in this month")
+                ReportResult.Error(labels.noSpots)
             } else {
                 action(payloads)
             }
 
+            resultOk = result is ReportResult.Success
             resultMessage = when (result) {
-                is ReportResult.Success -> result.filePath?.let { "PDF saved: $it" } ?: result.message
+                is ReportResult.Success -> result.filePath?.let { labels.pdfSavedPrefix + it } ?: result.message
                 is ReportResult.Error -> result.message
-                is ReportResult.Cancelled -> "Cancelled"
+                is ReportResult.Cancelled -> labels.cancelled
             }
 
             isLoading = false
@@ -78,11 +98,11 @@ fun ReportToolbar(
         ) {
             Icon(
                 ReportIcons.visibility,
-                contentDescription = "Preview Month Report",
+                contentDescription = labels.preview,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Preview")
+            Text(labels.preview)
         }
 
         // Print button
@@ -92,11 +112,11 @@ fun ReportToolbar(
         ) {
             Icon(
                 ReportIcons.print,
-                contentDescription = "Print Month Report",
+                contentDescription = labels.print,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Print")
+            Text(labels.print)
         }
 
         // Export PDF button
@@ -115,18 +135,18 @@ fun ReportToolbar(
             } else {
                 Icon(
                     ReportIcons.save,
-                    contentDescription = "Export Month to PDF",
+                    contentDescription = labels.exportPdf,
                     modifier = Modifier.size(18.dp)
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
-            Text("Export PDF")
+            Text(labels.exportPdf)
         }
 
         // Show message if report generation is not available
         if (!isReportAvailable) {
             Text(
-                text = "(Reports not available on this platform)",
+                text = labels.notAvailable,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -138,10 +158,8 @@ fun ReportToolbar(
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (message.contains("saved") || message.contains("opened") || message.contains("Print dialog"))
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.error
+                color = if (resultOk) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error
             )
         }
     }

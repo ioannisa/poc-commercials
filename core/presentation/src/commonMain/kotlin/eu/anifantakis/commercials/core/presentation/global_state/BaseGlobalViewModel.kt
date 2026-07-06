@@ -3,7 +3,9 @@ package eu.anifantakis.commercials.core.presentation.global_state
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import kotlinx.coroutines.CancellationException
 import org.koin.mp.KoinPlatform
 
@@ -18,16 +20,27 @@ abstract class BaseGlobalViewModel(
 
     val globalUiState: GlobalState by globalStateContainer.state.toComposeState(viewModelScope)
 
-    fun showLoading() = globalStateContainer.dispatch(GlobalIntent.ShowLoading)
+    /** [critical] = uninterruptible: the nav host also blocks back while it shows. */
+    fun showLoading(critical: Boolean = false) =
+        globalStateContainer.dispatch(GlobalIntent.ShowLoading(critical))
     fun hideLoading() = globalStateContainer.dispatch(GlobalIntent.HideLoading)
     fun updateHasContent(has: Boolean) = globalStateContainer.dispatch(GlobalIntent.UpdateHasContent(has))
 
-    fun showSnackbar(message: String, actionLabel: String? = null) =
+    /** Golden-standard carrier: [UiText] resolves at the UI edge, in the display-time language. */
+    fun showSnackbar(message: UiText, actionLabel: String? = null) =
         globalStateContainer.dispatch(GlobalIntent.ShowSnackbar(message, actionLabel))
 
-    /** Runs [block] under the global loading overlay; always hides it, rethrows cancellation. */
-    suspend fun <T> withLoading(block: suspend () -> T): Result<T> {
-        showLoading()
+    /** Convenience for the common localized case. */
+    fun showSnackbar(key: StringKey, actionLabel: String? = null) =
+        showSnackbar(UiText.Res(key), actionLabel)
+
+    /**
+     * Runs [block] under the global loading overlay; always hides it, rethrows
+     * cancellation. [critical] additionally blocks back navigation for
+     * uninterruptible operations (golden-standard AppLoadingIndicator).
+     */
+    suspend fun <T> withLoading(critical: Boolean = false, block: suspend () -> T): Result<T> {
+        showLoading(critical)
         return try {
             Result.success(block())
         } catch (e: CancellationException) {

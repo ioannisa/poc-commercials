@@ -1,5 +1,13 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
+import kotlinx.datetime.DayOfWeek
+import eu.anifantakis.commercials.reports.ui.ReportToolbarLabels
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerLabels
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -146,11 +154,14 @@ private fun TimetableScreen(
     // Daily totals for the Σύνολα footer, recomputed when cells change
     val dailyTotals = remember(cellData) { calculateDailyTotals(cellData).toImmutableMap() }
 
-    // Greek month names
-    val greekMonths = listOf(
-        "Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος",
-        "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος",
-        "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"
+    // Localized month names (Strings[] — recompose on language switch)
+    val monthNames = listOf(
+        Strings[StringKey.MONTH_JANUARY], Strings[StringKey.MONTH_FEBRUARY],
+        Strings[StringKey.MONTH_MARCH], Strings[StringKey.MONTH_APRIL],
+        Strings[StringKey.MONTH_MAY], Strings[StringKey.MONTH_JUNE],
+        Strings[StringKey.MONTH_JULY], Strings[StringKey.MONTH_AUGUST],
+        Strings[StringKey.MONTH_SEPTEMBER], Strings[StringKey.MONTH_OCTOBER],
+        Strings[StringKey.MONTH_NOVEMBER], Strings[StringKey.MONTH_DECEMBER]
     )
 
     // Report printing from popup menus (day header, break header, cell)
@@ -199,7 +210,7 @@ private fun TimetableScreen(
         KeyboardEnabledHeader(
             year = year,
             month = month,
-            monthName = greekMonths[month - 1],
+            monthName = monthNames[month - 1],
             breaks = breaks,
             cellData = cellData,
             canEdit = canEdit,
@@ -220,7 +231,7 @@ private fun TimetableScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             ) {
-                OutlinedButton(onClick = { onIntent(TimetableIntent.OpenFinder) }) { Text("Εύρεση") }
+                OutlinedButton(onClick = { onIntent(TimetableIntent.OpenFinder) }) { Text(Strings[StringKey.TIMETABLE_FINDER_BUTTON]) }
                 Spacer(modifier = Modifier.width(8.dp))
                 var spotMenu by remember { mutableStateOf(false) }
                 OutlinedButton(
@@ -228,7 +239,7 @@ private fun TimetableScreen(
                     enabled = finder.spots.isNotEmpty()
                 ) {
                     Text(
-                        finder.selectedSpot?.description?.take(48) ?: "— κανένα σποτ —",
+                        finder.selectedSpot?.description?.take(48) ?: Strings[StringKey.TIMETABLE_NO_SPOT_SELECTED],
                         maxLines = 1, fontSize = 12.sp
                     )
                     Icon(AppIcons.arrowDropDown, contentDescription = null)
@@ -246,7 +257,7 @@ private fun TimetableScreen(
                 }
                 if (finder.selectedParty != null) {
                     IconButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) {
-                        Icon(AppIcons.clear, contentDescription = "Καθαρισμός εύρεσης")
+                        Icon(AppIcons.clear, contentDescription = Strings[StringKey.TIMETABLE_CD_CLEAR_FINDER])
                     }
                 }
             }
@@ -260,6 +271,7 @@ private fun TimetableScreen(
 
         // The scheduler grid with keyboard navigation (using LazyColumn for performance)
         LazySchedulerGrid(
+            labels = schedulerLabels(),
             breaks = breaks,
             cellData = cellData,
             modifiedCells = state.modifiedCells,
@@ -309,7 +321,7 @@ private fun TimetableScreen(
                 buildList {
                     // Open/View details
                     add(ContextMenuEntry.Item(
-                        label = "Open Details",
+                        label = StringKey.TIMETABLE_MENU_OPEN_DETAILS.localized(),
                         icon = { Icon(AppIcons.openInNew, null, modifier = Modifier.size(16.dp)) },
                         shortcut = "Enter",
                         enabled = spotCount > 0
@@ -326,7 +338,7 @@ private fun TimetableScreen(
 
                     // Print the whole day this cell belongs to
                     add(ContextMenuEntry.Item(
-                        label = "Print Day ${dayMenuLabel(date)}",
+                        label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
@@ -335,7 +347,7 @@ private fun TimetableScreen(
 
                     // Print this break's commercials
                     add(ContextMenuEntry.Item(
-                        label = "Print Break",
+                        label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = spotCount > 0
                     ) {
@@ -346,7 +358,7 @@ private fun TimetableScreen(
                     // summed spot times (05:42 for 342s). Persisted.
                     add(ContextMenuEntry.Separator)
                     add(ContextMenuEntry.Item(
-                        label = if (showSpotTimes) "Show Spot Counts" else "Show Spot Times",
+                        label = (if (showSpotTimes) StringKey.TIMETABLE_MENU_SHOW_COUNTS else StringKey.TIMETABLE_MENU_SHOW_TIMES).localized(),
                         icon = {
                             Icon(
                                 if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
@@ -366,13 +378,13 @@ private fun TimetableScreen(
                         // Edit submenu - same real add/remove the 'a'/'r'
                         // keys drive (add needs a spot armed via Εύρεση)
                         add(ContextMenuEntry.SubMenu(
-                            label = "Edit",
+                            label = StringKey.TIMETABLE_MENU_EDIT.localized(),
                             icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
                             items = listOf(
                                 ContextMenuEntry.Item(
                                     label = finder.selectedSpot
-                                        ?.let { "Add «${it.description.take(30)}»" }
-                                        ?: "Add Spot (επιλέξτε από Εύρεση)",
+                                        ?.let { StringKey.TIMETABLE_ADD_SPOT_NAMED.localized().withArgs(listOf(it.description.take(30))) }
+                                        ?: StringKey.TIMETABLE_ADD_SPOT_HINT.localized(),
                                     icon = { Icon(AppIcons.add, null, modifier = Modifier.size(16.dp)) },
                                     shortcut = "A",
                                     enabled = finder.selectedSpot != null
@@ -380,7 +392,7 @@ private fun TimetableScreen(
                                     onIntent(TimetableIntent.AddSpotAt(breakSlot.id, date))
                                 },
                                 ContextMenuEntry.Item(
-                                    label = "Remove Last Added",
+                                    label = StringKey.TIMETABLE_MENU_REMOVE_LAST.localized(),
                                     icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
                                     shortcut = "R",
                                     enabled = (state.addedCounts[key] ?: 0) > 0
@@ -395,7 +407,7 @@ private fun TimetableScreen(
             dayHeaderContextMenuItems = { date ->
                 listOf(
                     ContextMenuEntry.Item(
-                        label = "Print Day ${dayMenuLabel(date)}",
+                        label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
@@ -408,7 +420,7 @@ private fun TimetableScreen(
 
                 listOf(
                     ContextMenuEntry.Item(
-                        label = "Print Break $label (Entire Month)",
+                        label = StringKey.TIMETABLE_MENU_PRINT_BREAK_MONTH.localized().withArgs(listOf(label)),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) }
                     ) {
                         printBreakForMonth(breakSlot)
@@ -445,7 +457,7 @@ private fun StationSelector(authSession: UserSession) {
                 )
                 Icon(
                     AppIcons.arrowDropDown,
-                    contentDescription = "Switch station",
+                    contentDescription = Strings[StringKey.TIMETABLE_CD_SWITCH_STATION],
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -512,7 +524,7 @@ private fun KeyboardEnabledHeader(
                 IconButton(onClick = onPreviousMonth) {
                     Icon(
                         AppIcons.arrowBack,
-                        contentDescription = "Previous month"
+                        contentDescription = Strings[StringKey.TIMETABLE_CD_PREV_MONTH]
                     )
                 }
 
@@ -526,7 +538,7 @@ private fun KeyboardEnabledHeader(
                 IconButton(onClick = onNextMonth) {
                     Icon(
                         AppIcons.arrowForward,
-                        contentDescription = "Next month"
+                        contentDescription = Strings[StringKey.TIMETABLE_CD_NEXT_MONTH]
                     )
                 }
 
@@ -535,13 +547,12 @@ private fun KeyboardEnabledHeader(
                 // Keyboard shortcut hints
                 Column {
                     Text(
-                        text = if (canEdit) "Arrows: Navigate | Enter: Open | A: Add | R: Remove"
-                        else "Arrows: Navigate | Enter: Open (view only)",
+                        text = Strings[if (canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Click grid to focus, then use keyboard",
+                        text = Strings[StringKey.TIMETABLE_HINT_CLICK_FOCUS],
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -552,7 +563,7 @@ private fun KeyboardEnabledHeader(
                 IconButton(onClick = onToggleShowTimes) {
                     Icon(
                         if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
-                        contentDescription = if (showSpotTimes) "Show spot counts" else "Show spot times"
+                        contentDescription = Strings[if (showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES]
                     )
                 }
 
@@ -567,7 +578,7 @@ private fun KeyboardEnabledHeader(
                 // renders it; this is just the launch point.
                 if (canEdit) {
                     IconButton(onClick = onEmail) {
-                        Icon(AppIcons.email, contentDescription = "Email customer schedule")
+                        Icon(AppIcons.email, contentDescription = Strings[StringKey.TIMETABLE_CD_EMAIL_SCHEDULE])
                     }
                 }
 
@@ -578,13 +589,13 @@ private fun KeyboardEnabledHeader(
                 IconButton(onClick = onPreferences) {
                     Icon(
                         AppIcons.settings,
-                        contentDescription = "Preferences"
+                        contentDescription = Strings[StringKey.TIMETABLE_CD_PREFERENCES]
                     )
                 }
                 IconButton(onClick = onLogout) {
                     Icon(
                         AppIcons.logout,
-                        contentDescription = "Logout",
+                        contentDescription = Strings[StringKey.TIMETABLE_CD_LOGOUT],
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -594,6 +605,7 @@ private fun KeyboardEnabledHeader(
             ReportToolbar(
                 year = year,
                 month = month,
+                labels = reportToolbarLabels(),
                 breaks = breaks,
                 cellData = cellData,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -619,7 +631,7 @@ private fun AccountBadge(authSession: UserSession) {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = if (authSession.isAdmin) "Super Administrator" else authSession.role.label,
+            text = if (authSession.isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[authSession.role.toStringKey()],
             fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -652,17 +664,17 @@ private fun SpotFinderDialog(
             tonalElevation = 6.dp
         ) {
             Column(Modifier.padding(14.dp)) {
-                Text("Εύρεση — Κονσόλα Λεπτομερειών", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(Strings[StringKey.FINDER_CONSOLE_TITLE], fontSize = 15.sp, fontWeight = FontWeight.Bold)
 
                 // ═══ ΠΕΛΑΤΗΣ ═══════════════════════════════════════════
-                SectionTitle("Πελάτης")
+                SectionTitle(Strings[StringKey.FINDER_SECTION_CUSTOMER])
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(
                         selected = finder.kind == PartyKind.CUSTOMER,
                         onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER)) }
                     )
                     Text(
-                        "Πελάτες", fontSize = 13.sp,
+                        Strings[StringKey.FINDER_TAB_CUSTOMERS], fontSize = 13.sp,
                         modifier = Modifier.clickable {
                             onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER))
                         }
@@ -673,7 +685,7 @@ private fun SpotFinderDialog(
                         onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER)) }
                     )
                     Text(
-                        "Διαφημιστές", fontSize = 13.sp,
+                        Strings[StringKey.FINDER_TAB_ADVERTISERS], fontSize = 13.sp,
                         modifier = Modifier.clickable {
                             onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER))
                         }
@@ -682,7 +694,7 @@ private fun SpotFinderDialog(
                     OutlinedTextField(
                         value = finder.query,
                         onValueChange = { onIntent(TimetableIntent.FinderQueryChanged(it)) },
-                        label = { Text("Εύρεση (3+ χαρακτήρες)", fontSize = 12.sp) },
+                        label = { Text(Strings[StringKey.FINDER_SEARCH_LABEL], fontSize = 12.sp) },
                         singleLine = true, modifier = Modifier.weight(1f),
                         trailingIcon = {
                             if (finder.searching) {
@@ -692,8 +704,8 @@ private fun SpotFinderDialog(
                     )
                 }
                 HeaderRow(
-                    "Κωδικός" to 0.14f, "Επωνυμία" to 0.44f,
-                    "ΑΦΜ" to 0.14f, "Τηλέφωνο" to 0.14f, "Σποτ" to 0.14f,
+                    Strings[StringKey.FINDER_COL_CODE] to 0.14f, Strings[StringKey.FINDER_COL_NAME] to 0.44f,
+                    Strings[StringKey.FINDER_COL_VAT] to 0.14f, Strings[StringKey.FINDER_COL_PHONE] to 0.14f, Strings[StringKey.FINDER_COL_SPOTS] to 0.14f,
                 )
                 // While a search runs the matches fill the table; the
                 // chosen party stays pinned as its single (highlighted) row.
@@ -714,10 +726,10 @@ private fun SpotFinderDialog(
                 }
 
                 // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
-                SectionTitle("Συμβόλαια Πελάτη — προϊόντα (απεικόνιση έως το ERP import)")
+                SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
                 HeaderRow(
-                    "Συμβ." to 0.16f, "Γρ." to 0.06f, "Περιγραφή" to 0.34f,
-                    "Spots ΑΓ." to 0.12f, "Secs ΑΓ." to 0.12f, "Ημ/νία Έκδ." to 0.20f,
+                    Strings[StringKey.FINDER_COL_CONTRACT] to 0.16f, Strings[StringKey.FINDER_COL_LINE] to 0.06f, Strings[StringKey.FINDER_COL_DESCRIPTION] to 0.34f,
+                    Strings[StringKey.FINDER_COL_SPOTS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_SECS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_ISSUE_DATE] to 0.20f,
                 )
                 if (finder.loadingLines) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
@@ -729,7 +741,7 @@ private fun SpotFinderDialog(
                             onClick = { onIntent(TimetableIntent.FinderLineSelected(line)) },
                             line.contractNumber to 0.16f,
                             "${line.lineNo}" to 0.06f,
-                            (if (line.isGift) "Διαφημίσεις  Δ Ω Ρ Α" else "Προϊόν ERP (εκκρεμεί)") to 0.34f,
+                            (if (line.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]) to 0.34f,
                             "${line.placements}" to 0.12f,
                             "${line.totalSeconds}" to 0.12f,
                             (line.entryDate ?: "") to 0.20f,
@@ -738,10 +750,10 @@ private fun SpotFinderDialog(
                 }
 
                 // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
-                SectionTitle("Μηνύματα")
+                SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
                 HeaderRow(
-                    "Περιγραφή Μηνύματος" to 0.52f, "Χρόνος (secs)" to 0.16f,
-                    "Αναλωμένα Spots" to 0.16f, "Αναλωμένα Secs" to 0.16f,
+                    Strings[StringKey.FINDER_COL_MSG_DESCRIPTION] to 0.52f, Strings[StringKey.FINDER_COL_DURATION] to 0.16f,
+                    Strings[StringKey.FINDER_COL_USED_SPOTS] to 0.16f, Strings[StringKey.FINDER_COL_USED_SECS] to 0.16f,
                 )
                 if (finder.loadingSpots) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
@@ -764,15 +776,15 @@ private fun SpotFinderDialog(
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) { Text("Καθαρισμός") }
+                    TextButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) { Text(Strings[StringKey.FINDER_CLEAR]) }
                     Spacer(Modifier.weight(1f))
                     TextButton(
                         enabled = finder.selectedSpot != null,
                         onClick = { onIntent(TimetableIntent.CloseFinder) }
                     ) {
-                        Text("Επιλογή", fontWeight = FontWeight.Bold)
+                        Text(Strings[StringKey.FINDER_SELECT], fontWeight = FontWeight.Bold)
                     }
-                    TextButton(onClick = { onIntent(TimetableIntent.CloseFinder) }) { Text("Άκυρο") }
+                    TextButton(onClick = { onIntent(TimetableIntent.CloseFinder) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
                 }
             }
         }
@@ -833,3 +845,32 @@ private fun TableRow(
         }
     }
 }
+
+
+/** Localized labels for the standalone grid toolkit (leaf takes no StringKey). */
+@Composable
+private fun schedulerLabels() = SchedulerLabels(
+    timeDay = Strings[StringKey.TIMETABLE_TIME_DAY],
+    totals = Strings[StringKey.TIMETABLE_TOTALS],
+    dayAbbreviations = mapOf(
+        DayOfWeek.MONDAY to Strings[StringKey.DAY_SHORT_MONDAY],
+        DayOfWeek.TUESDAY to Strings[StringKey.DAY_SHORT_TUESDAY],
+        DayOfWeek.WEDNESDAY to Strings[StringKey.DAY_SHORT_WEDNESDAY],
+        DayOfWeek.THURSDAY to Strings[StringKey.DAY_SHORT_THURSDAY],
+        DayOfWeek.FRIDAY to Strings[StringKey.DAY_SHORT_FRIDAY],
+        DayOfWeek.SATURDAY to Strings[StringKey.DAY_SHORT_SATURDAY],
+        DayOfWeek.SUNDAY to Strings[StringKey.DAY_SHORT_SUNDAY],
+    ),
+)
+
+/** Localized labels for the standalone report toolbar. */
+@Composable
+private fun reportToolbarLabels() = ReportToolbarLabels(
+    preview = Strings[StringKey.REPORT_PREVIEW],
+    print = Strings[StringKey.REPORT_PRINT],
+    exportPdf = Strings[StringKey.REPORT_EXPORT_PDF],
+    noSpots = Strings[StringKey.REPORT_NO_SPOTS],
+    pdfSavedPrefix = Strings[StringKey.REPORT_PDF_SAVED_PREFIX],
+    cancelled = Strings[StringKey.REPORT_CANCELLED],
+    notAvailable = Strings[StringKey.REPORT_NOT_AVAILABLE],
+)

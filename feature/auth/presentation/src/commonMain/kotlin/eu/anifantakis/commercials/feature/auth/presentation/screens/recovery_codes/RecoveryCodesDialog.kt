@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes
 
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Stable
 import androidx.compose.foundation.layout.Spacer
@@ -22,7 +26,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
-import eu.anifantakis.commercials.feature.auth.presentation.toDisplayMessage
+import eu.anifantakis.commercials.feature.auth.presentation.toUiText
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +38,7 @@ data class RecoveryCodesState(
     /** Null until generated; shown EXACTLY ONCE (server keeps only hashes). */
     val codes: ImmutableList<String>? = null,
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 )
 
 sealed interface RecoveryCodesIntent {
@@ -64,7 +68,7 @@ class RecoveryCodesViewModel(
                     it.copy(codes = result.data.toImmutableList(), busy = false)
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(error = result.error.toDisplayMessage(), busy = false)
+                    it.copy(error = result.error.toUiText(), busy = false)
                 }
             }
         }
@@ -91,19 +95,17 @@ private fun RecoveryCodesDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { Text("Recovery codes") },
+        title = { Text(Strings[StringKey.RECOVERY_TITLE]) },
         text = {
             Column {
                 if (state.codes == null) {
                     Text(
-                        "Generate 6 one-time codes for the \"forgot password\" flow. " +
-                            "They are shown ONCE - store them somewhere safe. " +
-                            "Generating new codes invalidates all previous ones.",
+                        Strings[StringKey.RECOVERY_INFO],
                         fontSize = 13.sp
                     )
                 } else {
                     Text(
-                        "Save these now - they will never be shown again:",
+                        Strings[StringKey.RECOVERY_SAVE_NOW],
                         fontSize = 13.sp, fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(8.dp))
@@ -113,7 +115,7 @@ private fun RecoveryCodesDialog(
                 }
                 state.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
                 }
             }
         },
@@ -124,14 +126,14 @@ private fun RecoveryCodesDialog(
                     onClick = { onIntent(RecoveryCodesIntent.Generate) }
                 ) {
                     if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    else Text("Generate new codes")
+                    else Text(Strings[StringKey.RECOVERY_GENERATE])
                 }
             } else {
-                TextButton(onClick = onDismiss) { Text("I saved them") }
+                TextButton(onClick = onDismiss) { Text(Strings[StringKey.RECOVERY_SAVED]) }
             }
         },
         dismissButton = {
-            if (state.codes == null) TextButton(enabled = !state.busy, onClick = onDismiss) { Text("Cancel") }
+            if (state.codes == null) TextButton(enabled = !state.busy, onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
         }
     )
 }

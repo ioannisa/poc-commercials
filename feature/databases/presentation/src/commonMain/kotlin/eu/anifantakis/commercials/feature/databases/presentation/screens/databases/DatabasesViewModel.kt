@@ -1,5 +1,9 @@
 package eu.anifantakis.commercials.feature.databases.presentation.screens.databases
 
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -7,7 +11,7 @@ import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.databases.domain.DatabasesRepository
 import eu.anifantakis.commercials.feature.databases.domain.HostedStation
 import kotlinx.collections.immutable.ImmutableList
@@ -27,7 +31,7 @@ data class DeleteDialogState(
     val hard: Boolean = false,
     val confirmId: String = "",
     val busy: Boolean = false,
-    val error: String? = null,
+    val error: UiText? = null,
 ) {
     val canConfirm: Boolean get() = !busy && confirmId.trim() == station.id
 }
@@ -35,8 +39,8 @@ data class DeleteDialogState(
 @Immutable
 data class DatabasesState(
     val stations: ImmutableList<HostedStation> = persistentListOf(),
-    val message: String? = null,
-    val error: String? = null,
+    val message: UiText? = null,
+    val error: UiText? = null,
     val delete: DeleteDialogState? = null,
 )
 
@@ -82,7 +86,7 @@ class DatabasesViewModel(
                     it.copy(stations = result.data.toImmutableList(), error = null)
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(error = result.error.toDisplayMessage())
+                    it.copy(error = result.error.toUiText())
                 }
             }
         }
@@ -98,13 +102,16 @@ class DatabasesViewModel(
                     _state.update {
                         it.copy(
                             delete = null,
-                            message = "${result.data.status} (grants removed: ${result.data.grantsRemoved})",
+                            message = UiText.Res(
+                                StringKey.DATABASES_DELETED_STATUS,
+                                listOf(result.data.status, result.data.grantsRemoved),
+                            ),
                         )
                     }
                     reload()
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(delete = it.delete?.copy(busy = false, error = result.error.toDisplayMessage()))
+                    it.copy(delete = it.delete?.copy(busy = false, error = result.error.toUiText()))
                 }
             }
         }

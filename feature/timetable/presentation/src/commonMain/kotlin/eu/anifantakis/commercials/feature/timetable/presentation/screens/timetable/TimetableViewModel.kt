@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -10,7 +11,7 @@ import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
@@ -270,7 +271,7 @@ class TimetableViewModel(
                     it.copy(finder = it.finder.copy(results = result.data.toImmutableList(), searching = false))
                 }
                 is DataResult.Failure -> {
-                    showSnackbar(result.error.toDisplayMessage())
+                    showSnackbar(result.error.toUiText())
                     _state.update { it.copy(finder = it.finder.copy(searching = false)) }
                 }
             }
@@ -299,7 +300,7 @@ class TimetableViewModel(
                     it.copy(finder = it.finder.copy(lines = result.data.toImmutableList(), loadingLines = false))
                 }
                 is DataResult.Failure -> {
-                    showSnackbar(result.error.toDisplayMessage())
+                    showSnackbar(result.error.toUiText())
                     _state.update { it.copy(finder = it.finder.copy(loadingLines = false)) }
                 }
             }
@@ -323,7 +324,7 @@ class TimetableViewModel(
                     it.copy(finder = it.finder.copy(spots = result.data.toImmutableList(), loadingSpots = false))
                 }
                 is DataResult.Failure -> {
-                    showSnackbar(result.error.toDisplayMessage())
+                    showSnackbar(result.error.toUiText())
                     _state.update { it.copy(finder = it.finder.copy(loadingSpots = false)) }
                 }
             }

@@ -32,8 +32,8 @@ class GlobalStateContainer(initialState: GlobalState = GlobalState()) {
 
     /** Pure copy-based reducer; snackbars emit an effect, state unchanged. */
     private fun reduce(state: GlobalState, action: GlobalIntent): GlobalState = when (action) {
-        GlobalIntent.ShowLoading -> state.copy(isLoading = true)
-        GlobalIntent.HideLoading -> state.copy(isLoading = false)
+        is GlobalIntent.ShowLoading -> state.copy(isLoading = true, isCriticalLoading = action.critical)
+        GlobalIntent.HideLoading -> state.copy(isLoading = false, isCriticalLoading = false)
         is GlobalIntent.UpdateHasContent -> state.copy(hasContent = action.hasContent)
         is GlobalIntent.ShowSnackbar -> {
             _effects.tryEmit(GlobalEffect.SnackBarMessage(action.message, action.actionLabel))

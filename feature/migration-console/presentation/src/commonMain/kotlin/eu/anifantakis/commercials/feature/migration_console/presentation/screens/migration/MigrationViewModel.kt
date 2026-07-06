@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.migration_console.presentation.screens.migration
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -7,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.core.presentation.util.toDisplayMessage
+import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
@@ -26,13 +27,13 @@ import kotlinx.coroutines.launch
 @Immutable
 data class ServerBrowserState(
     val listing: BrowseListing? = null,
-    val error: String? = null,
+    val error: UiText? = null,
 )
 
 @Immutable
 data class MigrationState(
     val status: MigrationStatus = MigrationStatus(),
-    val formError: String? = null,
+    val formError: UiText? = null,
     // step 1: source & target
     val dumpPath: String = "",
     val host: String = "localhost",
@@ -122,7 +123,7 @@ class MigrationViewModel(
                         it.copy(status = result.data, selectedFlow = null)
                     }
                     is DataResult.Failure -> _state.update {
-                        it.copy(formError = result.error.toDisplayMessage())
+                        it.copy(formError = result.error.toUiText())
                     }
                 }
             }
@@ -170,7 +171,7 @@ class MigrationViewModel(
             )
             when (result) {
                 is DataResult.Success -> _state.update { it.copy(status = result.data) }
-                is DataResult.Failure -> _state.update { it.copy(formError = result.error.toDisplayMessage()) }
+                is DataResult.Failure -> _state.update { it.copy(formError = result.error.toUiText()) }
             }
         }
     }
@@ -190,7 +191,7 @@ class MigrationViewModel(
             )
             when (result) {
                 is DataResult.Success -> _state.update { it.copy(status = result.data) }
-                is DataResult.Failure -> _state.update { it.copy(formError = result.error.toDisplayMessage()) }
+                is DataResult.Failure -> _state.update { it.copy(formError = result.error.toUiText()) }
             }
         }
     }
@@ -202,7 +203,7 @@ class MigrationViewModel(
                     it.copy(browser = it.browser?.copy(listing = result.data, error = null))
                 }
                 is DataResult.Failure -> _state.update {
-                    it.copy(browser = it.browser?.copy(error = result.error.toDisplayMessage()))
+                    it.copy(browser = it.browser?.copy(error = result.error.toUiText()))
                 }
             }
         }

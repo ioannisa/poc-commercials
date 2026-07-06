@@ -1,17 +1,18 @@
 package eu.anifantakis.commercials.feature.auth.presentation
 
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 
 /**
- * Auth failures to operator-facing text, localized via StringKey.
- * [AuthError.Server] passes through the backend's own authoritative message.
+ * Auth failures as [UiText]: localized keys for the client-side cases,
+ * verbatim pass-through ([UiText.Dynamic]) for the backend's own
+ * authoritative [AuthError.Server] message.
  */
-fun AuthError.toDisplayMessage(): String = when (this) {
-    AuthError.InvalidCredentials -> StringKey.AUTH_INVALID_CREDENTIALS.localized()
-    AuthError.NoStationsAssigned -> StringKey.AUTH_NO_STATIONS_ASSIGNED.localized()
-    AuthError.NotLoggedIn -> StringKey.AUTH_NOT_LOGGED_IN.localized()
-    is AuthError.Server -> message
-    is AuthError.Network -> StringKey.AUTH_NETWORK_UNREACHABLE.localized()
+fun AuthError.toUiText(): UiText = when (this) {
+    AuthError.InvalidCredentials -> UiText.Res(StringKey.AUTH_INVALID_CREDENTIALS)
+    AuthError.NoStationsAssigned -> UiText.Res(StringKey.AUTH_NO_STATIONS_ASSIGNED)
+    AuthError.NotLoggedIn -> UiText.Res(StringKey.AUTH_NOT_LOGGED_IN)
+    is AuthError.Server -> UiText.Dynamic(message)
+    is AuthError.Network -> UiText.Res(StringKey.AUTH_NETWORK_UNREACHABLE)
 }
