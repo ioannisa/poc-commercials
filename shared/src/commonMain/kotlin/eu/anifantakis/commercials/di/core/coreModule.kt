@@ -4,12 +4,15 @@ import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
 import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryImpl
 import eu.anifantakis.commercials.core.data.party_search.data_source.RemotePartySearchDataSourceImpl
+import eu.anifantakis.commercials.core.data.preferences.KSafeAppLanguageStore
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePartySearchDataSource
+import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -26,6 +29,11 @@ val coreModule = module {
 
     // App-wide MVI container (kmp-developer global state)
     single { GlobalStateContainer() }
+
+    // App language: persisted via the KSafe seam (data), resolved + observed by
+    // the manager (presentation) which depends on the domain AppLanguageStore.
+    singleOf(::KSafeAppLanguageStore).bind<AppLanguageStore>()
+    single { LocalizationManager(get()) }
 
     // ONE client per backend personality (CommonHttpClient subclasses):
     // authenticated + station-stamped for the app API, plain for login/recovery

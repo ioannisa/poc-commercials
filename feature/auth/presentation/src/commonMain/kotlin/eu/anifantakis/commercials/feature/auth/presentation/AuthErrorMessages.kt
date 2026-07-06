@@ -1,16 +1,17 @@
 package eu.anifantakis.commercials.feature.auth.presentation
 
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 
 /**
- * Auth failures to operator-facing text. Plain String instead of the
- * skill's StringKey - this POC is deliberately mono-lingual, and
- * [AuthError.Server] carries the backend's own authoritative message.
+ * Auth failures to operator-facing text, localized via StringKey.
+ * [AuthError.Server] passes through the backend's own authoritative message.
  */
 fun AuthError.toDisplayMessage(): String = when (this) {
-    AuthError.InvalidCredentials -> "Invalid username or password"
-    AuthError.NoStationsAssigned -> "No stations are assigned to this account"
-    AuthError.NotLoggedIn -> "Not logged in"
+    AuthError.InvalidCredentials -> StringKey.AUTH_INVALID_CREDENTIALS.localized()
+    AuthError.NoStationsAssigned -> StringKey.AUTH_NO_STATIONS_ASSIGNED.localized()
+    AuthError.NotLoggedIn -> StringKey.AUTH_NOT_LOGGED_IN.localized()
     is AuthError.Server -> message
-    is AuthError.Network -> "Could not reach the server"
+    is AuthError.Network -> StringKey.AUTH_NETWORK_UNREACHABLE.localized()
 }

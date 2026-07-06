@@ -27,6 +27,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.anifantakis.commercials.core.presentation.string_resources.Language
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -49,6 +52,7 @@ fun PreferencesScreenRoot(
 ) {
     PreferencesScreen(
         theme = viewModel.theme,
+        language = viewModel.language,
         isAdmin = isAdmin,
         onIntent = viewModel::onAction,
         onNavIntent = { navIntent ->
@@ -82,6 +86,7 @@ private sealed interface PreferencesScreenNavIntent {
 @Composable
 private fun PreferencesScreen(
     theme: ThemePreference,
+    language: Language,
     isAdmin: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
     onNavIntent: (PreferencesScreenNavIntent) -> Unit,
@@ -111,6 +116,19 @@ private fun PreferencesScreen(
                         "Always dark (the scheduler keeps its light paper surface)", onIntent
                     )
                     ThemeOption(theme, ThemePreference.SYSTEM, "System", "Follow the operating system setting", onIntent)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── language ─────────────────────────────────────────────────
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(Strings[StringKey.PREFERENCES_LANGUAGE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Language.entries.forEach { lang ->
+                        LanguageOption(language, lang, onIntent)
+                    }
                 }
             }
 
@@ -164,6 +182,23 @@ private fun ThemeOption(
             Text(label, fontSize = 14.sp)
             Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+@Composable
+private fun LanguageOption(
+    current: Language,
+    value: Language,
+    onIntent: (PreferencesIntent) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .clickable { onIntent(PreferencesIntent.LanguageSelected(value)) }
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = current == value, onClick = { onIntent(PreferencesIntent.LanguageSelected(value)) })
+        Text(value.displayName, fontSize = 14.sp)
     }
 }
 
