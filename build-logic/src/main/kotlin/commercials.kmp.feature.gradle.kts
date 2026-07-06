@@ -21,6 +21,10 @@ kotlin {
             implementation(catalog.findLibrary("compose-foundation").get())
             implementation(catalog.findLibrary("compose-material3").get())
             implementation(catalog.findLibrary("compose-ui").get())
+            // Compose Multiplatform Resources: StringResource + stringResource()/
+            // getString() back the i18n UiText helper (core:presentation) and every
+            // screen's Res.string.* lookups.
+            implementation(catalog.findLibrary("compose-components-resources").get())
             implementation(catalog.findLibrary("material-icons-extended").get())
             implementation(catalog.findLibrary("androidx-lifecycle-viewmodelCompose").get())
             implementation(catalog.findLibrary("androidx-lifecycle-runtimeCompose").get())
