@@ -23,7 +23,7 @@ object ServerConfigLoader {
     }
 
     private fun load(): ServerConfig {
-        val explicit = System.getProperty("poc.config") ?: System.getenv("POC_CONFIG")
+        val explicit = System.getProperty("commercials.config") ?: System.getenv("COMMERCIALS_CONFIG")
         val file = if (explicit != null) File(explicit) else File("config.properties")
 
         val props = Properties()
@@ -35,7 +35,7 @@ object ServerConfigLoader {
             props.getProperty(key) ?: System.getenv(envKey) ?: default
 
         return ServerConfig(
-            port = read("server.port", "POC_PORT", "8080").toIntOrNull() ?: 8080
+            port = read("server.port", "COMMERCIALS_PORT", "8080").toIntOrNull() ?: 8080
         )
     }
 }

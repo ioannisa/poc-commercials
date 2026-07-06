@@ -23,7 +23,7 @@ internal expect suspend fun loadAppConfig(): AppConfig
 
 /**
  * Minimal .properties parser: `key=value` per line, `#` or `!` start comments,
- * blank lines ignored. Good enough for the POC's config file.
+ * blank lines ignored. Good enough for the app's config file.
  */
 internal fun parseProperties(text: String): Map<String, String> {
     val out = mutableMapOf<String, String>()

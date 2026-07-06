@@ -137,20 +137,20 @@ data class HostingConfig(
 
 /**
  * Loads the hosting layout from server.yaml (path via `server.config`
- * system property or `POC_SERVER` env, default `./server.yaml`).
+ * system property or `COMMERCIALS_SERVER` env, default `./server.yaml`).
  *
  * The file - and its `central` block - are REQUIRED: the server cannot run
  * without its own schema. Station entries are optional.
  */
 fun loadHostingConfig(): HostingConfig {
     val log = LoggerFactory.getLogger("StationRegistry")
-    val explicit = System.getProperty("server.config") ?: System.getenv("POC_SERVER")
+    val explicit = System.getProperty("server.config") ?: System.getenv("COMMERCIALS_SERVER")
     val file = File(explicit ?: "server.yaml")
 
     require(file.exists()) {
         "Required config '${file.path}' not found. It must define the mandatory 'central' database " +
             "(users/tokens/grants) and optionally 0..n hosted stations. " +
-            "Override the path with -Dserver.config=<path> or POC_SERVER."
+            "Override the path with -Dserver.config=<path> or COMMERCIALS_SERVER."
     }
 
     val parsed = Yaml.default.decodeFromString(HostingConfig.serializer(), file.readText())

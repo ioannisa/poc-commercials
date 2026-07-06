@@ -21,7 +21,7 @@ import org.koin.logger.slf4jLogger
 fun main() {
     embeddedServer(
         Netty,
-        port = ServerConfigLoader.get().port, // server.port / POC_PORT, default 8080
+        port = ServerConfigLoader.get().port, // server.port / COMMERCIALS_PORT, default 8080
         host = "0.0.0.0",
         module = Application::module
     ).start(wait = true)

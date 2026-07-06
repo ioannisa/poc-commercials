@@ -10,7 +10,7 @@ import java.io.File
 
 /** Same server.yaml resolution the server's config loading uses. */
 fun stationsYamlFile(): File {
-    val explicit = System.getProperty("server.config") ?: System.getenv("POC_SERVER")
+    val explicit = System.getProperty("server.config") ?: System.getenv("COMMERCIALS_SERVER")
     return File(explicit ?: "server.yaml")
 }
 

@@ -173,7 +173,7 @@ private fun LoginScreen(
 
                 if (!state.recoveryMode) {
                     Spacer(Modifier.height(16.dp))
-                    // Demo accounts - one per access layer (POC convenience)
+                    // Demo accounts - one per access layer (demo convenience)
                     Text(
                         text = Strings[StringKey.LOGIN_DEMO_ACCOUNTS],
                         fontSize = 11.sp,

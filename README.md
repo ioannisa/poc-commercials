@@ -1,4 +1,4 @@
-# Commercials Manager (POC)
+# Commercials Manager
 
 Kotlin/Compose Multiplatform re-implementation of a legacy Windows TV/radio
 ad-scheduling application. Targets: **Android, iOS, Desktop (JVM), Web (JS +
@@ -62,7 +62,9 @@ iOS: open `/iosApp` in Xcode and run (the `Shared` framework comes from `:shared
   feature-specific error types. `CancellationException` always rethrows.
 - Programme colours in the scheduler are **data** (operator-assigned in the
   legacy app), never theme-adapted; text contrast is computed by luminance.
-- Mono-lingual Greek POC: UI strings are plain `String` (recorded deviation
-  from the skill's `StringKey` localization).
+- Fully localized (Greek + English) through a hand-rolled `StringKey` +
+  `LocalizationManager`, fronted by the `UiText` façade. Startup language is
+  the system locale when supported, else English; the choice is live-switchable
+  from Preferences and persisted as one KSafe entry.
 - The Koin compiler plugin is intentionally NOT used (cross-module
   definitions); `KoinGraphTest` guards the graph instead.
