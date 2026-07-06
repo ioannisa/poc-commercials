@@ -8,5 +8,9 @@ kotlin {
             api(projects.feature.preferences.domain)
             api(projects.core.presentation)
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

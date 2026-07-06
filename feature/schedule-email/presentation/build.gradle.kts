@@ -8,6 +8,10 @@ kotlin {
             api(projects.feature.scheduleEmail.domain)
             api(projects.core.presentation)
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
         jvmTest.dependencies {
             implementation(libs.kotlin.test)
         }
