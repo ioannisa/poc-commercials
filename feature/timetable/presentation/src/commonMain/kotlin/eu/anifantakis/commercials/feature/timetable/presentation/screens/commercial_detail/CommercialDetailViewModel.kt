@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
@@ -19,6 +20,8 @@ import kotlinx.datetime.LocalDate
 @Immutable
 data class CommercialDetailState(
     val commercials: ImmutableList<CommercialItem> = persistentListOf(),
+    /** The programme airing at this break (first placement's), when it has one. */
+    val programName: String? = null,
 )
 
 sealed interface CommercialDetailIntent {
@@ -43,11 +46,11 @@ class CommercialDetailViewModel(
     private val key = SchedulerKey(breakId, date)
 
     val state by common.commonState
-        .map { CommercialDetailState(commercials = it.cells[key]?.commercials ?: persistentListOf()) }
+        .map { it.cells[key].toDetailState() }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
-            CommercialDetailState(common.commonState.value.cells[key]?.commercials ?: persistentListOf()),
+            common.commonState.value.cells[key].toDetailState(),
         )
         .toComposeState(viewModelScope)
 
@@ -57,3 +60,10 @@ class CommercialDetailViewModel(
         }
     }
 }
+
+/** The cell's commercials and programme, or an empty state when the cell is gone. */
+private fun SchedulerCellData?.toDetailState(): CommercialDetailState =
+    CommercialDetailState(
+        commercials = this?.commercials ?: persistentListOf(),
+        programName = this?.programName,
+    )

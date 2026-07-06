@@ -66,6 +66,8 @@ data class SchedulerCellData(
     val totalDurationSeconds: Int = 0,
     val zoneColor: Color = Color.White,
     val isHighlighted: Boolean = false,
+    /** The programme airing at this slot (first placement's), when it has one. */
+    val programName: String? = null,
     val commercials: ImmutableList<CommercialItem> = persistentListOf()
 ) {
     val formattedDuration: String

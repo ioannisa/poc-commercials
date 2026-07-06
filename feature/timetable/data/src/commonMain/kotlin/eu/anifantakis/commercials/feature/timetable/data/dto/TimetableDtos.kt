@@ -33,6 +33,8 @@ internal data class CellDto(
     val spotCount: Int,
     val totalDurationSeconds: Int,
     val zoneColorArgb: Int,
+    /** The programme airing at this slot (first placement's), when it has one. */
+    val programName: String? = null,
     val commercials: List<CommercialDto>,
 )
 

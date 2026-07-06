@@ -58,6 +58,28 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
     }
 
     @Test
+    fun surfacesTheBreaksProgrammeNameFromItsCell() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+        val vm = CommercialDetailViewModel(breakId = 1, date = TEST_DATE, common = common)
+
+        assertEquals(null, vm.state.programName, "no programme before the flow loads a cell")
+
+        common.emit(
+            TimetableCommonState(
+                cells = persistentMapOf(
+                    key to SchedulerCellData(
+                        programName = "MOVIE TIME",
+                        commercials = persistentListOf(item(10)),
+                    )
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals("MOVIE TIME", vm.state.programName)
+    }
+
+    @Test
     fun reorderIntentDelegatesToTheCommonContract() = runTest(testDispatcher) {
         val common = FakeTimetableCommon()
         val vm = CommercialDetailViewModel(breakId = 1, date = TEST_DATE, common = common)

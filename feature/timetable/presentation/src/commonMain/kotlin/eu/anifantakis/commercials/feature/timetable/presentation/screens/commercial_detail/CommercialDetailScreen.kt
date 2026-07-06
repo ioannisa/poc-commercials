@@ -78,6 +78,7 @@ fun CommercialDetailScreenRoot(
         date = StableDate(date),
         spotCount = spotCount,
         commercials = viewModel.state.commercials,
+        programName = viewModel.state.programName,
         onCommercialsReorder = { reordered ->
             viewModel.onAction(CommercialDetailIntent.Reorder(reordered.map { it.id }))
         },
@@ -110,6 +111,7 @@ private fun CommercialDetailScreen(
     date: StableDate,
     spotCount: Int,
     commercials: ImmutableList<CommercialItem>,
+    programName: String?,
     onCommercialsReorder: (List<CommercialItem>) -> Unit,
     onNavIntent: (CommercialDetailScreenNavIntent) -> Unit,
     onPrevious: (() -> Unit)? = null,
@@ -349,6 +351,7 @@ private fun CommercialDetailScreen(
             monthName = monthOfNames[date.value.month.ordinal],
             year = date.value.year,
             breakTime = breakTime,
+            showName = programName,
             totalSpots = localCommercials.size,
             flowSpots = flowCount,
             exceptSpots = localCommercials.size - flowCount,
@@ -546,6 +549,7 @@ private fun DetailHeader(
     monthName: String,
     year: Int,
     breakTime: String,
+    showName: String?,
     totalSpots: Int,
     flowSpots: Int,
     exceptSpots: Int,
@@ -639,14 +643,18 @@ private fun DetailHeader(
                 Column(
                     horizontalAlignment = Alignment.End
                 ) {
-                    Text(
-                        text = "MOVIE TIME",
-                        color = gridPalette().positiveValue,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
+                    // The programme airing in this break, when one is on record
+                    // (migrated stations carry it; demo data has none).
+                    if (!showName.isNullOrBlank()) {
+                        Text(
+                            text = showName,
+                            color = gridPalette().positiveValue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
 
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

@@ -46,6 +46,8 @@ data class CellDto(
     val spotCount: Int,
     val totalDurationSeconds: Int,
     val zoneColorArgb: Int,
+    /** The programme airing at this slot (first placement's), when it has one. */
+    val programName: String? = null,
     val commercials: List<CommercialDto>
 )
 
@@ -161,6 +163,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                     spotCount = spotCount,
                     totalDurationSeconds = totalDuration,
                     zoneColorArgb = cell.zoneColorArgb,
+                    programName = cell.programName,
                     commercials = coms.map {
                         CommercialDto(
                             id = it.id,

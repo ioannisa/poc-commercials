@@ -44,6 +44,7 @@ fun ScheduleCell.toUi(): Pair<SchedulerKey, SchedulerCellData> =
         spotCount = spotCount,
         totalDurationSeconds = totalDurationSeconds,
         zoneColor = Color(zoneColorArgb.toLong() and 0xFFFFFFFFL),
+        programName = programName,
         commercials = commercials.map { it.toUi() }.toImmutableList(),
     )
 

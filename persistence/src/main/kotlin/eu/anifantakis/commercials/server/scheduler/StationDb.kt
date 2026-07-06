@@ -1085,10 +1085,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         val zoneByBreak = loadBreaks().associate { it.id to it.zone }
 
         val commercialsByKey = linkedMapOf<Pair<Long, LocalDate>, MutableList<CommercialRow>>()
-        // Programme colour per cell (legacy `programtypes.color` semantics):
-        // the break belongs to the programme airing at that slot, so the
-        // first placement's programme colour is the cell's colour.
+        // Programme identity per cell (legacy `programtypes` semantics): the
+        // break belongs to the programme airing at that slot, so the first
+        // placement's programme name AND colour are the cell's.
         val programColorByKey = mutableMapOf<Pair<Long, LocalDate>, Int>()
+        val programNameByKey = mutableMapOf<Pair<Long, LocalDate>, String>()
 
         connection().use { c ->
             c.prepareStatement(
@@ -1118,8 +1119,12 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         val date = rs.getDate("show_date").toLocalDate()
                         val isGift = rs.getBoolean("is_gift")
                         val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
+                        val programName = rs.getString("program_name")
                         if (programColor != null) {
                             programColorByKey.putIfAbsent(breakId to date, programColor)
+                        }
+                        if (programName != null) {
+                            programNameByKey.putIfAbsent(breakId to date, programName)
                         }
                         val list = commercialsByKey.getOrPut(breakId to date) { mutableListOf() }
                         list += CommercialRow(
@@ -1134,7 +1139,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                             contract = if (isGift) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
                             excludeFromReports = rs.getBoolean("exclude_from_reports"),
                             flow = rs.getString("flow"),
-                            programName = rs.getString("program_name"),
+                            programName = programName,
                             programColorArgb = programColor,
                             payerCode = rs.getString("payer_code"),
                             payerName = rs.getString("payer_name"),
@@ -1160,6 +1165,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     isWeekend = isWeekend,
                     spotCount = commercials.size
                 ),
+                programName = programNameByKey[key],
                 commercials = emptyList()
             )
         }

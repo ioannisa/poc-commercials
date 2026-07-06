@@ -30,6 +30,7 @@ internal fun CellDto.toDomain(): ScheduleCell = ScheduleCell(
     spotCount = spotCount,
     totalDurationSeconds = totalDurationSeconds,
     zoneColorArgb = zoneColorArgb,
+    programName = programName,
     commercials = commercials.sortedBy { it.position }.map { it.toDomain() },
 )
 
