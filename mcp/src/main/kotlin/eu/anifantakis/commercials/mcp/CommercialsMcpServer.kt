@@ -7,15 +7,14 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 
 /**
  * Builds the Commercials Manager MCP [Server]. A fresh server is built per
- * client session (each transport binding calls this), scoped to the caller's
- * identity so every tool is grant-checked.
+ * client session (each transport binding calls this), scoped to [caller]'s
+ * identity so every tool is grant-checked, and backed by [services].
  *
- * Phase 0: an empty server that only declares the `tools` capability. The tool
- * registration (read queries, report generation, guarded mutations) is added in
- * later phases.
+ * Registers the read query tools today; report generation and guarded mutations
+ * are added in later phases.
  */
-fun buildCommercialsMcpServer(): Server =
-    Server(
+fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Server {
+    val server = Server(
         serverInfo = Implementation(name = SERVER_NAME, version = SERVER_VERSION),
         options = ServerOptions(
             capabilities = ServerCapabilities(
@@ -23,6 +22,9 @@ fun buildCommercialsMcpServer(): Server =
             ),
         ),
     )
+    server.registerReadTools(caller, services)
+    return server
+}
 
 internal const val SERVER_NAME: String = "commercials-manager"
 internal const val SERVER_VERSION: String = "1.0.0"
