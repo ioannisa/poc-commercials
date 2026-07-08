@@ -91,6 +91,15 @@ data class CommercialItem(
     val excludeFromReports: Boolean = false,
 )
 
+/**
+ * The server's wire value marking a placement as part of the programme FLOW
+ * (ΡΟΗ) rather than a paid break. Compared as DATA across the client (grid
+ * stats, break-detail console, printed reports) — never shown as UI chrome
+ * (the localized column header is `StringKey.DETAIL_COL_FLOW`). Named here,
+ * next to [CommercialItem.flow], so the one Greek wire literal has a single home.
+ */
+const val FLOW_ROH: String = "ΡΟΗ"
+
 // ============================================================================
 // DISPLAY MODE ENUMS
 // ============================================================================

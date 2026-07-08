@@ -41,6 +41,7 @@ import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.EnhancedDataGrid
+import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SelectionMode
 import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import eu.anifantakis.commercials.core.presentation.grids.StickyRowsConfig
@@ -148,8 +149,8 @@ private fun CommercialDetailScreen(
 
     // Calculate totals from local list
     val totalDuration = localCommercials.sumOf { it.durationSeconds }
-    val flowCount = localCommercials.count { it.flow == "ΡΟΗ" }
-    val flowDuration = localCommercials.filter { it.flow == "ΡΟΗ" }.sumOf { it.durationSeconds }
+    val flowCount = localCommercials.count { it.flow == FLOW_ROH }
+    val flowDuration = localCommercials.filter { it.flow == FLOW_ROH }.sumOf { it.durationSeconds }
 
     // Reorder functions
     fun moveUp(index: Int) {
@@ -331,7 +332,7 @@ private fun CommercialDetailScreen(
                 headerAlignment = TextAlign.Center,
                 extractor = { it.flow },
                 cellBackground = { item ->
-                    if (item.flow == "ΡΟΗ") palette.positiveValue.copy(alpha = 0.15f) else Color.Transparent
+                    if (item.flow == FLOW_ROH) palette.positiveValue.copy(alpha = 0.15f) else Color.Transparent
                 }
             )
         ).filter { canEdit || it.id != "reorder" }.toImmutableList()

@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.reports
 
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
+import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.reports.models.ProgramFlowItem
@@ -57,7 +58,7 @@ object ReportDataFactory {
                         duration = formatDuration(commercial.durationSeconds),
                         durationSeconds = commercial.durationSeconds,
                         program = commercial.type,
-                        notes = if (commercial.flow == "ΡΟΗ") "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
+                        notes = if (commercial.flow == FLOW_ROH) "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
                         firstInGroup = index == 0,
                         lastInGroup = index == commercials.size - 1,
                         groupTotalDuration = formatDuration(data.totalDurationSeconds),
@@ -120,7 +121,7 @@ object ReportDataFactory {
                 duration = formatDuration(commercial.durationSeconds),
                 durationSeconds = commercial.durationSeconds,
                 program = commercial.type,
-                notes = if (commercial.flow == "ΡΟΗ") "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
+                notes = if (commercial.flow == FLOW_ROH) "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
                 firstInGroup = index == 0,
                 lastInGroup = index == commercials.lastIndex,
                 groupTotalDuration = formatDuration(totalDurationSeconds),

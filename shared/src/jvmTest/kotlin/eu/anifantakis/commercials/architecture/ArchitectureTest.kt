@@ -56,6 +56,24 @@ class ArchitectureTest {
             .filter { (_, line) -> predicate(line) }
             .map { (i, line) -> "  ${relativeTo(repoRoot).path}:${i + 1}  ${line.trim()}" }
 
+    // the shippable entry apps: they compose the app from :shared ONLY, never
+    // reaching into a feature module directly (iosApp is Swift, so no Kotlin cone).
+    private val entryAppRoots: List<File>
+        get() = listOf(dir("androidApp/src"), dir("desktopApp/src"), dir("webApp/src")).roots()
+
+    /** Every Gradle build script in the repo (excluding generated output). */
+    private fun buildScripts(): List<File> =
+        repoRoot.walkTopDown()
+            .filter {
+                it.isFile && it.name.endsWith(".gradle.kts") &&
+                    "/build/" !in it.path && "/.gradle/" !in it.path
+            }
+            .toList()
+
+    /** True for files under a test source set - excluded from production-code rules. */
+    private fun File.isTestSource(): Boolean =
+        listOf("/commonTest/", "/jvmTest/", "/androidHostTest/", "/iosTest/").any { it in path }
+
     // ── the rules ───────────────────────────────────────────────────────────
 
     /**
@@ -138,6 +156,98 @@ class ArchitectureTest {
         if (offenders.isNotEmpty()) fail(
             "RepositoryImpl must organize DataSource interfaces, never the HttpClient " +
                 "(move the transport into the *DataSourceImpl):\n" + offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * Build scripts declare module deps through the type-safe `projects.*`
+     * accessors, never the stringly-typed `project(":core:data")`: a typo in the
+     * latter surfaces late and cryptically, the accessor fails at configuration
+     * with a name. (The compiler can't see build scripts, so only a scan guards this.)
+     */
+    @Test
+    fun `build scripts declare deps via the projects accessors`() {
+        val stringly = Regex("""project\(\s*(?:path\s*=\s*)?":""")
+        val offenders = buildScripts().flatMap { f -> f.lineHits { stringly.containsMatchIn(it) } }
+        if (offenders.isNotEmpty()) fail(
+            "use the type-safe projects.<module> accessors, not project(\":...\"):\n" +
+                offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * The entry apps (android/desktop/web) assemble the app from :shared ONLY -
+     * they must never import a feature module's internals directly. That wiring
+     * belongs in shared/navigation, which keeps the app modules thin and the
+     * feature graph swappable.
+     */
+    @Test
+    fun `entry apps never import feature internals`() {
+        val offenders = entryAppRoots.flatMap { it.ktFiles() }.flatMap { f ->
+            f.lineHits { it.trimStart().startsWith("import eu.anifantakis.commercials.feature.") }
+        }
+        if (offenders.isNotEmpty()) fail(
+            "entry apps compose from :shared only - route feature access through " +
+                "shared/navigation, don't import feature.* here:\n" + offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * Screens and per-screen ViewModels depend on the narrow `<Feature>Common`
+     * CONTRACT (an interface), never the concrete `<Feature>CommonViewModel` -
+     * the star-topology guarantee that a screen physically cannot reach the
+     * shared reducer. The ONLY sanctioned references are the flow host that
+     * OWNS it (`Navigation<Feature>.kt`) and the class's own definition file.
+     */
+    @Test
+    fun `only the flow host references the concrete CommonViewModel`() {
+        val token = Regex("""\b\w+CommonViewModel\b""")
+        val offenders = presentationRoots.flatMap { it.ktFiles() }
+            .filter {
+                !it.isTestSource() &&                             // the VM's own unit test builds it
+                    !it.name.startsWith("Navigation") &&         // the flow host owns it
+                    !it.name.endsWith("CommonViewModel.kt")      // the definition itself
+            }
+            .flatMap { f ->
+                f.lineHits { line ->
+                    val t = line.trimStart()
+                    if (t.startsWith("//") || t.startsWith("*")) return@lineHits false
+                    token.findAll(line).any { it.value != "BaseCommonViewModel" }
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "screens/child ViewModels must use the <Feature>Common contract, not the " +
+                "concrete <Feature>CommonViewModel (only Navigation<Feature>.kt owns it):\n" +
+                offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * No hardcoded Greek in the presentation cone: every operator-facing string
+     * resolves through StringKey / LocalizationManager (the localization system,
+     * fronted by UiText). The language ENDONYMS (`Language.kt`) and the El/En
+     * providers are the sanctioned homes for literal Greek; a domain WIRE value
+     * like ΡΟΗ is named once in the model (`FLOW_ROH`), never inlined in a screen.
+     */
+    @Test
+    fun `no hardcoded Greek string literals in the presentation cone`() {
+        val greek = Regex("\"[^\"]*[\\u0370-\\u03FF\\u1F00-\\u1FFF][^\"]*\"")
+        val offenders = presentationRoots.flatMap { it.ktFiles() }
+            .filter { f ->
+                !f.isTestSource() &&
+                    f.name != "Language.kt" &&                   // language endonyms
+                    "/string_resources/lang/" !in f.path         // the El/En providers
+            }
+            .flatMap { f ->
+                f.lineHits { line ->
+                    val t = line.trimStart()
+                    !t.startsWith("//") && !t.startsWith("*") && greek.containsMatchIn(line)
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "hardcoded Greek in a cone file - route it through StringKey/Strings[] (or, for a " +
+                "domain wire value, name a const in the model like FLOW_ROH):\n" +
+                offenders.joinToString("\n")
         )
     }
 }
