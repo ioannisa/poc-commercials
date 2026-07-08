@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.mcp
 
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.ContentBlock
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.Dispatchers
@@ -20,25 +21,37 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
+import java.time.LocalDate
 
 internal val toolLogger = LoggerFactory.getLogger("eu.anifantakis.commercials.mcp")!!
 
 /**
  * Runs a tool body OFF the transport thread ([Dispatchers.IO] - the StationDb
  * calls are blocking JDBC) and maps outcomes to an MCP result:
- * - success -> the JSON payload as text,
+ * - success -> the returned content blocks,
  * - [McpToolException] -> a clean tool error with its message,
  * - anything else -> a logged, generic tool error (never leaks a stack trace).
  */
-internal suspend fun runTool(name: String, block: suspend () -> JsonElement): CallToolResult =
+internal suspend fun runToolBlocks(name: String, block: suspend () -> List<ContentBlock>): CallToolResult =
     try {
-        val payload = withContext(Dispatchers.IO) { block() }
-        CallToolResult(content = listOf(TextContent(payload.toString())))
+        CallToolResult(content = withContext(Dispatchers.IO) { block() })
     } catch (e: McpToolException) {
         CallToolResult(content = listOf(TextContent(e.message ?: "error")), isError = true)
     } catch (e: Exception) {
         toolLogger.error("MCP tool '$name' failed", e)
         CallToolResult(content = listOf(TextContent("Internal error running '$name': ${e.message}")), isError = true)
+    }
+
+/** [runToolBlocks] convenience for the common case: one JSON payload as text. */
+internal suspend fun runTool(name: String, block: suspend () -> JsonElement): CallToolResult =
+    runToolBlocks(name) { listOf(TextContent(block().toString())) }
+
+/** Parses an ISO `YYYY-MM-DD` date argument, or throws a clear tool error. */
+internal fun parseIsoDate(value: String): LocalDate =
+    try {
+        LocalDate.parse(value.trim())
+    } catch (e: Exception) {
+        throw McpToolException("Invalid date '$value' - use YYYY-MM-DD.")
     }
 
 /** Typed accessors over a tool call's JSON arguments, with clear missing/invalid messages. */

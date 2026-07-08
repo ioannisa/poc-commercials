@@ -5,7 +5,6 @@ import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.time.LocalDate
 
 /**
  * Registers the read-only query tools. Each reuses an existing [StationDb][eu.anifantakis.commercials.server.scheduler.StationDb]
@@ -183,15 +182,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
             val access = services.resolveStation(caller, a.stringOrNull("station"))
             val date = parseIsoDate(a.string("date"))
             val time = a.string("time").trim()
-            val slot = access.db.loadBreaks().firstOrNull { it.label == time }
-                ?: throw McpToolException(
-                    "No break labelled '$time'. Break labels are HH:mm on a 15-minute grid (e.g. 17:30)."
-                )
-            val (_, byKey) = access.db.loadMonth(date.year, date.monthValue)
-            var spots = byKey[slot.id to date].orEmpty()
-            if (services.isCustomerScoped(access.grant)) {
-                spots = spots.filter { it.clientCode == access.grant.clientCode }
-            }
+            val spots = services.breakSpots(access, date, time)
             buildJsonObject {
                 put("date", date.toString())
                 put("break", time)
@@ -235,10 +226,3 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
         }
     }
 }
-
-private fun parseIsoDate(value: String): LocalDate =
-    try {
-        LocalDate.parse(value.trim())
-    } catch (e: Exception) {
-        throw McpToolException("Invalid date '$value' - use YYYY-MM-DD.")
-    }

@@ -1,9 +1,14 @@
 package eu.anifantakis.commercials.mcp
 
+import eu.anifantakis.commercials.reports.dto.ReportRequest
+import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
+import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.StationRegistry
+import java.io.File
+import java.time.LocalDate
 
 /**
  * A tool-level failure carrying a client-facing message. Thrown by tool bodies
@@ -28,6 +33,8 @@ data class StationInfo(val id: String, val name: String, val role: String, val c
  */
 class McpToolServices(
     private val registry: StationRegistry,
+    /** Where generated report PDFs are written (also returned to the caller). */
+    private val reportOutputDir: File = File(System.getProperty("java.io.tmpdir"), "commercials-mcp-reports"),
 ) {
     /**
      * Resolve a station the caller is entitled to, else throw a clear tool error
@@ -65,5 +72,35 @@ class McpToolServices(
                 "Customer-scoped access: you may only query your own client code (${grant.clientCode})."
             )
         }
+    }
+
+    /**
+     * The commercials of one break on one date, in air order - resolving the
+     * break by its `HH:mm` label and applying customer scoping. Shared by
+     * `spots_in_break` and `generate_break_report`. Blocking JDBC; call inside
+     * [runTool]/[runToolBlocks].
+     */
+    fun breakSpots(access: StationAccess, date: LocalDate, timeLabel: String): List<CommercialRow> {
+        val slot = access.db.loadBreaks().firstOrNull { it.label == timeLabel }
+            ?: throw McpToolException(
+                "No break labelled '$timeLabel'. Break labels are HH:mm on a 15-minute grid (e.g. 17:30)."
+            )
+        val (_, byKey) = access.db.loadMonth(date.year, date.monthValue)
+        val spots = byKey[slot.id to date].orEmpty()
+        return if (isCustomerScoped(access.grant)) {
+            spots.filter { it.clientCode == access.grant.clientCode }
+        } else {
+            spots
+        }
+    }
+
+    /** Render a report request to PDF bytes via the shared JasperReports engine. */
+    fun generatePdf(request: ReportRequest): ByteArray = ReportEngine.generatePdf(request)
+
+    /** Persist a generated PDF under [reportOutputDir], returning the written file. */
+    fun saveReport(fileName: String, bytes: ByteArray): File {
+        if (!reportOutputDir.exists()) reportOutputDir.mkdirs()
+        val safeName = File(fileName).name.ifBlank { "report.pdf" }
+        return File(reportOutputDir, safeName).apply { writeBytes(bytes) }
     }
 }

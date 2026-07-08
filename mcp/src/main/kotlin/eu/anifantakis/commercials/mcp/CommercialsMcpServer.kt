@@ -23,6 +23,7 @@ fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Ser
         ),
     )
     server.registerReadTools(caller, services)
+    server.registerReportTools(caller, services)
     return server
 }
 
