@@ -168,6 +168,53 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
     }
 
     addTool(
+        name = "contract_status",
+        description = "Contract period + renewal status for a party on a station, with each contract's aired " +
+            "range. IMPORTANT: start/end dates are PROVISIONAL (derived from airings) until an ERP import supplies " +
+            "real values - each row carries 'datesProvisional', and 'renewedAt' has no source yet. To answer " +
+            "'how long since customer X renewed', use 'lastAired' (activity recency), not the provisional dates.",
+        inputSchema = inputSchema(required = listOf("station", "code")) {
+            prop("station", "string", "Station id.")
+            prop("code", "string", "Client code (Κωδ. Πελ.).")
+            prop("byTrader", "boolean", "Treat code as a contract payer (trader). Default false.")
+        },
+    ) { req ->
+        runTool("contract_status") {
+            val a = req.args
+            val access = services.resolveStation(caller, a.stringOrNull("station"))
+            val code = a.string("code")
+            services.requireCode(access.grant, code)
+            val rows = access.db.contractStatus(code, a.bool("byTrader", false))
+            buildJsonObject {
+                put("code", code)
+                put("contractCount", rows.size)
+                put("datesAreProvisional", rows.any { it.datesProvisional })
+                rows.mapNotNull { it.lastAired }.maxOrNull()?.let { put("lastAired", it) }
+                put(
+                    "note",
+                    "Period dates are provisional (placement-derived) until the Oracle ERP import; " +
+                        "renewedAt is not yet sourced - use lastAired for renewal recency.",
+                )
+                put("contracts", buildJsonArray {
+                    rows.forEach { r ->
+                        addJsonObject {
+                            put("contractNumber", r.contractNumber)
+                            put("isGift", r.isGift)
+                            r.startDate?.let { put("startDate", it) }
+                            r.endDate?.let { put("endDate", it) }
+                            r.renewedAt?.let { put("renewedAt", it) }
+                            put("datesProvisional", r.datesProvisional)
+                            r.firstAired?.let { put("firstAired", it) }
+                            r.lastAired?.let { put("lastAired", it) }
+                            put("placements", r.placements)
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    addTool(
         name = "spots_in_break",
         description = "The spots scheduled in a specific break on a specific date, in air order. " +
             "time is the break label 'HH:mm' (e.g. '17:30'); date is 'YYYY-MM-DD'.",

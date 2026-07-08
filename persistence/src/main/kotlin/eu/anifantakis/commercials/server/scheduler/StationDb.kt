@@ -125,6 +125,14 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         customer_id BIGINT NOT NULL,
                         agency_id BIGINT NULL,
                         entry_date DATE NULL,
+                        -- Contract period + renewal (Phase 6). PROVISIONAL until the
+                        -- Oracle ERP import supplies real values: the migration derives
+                        -- start/end from placements and sets dates_provisional=TRUE;
+                        -- renewed_at has no source yet and stays NULL.
+                        start_date DATE NULL,
+                        end_date DATE NULL,
+                        renewed_at DATE NULL,
+                        dates_provisional BOOLEAN NOT NULL DEFAULT FALSE,
                         synthetic BOOLEAN NOT NULL DEFAULT FALSE,
                         KEY idx_contracts_number (number),
                         KEY idx_contracts_legacy (legacy_docid),
@@ -311,6 +319,12 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Schemas created before programme colours (the ALTER path skips
             // the FK; fresh schemas get it via CREATE TABLE above).
             ensureColumn(c, "placements", "program_id", "BIGINT NULL")
+            // Contract period/renewal dates (Phase 6) - see the CREATE TABLE note.
+            // Provisional until the ERP import; the migration backfills start/end.
+            ensureColumn(c, "contracts", "start_date", "DATE NULL")
+            ensureColumn(c, "contracts", "end_date", "DATE NULL")
+            ensureColumn(c, "contracts", "renewed_at", "DATE NULL")
+            ensureColumn(c, "contracts", "dates_provisional", "BOOLEAN NOT NULL DEFAULT FALSE")
 
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.
@@ -863,6 +877,66 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
      * a retry with the next position. Returns the new placement as the same
      * row shape the month grid serves, or null if the spot doesn't exist.
      */
+    data class ContractStatusRow(
+        val contractNumber: String,
+        val isGift: Boolean,
+        val startDate: String?,
+        val endDate: String?,
+        val renewedAt: String?,
+        /** True when start/end are placement-derived placeholders (pre-ERP import). */
+        val datesProvisional: Boolean,
+        val firstAired: String?,
+        val lastAired: String?,
+        val placements: Int,
+    )
+
+    /**
+     * Per-contract status for a party: the (currently PROVISIONAL) period +
+     * renewal dates plus the aired range computed from placements. Until the
+     * Oracle ERP import lands, start/end are placement-derived and flagged
+     * [ContractStatusRow.datesProvisional]; [ContractStatusRow.renewedAt] has no
+     * source yet, so contract-renewal recency must be read from [ContractStatusRow.lastAired].
+     */
+    fun contractStatus(code: String, byTrader: Boolean): List<ContractStatusRow> {
+        val partyFilter =
+            if (byTrader) "JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"
+            else "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+        return connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT ct.number, ct.is_gift, ct.start_date, ct.end_date, ct.renewed_at, ct.dates_provisional,
+                       MIN(p.show_date) AS first_aired, MAX(p.show_date) AS last_aired, COUNT(p.id) AS placements
+                FROM contracts ct
+                JOIN contract_lines cl ON cl.contract_id = ct.id
+                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE
+                $partyFilter
+                LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                GROUP BY ct.id, ct.number, ct.is_gift, ct.start_date, ct.end_date, ct.renewed_at, ct.dates_provisional
+                ORDER BY last_aired DESC, ct.number
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, code)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            ContractStatusRow(
+                                contractNumber = rs.getString("number"),
+                                isGift = rs.getBoolean("is_gift"),
+                                startDate = rs.getString("start_date"),
+                                endDate = rs.getString("end_date"),
+                                renewedAt = rs.getString("renewed_at"),
+                                datesProvisional = rs.getBoolean("dates_provisional"),
+                                firstAired = rs.getString("first_aired"),
+                                lastAired = rs.getString("last_aired"),
+                                placements = rs.getInt("placements"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? {
         connection().use { c ->
             val duration = c.prepareStatement(

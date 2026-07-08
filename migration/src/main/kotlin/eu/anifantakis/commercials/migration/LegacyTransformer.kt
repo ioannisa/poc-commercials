@@ -88,6 +88,10 @@ class LegacyTransformer(
         log("Migrating placements (this is the big one)...")
         val placements = migratePlacements()
 
+        log("Backfilling provisional contract period dates from placements (until the ERP import)...")
+        val provisionalContracts = backfillProvisionalContractDates()
+        log("  $provisionalContracts contracts got provisional start/end dates (dates_provisional=TRUE)")
+
         log("Migrating flow comments and print audit...")
         val comments = migrateFlowComments()
         val audits = migratePrintAudit()
@@ -516,6 +520,33 @@ class LegacyTransformer(
                 FROM $s.messages m
                 JOIN $t.contracts tc ON tc.legacy_docid = m.contractID
                 WHERE m.forTV = $forTv AND m.contractID > 0 AND m.contractNO > 0
+                """.trimIndent()
+            )
+        }
+
+    /**
+     * Provisional contract-period backfill: the legacy MySQL has no contract
+     * start/end (Oracle-ERP-mastered), so derive each contract's period from
+     * its own aired placements - MIN/MAX(show_date) - and flag it
+     * dates_provisional=TRUE. The future ERP import (see erp_excluded_docs)
+     * overwrites exactly these rows; renewed_at stays NULL (renewal has no
+     * source until then). Contracts that never aired keep NULL dates.
+     * TODO: replace with real periods once the Oracle ERP import exists.
+     */
+    private fun backfillProvisionalContractDates(): Int =
+        c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $t.contracts ct
+                JOIN (
+                    SELECT cl.contract_id AS cid, MIN(p.show_date) AS mn, MAX(p.show_date) AS mx
+                    FROM $t.placements p
+                    JOIN $t.spots s ON s.id = p.spot_id
+                    JOIN $t.contract_lines cl ON cl.id = s.contract_line_id
+                    WHERE p.hidden = FALSE
+                    GROUP BY cl.contract_id
+                ) agg ON agg.cid = ct.id
+                SET ct.start_date = agg.mn, ct.end_date = agg.mx, ct.dates_provisional = TRUE
                 """.trimIndent()
             )
         }
