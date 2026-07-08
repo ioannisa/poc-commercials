@@ -23,16 +23,47 @@ transports, same tools and same per-station authorization:
   ```
 - For HTTP: the server built/runnable — `./gradlew :server:run`.
 
-### Get a token
-Log in against a server that uses **the same `server.yaml`** as the launcher’s
-`COMMERCIALS_SERVER` (so the token lives in that central DB):
+### Token lifecycle (read this — it answers "do I need to run a server?")
+
+**What a token is.** The same bearer token the app's login issues: a random
+256-bit value. `POST /api/auth/login` returns it once; the server stores only its
+SHA-256 hash in the `auth_tokens` table of the **central DB**. The MCP server
+runs *as that user*, scoped to its station grants.
+
+**You start a server ONCE, only to MINT the token — not to run MCP.** The stdio
+launcher connects straight to MySQL and validates the token against the central
+DB; it needs **no HTTP server running**. So the flow is:
+
 ```bash
-COMMERCIALS_PORT=8099 ./gradlew :server:run          # in one terminal
+# 1. (one-time) start any server that uses THIS server.yaml, so the token lands
+#    in the matching central DB:
+COMMERCIALS_PORT=8099 ./gradlew :server:run
+
+# 2. log in to mint a token (super-admin su/1234 from server.yaml):
 curl -s -X POST http://localhost:8099/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"su","password":"1234"}'            # -> {"token":"…"}
+  -d '{"username":"su","password":"1234"}'          # -> {"token":"…"}
+
+# 3. stop that server (Ctrl+C). The token stays valid in the DB.
 ```
-Tokens follow the `session:` policy in `server.yaml` (dev: 90-day sliding).
+
+Paste the token into the client config (§1–2). Day-to-day you only need **docker
+`local-mysql` up** — no server.
+
+**When does it change / expire?** Per the `session:` block in `server.yaml`. Dev
+default is `expiration: true, days: 90, sliding: true`:
+- **Sliding**: every MCP call slides the 90-day window forward, so a token you
+  keep using **effectively never expires**. Only an *unused* token dies after 90 days.
+- A token is also revoked by an explicit **logout** or a **password change**, or
+  if the central DB is reset/re-seeded.
+
+**Refreshing a token** = mint a new one (steps above) and update the config:
+- Claude Code: `claude mcp remove commercials-manager -s user` then `claude mcp add …` with the new token.
+- Claude Desktop / Cursor: edit the `COMMERCIALS_MCP_TOKEN` value and restart the app.
+
+**Tired of tokens for a personal setup?** Set `expiration: false` in
+`server.yaml`'s `session:` block → tokens never expire (revoked only by logout /
+password change). Note this changes the whole app's session policy, not just MCP.
 
 ---
 
