@@ -4,8 +4,10 @@ import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
+import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
+import eu.anifantakis.commercials.server.stations.SmtpConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import java.io.File
 import java.time.LocalDate
@@ -35,6 +37,11 @@ class McpToolServices(
     private val registry: StationRegistry,
     /** Where generated report PDFs are written (also returned to the caller). */
     private val reportOutputDir: File = File(System.getProperty("java.io.tmpdir"), "commercials-mcp-reports"),
+    /**
+     * Kill switch: when false, the mutation tools (add/delete/reorder placement,
+     * send email) are not registered at all - a strictly read-only MCP server.
+     */
+    val mutationsEnabled: Boolean = false,
 ) {
     /**
      * Resolve a station the caller is entitled to, else throw a clear tool error
@@ -80,11 +87,15 @@ class McpToolServices(
      * `spots_in_break` and `generate_break_report`. Blocking JDBC; call inside
      * [runTool]/[runToolBlocks].
      */
-    fun breakSpots(access: StationAccess, date: LocalDate, timeLabel: String): List<CommercialRow> {
-        val slot = access.db.loadBreaks().firstOrNull { it.label == timeLabel }
+    /** Resolve a break by its `HH:mm` label, or throw a clear tool error. */
+    fun resolveBreak(access: StationAccess, timeLabel: String): BreakSlotRow =
+        access.db.loadBreaks().firstOrNull { it.label == timeLabel }
             ?: throw McpToolException(
                 "No break labelled '$timeLabel'. Break labels are HH:mm on a 15-minute grid (e.g. 17:30)."
             )
+
+    fun breakSpots(access: StationAccess, date: LocalDate, timeLabel: String): List<CommercialRow> {
+        val slot = resolveBreak(access, timeLabel)
         val (_, byKey) = access.db.loadMonth(date.year, date.monthValue)
         val spots = byKey[slot.id to date].orEmpty()
         return if (isCustomerScoped(access.grant)) {
@@ -103,4 +114,34 @@ class McpToolServices(
         val safeName = File(fileName).name.ifBlank { "report.pdf" }
         return File(reportOutputDir, safeName).apply { writeBytes(bytes) }
     }
+
+    // ── mutation guardrails ─────────────────────────────────────────────────
+
+    /** Writes are staff work: require NORMAL_USER on the station (mirrors EmailRoutes). */
+    fun requireStaff(grant: StationGrant) {
+        if (grant.role != UserRole.NORMAL_USER) {
+            throw McpToolException(
+                "Requires full (NORMAL_USER) access on this station; your role is ${grant.role}."
+            )
+        }
+    }
+
+    /** The station's SMTP settings (its own override, else the file-wide default). */
+    fun smtpFor(stationId: String): SmtpConfig? = registry.config(stationId)?.smtp ?: registry.defaultSmtp
+
+    /** Display name for a station id. */
+    fun stationName(stationId: String): String = registry.config(stationId)?.name ?: stationId
+
+    /** Records a PERFORMED mutation (who + what) to the log - the write audit trail. */
+    fun audit(caller: McpCaller, action: String, detail: String) {
+        toolLogger.info("MCP mutation by '{}': {} {}", caller.user.username, action, detail)
+    }
 }
+
+/**
+ * Mutation kill switch: mutations are OFF unless `COMMERCIALS_MCP_MUTATIONS` is
+ * truthy. Default-deny so a hosted, network-reachable MCP server is read-only
+ * unless the operator explicitly opts in (e.g. a trusted stdio dev setup).
+ */
+fun mcpMutationsEnabled(): Boolean =
+    System.getenv("COMMERCIALS_MCP_MUTATIONS")?.trim()?.lowercase() in setOf("1", "true", "yes", "on")

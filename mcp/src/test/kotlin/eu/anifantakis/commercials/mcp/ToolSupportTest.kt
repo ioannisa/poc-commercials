@@ -2,6 +2,8 @@ package eu.anifantakis.commercials.mcp
 
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
@@ -36,6 +38,14 @@ class ToolSupportTest {
         val a = Args(buildJsonObject { })
         assertFailsWith<McpToolException> { a.string("station") }
         assertFailsWith<McpToolException> { a.long("id") }
+    }
+
+    @Test
+    fun `Args parses number arrays and treats absent as null`() {
+        val a = Args(buildJsonObject { put("ids", buildJsonArray { add(3); add(1); add(2) }) })
+        assertEquals(listOf(3L, 1L, 2L), a.longList("ids"))
+        assertNull(a.longListOrNull("missing"))
+        assertFailsWith<McpToolException> { a.longList("missing") }
     }
 
     @Test

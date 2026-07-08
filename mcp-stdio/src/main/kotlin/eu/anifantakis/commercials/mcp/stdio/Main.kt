@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.mcp.stdio
 import eu.anifantakis.commercials.mcp.McpCaller
 import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.mcp.buildCommercialsMcpServer
+import eu.anifantakis.commercials.mcp.mcpMutationsEnabled
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.StationRegistry
@@ -59,7 +60,8 @@ fun main() {
     }
     log.info("MCP stdio server ready as '{}' ({} station grant(s))", user.username, user.grants.size)
 
-    val services = McpToolServices(registry)
+    val services = McpToolServices(registry, mutationsEnabled = mcpMutationsEnabled())
+    if (services.mutationsEnabled) log.warn("Mutations ENABLED (COMMERCIALS_MCP_MUTATIONS) - write tools are exposed.")
     val server = buildCommercialsMcpServer(McpCaller.of(user), services)
 
     val transport = StdioServerTransport(

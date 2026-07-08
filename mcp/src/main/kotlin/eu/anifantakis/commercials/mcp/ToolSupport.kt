@@ -7,6 +7,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -74,8 +75,30 @@ internal class Args(private val obj: JsonObject?) {
         prim(name)?.let { it.intOrNull ?: it.contentOrNull?.toIntOrNull() }
     fun int(name: String): Int = intOrNull(name) ?: missing(name)
 
+    /** A required JSON array of numbers, e.g. reorder's ordered placement ids. */
+    fun longList(name: String): List<Long> {
+        val arr = obj?.get(name) as? JsonArray
+            ?: throw McpToolException("Parameter '$name' must be an array of numbers")
+        return arr.map { el ->
+            (el as? JsonPrimitive)?.let { it.longOrNull ?: it.contentOrNull?.toLongOrNull() }
+                ?: throw McpToolException("Parameter '$name' must contain only numbers")
+        }
+    }
+
+    /** [longList] when present, else null (for optional array params). */
+    fun longListOrNull(name: String): List<Long>? =
+        obj?.get(name)?.takeIf { it !is JsonNull }?.let { longList(name) }
+
     private fun missing(name: String): Nothing =
         throw McpToolException("Missing or invalid parameter '$name'")
+}
+
+/** A standard dry-run payload: [detail] merged under a not-written notice. */
+internal fun dryRun(action: String, detail: JsonObject): JsonObject = buildJsonObject {
+    put("dryRun", true)
+    put("action", action)
+    put("note", "Not written. Re-call with confirm=true to apply.")
+    for ((k, v) in detail) put(k, v)
 }
 
 internal val CallToolRequest.args: Args get() = Args(params.arguments)
@@ -98,5 +121,14 @@ internal fun JsonObjectBuilder.prop(name: String, type: String, description: Str
         put("type", type)
         put("description", description)
         if (enum != null) put("enum", buildJsonArray { enum.forEach { add(it) } })
+    })
+}
+
+/** Declares an array JSON-Schema property whose items are [itemType]. */
+internal fun JsonObjectBuilder.propArray(name: String, itemType: String, description: String) {
+    put(name, buildJsonObject {
+        put("type", "array")
+        put("description", description)
+        put("items", buildJsonObject { put("type", itemType) })
     })
 }

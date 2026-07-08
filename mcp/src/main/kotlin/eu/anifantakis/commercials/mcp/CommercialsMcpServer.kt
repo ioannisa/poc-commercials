@@ -24,6 +24,8 @@ fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Ser
     )
     server.registerReadTools(caller, services)
     server.registerReportTools(caller, services)
+    // Write tools only when the operator has opted in (default-deny).
+    if (services.mutationsEnabled) server.registerMutationTools(caller, services)
     return server
 }
 
