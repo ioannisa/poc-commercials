@@ -28,6 +28,7 @@ dependencies {
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.sse)   // SSE transport for the MCP endpoint
     implementation(libs.ktor.serialization.json)
 
     // Kotlinx Serialization
@@ -50,6 +51,9 @@ dependencies {
 
     // Customer schedule emails (HTML renderer + SMTP sender)
     implementation(projects.mailer)
+
+    // MCP tool core - the Model Context Protocol server mounted at /mcp
+    implementation(projects.mcp)
 
     // Logging
     implementation(libs.logback.classic)

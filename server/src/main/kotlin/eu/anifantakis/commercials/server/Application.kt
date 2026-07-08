@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
 import eu.anifantakis.commercials.server.di.serverModule
 import eu.anifantakis.commercials.server.plugins.configureCallLogging
+import eu.anifantakis.commercials.server.plugins.configureMcp
 import eu.anifantakis.commercials.server.plugins.configureRouting
 import eu.anifantakis.commercials.server.plugins.configureSecurity
 import eu.anifantakis.commercials.server.plugins.configureSerialization
@@ -47,6 +48,7 @@ fun Application.module() {
     configureSerialization()
     configureCORS()
     configureRouting()
+    configureMcp()   // mounts the MCP server at /mcp (SSE, under bearer auth)
 
     // Release all DB connection pools when the server shuts down
     monitor.subscribe(ApplicationStopped) {

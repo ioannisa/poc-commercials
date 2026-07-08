@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.server.di
 
+import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfig
@@ -28,4 +29,8 @@ val serverModule = module {
     single<AuthDb>()
 
     single<MigrationService>()
+
+    // MCP tool backend: constructor-wired from the registry (report output dir
+    // defaults). Consumed per session by configureMcp().
+    single<McpToolServices> { McpToolServices(registry = get()) }
 }

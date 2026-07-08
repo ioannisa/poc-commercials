@@ -21,6 +21,10 @@ fun Application.configureCORS() {
         allowHeader(HttpHeaders.Authorization)
         allowHeader(HttpHeaders.Accept)
 
+        // MCP session + protocol-negotiation headers (browser-based MCP clients)
+        allowHeader("Mcp-Session-Id")
+        allowHeader("Mcp-Protocol-Version")
+
         // NOTE: allowCredentials is deliberately NOT set. Nothing in the app
         // uses cookies or HTTP auth, and anyHost() + credentials would make
         // Ktor reflect arbitrary Origins on credentialed requests - the
@@ -29,5 +33,7 @@ fun Application.configureCORS() {
 
         // Expose headers to the client
         exposeHeader(HttpHeaders.ContentDisposition)
+        exposeHeader("Mcp-Session-Id")
+        exposeHeader("Mcp-Protocol-Version")
     }
 }
