@@ -1,10 +1,7 @@
 package eu.anifantakis.commercials.mcp
 
-import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
-import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
-import eu.anifantakis.commercials.scheduleemail.asScheduleEmailSource
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.serialization.json.buildJsonObject
@@ -46,7 +43,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
                     put("break", time); put("spotId", spotId)
                 })
             }
-            val row = access.db.addPlacement(spotId, breakId, date)
+            val row = access.data.addPlacement(spotId, breakId, date)
                 ?: throw McpToolException("Spot $spotId not found (or hidden) on this station.")
             services.audit(caller, "add_placement", "spot=$spotId break=$time date=$date -> placement=${row.id}")
             buildJsonObject {
@@ -79,7 +76,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
                     put("station", a.string("station")); put("placementId", placementId)
                 })
             }
-            val deleted = access.db.deletePlacement(placementId)
+            val deleted = access.data.deletePlacement(placementId)
             if (!deleted) throw McpToolException("Placement $placementId not found (nothing deleted).")
             services.audit(caller, "delete_placement", "placement=$placementId")
             buildJsonObject { put("performed", true); put("action", "delete_placement"); put("placementId", placementId) }
@@ -114,7 +111,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
                     put("break", time); put("count", orderedIds.size)
                 })
             }
-            val ok = access.db.reorderPlacements(breakId, date, orderedIds)
+            val ok = access.data.reorderPlacements(breakId, date, orderedIds)
             if (!ok) {
                 throw McpToolException(
                     "Order rejected: orderedPlacementIds must be exactly the cell's current placement ids " +
@@ -160,7 +157,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
             val spotIds = a.longListOrNull("spotIds")?.toSet().orEmpty()
 
             val data = ScheduleEmailAssembler.assemble(
-                source = access.db.asScheduleEmailSource(),
+                source = access.data,
                 stationName = services.stationName(access.grant.stationId),
                 year = year, month = month, clientCode = clientCode, byTrader = byTrader,
                 spotIds = spotIds, personalMessage = a.stringOrNull("personalMessage"),
@@ -169,7 +166,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
             )
 
             val recipient = a.stringOrNull("to")?.takeIf { it.isNotBlank() }
-                ?: access.db.customerByCode(clientCode)?.email
+                ?: access.data.customerByCode(clientCode)?.email
                 ?: throw McpToolException("Customer '${data.customerName}' has no stored email - pass 'to' explicitly.")
             val subject = a.stringOrNull("subject")?.takeIf { it.isNotBlank() }
                 ?: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ - ${data.mediumLabel} - ${ScheduleEmailAssembler.greekMonths[month - 1]} $year"
@@ -187,8 +184,8 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
             val smtp = services.smtpFor(access.grant.stationId)
                 ?: throw McpToolException("No SMTP configured - add an smtp: block (file-wide or on this station) in server.yaml.")
             try {
-                SmtpMailer(smtp.toSettings()).sendHtml(recipient, subject, html)
-                access.db.logEmail(
+                services.sendEmail(smtp, recipient, subject, html)
+                access.data.logEmail(
                     StationDb.EmailLogEntry(
                         customerCode = clientCode, customerName = data.customerName, recipient = recipient,
                         subject = subject, year = year, month = month,
@@ -203,7 +200,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
                     put("spotSections", data.spots.size); put("transmissions", transmissions)
                 }
             } catch (e: Exception) {
-                access.db.logEmail(
+                access.data.logEmail(
                     StationDb.EmailLogEntry(
                         customerCode = clientCode, customerName = data.customerName, recipient = recipient,
                         subject = subject, year = year, month = month,

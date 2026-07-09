@@ -1,12 +1,13 @@
 package eu.anifantakis.commercials.mcp
 
-import eu.anifantakis.commercials.server.auth.UserRole
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** The mutation kill switch and the staff-only write guard. */
+/**
+ * The mutation kill switch: which tools a session even sees. The staff-only write
+ * guard (`requireStaff`) is covered in [McpToolServicesTest].
+ */
 class MutationGuardTest {
 
     private val readTools = setOf(
@@ -20,7 +21,7 @@ class MutationGuardTest {
 
     @Test
     fun `mutations disabled hides the write tools`() {
-        val services = McpToolServices(registryOf(station("crete-tv")), mutationsEnabled = false)
+        val services = services(mutationsEnabled = false)
         val names = buildCommercialsMcpServer(caller(grant("crete-tv")), services).tools.keys
         assertTrue(names.containsAll(readTools))
         assertTrue(mutationTools.none { it in names }, "write tools must be absent when mutations are off")
@@ -29,17 +30,9 @@ class MutationGuardTest {
 
     @Test
     fun `mutations enabled exposes the write tools`() {
-        val services = McpToolServices(registryOf(station("crete-tv")), mutationsEnabled = true)
+        val services = services(mutationsEnabled = true)
         val names = buildCommercialsMcpServer(caller(grant("crete-tv")), services).tools.keys
         assertTrue(names.containsAll(readTools + mutationTools))
         assertEquals(readTools.size + mutationTools.size, names.size)
-    }
-
-    @Test
-    fun `requireStaff blocks non-NORMAL_USER roles`() {
-        val services = McpToolServices(registryOf(station("crete-tv")))
-        assertFailsWith<McpToolException> { services.requireStaff(grant("crete-tv", UserRole.REPORT_VIEWER)) }
-        assertFailsWith<McpToolException> { services.requireStaff(grant("crete-tv", UserRole.CUSTOMER_VIEWER, "A")) }
-        services.requireStaff(grant("crete-tv", UserRole.NORMAL_USER)) // no throw
     }
 }

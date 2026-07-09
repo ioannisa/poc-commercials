@@ -1,7 +1,17 @@
 package eu.anifantakis.commercials.mcp.di
 
+import eu.anifantakis.commercials.mcp.EmailSender
+import eu.anifantakis.commercials.mcp.FileReportStore
+import eu.anifantakis.commercials.mcp.JasperReportRenderer
 import eu.anifantakis.commercials.mcp.McpToolServices
+import eu.anifantakis.commercials.mcp.ReportRenderer
+import eu.anifantakis.commercials.mcp.ReportStore
+import eu.anifantakis.commercials.mcp.SmtpEmailSender
+import eu.anifantakis.commercials.mcp.StationDirectory
+import eu.anifantakis.commercials.mcp.StationRegistryDirectory
 import eu.anifantakis.commercials.mcp.mcpMutationsEnabled
+import org.koin.core.module.dsl.bind
+import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 /**
@@ -10,16 +20,30 @@ import org.koin.dsl.module
  *
  * It lives in `:mcp` rather than in a single entry point's `di/` package because
  * BOTH backend entry points need it: the Ktor server (which mounts `/mcp`) and
- * the `:mcp-stdio` launcher. Each entry point supplies the persistence graph
- * ([StationRegistry][eu.anifantakis.commercials.server.stations.StationRegistry]
- * et al.) that these bindings resolve with `get()`; duplicating this binding in
- * both would be exactly the drift the shared modules were extracted to prevent.
+ * the `:mcp-stdio` launcher. Each entry point supplies the
+ * [StationRegistry][eu.anifantakis.commercials.server.stations.StationRegistry]
+ * these bindings resolve with `get()`.
  *
- * A lambda (not `singleOf`) because the mutation kill switch is a VALUE read
- * from the environment, not a graph dependency.
+ * Every port is bound to its adapter (the one class allowed to touch that kind of
+ * I/O), so a test can swap any of them for a fake. Constructor-reference `*Of`
+ * forms where the graph supplies the arguments; lambdas only where a VALUE is
+ * passed (the report output dir, the env-read mutation kill switch).
  */
 val mcpModule = module {
+    // ports -> adapters (the only classes that touch JDBC / Jasper / disk / SMTP)
+    singleOf(::StationRegistryDirectory) { bind<StationDirectory>() }
+    singleOf(::JasperReportRenderer) { bind<ReportRenderer>() }
+    singleOf(::SmtpEmailSender) { bind<EmailSender>() }
+    single<ReportStore> { FileReportStore() }
+
+    // the organizer
     single<McpToolServices> {
-        McpToolServices(registry = get(), mutationsEnabled = mcpMutationsEnabled())
+        McpToolServices(
+            directory = get(),
+            renderer = get(),
+            store = get(),
+            emailSender = get(),
+            mutationsEnabled = mcpMutationsEnabled(),
+        )
     }
 }

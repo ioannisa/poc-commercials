@@ -28,14 +28,14 @@ dependencies {
     // the tool-services + caller-identity public API.
     api(projects.persistence)
 
-    // Report engine + wire DTOs (headless PDF generation), and the shared
-    // Program Flow contract (names/formatters) also used by reports-client.
-    implementation(projects.reportcore)
+    // `api`: ReportRequest appears in the ReportRenderer port's signature.
+    api(projects.reportcore)
     implementation(projects.reportsModel)
     implementation(libs.kotlinx.datetime)
 
-    // Customer schedule emails: shared assembler + the mailer render/send (send_schedule_email tool).
-    implementation(projects.scheduleEmail)
+    // `api`: StationDataSource EXTENDS ScheduleEmailSource, so the supertype is
+    // part of this module's public API.
+    api(projects.scheduleEmail)
     implementation(projects.mailer)
 
     implementation(libs.kotlinx.serialization.json)

@@ -1,14 +1,11 @@
 package eu.anifantakis.commercials.mcp
 
 import eu.anifantakis.commercials.reports.dto.ReportRequest
-import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
-import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.SmtpConfig
-import eu.anifantakis.commercials.server.stations.StationRegistry
 import java.io.File
 import java.time.LocalDate
 
@@ -19,8 +16,8 @@ import java.time.LocalDate
  */
 class McpToolException(message: String) : Exception(message)
 
-/** A station the caller may touch: its DB pool + the caller's grant (its role drives scoping). */
-data class StationAccess(val db: StationDb, val grant: StationGrant)
+/** A station the caller may touch: its data port + the caller's grant (its role drives scoping). */
+data class StationAccess(val data: StationDataSource, val grant: StationGrant)
 
 /** One station visible to the caller (`list_stations` output). */
 data class StationInfo(val id: String, val name: String, val role: String, val clientCode: String?)
@@ -30,13 +27,18 @@ data class StationInfo(val id: String, val name: String, val role: String, val c
  * authorization, mirroring the server's `Security.stationAccessOrRespond` and
  * role checks so the HTTP and stdio transports enforce the SAME rules.
  *
- * DB access is blocking JDBC - callers run these inside [runTool], which hops to
- * `Dispatchers.IO`.
+ * It ORGANIZES the ports (McpPorts.kt) and performs no I/O of its own — no JDBC,
+ * no report engine, no filesystem, no SMTP. That is what lets the tools be
+ * unit-tested against fakes instead of a live MySQL.
+ *
+ * The port implementations are blocking; callers run these inside [runTool] /
+ * [runToolBlocks], which hop to `Dispatchers.IO`.
  */
 class McpToolServices(
-    private val registry: StationRegistry,
-    /** Where generated report PDFs are written (also returned to the caller). */
-    private val reportOutputDir: File = File(System.getProperty("java.io.tmpdir"), "commercials-mcp-reports"),
+    private val directory: StationDirectory,
+    private val renderer: ReportRenderer,
+    private val store: ReportStore,
+    private val emailSender: EmailSender,
     /**
      * Kill switch: when false, the mutation tools (add/delete/reorder placement,
      * send email) are not registered at all - a strictly read-only MCP server.
@@ -51,19 +53,18 @@ class McpToolServices(
         if (stationId.isNullOrBlank()) throw McpToolException("Parameter 'station' is required")
         val grant = caller.grantFor(stationId)
             ?: throw McpToolException("No access to station '$stationId'")
-        // Pool creation + schema bootstrap are lazy and blocking on first touch.
-        val db = registry.db(stationId)
+        val data = directory.dataSource(stationId)
             ?: throw McpToolException("Unknown station '$stationId'")
-        return StationAccess(db, grant)
+        return StationAccess(data, grant)
     }
 
     /** The stations this caller may see, each with the caller's role/clientCode on it. */
     fun stations(caller: McpCaller): List<StationInfo> =
-        registry.ids.filter { caller.grantFor(it) != null }.map { id ->
+        directory.ids.filter { caller.grantFor(it) != null }.map { id ->
             val grant = caller.grantFor(id)!!
             StationInfo(
                 id = id,
-                name = registry.config(id)?.name ?: id,
+                name = directory.name(id) ?: id,
                 role = grant.role.name,
                 clientCode = grant.clientCode,
             )
@@ -81,22 +82,21 @@ class McpToolServices(
         }
     }
 
-    /**
-     * The commercials of one break on one date, in air order - resolving the
-     * break by its `HH:mm` label and applying customer scoping. Shared by
-     * `spots_in_break` and `generate_break_report`. Blocking JDBC; call inside
-     * [runTool]/[runToolBlocks].
-     */
     /** Resolve a break by its `HH:mm` label, or throw a clear tool error. */
     fun resolveBreak(access: StationAccess, timeLabel: String): BreakSlotRow =
-        access.db.loadBreaks().firstOrNull { it.label == timeLabel }
+        access.data.loadBreaks().firstOrNull { it.label == timeLabel }
             ?: throw McpToolException(
                 "No break labelled '$timeLabel'. Break labels are HH:mm on a 15-minute grid (e.g. 17:30)."
             )
 
+    /**
+     * The commercials of one break on one date, in air order - resolving the break
+     * by its `HH:mm` label and applying customer scoping. Shared by `spots_in_break`
+     * and `generate_break_report`.
+     */
     fun breakSpots(access: StationAccess, date: LocalDate, timeLabel: String): List<CommercialRow> {
         val slot = resolveBreak(access, timeLabel)
-        val (_, byKey) = access.db.loadMonth(date.year, date.monthValue)
+        val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
         val spots = byKey[slot.id to date].orEmpty()
         return if (isCustomerScoped(access.grant)) {
             spots.filter { it.clientCode == access.grant.clientCode }
@@ -105,15 +105,11 @@ class McpToolServices(
         }
     }
 
-    /** Render a report request to PDF bytes via the shared JasperReports engine. */
-    fun generatePdf(request: ReportRequest): ByteArray = ReportEngine.generatePdf(request)
+    /** Render a report request to PDF bytes. */
+    fun generatePdf(request: ReportRequest): ByteArray = renderer.renderPdf(request)
 
-    /** Persist a generated PDF under [reportOutputDir], returning the written file. */
-    fun saveReport(fileName: String, bytes: ByteArray): File {
-        if (!reportOutputDir.exists()) reportOutputDir.mkdirs()
-        val safeName = File(fileName).name.ifBlank { "report.pdf" }
-        return File(reportOutputDir, safeName).apply { writeBytes(bytes) }
-    }
+    /** Persist a generated PDF, returning the written file. */
+    fun saveReport(fileName: String, bytes: ByteArray): File = store.save(fileName, bytes)
 
     // ── mutation guardrails ─────────────────────────────────────────────────
 
@@ -127,10 +123,14 @@ class McpToolServices(
     }
 
     /** The station's SMTP settings (its own override, else the file-wide default). */
-    fun smtpFor(stationId: String): SmtpConfig? = registry.config(stationId)?.smtp ?: registry.defaultSmtp
+    fun smtpFor(stationId: String): SmtpConfig? = directory.smtp(stationId)
 
     /** Display name for a station id. */
-    fun stationName(stationId: String): String = registry.config(stationId)?.name ?: stationId
+    fun stationName(stationId: String): String = directory.name(stationId) ?: stationId
+
+    /** Deliver an already-rendered schedule email. */
+    fun sendEmail(smtp: SmtpConfig, to: String, subject: String, html: String) =
+        emailSender.send(smtp, to, subject, html)
 
     /** Records a PERFORMED mutation (who + what) to the log - the write audit trail. */
     fun audit(caller: McpCaller, action: String, detail: String) {

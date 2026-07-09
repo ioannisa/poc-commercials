@@ -47,7 +47,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
         runTool("search_parties") {
             val a = req.args
             val access = services.resolveStation(caller, a.stringOrNull("station"))
-            var rows = access.db.searchParties(a.string("query"), a.bool("byTrader", false))
+            var rows = access.data.searchParties(a.string("query"), a.bool("byTrader", false))
             if (services.isCustomerScoped(access.grant)) {
                 rows = rows.filter { it.code == access.grant.clientCode }
             }
@@ -82,7 +82,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
             val access = services.resolveStation(caller, a.stringOrNull("station"))
             val code = a.string("code")
             services.requireCode(access.grant, code)
-            val months = access.db.partyActivity(code, a.bool("byTrader", false))
+            val months = access.data.partyActivity(code, a.bool("byTrader", false))
             buildJsonObject {
                 put("code", code)
                 put("monthsWithActivity", months.size)
@@ -115,7 +115,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
             val access = services.resolveStation(caller, a.stringOrNull("station"))
             val code = a.string("code")
             services.requireCode(access.grant, code)
-            val lines = access.db.partyContractLines(code, a.bool("byTrader", false))
+            val lines = access.data.partyContractLines(code, a.bool("byTrader", false))
             buildJsonArray {
                 lines.forEach { l ->
                     addJsonObject {
@@ -152,7 +152,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
                         "use party_contracts for your own client code."
                 )
             }
-            val spots = access.db.contractLineSpots(a.long("lineId"))
+            val spots = access.data.contractLineSpots(a.long("lineId"))
             buildJsonArray {
                 spots.forEach { s ->
                     addJsonObject {
@@ -184,7 +184,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
             val access = services.resolveStation(caller, a.stringOrNull("station"))
             val code = a.string("code")
             services.requireCode(access.grant, code)
-            val rows = access.db.contractStatus(code, a.bool("byTrader", false))
+            val rows = access.data.contractStatus(code, a.bool("byTrader", false))
             buildJsonObject {
                 put("code", code)
                 put("contractCount", rows.size)
@@ -264,7 +264,7 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
     ) { req ->
         runTool("station_footprint") {
             val access = services.resolveStation(caller, req.args.stringOrNull("station"))
-            val stats = access.db.placementStats()
+            val stats = access.data.placementStats()
             buildJsonObject {
                 put("placements", stats.placements)
                 stats.minDate?.let { put("firstAirDate", it) }
