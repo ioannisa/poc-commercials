@@ -133,7 +133,21 @@ class MigrationViewModelTest {
 
         assertEquals("legacy", repo.lastStart?.schema)
         assertEquals(3307, repo.lastStart?.port, "the digit string parses into the request port")
+        assertNull(repo.lastStart?.senDirPath, "a blank SEN folder travels as null (enrichment skipped)")
         assertEquals("REPLAYING", vm.state.status.state, "the returned status replaces the local one")
+    }
+
+    @Test
+    fun startCarriesTheSenFolderWhenGiven() = runTest(testDispatcher) {
+        val repo = FakeMigrationRepository()
+        val vm = MigrationViewModel(repo)
+        fillSource(vm)
+        vm.onAction(MigrationIntent.SenDirChanged("  /backups/SEN  "))
+
+        vm.onAction(MigrationIntent.Start)
+        advanceUntilIdle()
+
+        assertEquals("/backups/SEN", repo.lastStart?.senDirPath, "trimmed SEN folder reaches the request")
     }
 
     @Test
@@ -180,15 +194,32 @@ class MigrationViewModelTest {
         val repo = FakeMigrationRepository()
         val vm = MigrationViewModel(repo)
 
-        vm.onAction(MigrationIntent.OpenBrowser)
+        vm.onAction(MigrationIntent.OpenBrowser())
         advanceUntilIdle()
 
         assertEquals(listOf<String?>(null), repo.browsePaths, "opening the picker browses the server home dir")
         assertEquals("/home", vm.state.browser?.listing?.path)
+        assertEquals(false, vm.state.browser?.forSenDir, "default mode picks a dump file")
 
         vm.onAction(MigrationIntent.DumpPicked("/srv/x/dump.sql"))
 
         assertEquals("/srv/x/dump.sql", vm.state.dumpPath)
         assertNull(vm.state.browser, "picking a file closes the browser")
+    }
+
+    @Test
+    fun senFolderModePicksTheCurrentFolderAndClosesTheBrowser() = runTest(testDispatcher) {
+        val repo = FakeMigrationRepository()
+        val vm = MigrationViewModel(repo)
+
+        vm.onAction(MigrationIntent.OpenBrowser(forSenDir = true))
+        advanceUntilIdle()
+
+        assertEquals(true, vm.state.browser?.forSenDir, "the dialog opens in folder mode")
+
+        vm.onAction(MigrationIntent.SenDirPicked("/backups/SEN"))
+
+        assertEquals("/backups/SEN", vm.state.senDirPath)
+        assertNull(vm.state.browser, "confirming the folder closes the browser")
     }
 }

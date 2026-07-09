@@ -83,9 +83,12 @@ fun MigrationScreenRoot(
                     }
                 }
             } else {
-                viewModel.onAction(MigrationIntent.OpenBrowser)
+                viewModel.onAction(MigrationIntent.OpenBrowser())
             }
         },
+        // The SEN exports are a FOLDER on the server; the server-side browser
+        // handles folder picking on every platform (no native dir picker).
+        onBrowseSenClicked = { viewModel.onAction(MigrationIntent.OpenBrowser(forSenDir = true)) },
     )
 }
 
@@ -105,6 +108,7 @@ private fun MigrationScreen(
     onIntent: (MigrationIntent) -> Unit,
     onNavIntent: (MigrationScreenNavIntent) -> Unit,
     onBrowseClicked: () -> Unit,
+    onBrowseSenClicked: () -> Unit,
 ) {
     val status = state.status
 
@@ -180,6 +184,19 @@ private fun MigrationScreen(
                         // Desktop gets the real OS file dialog; web/mobile
                         // fall back to browsing the server's filesystem.
                         Button(onClick = onBrowseClicked) { Text(Strings[StringKey.MIGRATION_BROWSE]) }
+                    }
+                    // Optional SEN (Oracle ERP) export folder: when given, the
+                    // migration follows the transform with the ERP enrichment
+                    // (real customer names/VAT/contacts, real contract periods).
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = state.senDirPath,
+                            onValueChange = { onIntent(MigrationIntent.SenDirChanged(it)) },
+                            label = { Text(Strings[StringKey.MIGRATION_SEN_DIR]) },
+                            placeholder = { Text("/backups/SEN") },
+                            singleLine = true, modifier = Modifier.weight(1f)
+                        )
+                        Button(onClick = onBrowseSenClicked) { Text(Strings[StringKey.MIGRATION_BROWSE]) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
@@ -363,9 +380,10 @@ private fun MigrationScreen(
 }
 
 /**
- * Navigates the SERVER's filesystem (directories + .sql files only) so the
- * operator can pick a dump without typing paths - works identically from
- * web and desktop clients because the listing comes over the admin API.
+ * Navigates the SERVER's filesystem (directories + dump/export files) so the
+ * operator can pick a dump - or, in [ServerBrowserState.forSenDir] mode, the
+ * SEN export FOLDER - without typing paths. Works identically from web and
+ * desktop clients because the listing comes over the admin API.
  */
 @Composable
 private fun ServerFileBrowserDialog(
@@ -375,7 +393,9 @@ private fun ServerFileBrowserDialog(
     val listing = browser.listing
     AlertDialog(
         onDismissRequest = { onIntent(MigrationIntent.CloseBrowser) },
-        title = { Text(Strings[StringKey.MIGRATION_PICK_DUMP]) },
+        title = {
+            Text(Strings[if (browser.forSenDir) StringKey.MIGRATION_PICK_SEN_DIR else StringKey.MIGRATION_PICK_DUMP])
+        },
         text = {
             Column {
                 Text(
@@ -408,8 +428,12 @@ private fun ServerFileBrowserDialog(
                         Row(
                             Modifier.fillMaxWidth()
                                 .clickable {
-                                    if (entry.isDir) onIntent(MigrationIntent.BrowseTo("$base/${entry.name}"))
-                                    else onIntent(MigrationIntent.DumpPicked("$base/${entry.name}"))
+                                    when {
+                                        entry.isDir -> onIntent(MigrationIntent.BrowseTo("$base/${entry.name}"))
+                                        // folder mode: files are context, not choices
+                                        browser.forSenDir -> Unit
+                                        else -> onIntent(MigrationIntent.DumpPicked("$base/${entry.name}"))
+                                    }
                                 }
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -435,7 +459,13 @@ private fun ServerFileBrowserDialog(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (browser.forSenDir && listing != null) {
+                TextButton(onClick = { onIntent(MigrationIntent.SenDirPicked(listing.path)) }) {
+                    Text(Strings[StringKey.MIGRATION_USE_THIS_FOLDER])
+                }
+            }
+        },
         dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { Text(Strings[StringKey.COMMON_CANCEL]) } }
     )
 }

@@ -21,8 +21,11 @@ import java.sql.DriverManager
  *      includes the email archive - irrelevant tables are skipped)
  *   4. transform scratch -> target (see LegacyTransformer; missing ERP data
  *      is faked deterministically and flagged synthetic=TRUE)
- *   5. drop the scratch schema (unless --keep-scratch)
- *   6. append the station to server.yaml (unless --no-yaml)
+ *   5. if --sen-dir points at a folder of SEN (Oracle ERP) table exports,
+ *      enrich the target with the real master data (see SenErpEnricher) -
+ *      real customer names/VAT/contacts, real contract periods, gift flags
+ *   6. drop the scratch schema (unless --keep-scratch)
+ *   7. append the station to server.yaml (unless --no-yaml)
  *
  * Requires MySQL 8+ on the TARGET server (window functions; MyISAM replay of
  * the 5.7-era dumps works fine there).
@@ -174,6 +177,18 @@ private fun runMigration(opts: Options) {
             so a future ERP import can find and replace them.
             """.trimIndent()
         )
+
+        // ── 5b. SEN (Oracle ERP) enrichment ─────────────────────────────
+        val senDirPath = opts.optional("sen-dir")
+        if (senDirPath != null) {
+            val senDir = File(senDirPath)
+            require(senDir.isDirectory) { "--sen-dir is not a directory: $senDirPath" }
+            println("\nEnriching from the SEN exports in $senDirPath ...")
+            val senSummary = SenErpEnricher(c, schema) { println("  $it") }.enrich(senDir, apply = true)
+            printSenSummary(senSummary, apply = true)
+        } else {
+            println("\n(no --sen-dir given - the ERP enrichment can run later via SenEnrichToolKt)")
+        }
 
         // ── 6. scratch cleanup ──────────────────────────────────────────
         if (opts.has("keep-scratch")) {

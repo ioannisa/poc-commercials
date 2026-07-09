@@ -17,6 +17,8 @@ data class MigrationStartDto(
     val password: String,
     val schema: String,
     val createSchema: Boolean = true,
+    /** Optional SERVER folder of SEN (Oracle ERP) exports - enriches after the transform. */
+    val senDirPath: String? = null,
 )
 
 @Serializable
@@ -93,11 +95,12 @@ fun Route.migrationRoutes(
             call.respond(migration.snapshot().toDto())
         }
 
-        // Server-side file browser backing the "Browse" button: the dump
-        // lives on the SERVER's filesystem, so that's what gets browsed -
-        // works identically from web and desktop clients. Read-only listing
-        // of directories and .sql files, super admin only (the same trust
-        // level as the migration itself, which reads arbitrary paths).
+        // Server-side file browser backing the "Browse" buttons: the dump and
+        // the SEN export folder live on the SERVER's filesystem, so that's
+        // what gets browsed - works identically from web and desktop clients.
+        // Read-only listing of directories, .sql dumps and .csv/.tsv exports,
+        // super admin only (the same trust level as the migration itself,
+        // which reads arbitrary paths).
         get("/browse") {
             if (!call.requireAdmin()) return@get
             val requested = call.request.queryParameters["path"]
@@ -106,9 +109,10 @@ fun Route.migrationRoutes(
                 call.respond(io.ktor.http.HttpStatusCode.BadRequest, mapOf("error" to "Not a directory: ${dir.path}"))
                 return@get
             }
+            val shownExtensions = listOf(".sql", ".csv", ".tsv")
             val entries = (dir.listFiles() ?: emptyArray())
                 .filter { !it.name.startsWith(".") }
-                .filter { it.isDirectory || it.name.endsWith(".sql", ignoreCase = true) }
+                .filter { f -> f.isDirectory || shownExtensions.any { f.name.endsWith(it, ignoreCase = true) } }
                 .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
                 .map { BrowseEntryDto(it.name, it.isDirectory, if (it.isFile) it.length() else 0) }
             call.respond(BrowseDto(path = dir.absolutePath, parent = dir.absoluteFile.parent, entries = entries))
@@ -127,6 +131,7 @@ fun Route.migrationRoutes(
                         password = req.password,
                         schema = req.schema.trim(),
                         createSchema = req.createSchema,
+                        senDirPath = req.senDirPath?.trim()?.ifEmpty { null },
                     )
                 )
             }

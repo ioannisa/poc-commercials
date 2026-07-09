@@ -23,6 +23,7 @@ private data class StartDto(
     val password: String,
     val schema: String,
     val createSchema: Boolean,
+    val senDirPath: String? = null,
 )
 
 @Serializable
@@ -105,6 +106,7 @@ class RemoteMigrationDataSourceImpl(private val api: ApiHttpClient) : RemoteMigr
             StartDto(
                 request.dumpPath, request.host, request.port,
                 request.username, request.password, request.schema, request.createSchema,
+                request.senDirPath,
             ),
         ).map { it.toDomain() }
 

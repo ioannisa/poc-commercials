@@ -69,6 +69,14 @@ class MigrationService(private val registry: StationRegistry) {
         val password: String,
         val schema: String,
         val createSchema: Boolean,
+        /**
+         * Optional folder of SEN (Oracle ERP) table exports on the SERVER
+         * (one tab-delimited file per Oracle table). When present, the
+         * transform is followed by the ERP enrichment: real customer
+         * names/VAT/contacts, real contract periods, corrected gift flags
+         * (see SenErpEnricher).
+         */
+        val senDirPath: String? = null,
     )
 
     data class FlowRequest(
@@ -108,6 +116,9 @@ class MigrationService(private val registry: StationRegistry) {
         val dump = File(req.dumpPath)
         require(dump.isFile) { "Dump file not found on the server: ${req.dumpPath}" }
         require(schemaNamePattern.matches(req.schema)) { "Schema name must match ${schemaNamePattern.pattern}" }
+        req.senDirPath?.let {
+            require(File(it).isDirectory) { "SEN export folder not found on the server: $it" }
+        }
 
         connect(req).use { c ->
             val exists = schemaExists(c, req.schema)
@@ -186,6 +197,10 @@ class MigrationService(private val registry: StationRegistry) {
                 connect(req).use { c ->
                     val scratch = scratchSchema(req)
                     summary = LegacyTransformer(c, scratch, req.schema, flowReq.forTv) { log("  $it") }.run()
+                    req.senDirPath?.let { senDir ->
+                        log("Enriching from the SEN (Oracle ERP) exports in $senDir ...")
+                        SenErpEnricher(c, req.schema) { log("  $it") }.enrich(File(senDir), apply = true)
+                    } ?: log("(no SEN folder given - the ERP enrichment can run later from the CLI)")
                     c.createStatement().use { it.executeUpdate("DROP DATABASE `$scratch`") }
                     log("Scratch schema dropped.")
                 }

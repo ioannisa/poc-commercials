@@ -23,11 +23,16 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** The server-filesystem picker dialog's sub-state (same screen, same VM). */
+/**
+ * The server-filesystem picker dialog's sub-state (same screen, same VM).
+ * [forSenDir]=true switches the dialog from dump-FILE picking to SEN
+ * export-FOLDER picking (navigate in, confirm "use this folder").
+ */
 @Immutable
 data class ServerBrowserState(
     val listing: BrowseListing? = null,
     val error: UiText? = null,
+    val forSenDir: Boolean = false,
 )
 
 @Immutable
@@ -36,6 +41,7 @@ data class MigrationState(
     val formError: UiText? = null,
     // step 1: source & target
     val dumpPath: String = "",
+    val senDirPath: String = "",
     val host: String = "localhost",
     val port: String = "3306",
     val username: String = "",
@@ -59,6 +65,7 @@ data class MigrationState(
 
 sealed interface MigrationIntent {
     data class DumpPathChanged(val value: String) : MigrationIntent
+    data class SenDirChanged(val value: String) : MigrationIntent
     data class HostChanged(val value: String) : MigrationIntent
     data class PortChanged(val value: String) : MigrationIntent
     data class UsernameChanged(val value: String) : MigrationIntent
@@ -75,10 +82,12 @@ sealed interface MigrationIntent {
 
     data object Reset : MigrationIntent
 
-    data object OpenBrowser : MigrationIntent
+    /** [forSenDir]=true opens the picker in folder mode for the SEN exports. */
+    data class OpenBrowser(val forSenDir: Boolean = false) : MigrationIntent
     data object CloseBrowser : MigrationIntent
     data class BrowseTo(val path: String?) : MigrationIntent
     data class DumpPicked(val path: String) : MigrationIntent
+    data class SenDirPicked(val path: String) : MigrationIntent
 }
 
 /**
@@ -102,6 +111,7 @@ class MigrationViewModel(
     fun onAction(intent: MigrationIntent) {
         when (intent) {
             is MigrationIntent.DumpPathChanged -> _state.update { it.copy(dumpPath = intent.value) }
+            is MigrationIntent.SenDirChanged -> _state.update { it.copy(senDirPath = intent.value) }
             is MigrationIntent.HostChanged -> _state.update { it.copy(host = intent.value) }
             is MigrationIntent.PortChanged ->
                 _state.update { it.copy(port = intent.value.filter { ch -> ch.isDigit() }) }
@@ -128,14 +138,16 @@ class MigrationViewModel(
                 }
             }
 
-            MigrationIntent.OpenBrowser -> {
-                _state.update { it.copy(browser = ServerBrowserState()) }
+            is MigrationIntent.OpenBrowser -> {
+                _state.update { it.copy(browser = ServerBrowserState(forSenDir = intent.forSenDir)) }
                 browseTo(null)
             }
             MigrationIntent.CloseBrowser -> _state.update { it.copy(browser = null) }
             is MigrationIntent.BrowseTo -> browseTo(intent.path)
             is MigrationIntent.DumpPicked ->
                 _state.update { it.copy(dumpPath = intent.path, browser = null) }
+            is MigrationIntent.SenDirPicked ->
+                _state.update { it.copy(senDirPath = intent.path, browser = null) }
         }
     }
 
@@ -167,6 +179,7 @@ class MigrationViewModel(
                     password = s.password,
                     schema = s.schema.trim(),
                     createSchema = s.createSchema,
+                    senDirPath = s.senDirPath.trim().ifEmpty { null },
                 )
             )
             when (result) {

@@ -109,6 +109,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         email VARCHAR(128) NULL,
                         notes TEXT NULL,
                         synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+                        -- Galaxy (the client's NEW ERP) linkage: its ids are UUID
+                        -- strings. NULL until the Galaxy customer import matches this
+                        -- customer by VAT number and stamps the UUID here.
+                        galaxy_id VARCHAR(36) NULL,
                         KEY idx_customers_legacy (legacy_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
@@ -325,6 +329,9 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             ensureColumn(c, "contracts", "end_date", "DATE NULL")
             ensureColumn(c, "contracts", "renewed_at", "DATE NULL")
             ensureColumn(c, "contracts", "dates_provisional", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // Galaxy (new ERP) UUID - NULL until the Galaxy customer import
+            // matches by VAT number (see the CREATE TABLE note).
+            ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
 
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.

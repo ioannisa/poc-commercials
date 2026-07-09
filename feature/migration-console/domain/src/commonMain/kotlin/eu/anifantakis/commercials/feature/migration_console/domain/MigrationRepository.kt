@@ -11,6 +11,13 @@ data class MigrationStart(
     val password: String,
     val schema: String,
     val createSchema: Boolean = true,
+    /**
+     * Optional SERVER folder with the SEN (Oracle ERP) table exports (one
+     * tab-delimited file per Oracle table). When set, the migration follows
+     * the transform with the ERP enrichment: real customer names/VAT/contacts,
+     * real contract periods, corrected gift flags.
+     */
+    val senDirPath: String? = null,
 )
 
 data class MigrationFlowChoice(
