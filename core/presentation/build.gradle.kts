@@ -12,6 +12,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.core.domain)
+            // Res.font.* for the design system's bundled Roboto family
+            implementation(libs.compose.components.resources)
         }
     }
 }

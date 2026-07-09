@@ -12,10 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
 import eu.anifantakis.commercials.navigation.NavigationRoot
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
-import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.CommercialsTheme
+import eu.anifantakis.commercials.core.presentation.design_system.FontSizeStep
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
 import org.koin.compose.koinInject
@@ -43,7 +45,16 @@ fun App() {
             ThemePreference.DARK -> true
             ThemePreference.SYSTEM -> isSystemInDarkTheme()
         }
-        AppTheme(darkTheme = dark) {
+        // Text size (Preferences slider, persisted in KSafe): the domain
+        // preference maps onto the theme's step; applied live like the theme.
+        val fontStep = when (prefs.fontSize) {
+            FontSizePreference.XSMALL -> FontSizeStep.XSMALL
+            FontSizePreference.SMALL -> FontSizeStep.SMALL
+            FontSizePreference.MEDIUM -> FontSizeStep.MEDIUM
+            FontSizePreference.LARGE -> FontSizeStep.LARGE
+            FontSizePreference.XLARGE -> FontSizeStep.XLARGE
+        }
+        CommercialsTheme(darkTheme = dark, fontSizeStep = fontStep) {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()

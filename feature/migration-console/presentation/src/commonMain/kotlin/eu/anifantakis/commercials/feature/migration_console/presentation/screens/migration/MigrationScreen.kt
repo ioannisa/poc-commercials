@@ -5,6 +5,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +44,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -372,7 +373,7 @@ private fun MigrationScreen(
                     .padding(8.dp)
             ) {
                 items(status.log) { line ->
-                    Text(line, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    AppText(line, AppTextStyle.LOG_LINE)
                 }
             }
         }
@@ -398,10 +399,10 @@ private fun ServerFileBrowserDialog(
         },
         text = {
             Column {
-                Text(
+                AppText(
                     listing?.path ?: "…",
-                    fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    AppTextStyle.LOG_LINE,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 browser.error?.let {
                     Spacer(Modifier.height(4.dp))

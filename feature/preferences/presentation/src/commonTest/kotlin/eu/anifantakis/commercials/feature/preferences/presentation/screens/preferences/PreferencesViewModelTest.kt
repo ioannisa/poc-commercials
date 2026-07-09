@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +45,10 @@ class PreferencesViewModelTest {
         LocalizationManager.setLanguage(Language.FALLBACK)
     }
 
-    private class FakeUserPreferences(override var theme: ThemePreference = ThemePreference.SYSTEM) : UserPreferences
+    private class FakeUserPreferences(
+        override var theme: ThemePreference = ThemePreference.SYSTEM,
+        override var fontSize: FontSizePreference = FontSizePreference.MEDIUM,
+    ) : UserPreferences
 
     private class FakeAppLanguageStore(override var languageCode: String = "") : AppLanguageStore
 
@@ -67,6 +71,16 @@ class PreferencesViewModelTest {
         vm.onAction(PreferencesIntent.ThemeSelected(ThemePreference.LIGHT))
 
         assertEquals(ThemePreference.LIGHT, prefs.theme, "the choice is written to the snapshot-backed prefs")
+    }
+
+    @Test
+    fun fontSizeSelectedPersistsToPreferences() = runTest(testDispatcher) {
+        val prefs = FakeUserPreferences()
+        val vm = vm(prefs)
+
+        vm.onAction(PreferencesIntent.FontSizeSelected(FontSizePreference.XLARGE))
+
+        assertEquals(FontSizePreference.XLARGE, prefs.fontSize, "the slider step is written to the prefs seam")
     }
 
     @Test

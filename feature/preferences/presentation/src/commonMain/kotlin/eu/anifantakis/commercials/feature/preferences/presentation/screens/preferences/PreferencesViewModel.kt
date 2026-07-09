@@ -5,12 +5,14 @@ import androidx.compose.runtime.Stable
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 
 sealed interface PreferencesIntent {
     data class ThemeSelected(val theme: ThemePreference) : PreferencesIntent
     data class LanguageSelected(val language: Language) : PreferencesIntent
+    data class FontSizeSelected(val size: FontSizePreference) : PreferencesIntent
 }
 
 /**
@@ -27,6 +29,7 @@ class PreferencesViewModel(
 ) : BaseGlobalViewModel() {
 
     val theme: ThemePreference get() = prefs.theme
+    val fontSize: FontSizePreference get() = prefs.fontSize
 
     fun onAction(intent: PreferencesIntent) {
         when (intent) {
@@ -35,6 +38,7 @@ class PreferencesViewModel(
                 languageStore.languageCode = intent.language.code   // persist (KSafe)
                 LocalizationManager.setLanguage(intent.language)     // switch (recomposes)
             }
+            is PreferencesIntent.FontSizeSelected -> prefs.fontSize = intent.size
         }
     }
 }

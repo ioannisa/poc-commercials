@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.preferences.data
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.lib.ksafe.KSafe
@@ -29,6 +30,19 @@ class KSafeUserPreferences(@Provided private val ksafe: KSafe) : UserPreferences
         set(value) {
             themeState = value
             storedTheme = value.name
+        }
+
+    private var storedFontSize by ksafe(FontSizePreference.MEDIUM.name, key = "font_size_preference")
+
+    private var fontSizeState by mutableStateOf(
+        runCatching { FontSizePreference.valueOf(storedFontSize) }.getOrDefault(FontSizePreference.MEDIUM)
+    )
+
+    override var fontSize: FontSizePreference
+        get() = fontSizeState
+        set(value) {
+            fontSizeState = value
+            storedFontSize = value.name
         }
 
 }

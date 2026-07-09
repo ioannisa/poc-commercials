@@ -17,11 +17,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
@@ -110,7 +111,7 @@ private fun RecoveryCodesDialog(
                     )
                     Spacer(Modifier.height(8.dp))
                     state.codes.forEach { code ->
-                        Text(code, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                        AppText(code, AppTextStyle.MONO)
                     }
                 }
                 state.error?.let {

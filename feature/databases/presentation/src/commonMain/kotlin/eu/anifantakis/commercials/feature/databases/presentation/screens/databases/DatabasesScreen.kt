@@ -4,6 +4,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,7 +29,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,10 +109,10 @@ private fun DatabasesScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Text(station.id, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Text(
+                            AppText(
                                 station.database,
-                                fontSize = 12.sp, fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                AppTextStyle.LOG_LINE,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 if (!station.reachable) Strings[StringKey.DATABASES_UNREACHABLE]

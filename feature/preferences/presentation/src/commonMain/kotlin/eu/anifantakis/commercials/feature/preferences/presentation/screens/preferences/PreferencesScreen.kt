@@ -19,20 +19,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.math.roundToInt
 
 /**
  * The gear-icon screen: theme selection (persisted, applied live) plus the
@@ -53,6 +55,7 @@ fun PreferencesScreenRoot(
 ) {
     PreferencesScreen(
         theme = viewModel.theme,
+        fontSize = viewModel.fontSize,
         language = LocalLanguage.current ?: Language.FALLBACK,
         isAdmin = isAdmin,
         onIntent = viewModel::onAction,
@@ -87,6 +90,7 @@ private sealed interface PreferencesScreenNavIntent {
 @Composable
 private fun PreferencesScreen(
     theme: ThemePreference,
+    fontSize: FontSizePreference,
     language: Language,
     isAdmin: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
@@ -101,7 +105,7 @@ private fun PreferencesScreen(
                 IconButton(onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) }) {
                     Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
                 }
-                Text(Strings[StringKey.PREFERENCES_TITLE], fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                AppText(Strings[StringKey.PREFERENCES_TITLE], AppTextStyle.SCREEN_TITLE)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -109,7 +113,7 @@ private fun PreferencesScreen(
             // ── appearance ──────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(Strings[StringKey.PREFERENCES_APPEARANCE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    AppText(Strings[StringKey.PREFERENCES_APPEARANCE], AppTextStyle.SECTION_TITLE)
                     Spacer(Modifier.height(4.dp))
                     ThemeOption(theme, ThemePreference.LIGHT, Strings[StringKey.PREFERENCES_THEME_LIGHT], Strings[StringKey.PREFERENCES_THEME_LIGHT_DESC], onIntent)
                     ThemeOption(
@@ -117,6 +121,27 @@ private fun PreferencesScreen(
                         Strings[StringKey.PREFERENCES_THEME_DARK_DESC], onIntent
                     )
                     ThemeOption(theme, ThemePreference.SYSTEM, Strings[StringKey.PREFERENCES_THEME_SYSTEM], Strings[StringKey.PREFERENCES_THEME_SYSTEM_DESC], onIntent)
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Text size: 5 discrete steps; the whole app restyles live
+                    // as the slider moves (the theme rebuilds its typography).
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppText(Strings[StringKey.PREFERENCES_FONT_SIZE], AppTextStyle.BODY_STRONG)
+                        Spacer(Modifier.weight(1f))
+                        AppText(fontSize.displayName(), AppTextStyle.NOTE)
+                    }
+                    Slider(
+                        value = fontSize.ordinal.toFloat(),
+                        onValueChange = { raw ->
+                            val step = FontSizePreference.entries[raw.roundToInt()
+                                .coerceIn(0, FontSizePreference.entries.lastIndex)]
+                            if (step != fontSize) onIntent(PreferencesIntent.FontSizeSelected(step))
+                        },
+                        valueRange = 0f..FontSizePreference.entries.lastIndex.toFloat(),
+                        steps = FontSizePreference.entries.size - 2,
+                    )
+                    AppText(Strings[StringKey.PREFERENCES_FONT_SIZE_PREVIEW], AppTextStyle.BODY)
                 }
             }
 
@@ -125,7 +150,7 @@ private fun PreferencesScreen(
             // ── language ─────────────────────────────────────────────────
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(Strings[StringKey.PREFERENCES_LANGUAGE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    AppText(Strings[StringKey.PREFERENCES_LANGUAGE], AppTextStyle.SECTION_TITLE)
                     Spacer(Modifier.height(4.dp))
                     Language.entries.forEach { lang ->
                         LanguageOption(language, lang, onIntent)
@@ -139,7 +164,7 @@ private fun PreferencesScreen(
             if (!isAdmin) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(Strings[StringKey.PREFERENCES_ACCOUNT], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        AppText(Strings[StringKey.PREFERENCES_ACCOUNT], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(4.dp))
                         PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
                         PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_RECOVERY_CODES], Strings[StringKey.PREFERENCES_RECOVERY_CODES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
@@ -152,7 +177,7 @@ private fun PreferencesScreen(
             if (isAdmin) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(Strings[StringKey.PREFERENCES_MAINTENANCE], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        AppText(Strings[StringKey.PREFERENCES_MAINTENANCE], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(4.dp))
                         PreferenceEntry(AppIcons.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
                         PreferenceEntry(AppIcons.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
@@ -162,6 +187,16 @@ private fun PreferencesScreen(
             }
         }
     }
+}
+
+/** The step's localized display name, shown beside the slider. */
+@Composable
+private fun FontSizePreference.displayName(): String = when (this) {
+    FontSizePreference.XSMALL -> Strings[StringKey.PREFERENCES_FONT_XSMALL]
+    FontSizePreference.SMALL -> Strings[StringKey.PREFERENCES_FONT_SMALL]
+    FontSizePreference.MEDIUM -> Strings[StringKey.PREFERENCES_FONT_MEDIUM]
+    FontSizePreference.LARGE -> Strings[StringKey.PREFERENCES_FONT_LARGE]
+    FontSizePreference.XLARGE -> Strings[StringKey.PREFERENCES_FONT_XLARGE]
 }
 
 @Composable
@@ -180,8 +215,8 @@ private fun ThemeOption(
     ) {
         RadioButton(selected = current == value, onClick = { onIntent(PreferencesIntent.ThemeSelected(value)) })
         Column {
-            Text(label, fontSize = 14.sp)
-            Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AppText(label, AppTextStyle.BODY)
+            AppText(description, AppTextStyle.TINY)
         }
     }
 }
@@ -199,7 +234,7 @@ private fun LanguageOption(
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(selected = current == value, onClick = { onIntent(PreferencesIntent.LanguageSelected(value)) })
-        Text(value.displayName, fontSize = 14.sp)
+        AppText(value.displayName, AppTextStyle.BODY)
     }
 }
 
@@ -217,8 +252,8 @@ private fun PreferenceEntry(
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Column {
-            Text(label, fontSize = 14.sp)
-            Text(description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            AppText(label, AppTextStyle.BODY)
+            AppText(description, AppTextStyle.TINY)
         }
     }
 }

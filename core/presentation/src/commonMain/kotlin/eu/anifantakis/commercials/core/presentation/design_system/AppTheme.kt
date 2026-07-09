@@ -7,18 +7,22 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * The application's Material 3 theme. Compose Multiplatform draws every widget
- * itself (Skia) rather than delegating to native OS controls, so "matching the
- * OS" here means a deliberate, cohesive palette plus honouring the platform's
- * light/dark preference - [isSystemInDarkTheme] reads the real macOS/Windows
- * setting on desktop and the browser's `prefers-color-scheme` on web/wasm.
+ * The application's Material 3 theme (named after the brand, dealer-totem
+ * convention - the `AppTheme` NAME belongs to the typography accessor
+ * object). Compose Multiplatform draws every widget itself (Skia) rather
+ * than delegating to native OS controls, so "matching the OS" here means a
+ * deliberate, cohesive palette plus honouring the platform's light/dark
+ * preference - [isSystemInDarkTheme] reads the real macOS/Windows setting on
+ * desktop and the browser's `prefers-color-scheme` on web/wasm.
  *
- * A professional broadcast-blue brand replaces the unstyled Material default
- * (which is what made the app read as a generic Java/Swing demo).
+ * Typography: the bundled Roboto family (identical rendering on every
+ * platform, full Greek coverage) built at the user's [FontSizeStep] - the
+ * whole type system scales from the preferences slider.
  */
 
 private val BrandLight = lightColorScheme(
@@ -85,13 +89,22 @@ private val AppShapes = Shapes(
 )
 
 @Composable
-fun AppTheme(
+fun CommercialsTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    fontSizeStep: FontSizeStep = FontSizeStep.DEFAULT,
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) BrandDark else BrandLight,
-        shapes = AppShapes,
-        content = content,
+    val appTypography = buildAppTypography(
+        roboto = robotoFamily(),
+        robotoMono = robotoMonoFamily(),
+        step = fontSizeStep,
     )
+    CompositionLocalProvider(LocalAppTypography provides appTypography) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) BrandDark else BrandLight,
+            shapes = AppShapes,
+            typography = appTypography.material,
+            content = content,
+        )
+    }
 }
