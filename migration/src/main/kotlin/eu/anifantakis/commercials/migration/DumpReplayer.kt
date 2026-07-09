@@ -17,6 +17,7 @@ val LEGACY_TABLES_OF_INTEREST = setOf(
     "docref",                      // ERP contract/document shadow (traid/targetleeid/pelatislee)
     "z_commercials",               // ERP doc lines <-> spots
     "sld",                         // doc types flagged gift
+    "calendar_excluded_docs",      // ERP doc ids kept OFF printed reports
     "cus",                         // customer contact supplement
     "programtypes",                // spot/programme types
     "commercials_calendar",        // flattened rows WITH customer names + ΑΦΜ

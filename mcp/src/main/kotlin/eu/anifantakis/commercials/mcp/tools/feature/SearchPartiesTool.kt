@@ -46,6 +46,7 @@ object SearchPartiesTool : McpTool {
                         p.email?.let { put("email", it) }
                         p.vatNumber?.let { put("vatNumber", it) }
                         p.phone?.let { put("phone", it) }
+                        p.address?.let { put("address", it) }
                         put("spotCount", p.spotCount)
                         put("placementCount", p.placementCount)
                     }

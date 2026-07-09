@@ -107,6 +107,12 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         phone VARCHAR(32) NULL,
                         fax VARCHAR(32) NULL,
                         email VARCHAR(128) NULL,
+                        -- Main address (SEN gap-fill: the legacy app showed it live
+                        -- from the ERP's ADR table - "Κύρια Διεύθυνση"; the legacy
+                        -- MySQL never stored it).
+                        address_street VARCHAR(160) NULL,
+                        address_zip VARCHAR(16) NULL,
+                        address_city VARCHAR(64) NULL,
                         notes TEXT NULL,
                         synthetic BOOLEAN NOT NULL DEFAULT FALSE,
                         -- Galaxy (the client's NEW ERP) linkage: its ids are UUID
@@ -147,10 +153,16 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 )
                 s.executeUpdate(
                     """
+                    -- Contract PRODUCT lines (≙ legacy z_commercials - the owner's
+                    -- Oracle view over the ERP doc lines, materialized in the dumps):
+                    -- one row per (document, line), each line selling ONE item class
+                    -- (spot_type_id ≙ z.mciid). line_no >= 1000 marks a fallback line
+                    -- synthesized for a (doc, type) pair the view did not carry.
                     CREATE TABLE IF NOT EXISTS contract_lines (
                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
                         contract_id BIGINT NOT NULL,
                         line_no INT NOT NULL,
+                        spot_type_id BIGINT NULL,
                         desired_qty INT NOT NULL DEFAULT 0,
                         agel_val DECIMAL(10,6) NOT NULL DEFAULT 0,
                         eidikos_val DECIMAL(10,6) NOT NULL DEFAULT 0,
@@ -158,6 +170,25 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         UNIQUE KEY uq_contract_line (contract_id, line_no),
                         CONSTRAINT fk_lines_contract FOREIGN KEY (contract_id)
                             REFERENCES contracts(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
+                s.executeUpdate(
+                    """
+                    -- The spot-type CATALOG - mirror of legacy `programtypes`,
+                    -- which IS the ERP's item-class list (MCI): messages carry
+                    -- messageTypeID, and the ERP item (STI) is 1:1 with the
+                    -- class. `name` is the legacy descr; `sales_item` is the
+                    -- ERP item name the SEN import fills (e.g. 'Διαφ. TV Κρήτη
+                    -- Σ73.002', 'Διαφημίσεις τηλεόρασης Δ Ω Ρ Α' - the gift
+                    -- marker is part of the name). NULL until that import runs.
+                    CREATE TABLE IF NOT EXISTS spot_types (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        legacy_id BIGINT NULL,
+                        name VARCHAR(128) NOT NULL,
+                        sales_item VARCHAR(160) NULL,
+                        item_code VARCHAR(32) NULL,
+                        UNIQUE KEY uq_spot_types_legacy (legacy_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -171,10 +202,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         description VARCHAR(255) NOT NULL,
                         duration_seconds INT NOT NULL,
                         spot_type VARCHAR(64) NOT NULL DEFAULT '',
-                        -- The SALES item of the spot's contract line (ERP STI name,
-                        -- e.g. 'Διαφ. TV Κρήτη Σ73.002') - what the legacy Break
-                        -- Console shows as Τύπος. spot_type stays the PROGRAMME type.
-                        sales_item VARCHAR(160) NULL,
+                        -- REFERENCE to the spot-type catalog (legacy
+                        -- messages.messageTypeID) - a spot's type/item is a
+                        -- lookup, never frozen text: relink the spot and every
+                        -- display follows (mirrors the legacy MySQL model).
+                        spot_type_id BIGINT NULL,
                         flow VARCHAR(32) NOT NULL DEFAULT '',
                         hidden BOOLEAN NOT NULL DEFAULT FALSE,
                         force_position INT NULL,
@@ -207,6 +239,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         show_date DATE NOT NULL,
                         position INT NOT NULL,
                         duration_seconds INT NOT NULL,
+                        -- The ACTUAL charge of this airing (≙ legacy schedule.docID +
+                        -- lineno): the same spot airs under different contracts/
+                        -- products over time; the spot's own line is only its
+                        -- CURRENT default. NULL -> displays fall back to the spot's.
+                        contract_line_id BIGINT NULL,
                         program_id BIGINT NULL,
                         played BOOLEAN NOT NULL DEFAULT FALSE,
                         hidden BOOLEAN NOT NULL DEFAULT FALSE,
@@ -336,8 +373,17 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Galaxy (new ERP) UUID - NULL until the Galaxy customer import
             // matches by VAT number (see the CREATE TABLE note).
             ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
-            // Sales item of the spot's contract line (see the CREATE TABLE note).
-            ensureColumn(c, "spots", "sales_item", "VARCHAR(160) NULL")
+            // The spot-type catalog reference (see the CREATE TABLE notes) -
+            // schemas from before the catalog gain the column; the SEN
+            // enrichment backfills it from the legacy messageTypeID.
+            ensureColumn(c, "spots", "spot_type_id", "BIGINT NULL")
+            // Product lines + per-airing charge (see the CREATE TABLE notes).
+            ensureColumn(c, "contract_lines", "spot_type_id", "BIGINT NULL")
+            ensureColumn(c, "placements", "contract_line_id", "BIGINT NULL")
+            // Main address (see the customers CREATE TABLE note).
+            ensureColumn(c, "customers", "address_street", "VARCHAR(160) NULL")
+            ensureColumn(c, "customers", "address_zip", "VARCHAR(16) NULL")
+            ensureColumn(c, "customers", "address_city", "VARCHAR(64) NULL")
 
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.
@@ -691,6 +737,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         val email: String?,
         val vatNumber: String?,
         val phone: String?,
+        /** Main address composed for display, e.g. "ΑΓΡΙΑΝΑ ΧΕΡΣΟΝΗΣΟΥ, 70014 ΧΕΡΣΟΝΗΣΟΣ". */
+        val address: String? = null,
         val spotCount: Int,
         val placementCount: Int,
     )
@@ -717,12 +765,15 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             c.prepareStatement(
                 """
                 SELECT cu.code, cu.name, cu.email, cu.vat_number, cu.phone,
+                       TRIM(BOTH ', ' FROM CONCAT_WS(', ', cu.address_street,
+                            NULLIF(TRIM(CONCAT_WS(' ', cu.address_zip, cu.address_city)), ''))) AS address,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placement_count
                 FROM customers cu
                 ${partyJoin(byTrader)}
                 JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE (cu.name LIKE ? OR cu.code LIKE ?)
-                GROUP BY cu.id, cu.code, cu.name, cu.email, cu.vat_number, cu.phone
+                GROUP BY cu.id, cu.code, cu.name, cu.email, cu.vat_number, cu.phone,
+                         cu.address_street, cu.address_zip, cu.address_city
                 ORDER BY placement_count DESC, cu.name
                 LIMIT ?
                 """.trimIndent()
@@ -740,6 +791,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                                 email = rs.getString("email")?.ifBlank { null },
                                 vatNumber = rs.getString("vat_number")?.ifBlank { null },
                                 phone = rs.getString("phone")?.ifBlank { null },
+                                address = rs.getString("address")?.ifBlank { null },
                                 spotCount = rs.getInt("spot_count"),
                                 placementCount = rs.getInt("placement_count"),
                             )
@@ -998,7 +1050,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         c.prepareStatement(
             """
             SELECT p.id, p.spot_id, p.position, p.duration_seconds,
-                   s.description, s.spot_type, s.sales_item, s.flow,
+                   s.description, s.spot_type, s.flow, sty.sales_item,
                    cu.code AS client_code, cu.name AS client_name,
                    ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                    pay.code AS payer_code, pay.name AS payer_name,
@@ -1006,7 +1058,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             FROM placements p
             JOIN spots s      ON s.id = p.spot_id
             JOIN customers cu ON cu.id = s.customer_id
-            LEFT JOIN contract_lines cl ON cl.id = s.contract_line_id
+            LEFT JOIN spot_types sty    ON sty.id = s.spot_type_id
+            -- the airing's ACTUAL charge (legacy schedule.docID+lineno) wins;
+            -- the spot's own line is only its current default
+            LEFT JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
             LEFT JOIN contracts ct      ON ct.id = cl.contract_id
             LEFT JOIN customers pay     ON pay.id = ct.customer_id
             LEFT JOIN programs pr       ON pr.id = p.program_id
@@ -1184,7 +1239,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             c.prepareStatement(
                 """
                 SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
-                       s.description, s.spot_type, s.sales_item, s.flow,
+                       s.description, s.spot_type, s.flow, sty.sales_item,
                        cu.code AS client_code, cu.name AS client_name,
                        ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                        pay.code AS payer_code, pay.name AS payer_name,
@@ -1192,7 +1247,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 FROM placements p
                 JOIN spots s      ON s.id = p.spot_id
                 JOIN customers cu ON cu.id = s.customer_id
-                LEFT JOIN contract_lines cl ON cl.id = s.contract_line_id
+                LEFT JOIN spot_types sty    ON sty.id = s.spot_type_id
+                -- the airing's ACTUAL charge (legacy schedule.docID+lineno) wins;
+                -- the spot's own line is only its current default
+                LEFT JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
                 LEFT JOIN contracts ct      ON ct.id = cl.contract_id
                 LEFT JOIN customers pay     ON pay.id = ct.customer_id
                 LEFT JOIN programs pr       ON pr.id = p.program_id

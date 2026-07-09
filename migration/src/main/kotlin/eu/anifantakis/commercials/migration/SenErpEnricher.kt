@@ -76,8 +76,8 @@ class SenErpEnricher(
         var contractsNoErpDates: Int = 0,
         var contractsNotInSld: Int = 0,
         var contractsBackfilled: Int = 0,
-        var spotsItemSet: Int = 0,
-        var spotsItemViaLines: Int = 0,
+        var spotTypesEnriched: Int = 0,
+        var spotsTypeLinked: Int = 0,
         var rejectedRecords: Int = 0,
     )
 
@@ -132,8 +132,10 @@ class SenErpEnricher(
         else log("lee.csv absent - customer identity/contact phases skipped")
         if (sld != null) enrichContracts(sld, sdt, apply, s)
         else log("sld.csv absent - contract phase skipped")
-        if (ssd != null && sti != null) enrichSpotItems(ssd, sti, legacyScratchSchema, apply, s)
-        else log("ssd.csv/sti.csv absent - sales-item phase skipped")
+        if (ssd != null) enrichLineQuantities(ssd, apply, s)
+        else log("ssd.csv absent - product-line quantities skipped")
+        if (sti != null) enrichSpotTypeCatalog(sti, legacyScratchSchema, apply, s)
+        else log("sti.csv absent - spot-type catalog phase skipped")
         backfillProvisional(apply, s)
         return s
     }
@@ -169,6 +171,7 @@ class SenErpEnricher(
         data class Update(
             val id: Long, val name: String, val vat: String?,
             val phone: String?, val fax: String?, val email: String?,
+            val street: String?, val zip: String?, val city: String?,
             val newCode: String?, val oldCode: String,
         )
 
@@ -177,7 +180,11 @@ class SenErpEnricher(
         val updates = ArrayList<Update>()
         c.createStatement().use { st ->
             st.executeQuery(
-                "SELECT id, legacy_id, legacy_lee_id, code, name, vat_number, phone, fax, email FROM $schema.customers"
+                """
+                SELECT id, legacy_id, legacy_lee_id, code, name, vat_number, phone, fax, email,
+                       address_street, address_zip, address_city
+                FROM $schema.customers
+                """.trimIndent()
             ).use { rs ->
                 while (rs.next()) {
                     s.customersExamined++
@@ -206,7 +213,9 @@ class SenErpEnricher(
                     val newCode = tracodeByTraid[legacyId?.toString()]
                         ?.takeIf { it.isNotBlank() && it != oldCode }
 
-                    // contacts from the entity's MAIN address, fill-only semantics
+                    // contacts from the entity's MAIN address: phone/fax/email are
+                    // fill-only (recovered real values win); the ADDRESS itself has
+                    // no local source - the ERP is authoritative, sync it outright
                     val adrRow = adrById[lee.value(leeRow, "ADRIDMAIN")]
                     val erpPhone = adrRow?.let { adr!!.value(it, "ADRPHONE1").takeIf(String::isNotBlank) }
                     val erpFax = adrRow?.let { adr!!.value(it, "ADRFAX").takeIf(String::isNotBlank) }
@@ -215,19 +224,39 @@ class SenErpEnricher(
                     val newFax = if (rs.getString("fax").isNullOrBlank() && erpFax != null) erpFax else null
                     val newEmail = if (placeholderEmail(rs.getString("email")) && erpEmail != null) erpEmail else null
 
+                    fun addressPart(column: String, max: Int): String? = adrRow
+                        ?.let { adr!!.value(it, column).replace(Regex("\\s+"), " ").trim() }
+                        ?.takeIf { it.isNotBlank() }?.take(max)
+                    val erpStreet = adrRow?.let {
+                        listOfNotNull(addressPart("ADRSTREET", 140), addressPart("ADRNUMBER", 16))
+                            .joinToString(" ").takeIf(String::isNotBlank)?.take(160)
+                    }
+                    val erpZip = addressPart("ADRZIPCODE", 16)
+                    val erpCity = adrRow?.let {
+                        (addressPart("ADRCITY", 64) ?: addressPart("ADRDISTRICT", 64))?.take(64)
+                    }
+                    val addressChanged = adrRow != null && (
+                        erpStreet != rs.getString("address_street") ||
+                            erpZip != rs.getString("address_zip") ||
+                            erpCity != rs.getString("address_city")
+                        )
+
                     val oldName = rs.getString("name").orEmpty()
                     val oldVat = rs.getString("vat_number")
                     val identityChanged = erpName != oldName || erpVat != oldVat
                     val contactsChanged = newPhone != null || newFax != null || newEmail != null
-                    if (!identityChanged && !contactsChanged && newCode == null) {
+                    if (!identityChanged && !contactsChanged && !addressChanged && newCode == null) {
                         s.customersUnchanged++
                         continue
                     }
                     if (erpName != oldName) s.customersRenamed++
                     if (erpVat != oldVat && erpVat != null) s.customersVatSet++
-                    if (contactsChanged) s.contactsFilled++
+                    if (contactsChanged || addressChanged) s.contactsFilled++
                     if (newCode != null) s.customersRecoded++
-                    updates += Update(rs.getLong("id"), erpName, erpVat, newPhone, newFax, newEmail, newCode, oldCode)
+                    updates += Update(
+                        rs.getLong("id"), erpName, erpVat, newPhone, newFax, newEmail,
+                        erpStreet, erpZip, erpCity, newCode, oldCode,
+                    )
                 }
             }
         }
@@ -247,19 +276,28 @@ class SenErpEnricher(
                 """
                 UPDATE $schema.customers
                 SET name = ?, vat_number = ?, synthetic = FALSE, code = COALESCE(?, code),
-                    phone = COALESCE(?, phone), fax = COALESCE(?, fax), email = COALESCE(?, email)
+                    phone = COALESCE(?, phone), fax = COALESCE(?, fax), email = COALESCE(?, email),
+                    address_street = IF(?, ?, address_street),
+                    address_zip = IF(?, ?, address_zip),
+                    address_city = IF(?, ?, address_city)
                 WHERE id = ?
                 """.trimIndent()
             ).use { ps ->
                 var batched = 0
                 for (u in updates) {
+                    // the ERP is authoritative for the address ONLY when the
+                    // entity's main ADR row was in the export (sync flag)
+                    val syncAddress = u.street != null || u.zip != null || u.city != null
                     ps.setString(1, u.name)
                     ps.setString(2, u.vat)
                     ps.setString(3, if (u.newCode != null) u.newCode else null)
                     ps.setString(4, u.phone)
                     ps.setString(5, u.fax)
                     ps.setString(6, u.email)
-                    ps.setLong(7, u.id)
+                    ps.setBoolean(7, syncAddress); ps.setString(8, u.street)
+                    ps.setBoolean(9, syncAddress); ps.setString(10, u.zip)
+                    ps.setBoolean(11, syncAddress); ps.setString(12, u.city)
+                    ps.setLong(13, u.id)
                     ps.addBatch()
                     if (++batched % 500 == 0) ps.executeBatch()
                 }
@@ -296,90 +334,86 @@ class SenErpEnricher(
     // ── phase 2b: per-spot sales items (the Break Console's Τύπος) ──────────
 
     /**
-     * Stamps each spot with the SALES item of its ERP contract line
+     * Enriches the spot-type CATALOG (`spot_types`, the mirror of legacy
+     * `programtypes`): each type's `sales_item` becomes the ERP item name
      * (STI.ITMNAME - e.g. 'Διαφ. TV Κρήτη Σ73.002', or 'Διαφημίσεις
-     * τηλεόρασης Δ Ω Ρ Α' whose name itself carries the gift marker), which
-     * is exactly what the legacy Break Console shows as Τύπος.
+     * τηλεόρασης Δ Ω Ρ Α' whose name itself carries the gift marker) -
+     * exactly what the legacy Break Console shows as Τύπος. The join is
+     * direct and 1:1: legacy `messages.messageTypeID` IS the ERP item class
+     * (STI.MCIID), so `spot_types.legacy_id == STI.MCIID`.
      *
-     * Resolution per spot: legacy `messages.messageTypeID` IS the ERP's item
-     * class (MCIID - verified: a doc's "ΣΦΗΝΕΣ ΔΕΛΤΙΟΥ" message carries
-     * typeID 301 and lands exactly on the doc's MCIID-301 SSD line), so
-     * `(document, messageTypeID)` names the SSD line whose CODCODE names the
-     * STI item. Per-message typeIDs come from the replayed dump when
-     * [scratch] is available (the migration pipeline passes its scratch
-     * schema); without it, a spot still resolves when its document sells a
-     * SINGLE distinct item (the majority) - multi-item documents are left
-     * untouched.
+     * Spots themselves are NEVER stamped - a spot's type/item is a REFERENCE
+     * (`spots.spot_type_id`), so relinking a spot to another contract or
+     * type updates every display, like the legacy model. For a station
+     * migrated BEFORE the catalog existed, [scratch] (the replayed dump)
+     * supplies what the migration would have written: the catalog rows from
+     * `programtypes` and each spot's `spot_type_id` from
+     * `messages.messageTypeID`.
      */
-    private fun enrichSpotItems(ssd: SenTable, sti: SenTable, scratch: String?, apply: Boolean, s: Summary) {
-        val itemByCode = sti.rows.associate {
-            sti.value(it, "CODCODE") to sti.value(it, "ITMNAME").replace(Regex("\\s+"), " ").trim()
-        }
-
-        // (docid, item class) -> the lines' item codes; docid -> its distinct item codes
-        val codesByDocMci = HashMap<String, MutableSet<String>>()
-        val codesByDoc = HashMap<String, MutableSet<String>>()
-        for (row in ssd.rows) {
-            val doc = ssd.value(row, "DOCID")
-            val code = ssd.value(row, "CODCODE")
-            if (doc.isEmpty() || code.isEmpty()) continue
-            codesByDocMci.getOrPut(doc + " " + ssd.value(row, "MCIID")) { mutableSetOf() } += code
-            codesByDoc.getOrPut(doc) { mutableSetOf() } += code
-        }
-
-        // message id -> its item class (MCIID), from the replayed legacy dump
-        val mciByMessage = HashMap<Long, String>()
-        if (scratch != null) {
-            c.createStatement().use { st ->
-                st.executeQuery("SELECT id, messageTypeID FROM $scratch.messages").use { rs ->
-                    while (rs.next()) mciByMessage[rs.getLong(1)] = rs.getString(2)
-                }
+    private fun enrichSpotTypeCatalog(sti: SenTable, scratch: String?, apply: Boolean, s: Summary) {
+        // adoption path: a pre-catalog station rebuilds what migration now writes
+        if (scratch != null && apply) {
+            val inserted = c.createStatement().use { st ->
+                st.executeUpdate(
+                    """
+                    INSERT INTO $schema.spot_types(legacy_id, name)
+                    SELECT pt.id, pt.descr FROM $scratch.programtypes pt
+                    WHERE NOT EXISTS (SELECT 1 FROM $schema.spot_types x WHERE x.legacy_id = pt.id)
+                    """.trimIndent()
+                )
             }
-            log("sales items: ${mciByMessage.size} message item classes from $scratch.messages")
+            val linked = c.createStatement().use { st ->
+                st.executeUpdate(
+                    """
+                    UPDATE $schema.spots sp
+                    JOIN $scratch.messages m ON m.id = sp.legacy_id
+                    JOIN $schema.spot_types tst ON tst.legacy_id = m.messageTypeID
+                    SET sp.spot_type_id = tst.id
+                    WHERE sp.spot_type_id IS NULL
+                    """.trimIndent()
+                )
+            }
+            s.spotsTypeLinked = linked
+            log("spot types: $inserted catalog rows adopted from $scratch.programtypes, $linked spots linked")
         }
 
-        data class Update(val spotId: Long, val item: String)
+        data class Update(val typeId: Long, val item: String, val code: String?)
+
+        // STI by item class: MCIID -> (ITMNAME, CODCODE), verified 1:1
+        val byMci = sti.rows
+            .filter { sti.value(it, "MCIID").isNotEmpty() }
+            .associateBy { sti.value(it, "MCIID") }
 
         val updates = ArrayList<Update>()
         c.createStatement().use { st ->
             st.executeQuery(
-                """
-                SELECT sp.id, sp.legacy_id, sp.sales_item, ct.legacy_docid
-                FROM $schema.spots sp
-                JOIN $schema.contract_lines cl ON cl.id = sp.contract_line_id
-                JOIN $schema.contracts ct ON ct.id = cl.contract_id
-                WHERE ct.legacy_docid IS NOT NULL
-                """.trimIndent()
+                "SELECT id, legacy_id, sales_item, item_code FROM $schema.spot_types WHERE legacy_id IS NOT NULL"
             ).use { rs ->
                 while (rs.next()) {
-                    val docId = rs.getLong("legacy_docid").toString()
-                    val viaLine = rs.getLong("legacy_id").let { if (rs.wasNull()) null else mciByMessage[it] }
-                        ?.let { mci -> codesByDocMci[docId + " " + mci]?.singleOrNull() }
-                    val code = viaLine ?: codesByDoc[docId]?.singleOrNull() ?: continue
-                    val item = itemByCode[code] ?: continue
-                    if (item.isEmpty() || item == rs.getString("sales_item")) continue
-                    if (viaLine != null) s.spotsItemViaLines++
-                    updates += Update(rs.getLong("id"), item)
+                    val row = byMci[rs.getLong("legacy_id").toString()] ?: continue
+                    val item = sti.value(row, "ITMNAME").replace(Regex("\\s+"), " ").trim()
+                    val code = sti.value(row, "CODCODE").takeIf { it.isNotBlank() }
+                    if (item.isEmpty()) continue
+                    if (item == rs.getString("sales_item") && code == rs.getString("item_code")) continue
+                    updates += Update(rs.getLong("id"), item, code)
                 }
             }
         }
-        s.spotsItemSet = updates.size
+        s.spotTypesEnriched = updates.size
 
         if (apply && updates.isNotEmpty()) {
-            c.prepareStatement("UPDATE $schema.spots SET sales_item = ? WHERE id = ?").use { ps ->
-                var batched = 0
+            c.prepareStatement("UPDATE $schema.spot_types SET sales_item = ?, item_code = ? WHERE id = ?").use { ps ->
                 for (u in updates) {
                     ps.setString(1, u.item)
-                    ps.setLong(2, u.spotId)
+                    ps.setString(2, u.code)
+                    ps.setLong(3, u.typeId)
                     ps.addBatch()
-                    if (++batched % 500 == 0) ps.executeBatch()
                 }
                 ps.executeBatch()
             }
         }
         log(
-            "sales items: ${s.spotsItemSet} spots stamped with their contract line's item " +
-                "(${s.spotsItemViaLines} via the exact line link, the rest via single-item documents)" +
+            "spot types: ${s.spotTypesEnriched} catalog entries got their ERP sales item (1:1 by item class)" +
                 if (apply) "" else "  [DRY RUN]"
         )
     }
@@ -387,7 +421,7 @@ class SenErpEnricher(
     // ── phase 3: contracts (period + agreed qty + gift flag) ────────────────
 
     private fun enrichContracts(sld: SenTable, sdt: SenTable?, apply: Boolean, s: Summary) {
-        data class ErpDoc(val start: LocalDate?, val end: LocalDate?, val qtyA: Long?, val gift: Boolean?)
+        data class ErpDoc(val start: LocalDate?, val end: LocalDate?, val gift: Boolean?)
 
         // SDT catalog: doc type id -> is it a gift type? ("ΔΩΡ" in the
         // description - accent-stripped, or contains("ΔΩΡ") misses "(Δώρα)")
@@ -402,19 +436,17 @@ class SenErpEnricher(
             docs[docId] = ErpDoc(
                 start = SenExports.parseDate(sld.value(row, "TDOEKTELESISDATE")),
                 end = SenExports.parseDate(sld.value(row, "TDOOTHERDATE")),
-                qtyA = sld.value(row, "TDOQTYA").replace(",", ".").toDoubleOrNull()?.toLong()?.takeIf { it > 0 },
                 gift = giftByDotId[sld.value(row, "DOTID")],
             )
         }
 
-        data class Update(val id: Long, val start: LocalDate?, val end: LocalDate?, val gift: Boolean?, val qty: Long?)
+        data class Update(val id: Long, val start: LocalDate?, val end: LocalDate?, val gift: Boolean?)
 
         val updates = ArrayList<Update>()
         c.createStatement().use { st ->
             st.executeQuery(
                 """
-                SELECT ct.id, ct.legacy_docid, ct.start_date, ct.end_date, ct.dates_provisional, ct.is_gift,
-                       (SELECT MAX(cl.desired_qty) FROM $schema.contract_lines cl WHERE cl.contract_id = ct.id) AS line_qty
+                SELECT ct.id, ct.legacy_docid, ct.start_date, ct.end_date, ct.dates_provisional, ct.is_gift
                 FROM $schema.contracts ct WHERE ct.legacy_docid IS NOT NULL
                 """.trimIndent()
             ).use { rs ->
@@ -435,18 +467,15 @@ class SenErpEnricher(
                     if (period == null) s.contractsNoErpDates++
 
                     val giftFix = doc.gift?.takeIf { it != rs.getBoolean("is_gift") }
-                    val qtyFill = doc.qtyA?.takeIf { rs.getLong("line_qty") == 0L }
 
-                    if (!periodChanged && giftFix == null && qtyFill == null) continue
+                    if (!periodChanged && giftFix == null) continue
                     if (periodChanged) s.contractsDated++
                     if (giftFix != null) s.contractsGiftFixed++
-                    if (qtyFill != null) s.contractsQtySet++
                     updates += Update(
                         id = rs.getLong("id"),
                         start = if (periodChanged) period!!.start else null,
                         end = if (periodChanged) period!!.end else null,
                         gift = giftFix,
-                        qty = qtyFill,
                     )
                 }
             }
@@ -475,14 +504,62 @@ class SenErpEnricher(
                 }
                 ps.executeBatch()
             }
-            c.prepareStatement(
-                "UPDATE $schema.contract_lines SET desired_qty = ? WHERE contract_id = ? AND (desired_qty = 0 OR desired_qty IS NULL)"
-            ).use { ps ->
+        }
+        log(
+            "contracts: ${s.contractsExamined} with a legacy doc id - ${s.contractsDated} get their real ERP " +
+                "period, ${s.contractsGiftFixed} a corrected gift flag " +
+                "(${s.contractsNoErpDates} in the ERP without dates, ${s.contractsNotInSld} not in the export)" +
+                if (apply) "" else "  [DRY RUN]"
+        )
+    }
+
+    // ── phase 3b: per-product-line agreed quantities ─────────────────────────
+
+    /**
+     * The agreed quantity of each PRODUCT LINE, from the ERP's own line rows
+     * (SSD STDQTYA), joined the faithful way: `(document, lineno)` - our
+     * contract_lines mirror the legacy z_commercials view, so real lines
+     * match directly. Fallback lines (line_no >= 1000) have no ERP row and
+     * keep 0.
+     */
+    private fun enrichLineQuantities(ssd: SenTable, apply: Boolean, s: Summary) {
+        val qtyByDocLine = HashMap<String, Long>(ssd.rows.size)
+        for (row in ssd.rows) {
+            val doc = ssd.value(row, "DOCID")
+            val line = ssd.value(row, "LINENO")
+            if (doc.isEmpty() || line.isEmpty()) continue
+            val qty = ssd.value(row, "STDQTYA").replace(",", ".").toDoubleOrNull()?.toLong() ?: continue
+            if (qty > 0) qtyByDocLine[doc + " " + line] = qty
+        }
+
+        data class Update(val lineId: Long, val qty: Long)
+
+        val updates = ArrayList<Update>()
+        c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT cl.id, cl.line_no, cl.desired_qty, ct.legacy_docid
+                FROM $schema.contract_lines cl
+                JOIN $schema.contracts ct ON ct.id = cl.contract_id
+                WHERE ct.legacy_docid IS NOT NULL AND cl.line_no < 1000
+                """.trimIndent()
+            ).use { rs ->
+                while (rs.next()) {
+                    val qty = qtyByDocLine[rs.getLong("legacy_docid").toString() + " " + rs.getInt("line_no")]
+                        ?: continue
+                    if (qty == rs.getLong("desired_qty")) continue
+                    updates += Update(rs.getLong("id"), qty)
+                }
+            }
+        }
+        s.contractsQtySet = updates.size
+
+        if (apply && updates.isNotEmpty()) {
+            c.prepareStatement("UPDATE $schema.contract_lines SET desired_qty = ? WHERE id = ?").use { ps ->
                 var batched = 0
                 for (u in updates) {
-                    if (u.qty == null) continue
                     ps.setLong(1, u.qty)
-                    ps.setLong(2, u.id)
+                    ps.setLong(2, u.lineId)
                     ps.addBatch()
                     if (++batched % 500 == 0) ps.executeBatch()
                 }
@@ -490,9 +567,7 @@ class SenErpEnricher(
             }
         }
         log(
-            "contracts: ${s.contractsExamined} with a legacy doc id - ${s.contractsDated} get their real ERP " +
-                "period, ${s.contractsQtySet} their agreed quantity, ${s.contractsGiftFixed} a corrected gift flag " +
-                "(${s.contractsNoErpDates} in the ERP without dates, ${s.contractsNotInSld} not in the export)" +
+            "product lines: ${s.contractsQtySet} lines got their agreed quantity from the ERP line rows" +
                 if (apply) "" else "  [DRY RUN]"
         )
     }

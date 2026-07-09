@@ -207,3 +207,61 @@ is self-sufficient. Per station schema:
   existing `cell_date` indexing strategy, but the migration tool must stream
   (the dumps' multi-row INSERTs are already ideal for LOAD-style replay into
   a scratch schema, then transform via SQL).
+
+## Schema correspondence — our DB derives from the dumps (2026-07-09)
+
+THE RULE (owner's directive): our station schema IS an evolution of the
+legacy MySQL structure. The SEN (Oracle ERP) exports only FILL what the
+legacy app fetched live from the ERP (customers, contracts, contract
+products) — they never reshape the model. When adding anything, find the
+legacy table first and mirror it.
+
+| Legacy MySQL            | Ours              | Notes |
+|-------------------------|-------------------|-------|
+| `messages`              | `spots`           | 1:1. `messageTypeID` → `spot_type_id` (REFERENCE, never frozen text); `contractID`+`contractNO` → `contract_line_id`; `cusID` → `customer_id` (end client on triangular). |
+| `schedule`              | `placements`      | 1:1. showDate/showTime/showOrder → break_id+position (`break_slots` materializes the time grid the legacy app derived). |
+| `programtypes`          | `spot_types` + `programs` | The legacy catalog is the ERP MCI class list (messages.messageTypeID AND schedule.programID both point at it). `spot_types.sales_item` = the ERP item name (STI, 1:1 by MCIID) — the SEN gap-fill. ⚠ TWO mirrors of one legacy table: candidate for merging into ONE catalog. |
+| `docref`                | `contracts`       | docid → legacy_docid, docno → number, dotid → doc_type, traid → customer_id. SEN fills periods/qty/gift. |
+| `z_commercials`         | ⚠ (contract_lines) | z_commercials IS the contract-PRODUCTS table (doc lines, mciid = item class — 1:1 with SSD lines). Our `contract_lines` is a pseudo-mirror (one line per contract keyed by the doc NUMBER from messages.contractNO). Deviation to fix: contract_lines should mirror z_commercials (contract, lineno, spot_type_id) and a spot's product = (contract, spot_type) at query time — needs re-migration. |
+| `sld`                   | `contracts.is_gift` | Absorbed (dotid → gift); SDT completes the 21 doc types in use. |
+| `cus`                   | `customers` contact fields | Absorbed; customers themselves are the SEN gap-fill (legacy had NO customer names). |
+| `calendar_excluded_docs`| `contracts.exclude_from_reports` + `erp_excluded_docs` | Absorbed + holding table. |
+| `roh_comments`          | `flow_comments`   | 1:1. |
+| `roh_print_history`     | `print_audit`     | 1:1. |
+| `emailhistory`          | `email_log`       | 1:1 (bodies capped per customer). |
+| `zones`, `zonefillers`  | `zones`, `zone_fillers` | 1:1, full price history. |
+| `usr`, `emailsetup`, `generic` | central auth DB / server.yaml | Replaced by hosting-level equivalents. |
+| `commercials_calendar(_final)` | — (partly absorbed) | The ΗΜΕΡΟΛΟΓΙΟ flattened export; its agelVal/eidikosVal/zoneVal live on contract_lines. Also a fallback source of agency/client pairs + ΑΦΜ. |
+| `zoneprograms(+days/parts/list*)` | — NOT migrated | The daily programme guide (EPG: showdate, timefrom, progid → programtypes) — 43 MB of real data, biggest unmigrated feature. |
+| `customermessages(+log)` | — NOT migrated | Per (customer, year, month) message texts (schedule-email era) + log. |
+| `media_services(_final)` | — NOT migrated | Flattened per-airing export (media-services feed). |
+| `pelates_of_pelates`    | — (empty)         | MEMORY table, dumps empty. |
+
+### Column-level correspondence (verified 2026-07-09, v2)
+
+- `messages` → `spots`: id→legacy_id, messageTypeID→spot_type_id (catalog ref),
+  contractID→(contract via product line), contractNO→(the DOC number - superseded
+  by the real line resolution), cusID→customer_id (end client on triangular),
+  forcePosition→force_position (NULL for -1), hidden, descr→description,
+  duration→duration_seconds, memo. Dropped deliberately: lastaction (audit ts).
+- `schedule` → `placements`: id→legacy_id, messageID→spot_id, **docID+lineno→
+  contract_line_id (the airing's ACTUAL charge - the same spot airs under
+  different contracts/products; verified populated on 100% of sampled rows)**,
+  programID→program_id, showDate→show_date, showTime→break_id (via the
+  materialized grid), showOrder→position (renumbered per cell), durationSecs,
+  played, hideSchedule→hidden. Dropped: lastaction, timeOfEntrance.
+- `z_commercials` → `contract_lines`: docid→contract_id, lineno→line_no,
+  mciid→spot_type_id; docnumber/traid are redundant (live on the contract).
+  Fallback lines for uncovered (doc, type) pairs use line_no = 1000 + type id.
+- `programtypes` → `spot_types` (id→legacy_id, descr→name; + SEN sales_item/
+  item_code) and `programs` (colour/visible view for placements.program_id) -
+  the dual mirror is the one REMAINING soft deviation, scheduled for merge.
+- `docref` → `contracts`: docid→legacy_docid, docno→number, dotid→doc_type,
+  traid→customer_id, targetleeid/pelatislee→triangular resolution.
+- `emailhistory` → `email_log`: cusID→customer_code (ERP TRACODEs after
+  enrichment), recipientEmailAddress→recipient, body→body_html (capped),
+  subject, entryDate/Time→created_at, periodRequested→year/month. Dropped:
+  emailFrom, reportType.
+- `roh_comments`/`roh_print_history`/`zones`/`zonefillers`/`cus`/`sld`/
+  `calendar_excluded_docs`: absorbed as listed in the table above, all columns
+  either mapped or deliberately dropped (timestamps).

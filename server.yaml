@@ -96,6 +96,6 @@ stations:
 
   - id: my-sample
     name: "My Sample"
-    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_migrated?useUnicode=true&characterEncoding=utf8"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_v2?useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123

@@ -78,6 +78,12 @@ class LegacyTransformer(
         log("Migrating customers (recovering real names where possible)...")
         val (customers, customersSynthetic, endClients) = migrateCustomers()
 
+        // The type catalog MUST precede the product lines: lines carry
+        // spot_type_id (z.mciid) and spots resolve their default line by type.
+        log("Migrating the spot-type catalog (legacy programtypes = the ERP item classes)...")
+        val spotTypes = migrateSpotTypes()
+        log("  $spotTypes spot types (the SEN import adds each type's ERP sales item)")
+
         log("Migrating contracts and lines...")
         val (contracts, contractsSynthetic) = migrateContracts()
         val lines = migrateContractLines()
@@ -500,29 +506,60 @@ class LegacyTransformer(
         // - they are the EXTERNAL ERP's document ids, fed to the staging
         // commercials_calendar. Preserve the raw list per station so the
         // future ERP import can set contracts.exclude_from_reports from it.
-        c.createStatement().use { st ->
-            st.executeUpdate("CREATE TABLE IF NOT EXISTS $t.erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB")
-            val kept = st.executeUpdate(
-                "INSERT IGNORE INTO $t.erp_excluded_docs(erp_docid) SELECT docid FROM $s.calendar_excluded_docs"
-            )
-            if (kept > 0) log("  $kept ERP doc ids preserved in erp_excluded_docs (report exclusions, applied at ERP import)")
+        if (tableExists("calendar_excluded_docs")) {
+            c.createStatement().use { st ->
+                st.executeUpdate("CREATE TABLE IF NOT EXISTS $t.erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB")
+                val kept = st.executeUpdate(
+                    "INSERT IGNORE INTO $t.erp_excluded_docs(erp_docid) SELECT docid FROM $s.calendar_excluded_docs"
+                )
+                if (kept > 0) log("  $kept ERP doc ids preserved in erp_excluded_docs (report exclusions, applied at ERP import)")
+            }
         }
 
         return rows.size to synthetic
     }
 
-    private fun migrateContractLines(): Int =
-        c.createStatement().use { st ->
+    /**
+     * Contract PRODUCT lines, straight from the dump's `z_commercials` (the
+     * owner's Oracle view over the ERP document lines): one row per
+     * (document, lineno), each selling ONE item class (mciid -> spot_types).
+     * A fallback line (line_no = 1000 + type id, clearly synthetic) is added
+     * for any (document, type) pair the view did not carry, so every message
+     * still finds its product.
+     */
+    private fun migrateContractLines(): Int {
+        val real = if (tableExists("z_commercials")) {
+            c.createStatement().use { st ->
+                st.executeUpdate(
+                    """
+                    INSERT INTO $t.contract_lines(contract_id, line_no, spot_type_id)
+                    SELECT DISTINCT tc.id, z.lineno, tst.id
+                    FROM $s.z_commercials z
+                    JOIN $t.contracts tc ON tc.legacy_docid = z.docid
+                    LEFT JOIN $t.spot_types tst ON tst.legacy_id = z.mciid
+                    """.trimIndent()
+                )
+            }
+        } else 0
+        val fallback = c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT INTO $t.contract_lines(contract_id, line_no)
-                SELECT DISTINCT tc.id, m.contractNO
+                INSERT INTO $t.contract_lines(contract_id, line_no, spot_type_id)
+                SELECT DISTINCT tc.id, 1000 + m.messageTypeID, tst.id
                 FROM $s.messages m
                 JOIN $t.contracts tc ON tc.legacy_docid = m.contractID
-                WHERE m.forTV = $forTv AND m.contractID > 0 AND m.contractNO > 0
+                LEFT JOIN $t.spot_types tst ON tst.legacy_id = m.messageTypeID
+                WHERE m.forTV = $forTv AND m.contractID > 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM $t.contract_lines cl
+                      WHERE cl.contract_id = tc.id AND cl.spot_type_id = tst.id
+                  )
                 """.trimIndent()
             )
         }
+        log("  $real product lines from z_commercials + $fallback fallback lines (line_no >= 1000)")
+        return real + fallback
+    }
 
     /**
      * Provisional contract-period backfill: the legacy MySQL has no contract
@@ -561,22 +598,49 @@ class LegacyTransformer(
      * instead; the payer stays reachable via the contract
      * (contracts.customer_id = traid).
      */
+    /**
+     * The spot-type CATALOG: legacy `programtypes` is the ERP's item-class
+     * list (MCI - `messages.messageTypeID` points here, and its `sen` index
+     * is named after the ERP). Kept as a REFERENCE table, exactly like the
+     * legacy model: a spot's type/item is a lookup, never frozen text. The
+     * SEN import later fills each type's `sales_item` from the ERP item
+     * catalog (STI is 1:1 with the class).
+     */
+    private fun migrateSpotTypes(): Int {
+        if (!tableExists("programtypes")) return 0
+        return c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $t.spot_types(legacy_id, name)
+                SELECT id, descr FROM $s.programtypes
+                """.trimIndent()
+            )
+        }
+    }
+
     private fun migrateSpots(): Int =
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
                 INSERT INTO $t.spots(legacy_id, customer_id, contract_line_id, description,
-                                     duration_seconds, spot_type, flow, hidden, force_position, memo)
+                                     duration_seconds, spot_type, spot_type_id, flow, hidden, force_position, memo)
                 SELECT m.id, COALESCE(tend.id, tcu.id), tl.id, m.descr, m.duration,
-                       COALESCE(pt.descr, ''), 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
+                       COALESCE(pt.descr, ''), tst.id, 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
                 FROM $s.messages m
                 JOIN $t.customers tcu ON tcu.legacy_id = GREATEST(m.cusID, 0)
                 LEFT JOIN $s.docref d ON d.docid = m.contractID
                                      AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                 LEFT JOIN $t.customers tend ON tend.legacy_lee_id = d.targetleeid
                 LEFT JOIN $t.contracts tct ON tct.legacy_docid = m.contractID
-                LEFT JOIN $t.contract_lines tl ON tl.contract_id = tct.id AND tl.line_no = m.contractNO
                 LEFT JOIN $s.programtypes pt ON pt.id = m.messageTypeID
+                LEFT JOIN $t.spot_types tst ON tst.legacy_id = m.messageTypeID
+                -- the message's CURRENT default product: its contract's line
+                -- selling the message's item class (real line first, fallback after)
+                LEFT JOIN $t.contract_lines tl ON tl.id = (
+                    SELECT cl.id FROM $t.contract_lines cl
+                    WHERE cl.contract_id = tct.id AND cl.spot_type_id = tst.id
+                    ORDER BY cl.line_no LIMIT 1
+                )
                 WHERE m.forTV = $forTv
                 """.trimIndent()
             )
@@ -587,17 +651,21 @@ class LegacyTransformer(
             st.executeUpdate(
                 """
                 INSERT INTO $t.placements(legacy_id, spot_id, break_id, show_date, position,
-                                          duration_seconds, program_id, played, hidden)
+                                          duration_seconds, contract_line_id, program_id, played, hidden)
                 SELECT sch.id, ts.id, tb.id, sch.showDate,
                        ROW_NUMBER() OVER (
                            PARTITION BY sch.showDate, HOUR(sch.showTime), MINUTE(sch.showTime)
                            ORDER BY sch.showOrder, sch.id
                        ) - 1,
-                       sch.durationSecs, tp.id, sch.played, sch.hideSchedule
+                       sch.durationSecs, pcl.id, tp.id, sch.played, sch.hideSchedule
                 FROM $s.schedule sch
                 JOIN $t.spots ts ON ts.legacy_id = sch.messageID
                 JOIN $t.break_slots tb ON tb.hour_of_day = HOUR(sch.showTime)
                                       AND tb.minute_of_hour = MINUTE(sch.showTime)
+                -- the airing's ACTUAL charge: schedule.docID + lineno name the
+                -- product line directly (NULL falls back to the spot's default)
+                LEFT JOIN $t.contracts pct ON pct.legacy_docid = sch.docID
+                LEFT JOIN $t.contract_lines pcl ON pcl.contract_id = pct.id AND pcl.line_no = sch.lineno
                 LEFT JOIN $t.programs tp ON tp.legacy_id = sch.programID
                 WHERE sch.showDate >= '1900-01-01'
                 """.trimIndent()

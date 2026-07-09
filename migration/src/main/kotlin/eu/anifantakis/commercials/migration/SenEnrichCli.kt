@@ -52,7 +52,8 @@ internal fun printSenSummary(summary: SenErpEnricher.Summary, apply: Boolean) {
           ERP has no dates     ${summary.contractsNoErpDates}
           not in export        ${summary.contractsNotInSld}
           provisional backfill ${summary.contractsBackfilled}
-        spot sales items       ${summary.spotsItemSet} (${summary.spotsItemViaLines} via exact line links)
+        spot-type catalog      ${summary.spotTypesEnriched} entries got their ERP sales item
+          spots linked to type ${summary.spotsTypeLinked} (adoption of a pre-catalog station)
         rejected export records ${summary.rejectedRecords}
         ──────────────────────────────────────────────
         """.trimIndent()
