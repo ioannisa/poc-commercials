@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.mcp
 
+import eu.anifantakis.commercials.mcp.tools.ALL_MCP_TOOLS
+import eu.anifantakis.commercials.mcp.tools.ToolContext
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
@@ -10,8 +12,10 @@ import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
  * client session (each transport binding calls this), scoped to [caller]'s
  * identity so every tool is grant-checked, and backed by [services].
  *
- * Registers the read query tools today; report generation and guarded mutations
- * are added in later phases.
+ * The tool set is data-driven: every entry in [ALL_MCP_TOOLS] is registered,
+ * except that mutating tools are dropped unless [McpToolServices.mutationsEnabled]
+ * (default-deny). Adding a functionality means adding a `tools/<name>/` folder
+ * and listing its object in the registry - this wiring never changes.
  */
 fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Server {
     val server = Server(
@@ -22,10 +26,12 @@ fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Ser
             ),
         ),
     )
-    server.registerReadTools(caller, services)
-    server.registerReportTools(caller, services)
-    // Write tools only when the operator has opted in (default-deny).
-    if (services.mutationsEnabled) server.registerMutationTools(caller, services)
+    val ctx = ToolContext(caller, services)
+    ALL_MCP_TOOLS
+        .filter { services.mutationsEnabled || !it.mutating }
+        .forEach { tool ->
+            server.addTool(tool.name, tool.description, tool.inputSchema) { req -> tool.handle(ctx, req) }
+        }
     return server
 }
 

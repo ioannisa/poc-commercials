@@ -23,20 +23,6 @@ data class StationAccess(val data: StationDataSource, val grant: StationGrant)
 data class StationInfo(val id: String, val name: String, val role: String, val clientCode: String?)
 
 /**
- * A break in the airtime grid. Occupancy fields are null when no date was given
- * (pure grid discovery) and populated (customer-scoped) when a date is.
- */
-data class BreakInfo(
-    val label: String,
-    val hour: Int,
-    val minute: Int,
-    val zone: String,
-    val spotCount: Int?,
-    val totalDurationSeconds: Int?,
-    val programName: String?,
-)
-
-/**
  * The backend surface the MCP tools call. Centralises station resolution and
  * authorization, mirroring the server's `Security.stationAccessOrRespond` and
  * role checks so the HTTP and stdio transports enforce the SAME rules.
@@ -116,53 +102,6 @@ class McpToolServices(
             spots.filter { it.clientCode == access.grant.clientCode }
         } else {
             spots
-        }
-    }
-
-    /**
-     * The station's breaks, ascending by air time — the discovery counterpart of
-     * `spots_in_break`/`generate_break_report` (which need an exact label).
-     *
-     * - no [date]  -> just the grid (label + zone); occupancy fields null.
-     * - with [date] -> each break carries that day's spot count / duration /
-     *   programme, customer-scoped (a CUSTOMER_VIEWER sees only THEIR spots).
-     * - [onlyWithSpots] keeps only occupied breaks (requires a date).
-     * - [after] ("HH:mm") keeps only breaks later than that time; the FIRST
-     *   result is the "next break".
-     */
-    fun listBreaks(
-        access: StationAccess,
-        date: LocalDate?,
-        onlyWithSpots: Boolean,
-        after: String?,
-    ): List<BreakInfo> {
-        if (onlyWithSpots && date == null) {
-            throw McpToolException("onlyWithSpots needs a 'date' (occupancy is per-day).")
-        }
-        val afterMinutes = after?.let { parseHhMm(it) }
-        val slots = access.data.loadBreaks()
-            .sortedBy { it.hour * 60 + it.minute }
-            .filter { afterMinutes == null || it.hour * 60 + it.minute > afterMinutes }
-
-        if (date == null) {
-            return slots.map { BreakInfo(it.label, it.hour, it.minute, it.zone.name, null, null, null) }
-        }
-
-        val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
-        val scoped = isCustomerScoped(access.grant)
-        return slots.mapNotNull { slot ->
-            var spots = byKey[slot.id to date].orEmpty()
-            if (scoped) spots = spots.filter { it.clientCode == access.grant.clientCode }
-            if (onlyWithSpots && spots.isEmpty()) return@mapNotNull null
-            BreakInfo(
-                label = slot.label,
-                hour = slot.hour,
-                minute = slot.minute,
-                zone = slot.zone.name,
-                spotCount = spots.size,
-                totalDurationSeconds = spots.sumOf { it.durationSeconds },
-                programName = spots.firstOrNull()?.programName,
-            )
         }
     }
 

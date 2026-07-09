@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.mcp
+package eu.anifantakis.commercials.mcp.tools.feature.generate_break_report
 
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.reports.model.ProgramFlow
@@ -18,6 +18,9 @@ import java.time.LocalDate
  * also builds against - the two cannot drift apart. Only the input mapping
  * differs: the client starts from grid `CommercialItem`s, this from DB
  * [CommercialRow]s.
+ *
+ * Lives beside [GenerateBreakReportTool] because it is that tool's private
+ * assembly step (its only caller).
  */
 object BreakReportAssembler {
 

@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.mcp
+package eu.anifantakis.commercials.mcp.tools.feature.generate_break_report
 
 import eu.anifantakis.commercials.reports.model.ProgramFlow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
