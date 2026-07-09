@@ -155,8 +155,8 @@ deployed publicly with proper auth.
 
 ## 5. Enabling mutations (write tools)
 
-Default is **read-only** (9 tools). To expose `add_placement`,
-`delete_placement`, `reorder_placements`, `send_schedule_email` (13 tools), set
+Default is **read-only** (11 tools). To expose `add_placement`,
+`delete_placement`, `reorder_placements`, `send_schedule_email` (15 tools), set
 `COMMERCIALS_MCP_MUTATIONS=true` in the server/launcher environment:
 - Claude Code: re-add with an extra `-e COMMERCIALS_MCP_MUTATIONS=true`.
 - Claude Desktop/Cursor: add it to the `env` block.
@@ -178,6 +178,7 @@ write is audit-logged.
 | "Which breaks have spots on 2005-09-12 in my-sample? What's the next one after 12:00?" | `list_breaks` |
 | "Show the spots in the 21:00 break on 2005-09-12 in my-sample" | `spots_in_break` |
 | "Generate the printout for that break" | `generate_break_report` (PDF) |
+| "Print the whole day's program flow for my-sample on 2005-09-12" | `generate_day_report` (PDF) |
 | "How long since customer 00000025 last aired on my-sample? Any active contracts?" | `contract_status` / `party_activity` |
 
 ---
@@ -189,7 +190,7 @@ write is audit-logged.
   Mint a new one (§0) from a server using this `server.yaml`.
 - **Not connected / exits immediately** — MySQL unreachable, or `server.yaml`
   path wrong. Check the launcher’s stderr.
-- **Only 9 tools, expected 13** — mutations are off; set
+- **Only 11 tools, expected 15** — mutations are off; set
   `COMMERCIALS_MCP_MUTATIONS=true` (§5).
 - **Write tool says "Requires full (NORMAL_USER) access"** — the token’s grant
   on that station isn’t NORMAL_USER.

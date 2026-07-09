@@ -42,25 +42,27 @@ All files below are **new**.
 | File | Responsibility |
 |---|---|
 | `di/McpModule.kt` | `val mcpModule` — this module's Koin bindings (`McpToolServices`). Owned by `:mcp` because BOTH entry points load it (the Ktor server and `:mcp-stdio`); each supplies the persistence graph it resolves against. |
-| `CommercialsMcpServer.kt` | `buildCommercialsMcpServer(caller, services): Server` — builds a per-session server, registers read + report tools, and mutation tools only when `services.mutationsEnabled`. |
+| `CommercialsMcpServer.kt` | `buildCommercialsMcpServer(caller, services): Server` — builds a per-session server and registers every tool in `ALL_MCP_TOOLS`, dropping mutating ones unless `services.mutationsEnabled`. |
 | `McpCaller.kt` | Identity wrapper over `AuthUser` (same object the HTTP bearer principal carries), so authz is identical across transports. |
 | `McpToolServices.kt` | The backend facade: `resolveStation` (mirrors `Security.stationAccessOrRespond`: missing→required / no-grant→No access / unhosted→Unknown), `stations`, `isCustomerScoped`/`requireCode` (CUSTOMER_VIEWER scoping), `resolveBreak`/`breakSpots`, `generatePdf`/`saveReport`, and the mutation guardrails `requireStaff`/`smtpFor`/`stationName`/`audit`. Also the top-level `mcpMutationsEnabled()` (reads `COMMERCIALS_MCP_MUTATIONS`, default-deny). |
 | `ToolSupport.kt` | Infrastructure: `runTool`/`runToolBlocks` (run OFF the transport thread on `Dispatchers.IO` — JDBC is blocking — and map `McpToolException`→clean tool error, anything else→logged generic error); `Args` typed arg parsing (`string/int/long/bool/longList/longListOrNull`); `dryRun` payload; schema builders `inputSchema`/`prop`/`propArray`; `parseIsoDate`. |
-| `ReadTools.kt` | The 8 query tools (see §5). |
-| `ReportTools.kt` | `generate_break_report` — assembles rows, calls `ReportEngine.generatePdf`, returns a JSON summary + the PDF as an `EmbeddedResource` (`application/pdf`), and writes it to the report output dir. |
-| `BreakReportAssembler.kt` | Server-side Program-Flow assembly (`CommercialRow` → `reportcore.ReportRequest`). Builds against the shared **`:reports-model`** `ProgramFlow` contract (JRXML names, formatters, `FLOW_ROH`, notes rule) that `reports-client` also uses — only the input mapping differs. |
-| `MutationTools.kt` | The 4 write tools (see §5), each: `requireStaff` (NORMAL_USER) + `confirm`/dry-run + audit. |
+| `tools/McpTool.kt` | The `McpTool` contract (`name`/`description`/`inputSchema`/`mutating` + `handle`) and `ToolContext(caller, services)`. |
+| `tools/McpToolRegistry.kt` | `ALL_MCP_TOOLS` — the single registry the server iterates. Adding a tool = drop its file in `tools/feature/` + one line here. |
+| `tools/feature/*.kt` | One self-contained `object <Name>Tool : McpTool` per functionality (schema + handler + its own single-use logic, e.g. `ListBreaksTool` holds the break-discovery logic). The 9 query tools + the 4 write tools (`requireStaff` NORMAL_USER + `confirm`/dry-run + audit) live here as single files. |
+| `tools/feature/generate_break_report/`, `tools/feature/generate_day_report/` | The 2 report tools, each in its own subfolder (tool + a pure server-side assembler, `CommercialRow` → `reportcore.ReportRequest`, built against the shared **`:reports-model`** `ProgramFlow` contract that `reports-client` also uses). Each returns a JSON summary + the PDF as an `EmbeddedResource` (`application/pdf`) and writes it to the report output dir. `generate_day_report` = the whole-day batch (every occupied break, grouped by `timeSlot`, in one PDF); `generate_break_report` = the single-break special case. |
 | _(schedule-email assembly)_ | Moved out to the shared **`:schedule-email`** module (`ScheduleEmailAssembler`), used by BOTH this tool and the server's REST route. It is pure: the REST route calls `ensureMonthSeeded` itself; the MCP tool deliberately does not (never fabricate demo data for a real email). |
 
-### Tests (`mcp/src/test/kotlin/…/mcp/`) — 18 tests
+### Tests (`mcp/src/test/kotlin/…/mcp/`) — 36 tests
 
 | File | Covers |
 |---|---|
-| `McpTestSupport.kt` | DB-free fixtures (`caller`, `grant`, `station`, `registryOf`). |
-| `McpToolServicesTest.kt` (6) | station listing + `resolveStation` error paths + `requireCode` scoping, no live DB. |
+| `McpTestSupport.kt` | DB-free fixtures: `caller`/`grant`, port fakes (`FakeStationDataSource`/`FakeStationDirectory`/`FakeReportRenderer`/`FakeReportStore`/`FakeEmailSender`), the `services(...)` factory, `commercial(...)`. |
+| `McpToolServicesTest.kt` (12) | station listing + `resolveStation` error paths + `requireCode`/`requireStaff` + `resolveBreak`/`breakSpots` (incl. CUSTOMER_VIEWER scoping), no live DB. |
 | `ToolSupportTest.kt` (5) | `Args` scalar + array parsing, `runTool` success/error mapping. |
-| `BreakReportAssemblerTest.kt` (4) | template param/field names, per-row totals, `FLOW_ROH`→notes, `excludeFromReports`. |
-| `MutationGuardTest.kt` (3) | kill switch tool-count (9 vs 13), `requireStaff` rejects non-NORMAL_USER. |
+| `tools/feature/ListBreaksTest.kt` (9) | break discovery: grid, per-day occupancy, `onlyWithSpots`, `after` next-break, customer scoping. |
+| `tools/feature/generate_break_report/BreakReportAssemblerTest.kt` (4) | template param/field names, per-row totals, `FLOW_ROH`→notes, `excludeFromReports`. |
+| `tools/feature/generate_day_report/DayReportAssemblerTest.kt` (4) | multi-break grouping in air order, per-break group totals, `excludeFromReports` drop + empty-break skip. |
+| `MutationGuardTest.kt` (2) | kill switch tool-count (11 vs 15) — write tools absent when mutations off. |
 
 ---
 
@@ -100,7 +102,7 @@ All files below are **new**.
 
 ---
 
-## 5. Tools (14)
+## 5. Tools (15)
 
 **Query (9)** — each reuses an existing `StationDb` read; CUSTOMER_VIEWER callers only see their own client code:
 `list_stations`, `search_parties`, `party_activity`, `party_contracts`,
@@ -111,7 +113,7 @@ label): it lists a station's grid ascending by time; with a `date` each break ca
 spot count/duration/programme; `onlyWithSpots` shows just occupied breaks; `after="HH:mm"` returns
 the next break. Essential for migrated stations whose air times are off-grid (e.g. `22:05`, `21:01`).
 
-**Report (1):** `generate_break_report` — headless Program-Flow PDF for one break.
+**Reports (2):** `generate_break_report` — headless Program-Flow PDF for one break; `generate_day_report` — the whole day as one PDF (every occupied break, in air order, one section per break; customer accounts get only their own spots).
 
 **Mutation (4)** — only when mutations are enabled; NORMAL_USER + `confirm`/dry-run + audit:
 `add_placement`, `delete_placement`, `reorder_placements`, `send_schedule_email`.
@@ -193,7 +195,7 @@ Get a token via `POST /api/auth/login` (e.g. super-admin `su`/`1234` from `serve
   placements (real DB); `generate_break_report` → 57 KB `%PDF-` (embedded + on disk).
 - **stdio:** spawned the launcher, MCP handshake over stdin/stdout, logs on stderr,
   same read results, clean shutdown on EOF.
-- **Mutations:** kill switch (13 tools on / 9 off); `add_placement` dry-run (no
+- **Mutations:** kill switch (15 tools on / 11 off); `add_placement` dry-run (no
   write) → confirm (placement #33480) → `spots_in_break`=1 → `delete_placement` →
   `spots_in_break`=0; `send_schedule_email` dry-run rendered ≈1.576 MB HTML,
   byte-identical to the existing REST preview, and did NOT send.

@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.mcp.tools.feature.ContractSpotsTool
 import eu.anifantakis.commercials.mcp.tools.feature.ContractStatusTool
 import eu.anifantakis.commercials.mcp.tools.feature.DeletePlacementTool
 import eu.anifantakis.commercials.mcp.tools.feature.generate_break_report.GenerateBreakReportTool
+import eu.anifantakis.commercials.mcp.tools.feature.generate_day_report.GenerateDayReportTool
 import eu.anifantakis.commercials.mcp.tools.feature.ListBreaksTool
 import eu.anifantakis.commercials.mcp.tools.feature.ListStationsTool
 import eu.anifantakis.commercials.mcp.tools.feature.PartyActivityTool
@@ -36,8 +37,9 @@ val ALL_MCP_TOOLS: List<McpTool> = listOf(
     ListBreaksTool,
     SpotsInBreakTool,
     StationFootprintTool,
-    // -- report --
+    // -- reports --
     GenerateBreakReportTool,
+    GenerateDayReportTool,
     // -- writes (mutating; registered only when mutations are enabled) --
     AddPlacementTool,
     DeletePlacementTool,
