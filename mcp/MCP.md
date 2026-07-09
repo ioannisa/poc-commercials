@@ -100,11 +100,16 @@ All files below are **new**.
 
 ---
 
-## 5. Tools (13)
+## 5. Tools (14)
 
-**Query (8)** — each reuses an existing `StationDb` read; CUSTOMER_VIEWER callers only see their own client code:
+**Query (9)** — each reuses an existing `StationDb` read; CUSTOMER_VIEWER callers only see their own client code:
 `list_stations`, `search_parties`, `party_activity`, `party_contracts`,
-`contract_spots`, `contract_status`, `spots_in_break`, `station_footprint`.
+`contract_spots`, `contract_status`, `list_breaks`, `spots_in_break`, `station_footprint`.
+
+`list_breaks` is the break-DISCOVERY tool (the others that touch a break need an exact `HH:mm`
+label): it lists a station's grid ascending by time; with a `date` each break carries that day's
+spot count/duration/programme; `onlyWithSpots` shows just occupied breaks; `after="HH:mm"` returns
+the next break. Essential for migrated stations whose air times are off-grid (e.g. `22:05`, `21:01`).
 
 **Report (1):** `generate_break_report` — headless Program-Flow PDF for one break.
 

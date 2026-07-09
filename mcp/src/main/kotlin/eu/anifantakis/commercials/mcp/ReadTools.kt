@@ -215,6 +215,44 @@ internal fun Server.registerReadTools(caller: McpCaller, services: McpToolServic
     }
 
     addTool(
+        name = "list_breaks",
+        description = "Discover a station's breaks (the airtime grid), ascending by time. Without a date " +
+            "you get the grid (label + zone). With date='YYYY-MM-DD' each break also carries that day's " +
+            "spot count, total duration and programme (customer accounts see only their own spots). Use " +
+            "onlyWithSpots=true (needs a date) to list just the occupied breaks, and after='HH:mm' to find " +
+            "the NEXT break after a time (the first result). The 'label' values feed spots_in_break / " +
+            "generate_break_report.",
+        inputSchema = inputSchema(required = listOf("station")) {
+            prop("station", "string", "Station id (see list_stations).")
+            prop("date", "string", "Optional date YYYY-MM-DD; add it for per-day occupancy.")
+            prop("onlyWithSpots", "boolean", "Only breaks that have spots that date (requires date). Default false.")
+            prop("after", "string", "Only breaks later than this HH:mm; the first result is the next break.")
+        },
+    ) { req ->
+        runTool("list_breaks") {
+            val a = req.args
+            val access = services.resolveStation(caller, a.stringOrNull("station"))
+            val date = a.stringOrNull("date")?.let { parseIsoDate(it) }
+            val breaks = services.listBreaks(access, date, a.bool("onlyWithSpots", false), a.stringOrNull("after"))
+            buildJsonObject {
+                date?.let { put("date", it.toString()) }
+                put("breakCount", breaks.size)
+                put("breaks", buildJsonArray {
+                    breaks.forEach { b ->
+                        addJsonObject {
+                            put("label", b.label)
+                            put("zone", b.zone)
+                            b.spotCount?.let { put("spotCount", it) }
+                            b.totalDurationSeconds?.let { put("totalDurationSeconds", it) }
+                            b.programName?.let { put("programName", it) }
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    addTool(
         name = "spots_in_break",
         description = "The spots scheduled in a specific break on a specific date, in air order. " +
             "time is the break label 'HH:mm' (e.g. '17:30'); date is 'YYYY-MM-DD'.",

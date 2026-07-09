@@ -175,6 +175,7 @@ write is audit-logged.
 | "Which stations can I access?" | `list_stations` |
 | "In my-sample, how many placements and over what date range?" | `station_footprint` |
 | "Search parties containing 'ΝΟΒΑ' on crete-tv" | `search_parties` |
+| "Which breaks have spots on 2005-09-12 in my-sample? What's the next one after 12:00?" | `list_breaks` |
 | "Show the spots in the 21:00 break on 2005-09-12 in my-sample" | `spots_in_break` |
 | "Generate the printout for that break" | `generate_break_report` (PDF) |
 | "How long since customer 00000025 last aired on my-sample? Any active contracts?" | `contract_status` / `party_activity` |
