@@ -73,6 +73,10 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.material.icons.extended)
 
+            // Shared Program Flow report contract (JRXML names, formatters, notes)
+            // - the single home shared with the backend's :mcp assembler.
+            implementation(projects.reportsModel)
+
             // Grid models are the factory's input; session/config drive the
             // web client - both appear in public signatures.
             api(projects.core.presentation.grids)

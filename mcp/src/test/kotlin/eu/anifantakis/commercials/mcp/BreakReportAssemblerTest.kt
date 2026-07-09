@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.mcp
 
+import eu.anifantakis.commercials.reports.model.ProgramFlow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
@@ -67,7 +68,7 @@ class BreakReportAssemblerTest {
             date = LocalDate.of(2026, 7, 3),
             breakLabel = "17:30",
             commercials = listOf(
-                row("FLOW SPOT", 30, flow = BreakReportAssembler.FLOW_ROH),
+                row("FLOW SPOT", 30, flow = ProgramFlow.FLOW_ROH),
                 row("PAID SPOT", 30, flow = "ΠΛΗΡΩΜΕΝΟ"),
             ),
         )

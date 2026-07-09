@@ -22,9 +22,11 @@ to run/verify.
 
 | File | Change |
 |---|---|
-| `settings.gradle.kts` | `include(":mcp")`, `include(":mcp-stdio")` |
+| `settings.gradle.kts` | `include(":mcp")`, `include(":mcp-stdio")`, `include(":schedule-email")`, `include(":reports-model")` |
 | `gradle/libs.versions.toml` | version `mcpKotlinSdk = "0.14.0"`; libs `mcp-kotlin-sdk-server`, `ktor-server-sse` |
-| `mcp/build.gradle.kts` | **NEW** — JVM lib. `api(mcp-kotlin-sdk-server)` + `api(projects.persistence)` (their types are in `:mcp`'s public API); `implementation(reportcore, mailer)` |
+| `schedule-email/build.gradle.kts` | **NEW** — JVM lib (`api` persistence + mailer). The single home of the schedule-email assembly (see §7) |
+| `reports-model/build.gradle.kts` | **NEW** — multiplatform lib (android/ios/jvm/js/wasm). The single home of the Program Flow report contract (see §7) |
+| `mcp/build.gradle.kts` | **NEW** — JVM lib. `api(mcp-kotlin-sdk-server)` + `api(projects.persistence)` (their types are in `:mcp`'s public API); `implementation(reportcore, reports-model, schedule-email, mailer, kotlinx-datetime)` |
 | `mcp-stdio/build.gradle.kts` | **NEW** — JVM `application`; `mainClass …mcp.stdio.MainKt`; `implementation(projects.mcp)` + logback; `installDist` used for the launcher |
 
 The SDK artifact brings `ktor-server-sse` + the Ktor `mcp()` helpers
@@ -45,9 +47,9 @@ All files below are **new**.
 | `ToolSupport.kt` | Infrastructure: `runTool`/`runToolBlocks` (run OFF the transport thread on `Dispatchers.IO` — JDBC is blocking — and map `McpToolException`→clean tool error, anything else→logged generic error); `Args` typed arg parsing (`string/int/long/bool/longList/longListOrNull`); `dryRun` payload; schema builders `inputSchema`/`prop`/`propArray`; `parseIsoDate`. |
 | `ReadTools.kt` | The 8 query tools (see §5). |
 | `ReportTools.kt` | `generate_break_report` — assembles rows, calls `ReportEngine.generatePdf`, returns a JSON summary + the PDF as an `EmbeddedResource` (`application/pdf`), and writes it to the report output dir. |
-| `BreakReportAssembler.kt` | Server-side Program-Flow assembly (`CommercialRow` → `reportcore.ReportRequest`). **Duplicate** of the client's `ReportDataFactory` + `toReportPayload` — TODO to extract a shared module (see §7). Holds the backend copy of `FLOW_ROH`. |
+| `BreakReportAssembler.kt` | Server-side Program-Flow assembly (`CommercialRow` → `reportcore.ReportRequest`). Builds against the shared **`:reports-model`** `ProgramFlow` contract (JRXML names, formatters, `FLOW_ROH`, notes rule) that `reports-client` also uses — only the input mapping differs. |
 | `MutationTools.kt` | The 4 write tools (see §5), each: `requireStaff` (NORMAL_USER) + `confirm`/dry-run + audit. |
-| `ScheduleEmailAssembler.kt` | Server-side `ScheduleEmailData` assembly. **Faithful duplicate** of `server`'s `EmailRoutes.assembleScheduleEmail` (`:mcp` can't depend on `server`) — TODO to extract (see §7). Deliberately does NOT call `ensureMonthSeeded` (never fabricate demo data for a real email). |
+| _(schedule-email assembly)_ | Moved out to the shared **`:schedule-email`** module (`ScheduleEmailAssembler`), used by BOTH this tool and the server's REST route. It is pure: the REST route calls `ensureMonthSeeded` itself; the MCP tool deliberately does not (never fabricate demo data for a real email). |
 
 ### Tests (`mcp/src/test/kotlin/…/mcp/`) — 18 tests
 
@@ -132,15 +134,26 @@ the aired range; "how long since customer X renewed" is answered from `lastAired
 
 ---
 
-## 7. Known debt (marked with TODOs in code)
+## 7. Shared modules (duplication removed)
 
-- `BreakReportAssembler` and `ScheduleEmailAssembler` duplicate the client's
-  report assembly and `EmailRoutes.assembleScheduleEmail` respectively (because
-  `:mcp` cannot depend on the client/server). Future: extract a shared
-  `:schedule-email` / reports-model module (deps: persistence + mailer) consumed
-  by the REST route AND `:mcp`.
+The two assemblers that once existed twice now have a single home each:
+
+| Module | Kind | Holds | Consumed by |
+|---|---|---|---|
+| `:schedule-email` | JVM (`api` persistence + mailer) | `ScheduleEmailAssembler.assemble` (one section per spot, triangular trader logic), `spotLabel`, `SmtpConfig.toSettings`, Greek month names | `server`'s `EmailRoutes` **and** `:mcp`'s `send_schedule_email` |
+| `:reports-model` | Multiplatform (android/ios/jvm/js/wasm; kotlinx-serialization + datetime, no Compose, no reportcore) | `ProgramFlow`: JRXML param/field names, `formatDuration`, `formatGreekDate`, `emptyTime`, `notes`, `FLOW_ROH`, `params()`/`row()` builders | `reports-client`'s `toReportPayload`/`ReportDataFactory` **and** `:mcp`'s `BreakReportAssembler` |
+
+Only the *input mapping* still differs per side (client: grid `CommercialItem`s;
+backend: DB `CommercialRow`s) — that is genuine, not duplication. `grids.FLOW_ROH`
+remains the home of the UI-side comparison in the Compose cone.
+
+### Remaining caveat
 - `send_schedule_email confirm=true` (a real SMTP send) is code-reviewed but was
   not exercised live (needs configured SMTP).
+- Generated PDFs are **not byte-reproducible** (JasperReports stamps a creation
+  time / document id — identical input yields a different sha256 each run), so
+  regression-check the report via the assembler's `ReportRequest` (unit-tested
+  field by field), not by comparing PDF bytes.
 
 ---
 

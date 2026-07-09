@@ -49,7 +49,8 @@ dependencies {
     // auth persistence) - brings the MySQL driver at runtime
     implementation(projects.persistence)
 
-    // Customer schedule emails (HTML renderer + SMTP sender)
+    // Customer schedule emails (shared assembler + HTML renderer + SMTP sender)
+    implementation(projects.scheduleEmail)
     implementation(projects.mailer)
 
     // MCP tool core - the Model Context Protocol server mounted at /mcp

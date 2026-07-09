@@ -1,13 +1,10 @@
 package eu.anifantakis.commercials.server.routes
 
-import eu.anifantakis.commercials.mailer.EmailCell
-import eu.anifantakis.commercials.mailer.EmailGridRow
-import eu.anifantakis.commercials.mailer.ProgramTotal
 import eu.anifantakis.commercials.mailer.ScheduleEmailData
 import eu.anifantakis.commercials.mailer.SmtpMailer
-import eu.anifantakis.commercials.mailer.SmtpSettings
-import eu.anifantakis.commercials.mailer.SpotSection
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
+import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
+import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.authUser
@@ -23,8 +20,6 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import java.time.LocalDate
-import java.time.YearMonth
 
 @Serializable
 data class EmailCustomerDto(
@@ -182,7 +177,7 @@ fun Route.emailRoutes(registry: StationRegistry) {
             val spots = withContext(Dispatchers.IO) {
                 partyCommercials(access, year, month, byTrader)[clientCode].orEmpty()
                     .groupBy { it.spotId }
-                    .map { (id, rows) -> EmailSpotDto(id, spotLabel(rows.first(), byTrader, clientCode), rows.size) }
+                    .map { (id, rows) -> EmailSpotDto(id, ScheduleEmailAssembler.spotLabel(rows.first(), byTrader, clientCode), rows.size) }
                     .sortedByDescending { it.placements }
             }
             call.respond(spots)
@@ -200,8 +195,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             val spotIds = call.request.queryParameters["spotIds"]
                 ?.split(",")?.mapNotNull { it.trim().toLongOrNull() }?.toSet().orEmpty()
             val data = withContext(Dispatchers.IO) {
-                assembleScheduleEmail(registry, access, year, month, clientCode, byTrader, spotIds,
-                    call.request.queryParameters["personalMessage"])
+                access.db.ensureMonthSeeded(year, month)
+                ScheduleEmailAssembler.assemble(
+                    access.db, registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
+                    year, month, clientCode, byTrader, spotIds, call.request.queryParameters["personalMessage"],
+                )
             }
             if (data == null) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "No spots for customer '$clientCode' this month"))
@@ -241,11 +239,15 @@ fun Route.emailRoutes(registry: StationRegistry) {
                 val to = req.to?.takeIf { it.isNotBlank() } ?: customer.email
                     ?: return@withContext SendResult(false, "Customer '${customer.name}' has no stored email - pass a recipient explicitly")
 
-                val data = assembleScheduleEmail(registry, access, req.year, req.month, req.clientCode, byTrader, req.spotIds.toSet(), req.personalMessage)
+                access.db.ensureMonthSeeded(req.year, req.month)
+                val data = ScheduleEmailAssembler.assemble(
+                    access.db, registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
+                    req.year, req.month, req.clientCode, byTrader, req.spotIds.toSet(), req.personalMessage,
+                )
                     ?: return@withContext SendResult(false, "No spots for customer '${req.clientCode}' this month")
 
                 val subject = req.subject?.takeIf { it.isNotBlank() }
-                    ?: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ - ${data.mediumLabel} - ${greekMonth(req.month)} ${req.year}"
+                    ?: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ - ${data.mediumLabel} - ${ScheduleEmailAssembler.greekMonths[req.month - 1]} ${req.year}"
                 val html = renderScheduleEmail(data)
                 val transmissions = data.spots.sumOf { sec -> sec.rows.sumOf { r -> r.cells.sumOf { it?.count ?: 0 } } }
 
@@ -366,96 +368,6 @@ private fun partyCommercials(
         .filterKeys { it.isNotEmpty() }
 }
 
-/**
- * In trader mode a spot may belong to a DIFFERENT end customer (the
- * "triangular" case: the agency pays, e.g. Unilever's spot airs) - label
- * the spot with whose it is so the operator and the email are unambiguous.
- */
-private fun spotLabel(row: CommercialRow, byTrader: Boolean, partyCode: String): String =
-    if (byTrader && row.clientCode != partyCode) "${row.message} — ${row.clientName}" else row.message
-
-private fun SmtpConfig.toSettings() = SmtpSettings(
-    host = host, port = port, username = username, password = password, from = from, startTls = startTls,
-)
-
-/**
- * Builds the multi-section email: one [SpotSection] per spot the party ran
- * that month (optionally restricted to [spotIds]), each a grid of just that
- * spot's placements with its own per-programme breakdown. The party is the
- * spot's own customer, or (byTrader) the payer of its contract - in the
- * triangular case the trader's email covers other companies' spots, each
- * section labelled with the end customer.
- */
-private fun assembleScheduleEmail(
-    registry: StationRegistry,
-    access: StationAccess,
-    year: Int,
-    month: Int,
-    clientCode: String,
-    byTrader: Boolean,
-    spotIds: Set<Long>,
-    personalMessage: String?,
-): ScheduleEmailData? {
-    val customer = access.db.customerByCode(clientCode) ?: return null
-    val stationName = registry.config(access.grant.stationId)?.name ?: access.grant.stationId
-
-    access.db.ensureMonthSeeded(year, month)
-    val (cells, commercialsByKey) = access.db.loadMonth(year, month)
-    val colorByKey = cells.associate { (it.breakId to it.date) to it.zoneColorArgb }
-    val breaks = access.db.loadBreaks()
-    val days = YearMonth.of(year, month).lengthOfMonth()
-
-    fun isMine(row: CommercialRow): Boolean =
-        if (byTrader) row.payerCode == clientCode else row.clientCode == clientCode
-
-    // (breakId,date) -> the party's rows there, filtered to the chosen spots
-    fun rowsFor(spotId: Long): Map<Pair<Long, LocalDate>, List<CommercialRow>> =
-        commercialsByKey.mapValues { (_, list) ->
-            list.filter { isMine(it) && it.spotId == spotId }
-        }.filterValues { it.isNotEmpty() }
-
-    val allSpotIds = commercialsByKey.values.flatten()
-        .filter { isMine(it) }
-        .let { mine ->
-            if (mine.isEmpty()) return null
-            val wanted = if (spotIds.isEmpty()) mine.map { it.spotId }.toSet() else spotIds
-            // preserve a stable, busiest-first order
-            mine.filter { it.spotId in wanted }
-                .groupBy { it.spotId }
-                .entries.sortedByDescending { it.value.size }
-                .map { it.key to spotLabel(it.value.first(), byTrader, clientCode) }
-        }
-    if (allSpotIds.isEmpty()) return null
-
-    val sections = allSpotIds.map { (spotId, description) ->
-        val mine = rowsFor(spotId)
-        val usedBreaks = breaks.filter { b -> mine.keys.any { it.first == b.id } }
-        val rows = usedBreaks.map { b ->
-            EmailGridRow(
-                label = b.label,
-                cells = (1..days).map { day ->
-                    val key = b.id to LocalDate.of(year, month, day)
-                    mine[key]?.let { EmailCell(count = it.size, colorArgb = colorByKey[key]) }
-                }
-            )
-        }
-        val totals = mine.values.flatten()
-            .groupBy { it.programName ?: it.type.ifBlank { "Λοιπά" } }
-            .map { (name, rs) -> ProgramTotal(name, rs.firstNotNullOfOrNull { it.programColorArgb }, rs.size) }
-        SpotSection(description = description, rows = rows, programTotals = totals)
-    }
-
-    return ScheduleEmailData(
-        stationName = stationName,
-        customerName = customer.name,
-        year = year,
-        month = month,
-        personalMessage = personalMessage,
-        spots = sections,
-    )
-}
-
-private fun greekMonth(month: Int) = listOf(
-    "Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος",
-    "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος",
-)[month - 1]
+// Schedule-email assembly (assembleScheduleEmail, spotLabel, SmtpConfig.toSettings,
+// greek month names) now lives in the shared :schedule-email module so the REST
+// route and the MCP send_schedule_email tool share one implementation.

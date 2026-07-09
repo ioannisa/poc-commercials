@@ -2,13 +2,12 @@ package eu.anifantakis.commercials.reports
 
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
-import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.reports.model.ProgramFlow
 import eu.anifantakis.commercials.reports.models.ProgramFlowItem
 import eu.anifantakis.commercials.reports.models.ProgramFlowReportData
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.minus
@@ -58,7 +57,7 @@ object ReportDataFactory {
                         duration = formatDuration(commercial.durationSeconds),
                         durationSeconds = commercial.durationSeconds,
                         program = commercial.type,
-                        notes = if (commercial.flow == FLOW_ROH) "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
+                        notes = ProgramFlow.notes(commercial.flow),
                         firstInGroup = index == 0,
                         lastInGroup = index == commercials.size - 1,
                         groupTotalDuration = formatDuration(data.totalDurationSeconds),
@@ -69,11 +68,11 @@ object ReportDataFactory {
         }
 
         return ProgramFlowReportData(
-            title = "ΡΟΗ ΠΡΟΓΡΑΜΜΑΤΟΣ",
+            title = ProgramFlow.TITLE,
             generatedAt = currentTimeMillis(),
             date = date,
-            dateFormatted = formatGreekDate(date),
-            emptyTimeFormatted = "Κενός Χρόνος: ${formatDuration(emptyTimeSeconds)}",
+            dateFormatted = ProgramFlow.formatGreekDate(date),
+            emptyTimeFormatted = ProgramFlow.emptyTime(emptyTimeSeconds),
             items = items
         )
     }
@@ -121,7 +120,7 @@ object ReportDataFactory {
                 duration = formatDuration(commercial.durationSeconds),
                 durationSeconds = commercial.durationSeconds,
                 program = commercial.type,
-                notes = if (commercial.flow == FLOW_ROH) "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else commercial.flow,
+                notes = ProgramFlow.notes(commercial.flow),
                 firstInGroup = index == 0,
                 lastInGroup = index == commercials.lastIndex,
                 groupTotalDuration = formatDuration(totalDurationSeconds),
@@ -130,11 +129,11 @@ object ReportDataFactory {
         }
 
         return ProgramFlowReportData(
-            title = "ΡΟΗ ΠΡΟΓΡΑΜΜΑΤΟΣ",
+            title = ProgramFlow.TITLE,
             generatedAt = currentTimeMillis(),
             date = date,
-            dateFormatted = formatGreekDate(date),
-            emptyTimeFormatted = "Κενός Χρόνος: ${formatDuration(0)}",
+            dateFormatted = ProgramFlow.formatGreekDate(date),
+            emptyTimeFormatted = ProgramFlow.emptyTime(0),
             items = items
         )
     }
@@ -154,30 +153,10 @@ object ReportDataFactory {
     }
 
     /**
-     * Format duration from seconds to MM:SS
+     * Format duration from seconds to MM:SS. Delegates to the shared report
+     * contract so the client and the backend assembler format identically.
      */
-    fun formatDuration(totalSeconds: Int): String {
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
-    }
-
-    /**
-     * Format date in Greek format
-     */
-    private fun formatGreekDate(date: LocalDate): String {
-        val dayOfWeek = when (date.dayOfWeek) {
-            DayOfWeek.MONDAY -> "Δευτέρα"
-            DayOfWeek.TUESDAY -> "Τρίτη"
-            DayOfWeek.WEDNESDAY -> "Τετάρτη"
-            DayOfWeek.THURSDAY -> "Πέμπτη"
-            DayOfWeek.FRIDAY -> "Παρασκευή"
-            DayOfWeek.SATURDAY -> "Σάββατο"
-            DayOfWeek.SUNDAY -> "Κυριακή"
-            else -> ""
-        }
-        return "$dayOfWeek - ${date.dayOfMonth.toString().padStart(2, '0')}/${date.monthNumber.toString().padStart(2, '0')}/${date.year}"
-    }
+    fun formatDuration(totalSeconds: Int): String = ProgramFlow.formatDuration(totalSeconds)
 }
 
 /**

@@ -2,7 +2,8 @@ package eu.anifantakis.commercials.mcp
 
 import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
-import eu.anifantakis.commercials.mcp.ScheduleEmailAssembler.toSettings
+import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
+import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.serialization.json.buildJsonObject

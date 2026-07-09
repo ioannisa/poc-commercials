@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.mcp
+package eu.anifantakis.commercials.scheduleemail
 
 import eu.anifantakis.commercials.mailer.EmailCell
 import eu.anifantakis.commercials.mailer.EmailGridRow
@@ -13,17 +13,16 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 /**
- * Assembles the customer schedule email SERVER-SIDE from [StationDb] rows -
- * ONE section per spot the party ran that month (optionally restricted to
- * [spotIds]), each a grid of just that spot's placements with its own
- * per-programme breakdown. In trader mode a spot may belong to a different end
- * customer (the triangular case).
+ * The single home of the customer schedule-email assembly. Builds
+ * [ScheduleEmailData] from station-DB rows: ONE section per spot the party ran
+ * that month (optionally restricted to `spotIds`), each a grid of just that
+ * spot's placements with its own per-programme breakdown. In trader mode a spot
+ * may belong to a different end customer (the triangular case).
  *
- * TODO: this is a faithful duplicate of `server`'s `EmailRoutes.assembleScheduleEmail`
- * (which `:mcp` cannot depend on). Extract a shared `:schedule-email` module
- * (deps: persistence + mailer) consumed by both the REST route and this tool.
- * Deliberate divergence: unlike the route, this does NOT call `ensureMonthSeeded`
- * - a real email must never fabricate demo placements.
+ * Shared by the Ktor server's `/api/email/schedule` route and the MCP
+ * `send_schedule_email` tool. It is PURE: it never seeds demo months - the REST
+ * route calls `StationDb.ensureMonthSeeded` itself before assembling; the MCP
+ * tool deliberately does not (a real email must not fabricate demo placements).
  */
 object ScheduleEmailAssembler {
 
@@ -92,8 +91,11 @@ object ScheduleEmailAssembler {
         )
     }
 
-    /** Label a spot with its end customer when a trader's email covers others' spots. */
-    private fun spotLabel(row: CommercialRow, byTrader: Boolean, partyCode: String): String =
+    /**
+     * Label a spot with its end customer when a trader's email covers others'
+     * spots (the triangular case). Also used by the `/spots` list endpoint.
+     */
+    fun spotLabel(row: CommercialRow, byTrader: Boolean, partyCode: String): String =
         if (byTrader && row.clientCode != partyCode) "${row.message} — ${row.clientName}" else row.message
 
     fun SmtpConfig.toSettings(): SmtpSettings =
