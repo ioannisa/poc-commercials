@@ -84,8 +84,13 @@ data class CommercialItem(
     val clientName: String,
     val message: String,
     val durationSeconds: Int,
+    /** PROGRAMME type - what the Program Flow report prints. */
     val type: String,
+    /** Sales item of the contract line (Break Console Τύπος); null -> show [type]. */
+    val salesItem: String? = null,
+    /** Contract NUMBER (gifts included - the gift marker lives in the item name). */
     val contract: String,
+    val isGift: Boolean = false,
     val flow: String,
     /** Legacy calendar_excluded_docs: shown in the grid, kept OFF printed reports. */
     val excludeFromReports: Boolean = false,

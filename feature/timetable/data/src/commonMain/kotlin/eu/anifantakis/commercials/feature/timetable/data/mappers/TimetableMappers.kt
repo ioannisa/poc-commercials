@@ -20,8 +20,8 @@ internal fun BreakSlotDto.toDomain(): BreakSlotInfo = BreakSlotInfo(
 
 internal fun CommercialDto.toDomain(): PlacedCommercial = PlacedCommercial(
     id = id, position = position, clientCode = clientCode, clientName = clientName,
-    message = message, durationSeconds = durationSeconds, type = type, contract = contract,
-    excludeFromReports = excludeFromReports, flow = flow,
+    message = message, durationSeconds = durationSeconds, type = type, salesItem = salesItem,
+    contract = contract, isGift = isGift, excludeFromReports = excludeFromReports, flow = flow,
 )
 
 internal fun CellDto.toDomain(): ScheduleCell = ScheduleCell(

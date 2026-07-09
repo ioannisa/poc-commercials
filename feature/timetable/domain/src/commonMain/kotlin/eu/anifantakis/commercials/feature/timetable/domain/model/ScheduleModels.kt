@@ -21,7 +21,10 @@ data class PlacedCommercial(
     val message: String,
     val durationSeconds: Int,
     val type: String,
+    /** Sales item of the contract line (Break Console Τύπος); null -> show [type]. */
+    val salesItem: String? = null,
     val contract: String,
+    val isGift: Boolean = false,
     /** Legacy calendar_excluded_docs: aired normally, kept OFF printed reports. */
     val excludeFromReports: Boolean = false,
     val flow: String,

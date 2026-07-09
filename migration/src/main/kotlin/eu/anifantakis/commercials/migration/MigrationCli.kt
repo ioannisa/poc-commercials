@@ -184,7 +184,8 @@ private fun runMigration(opts: Options) {
             val senDir = File(senDirPath)
             require(senDir.isDirectory) { "--sen-dir is not a directory: $senDirPath" }
             println("\nEnriching from the SEN exports in $senDirPath ...")
-            val senSummary = SenErpEnricher(c, schema) { println("  $it") }.enrich(senDir, apply = true)
+            val senSummary = SenErpEnricher(c, schema) { println("  $it") }
+                .enrich(senDir, apply = true, legacyScratchSchema = scratch)
             printSenSummary(senSummary, apply = true)
         } else {
             println("\n(no --sen-dir given - the ERP enrichment can run later via SenEnrichToolKt)")

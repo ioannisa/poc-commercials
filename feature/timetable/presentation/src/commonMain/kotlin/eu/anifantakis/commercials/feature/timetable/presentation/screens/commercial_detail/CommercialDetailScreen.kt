@@ -63,6 +63,8 @@ import org.koin.compose.koinInject
 /**
  * Break Console entry point: own ViewModel (per-screen), the cell's
  * commercials observed from the shared ScheduleCellsStore.
+ * [onNavigateToBreak] re-targets the screen to a sibling break of the same
+ * day - the Προηγούμενο/Επόμενο paging of the legacy Break Console.
  */
 @Composable
 fun CommercialDetailScreenRoot(
@@ -72,7 +74,11 @@ fun CommercialDetailScreenRoot(
     spotCount: Int,
     viewModel: CommercialDetailViewModel,
     onBack: () -> Unit,
+    onNavigateToBreak: (breakId: Long, breakTime: String, spotCount: Int) -> Unit,
 ) {
+    val previous = viewModel.state.previousBreak
+    val next = viewModel.state.nextBreak
+    val goToBreak: (BreakRef) -> Unit = { onNavigateToBreak(it.breakId, it.label, it.spotCount) }
     CommercialDetailScreen(
         breakId = breakId,
         breakTime = breakTime,
@@ -88,13 +94,16 @@ fun CommercialDetailScreenRoot(
                 CommercialDetailScreenNavIntent.OnBack -> onBack()
             }
         },
+        onPrevious = previous?.let { p -> { goToBreak(p) } },
+        onNext = next?.let { n -> { goToBreak(n) } },
     )
 }
 
 /**
  * Navigation-only actions of the detail screen — always via this single
- * parameter (predictable shape; ready to grow, e.g. a future prev/next
- * break). Not a ViewModel [CommercialDetailIntent] (reorder is that).
+ * parameter (predictable shape). Not a ViewModel [CommercialDetailIntent]
+ * (reorder is that); prev/next paging rides the dedicated nullable
+ * callbacks the header buttons already expose.
  */
 private sealed interface CommercialDetailScreenNavIntent {
     data object OnBack : CommercialDetailScreenNavIntent
@@ -312,9 +321,14 @@ private fun CommercialDetailScreen(
             ColumnDef(
                 id = "type",
                 header = StringKey.DETAIL_COL_TYPE.localized(),
-                width = 160.dp,
+                width = 200.dp,
                 alignment = TextAlign.Start,
-                extractor = { it.type }
+                // The legacy Break Console shows the contract line's SALES
+                // item here ('Διαφ. TV Κρήτη Σ73.002', 'Διαφημίσεις
+                // τηλεόρασης Δ Ω Ρ Α' - the item name carries the gift
+                // marker). Programme type is the fallback for spots the ERP
+                // never covered, with the marker appended for gifts.
+                extractor = { it.salesItem ?: if (it.isGift) "${it.type} ΔΩΡΑ" else it.type }
             ),
             ColumnDef(
                 id = "contract",
@@ -322,6 +336,8 @@ private fun CommercialDetailScreen(
                 width = 80.dp,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
+                // Always the contract NUMBER, like the legacy console - the
+                // gift marker lives in the Τύπος column, not here.
                 extractor = { it.contract }
             ),
             ColumnDef(

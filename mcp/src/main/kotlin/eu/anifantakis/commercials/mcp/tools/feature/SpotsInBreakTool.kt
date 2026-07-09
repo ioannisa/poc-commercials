@@ -48,7 +48,9 @@ object SpotsInBreakTool : McpTool {
                             put("message", s.message)
                             put("durationSeconds", s.durationSeconds)
                             put("type", s.type)
+                            s.salesItem?.let { put("salesItem", it) }
                             put("contract", s.contract)
+                            put("isGift", s.isGift)
                             put("flow", s.flow)
                             s.programName?.let { put("programName", it) }
                         }

@@ -52,6 +52,7 @@ val timetableModule = module {
             breakId = params.get(),
             date = params.get(),
             common = params.get(),
+            scheduleRepository = get(),
         )
     }
 }

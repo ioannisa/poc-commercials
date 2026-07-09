@@ -199,7 +199,8 @@ class MigrationService(private val registry: StationRegistry) {
                     summary = LegacyTransformer(c, scratch, req.schema, flowReq.forTv) { log("  $it") }.run()
                     req.senDirPath?.let { senDir ->
                         log("Enriching from the SEN (Oracle ERP) exports in $senDir ...")
-                        SenErpEnricher(c, req.schema) { log("  $it") }.enrich(File(senDir), apply = true)
+                        SenErpEnricher(c, req.schema) { log("  $it") }
+                            .enrich(File(senDir), apply = true, legacyScratchSchema = scratch)
                     } ?: log("(no SEN folder given - the ERP enrichment can run later from the CLI)")
                     c.createStatement().use { it.executeUpdate("DROP DATABASE `$scratch`") }
                     log("Scratch schema dropped.")

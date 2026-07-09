@@ -41,6 +41,7 @@ internal fun printSenSummary(summary: SenErpEnricher.Summary, apply: Boolean) {
           resolved via trader  ${summary.customersResolvedViaCus}
           renamed              ${summary.customersRenamed}
           real VAT set         ${summary.customersVatSet}
+          ERP code applied     ${summary.customersRecoded} (email archive remapped: ${summary.emailLogRecoded})
           contacts filled      ${summary.contactsFilled}
           already correct      ${summary.customersUnchanged}
           not in export        ${summary.customersUnresolved}
@@ -51,6 +52,7 @@ internal fun printSenSummary(summary: SenErpEnricher.Summary, apply: Boolean) {
           ERP has no dates     ${summary.contractsNoErpDates}
           not in export        ${summary.contractsNotInSld}
           provisional backfill ${summary.contractsBackfilled}
+        spot sales items       ${summary.spotsItemSet} (${summary.spotsItemViaLines} via exact line links)
         rejected export records ${summary.rejectedRecords}
         ──────────────────────────────────────────────
         """.trimIndent()
@@ -92,17 +94,22 @@ private fun run(opts: Opts) {
         print("MySQL password: "); readLine().orEmpty()
     }
     val apply = opts.has("apply")
+    // Optional schema holding the legacy dump's z_commercials (message->ERP-line
+    // links) for EXACT per-spot sales items; the migration pipeline passes its
+    // scratch schema automatically - this flag serves post-hoc runs.
+    val legacyScratch = opts.optional("legacy-scratch")
 
     println()
     println("═══ Commercials Manager - SEN (Oracle ERP) enrichment ═══")
     println("Schema:  $host:$port / $schema")
     println("SEN dir: $dir")
+    legacyScratch?.let { println("Scratch: $it (z_commercials line links)") }
     println("Mode:    ${if (apply) "APPLY" else "DRY RUN (pass --apply to write)"}")
     println()
 
     val url = "jdbc:mysql://$host:$port/?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false"
     DriverManager.getConnection(url, user, password).use { c ->
-        val summary = SenErpEnricher(c, schema) { println("  $it") }.enrich(dir, apply)
+        val summary = SenErpEnricher(c, schema) { println("  $it") }.enrich(dir, apply, legacyScratch)
         printSenSummary(summary, apply)
         if (!apply) println("Nothing was written. Re-run with --apply to perform the update.")
     }

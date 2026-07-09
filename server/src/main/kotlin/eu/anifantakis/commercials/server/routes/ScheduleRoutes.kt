@@ -34,7 +34,11 @@ data class CommercialDto(
     val message: String,
     val durationSeconds: Int,
     val type: String,
+    /** Sales item of the contract line (Break Console Τύπος); null -> show [type]. */
+    val salesItem: String? = null,
+    /** Contract NUMBER (gifts included - the gift marker lives in the item name). */
     val contract: String,
+    val isGift: Boolean = false,
     val excludeFromReports: Boolean = false,
     val flow: String
 )
@@ -173,7 +177,9 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                             message = it.message,
                             durationSeconds = it.durationSeconds,
                             type = it.type,
+                            salesItem = it.salesItem,
                             contract = it.contract,
+                            isGift = it.isGift,
                             excludeFromReports = it.excludeFromReports,
                             flow = it.flow
                         )

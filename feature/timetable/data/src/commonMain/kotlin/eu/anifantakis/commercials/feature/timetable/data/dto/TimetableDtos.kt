@@ -21,7 +21,10 @@ internal data class CommercialDto(
     val message: String,
     val durationSeconds: Int,
     val type: String,
+    /** Sales item of the contract line (Break Console Τύπος); null -> show [type]. */
+    val salesItem: String? = null,
     val contract: String,
+    val isGift: Boolean = false,
     val excludeFromReports: Boolean = false,
     val flow: String,
 )

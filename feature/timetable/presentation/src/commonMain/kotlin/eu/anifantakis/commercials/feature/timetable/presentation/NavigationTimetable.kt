@@ -134,6 +134,13 @@ private fun TimetableFlowHost(
                         key = "commercial-detail-${route.breakId}-${route.date}",
                     ) { parametersOf(route.breakId, route.date, common) },
                     onBack = { stepStack.removeLastOrNull() },
+                    // Προηγούμενο/Επόμενο: RE-TARGET the top entry to the
+                    // sibling break (replace, not push - Back still returns
+                    // to the grid, exactly like the legacy Break Console).
+                    onNavigateToBreak = { breakId, breakTime, spotCount ->
+                        stepStack[stepStack.lastIndex] =
+                            TimetableStepNavType.CommercialDetail(breakId, breakTime, route.date, spotCount)
+                    },
                 )
             }
         }

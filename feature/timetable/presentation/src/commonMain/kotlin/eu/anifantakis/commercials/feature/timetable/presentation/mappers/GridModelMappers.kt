@@ -34,7 +34,9 @@ fun PlacedCommercial.toUi(): CommercialItem = CommercialItem(
     message = message,
     durationSeconds = durationSeconds,
     type = type,
+    salesItem = salesItem,
     contract = contract,
+    isGift = isGift,
     flow = flow,
     excludeFromReports = excludeFromReports,
 )

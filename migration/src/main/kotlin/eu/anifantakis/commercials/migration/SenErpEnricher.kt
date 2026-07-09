@@ -65,8 +65,10 @@ class SenErpEnricher(
         var customersUnresolved: Int = 0,
         var customersRenamed: Int = 0,
         var customersVatSet: Int = 0,
+        var customersRecoded: Int = 0,
         var customersUnchanged: Int = 0,
         var contactsFilled: Int = 0,
+        var emailLogRecoded: Int = 0,
         var contractsExamined: Int = 0,
         var contractsDated: Int = 0,
         var contractsQtySet: Int = 0,
@@ -74,14 +76,23 @@ class SenErpEnricher(
         var contractsNoErpDates: Int = 0,
         var contractsNotInSld: Int = 0,
         var contractsBackfilled: Int = 0,
+        var spotsItemSet: Int = 0,
+        var spotsItemViaLines: Int = 0,
         var rejectedRecords: Int = 0,
     )
 
     /**
      * Runs every phase the [senDir] exports allow. [apply]=false is a full
      * dry-run: counts, no writes.
+     *
+     * [legacyScratchSchema] (optional) names a schema holding the legacy
+     * MySQL `z_commercials` table (the dump's message->ERP-line links). The
+     * migration pipeline passes its scratch schema (enrichment runs before
+     * the scratch drop), giving EXACT per-spot sales items; without it,
+     * spots on single-item documents still resolve (the majority), spots on
+     * multi-item documents are left alone.
      */
-    fun enrich(senDir: File, apply: Boolean): Summary {
+    fun enrich(senDir: File, apply: Boolean, legacyScratchSchema: String? = null): Summary {
         require(senDir.isDirectory) { "SEN export folder not found: $senDir" }
         val s = Summary()
 
@@ -114,11 +125,15 @@ class SenErpEnricher(
         val adr = parse(senDir, "adr", keyColumn = "ADRID", keys = neededAdrIds, s = s)
         val sdt = parse(senDir, "sdt", s = s) // 87-row catalog, no filter needed
         val sld = parse(senDir, "sld", keyColumn = "DOCID", keys = neededDocIds, s = s)
+        val ssd = parse(senDir, "ssd", keyColumn = "DOCID", keys = neededDocIds, s = s)
+        val sti = parse(senDir, "sti", s = s) // 224-row item catalog
 
-        if (lee != null) enrichCustomers(lee, traidToLeeId, adr, apply, s)
+        if (lee != null) enrichCustomers(lee, traidToLeeId, cus, adr, apply, s)
         else log("lee.csv absent - customer identity/contact phases skipped")
         if (sld != null) enrichContracts(sld, sdt, apply, s)
         else log("sld.csv absent - contract phase skipped")
+        if (ssd != null && sti != null) enrichSpotItems(ssd, sti, legacyScratchSchema, apply, s)
+        else log("ssd.csv/sti.csv absent - sales-item phase skipped")
         backfillProvisional(apply, s)
         return s
     }
@@ -141,16 +156,20 @@ class SenErpEnricher(
     private fun enrichCustomers(
         lee: SenTable,
         traidToLeeId: Map<String, String>,
+        cus: SenTable?,
         adr: SenTable?,
         apply: Boolean,
         s: Summary,
     ) {
         val leeById = lee.rows.associateBy { lee.value(it, "LEEID") }
         val adrById = adr?.rows?.associateBy { adr.value(it, "ADRID") }.orEmpty()
+        // TRAID -> the ERP customer code (Κωδ. Πελ. as the operators know it)
+        val tracodeByTraid = cus?.rows?.associate { cus.value(it, "TRAID") to cus.value(it, "TRACODE") }.orEmpty()
 
         data class Update(
             val id: Long, val name: String, val vat: String?,
             val phone: String?, val fax: String?, val email: String?,
+            val newCode: String?, val oldCode: String,
         )
 
         fun placeholderEmail(v: String?) = v.isNullOrBlank() || v.contains("@example.")
@@ -158,7 +177,7 @@ class SenErpEnricher(
         val updates = ArrayList<Update>()
         c.createStatement().use { st ->
             st.executeQuery(
-                "SELECT id, legacy_id, legacy_lee_id, name, vat_number, phone, fax, email FROM $schema.customers"
+                "SELECT id, legacy_id, legacy_lee_id, code, name, vat_number, phone, fax, email FROM $schema.customers"
             ).use { rs ->
                 while (rs.next()) {
                     s.customersExamined++
@@ -181,6 +200,12 @@ class SenErpEnricher(
                     val erpVat = lee.value(leeRow, "LEEAFM").takeIf { it.isNotBlank() }
                     if (erpName.isEmpty()) continue
 
+                    // the ERP account code replaces the migration's LPAD(traid)
+                    // placeholder - it is what the legacy Break Console displays
+                    val oldCode = rs.getString("code").orEmpty()
+                    val newCode = tracodeByTraid[legacyId?.toString()]
+                        ?.takeIf { it.isNotBlank() && it != oldCode }
+
                     // contacts from the entity's MAIN address, fill-only semantics
                     val adrRow = adrById[lee.value(leeRow, "ADRIDMAIN")]
                     val erpPhone = adrRow?.let { adr!!.value(it, "ADRPHONE1").takeIf(String::isNotBlank) }
@@ -194,23 +219,34 @@ class SenErpEnricher(
                     val oldVat = rs.getString("vat_number")
                     val identityChanged = erpName != oldName || erpVat != oldVat
                     val contactsChanged = newPhone != null || newFax != null || newEmail != null
-                    if (!identityChanged && !contactsChanged) {
+                    if (!identityChanged && !contactsChanged && newCode == null) {
                         s.customersUnchanged++
                         continue
                     }
                     if (erpName != oldName) s.customersRenamed++
                     if (erpVat != oldVat && erpVat != null) s.customersVatSet++
                     if (contactsChanged) s.contactsFilled++
-                    updates += Update(rs.getLong("id"), erpName, erpVat, newPhone, newFax, newEmail)
+                    if (newCode != null) s.customersRecoded++
+                    updates += Update(rs.getLong("id"), erpName, erpVat, newPhone, newFax, newEmail, newCode, oldCode)
                 }
             }
         }
 
         if (apply && updates.isNotEmpty()) {
+            val recodes = updates.filter { it.newCode != null }
+            // Codes are UNIQUE and the new set can overlap the old (an ERP code
+            // may equal ANOTHER customer's placeholder), so recode in two
+            // passes: park on a collision-free temp code, then set the finals.
+            if (recodes.isNotEmpty()) {
+                c.prepareStatement("UPDATE $schema.customers SET code = CONCAT('~', id) WHERE id = ?").use { ps ->
+                    for (u in recodes) { ps.setLong(1, u.id); ps.addBatch() }
+                    ps.executeBatch()
+                }
+            }
             c.prepareStatement(
                 """
                 UPDATE $schema.customers
-                SET name = ?, vat_number = ?, synthetic = FALSE,
+                SET name = ?, vat_number = ?, synthetic = FALSE, code = COALESCE(?, code),
                     phone = COALESCE(?, phone), fax = COALESCE(?, fax), email = COALESCE(?, email)
                 WHERE id = ?
                 """.trimIndent()
@@ -219,10 +255,122 @@ class SenErpEnricher(
                 for (u in updates) {
                     ps.setString(1, u.name)
                     ps.setString(2, u.vat)
-                    ps.setString(3, u.phone)
-                    ps.setString(4, u.fax)
-                    ps.setString(5, u.email)
-                    ps.setLong(6, u.id)
+                    ps.setString(3, if (u.newCode != null) u.newCode else null)
+                    ps.setString(4, u.phone)
+                    ps.setString(5, u.fax)
+                    ps.setString(6, u.email)
+                    ps.setLong(7, u.id)
+                    ps.addBatch()
+                    if (++batched % 500 == 0) ps.executeBatch()
+                }
+                ps.executeBatch()
+            }
+            // COALESCE(?, code) left the parked '~id' codes in place for rows
+            // whose newCode is null - impossible by construction (only recodes
+            // were parked), so every parked row just received its final code.
+            // The email archive references customers BY CODE - remap it.
+            if (recodes.isNotEmpty()) {
+                c.prepareStatement("UPDATE $schema.email_log SET customer_code = ? WHERE customer_code = ?").use { ps ->
+                    var remapped = 0
+                    for (u in recodes) {
+                        ps.setString(1, u.newCode)
+                        ps.setString(2, u.oldCode)
+                        ps.addBatch()
+                        if (++remapped % 500 == 0) ps.executeBatch()
+                    }
+                    ps.executeBatch()
+                }
+                s.emailLogRecoded = recodes.size
+            }
+        }
+        log(
+            "customers: ${s.customersExamined} examined, " +
+                "${s.customersResolvedViaLee} via lee id + ${s.customersResolvedViaCus} via trader account, " +
+                "${s.customersRenamed} renamed, ${s.customersVatSet} got a real VAT, " +
+                "${s.customersRecoded} got their ERP account code, ${s.contactsFilled} got missing contact details " +
+                "(${s.customersUnchanged} already correct, ${s.customersUnresolved} not in the export)" +
+                if (apply) "" else "  [DRY RUN]"
+        )
+    }
+
+    // ── phase 2b: per-spot sales items (the Break Console's Τύπος) ──────────
+
+    /**
+     * Stamps each spot with the SALES item of its ERP contract line
+     * (STI.ITMNAME - e.g. 'Διαφ. TV Κρήτη Σ73.002', or 'Διαφημίσεις
+     * τηλεόρασης Δ Ω Ρ Α' whose name itself carries the gift marker), which
+     * is exactly what the legacy Break Console shows as Τύπος.
+     *
+     * Resolution per spot: legacy `messages.messageTypeID` IS the ERP's item
+     * class (MCIID - verified: a doc's "ΣΦΗΝΕΣ ΔΕΛΤΙΟΥ" message carries
+     * typeID 301 and lands exactly on the doc's MCIID-301 SSD line), so
+     * `(document, messageTypeID)` names the SSD line whose CODCODE names the
+     * STI item. Per-message typeIDs come from the replayed dump when
+     * [scratch] is available (the migration pipeline passes its scratch
+     * schema); without it, a spot still resolves when its document sells a
+     * SINGLE distinct item (the majority) - multi-item documents are left
+     * untouched.
+     */
+    private fun enrichSpotItems(ssd: SenTable, sti: SenTable, scratch: String?, apply: Boolean, s: Summary) {
+        val itemByCode = sti.rows.associate {
+            sti.value(it, "CODCODE") to sti.value(it, "ITMNAME").replace(Regex("\\s+"), " ").trim()
+        }
+
+        // (docid, item class) -> the lines' item codes; docid -> its distinct item codes
+        val codesByDocMci = HashMap<String, MutableSet<String>>()
+        val codesByDoc = HashMap<String, MutableSet<String>>()
+        for (row in ssd.rows) {
+            val doc = ssd.value(row, "DOCID")
+            val code = ssd.value(row, "CODCODE")
+            if (doc.isEmpty() || code.isEmpty()) continue
+            codesByDocMci.getOrPut(doc + " " + ssd.value(row, "MCIID")) { mutableSetOf() } += code
+            codesByDoc.getOrPut(doc) { mutableSetOf() } += code
+        }
+
+        // message id -> its item class (MCIID), from the replayed legacy dump
+        val mciByMessage = HashMap<Long, String>()
+        if (scratch != null) {
+            c.createStatement().use { st ->
+                st.executeQuery("SELECT id, messageTypeID FROM $scratch.messages").use { rs ->
+                    while (rs.next()) mciByMessage[rs.getLong(1)] = rs.getString(2)
+                }
+            }
+            log("sales items: ${mciByMessage.size} message item classes from $scratch.messages")
+        }
+
+        data class Update(val spotId: Long, val item: String)
+
+        val updates = ArrayList<Update>()
+        c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT sp.id, sp.legacy_id, sp.sales_item, ct.legacy_docid
+                FROM $schema.spots sp
+                JOIN $schema.contract_lines cl ON cl.id = sp.contract_line_id
+                JOIN $schema.contracts ct ON ct.id = cl.contract_id
+                WHERE ct.legacy_docid IS NOT NULL
+                """.trimIndent()
+            ).use { rs ->
+                while (rs.next()) {
+                    val docId = rs.getLong("legacy_docid").toString()
+                    val viaLine = rs.getLong("legacy_id").let { if (rs.wasNull()) null else mciByMessage[it] }
+                        ?.let { mci -> codesByDocMci[docId + " " + mci]?.singleOrNull() }
+                    val code = viaLine ?: codesByDoc[docId]?.singleOrNull() ?: continue
+                    val item = itemByCode[code] ?: continue
+                    if (item.isEmpty() || item == rs.getString("sales_item")) continue
+                    if (viaLine != null) s.spotsItemViaLines++
+                    updates += Update(rs.getLong("id"), item)
+                }
+            }
+        }
+        s.spotsItemSet = updates.size
+
+        if (apply && updates.isNotEmpty()) {
+            c.prepareStatement("UPDATE $schema.spots SET sales_item = ? WHERE id = ?").use { ps ->
+                var batched = 0
+                for (u in updates) {
+                    ps.setString(1, u.item)
+                    ps.setLong(2, u.spotId)
                     ps.addBatch()
                     if (++batched % 500 == 0) ps.executeBatch()
                 }
@@ -230,11 +378,8 @@ class SenErpEnricher(
             }
         }
         log(
-            "customers: ${s.customersExamined} examined, " +
-                "${s.customersResolvedViaLee} via lee id + ${s.customersResolvedViaCus} via trader account, " +
-                "${s.customersRenamed} renamed, ${s.customersVatSet} got a real VAT, " +
-                "${s.contactsFilled} got missing contact details " +
-                "(${s.customersUnchanged} already correct, ${s.customersUnresolved} not in the export)" +
+            "sales items: ${s.spotsItemSet} spots stamped with their contract line's item " +
+                "(${s.spotsItemViaLines} via the exact line link, the rest via single-item documents)" +
                 if (apply) "" else "  [DRY RUN]"
         )
     }

@@ -171,6 +171,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         description VARCHAR(255) NOT NULL,
                         duration_seconds INT NOT NULL,
                         spot_type VARCHAR(64) NOT NULL DEFAULT '',
+                        -- The SALES item of the spot's contract line (ERP STI name,
+                        -- e.g. 'Διαφ. TV Κρήτη Σ73.002') - what the legacy Break
+                        -- Console shows as Τύπος. spot_type stays the PROGRAMME type.
+                        sales_item VARCHAR(160) NULL,
                         flow VARCHAR(32) NOT NULL DEFAULT '',
                         hidden BOOLEAN NOT NULL DEFAULT FALSE,
                         force_position INT NULL,
@@ -332,6 +336,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             // Galaxy (new ERP) UUID - NULL until the Galaxy customer import
             // matches by VAT number (see the CREATE TABLE note).
             ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
+            // Sales item of the spot's contract line (see the CREATE TABLE note).
+            ensureColumn(c, "spots", "sales_item", "VARCHAR(160) NULL")
 
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.
@@ -992,7 +998,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         c.prepareStatement(
             """
             SELECT p.id, p.spot_id, p.position, p.duration_seconds,
-                   s.description, s.spot_type, s.flow,
+                   s.description, s.spot_type, s.sales_item, s.flow,
                    cu.code AS client_code, cu.name AS client_name,
                    ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                    pay.code AS payer_code, pay.name AS payer_name,
@@ -1020,7 +1026,9 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     message = rs.getString("description"),
                     durationSeconds = rs.getInt("duration_seconds"),
                     type = rs.getString("spot_type"),
-                    contract = if (rs.getBoolean("is_gift")) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
+                    salesItem = rs.getString("sales_item"),
+                    contract = rs.getString("contract_number") ?: "",
+                    isGift = rs.getBoolean("is_gift"),
                     excludeFromReports = rs.getBoolean("exclude_from_reports"),
                     flow = rs.getString("flow"),
                     programName = rs.getString("program_name"),
@@ -1176,7 +1184,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             c.prepareStatement(
                 """
                 SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
-                       s.description, s.spot_type, s.flow,
+                       s.description, s.spot_type, s.sales_item, s.flow,
                        cu.code AS client_code, cu.name AS client_name,
                        ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                        pay.code AS payer_code, pay.name AS payer_name,
@@ -1217,7 +1225,9 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                             message = rs.getString("description"),
                             durationSeconds = rs.getInt("duration_seconds"),
                             type = rs.getString("spot_type"),
-                            contract = if (isGift) "ΔΩΡΑ" else (rs.getString("contract_number") ?: ""),
+                            salesItem = rs.getString("sales_item"),
+                            contract = rs.getString("contract_number") ?: "",
+                            isGift = isGift,
                             excludeFromReports = rs.getBoolean("exclude_from_reports"),
                             flow = rs.getString("flow"),
                             programName = programName,

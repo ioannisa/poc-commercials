@@ -37,8 +37,17 @@ data class CommercialRow(
     val clientName: String,
     val message: String,
     val durationSeconds: Int,
+    /** PROGRAMME type (programtypes) - printed on the Program Flow report. */
     val type: String,
+    /**
+     * The SALES item of the spot's contract line (ERP STI name, e.g.
+     * 'Διαφ. TV Κρήτη Σ73.002') - the Break Console's Τύπος. Null when the
+     * ERP enrichment has not stamped it; displays fall back to [type].
+     */
+    val salesItem: String? = null,
+    /** The contract number - the Break Console's Σύμβαση (a NUMBER even for gifts). */
     val contract: String,
+    val isGift: Boolean = false,
     /** Legacy calendar_excluded_docs: aired normally but kept off printed reports. */
     val excludeFromReports: Boolean = false,
     val flow: String,
