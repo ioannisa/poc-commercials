@@ -66,6 +66,9 @@ class LegacyTransformer(
     fun run(): Summary {
         c.createStatement().use { it.execute("SET SESSION sql_mode = ''") }
 
+        log("Copying the legacy MySQL tables VERBATIM (faithful union layer)...")
+        copyLegacyTables()
+
         log("Building break grid from real airing times...")
         val breaks = migrateBreaks()
 
@@ -606,6 +609,56 @@ class LegacyTransformer(
      * SEN import later fills each type's `sales_item` from the ERP item
      * catalog (STI is 1:1 with the class).
      */
+    /**
+     * THE FAITHFUL UNION LAYER (owner directive): the station schema CONTAINS
+     * the legacy MySQL tables as VERBATIM copies - exact table names, exact
+     * column names, all rows of this station's flow. The app's working tables
+     * (spots/placements/...) are DERIVED from these; the copies are the
+     * inspectable source of truth inside the one functional database, and the
+     * SEN side lands next to them as `sen_*` tables (the enricher writes
+     * those - `sen_` because legacy `cus`/`sld` collide with the ERP names).
+     *
+     * Flow-scoped tables are filtered to this station's flow; shared tables
+     * copy whole. `emailhistory` copies WITHOUT the heavy bodies (the app's
+     * email_log keeps the capped bodies; the summaries here are complete).
+     */
+    private fun copyLegacyTables() {
+        fun copy(table: String, filter: String = "", columns: String = "*") {
+            if (!tableExists(table)) return
+            val rows = c.createStatement().use { st ->
+                st.executeUpdate("DROP TABLE IF EXISTS $t.$table")
+                st.executeUpdate("CREATE TABLE $t.$table LIKE $s.$table")
+                try {
+                    st.executeUpdate("ALTER TABLE $t.$table ENGINE=InnoDB")
+                } catch (e: java.sql.SQLException) {
+                    // e.g. a MyISAM-only AUTO_INCREMENT/key layout - fidelity
+                    // beats the engine, keep the table exactly as dumped
+                    log("  ($table stays MyISAM: ${e.message})")
+                }
+                st.executeUpdate("INSERT INTO $t.$table SELECT $columns FROM $s.$table $filter")
+            }
+            log("  %-28s %,d rows (verbatim)".format(table, rows))
+        }
+        copy("messages", "WHERE forTV = $forTv")
+        copy("schedule", "WHERE messageID IN (SELECT id FROM $s.messages WHERE forTV = $forTv)")
+        copy("programtypes")
+        copy("docref")
+        copy("z_commercials")
+        copy("cus")
+        copy("sld")
+        copy("calendar_excluded_docs")
+        copy("commercials_calendar_final")
+        copy("roh_comments", "WHERE forTV = $forTv")
+        copy("roh_print_history", "WHERE forTV = $forTv")
+        copy("zones", "WHERE forTV = $forTv")
+        copy("zonefillers", "WHERE forTV = $forTv")
+        copy(
+            "emailhistory",
+            columns = "id, subject, emailFrom, cusID, periodRequested, entryDate, entryTime, " +
+                "recipientEmailAddress, NULL, reportType",
+        )
+    }
+
     private fun migrateSpotTypes(): Int {
         if (!tableExists("programtypes")) return 0
         return c.createStatement().use { st ->
@@ -779,42 +832,17 @@ class LegacyTransformer(
     // ───────────────────────────────────────────────── zones (pricing) ──
 
     /**
-     * The airtime price list, WITH its full history: legacy zones/zonefillers
-     * are versioned by an integer fromDate (YYYYMMDD) - every price change
-     * since 2004 is a new row, and all of them migrate. Fillers first (zones
-     * reference them); legacy `fillerID = -1` means none.
+     * The airtime price list lives ONLY as the faithful union copies
+     * (`zones`/`zonefillers`, written verbatim with full price history by
+     * [copyLegacyTables]) - there is no derived app table to fill. This just
+     * reports the copied counts for the summary.
      */
     private fun migrateZones(): Pair<Int, Int> {
-        if (!tableExists("zones")) return 0 to 0
-        val fillers = if (tableExists("zonefillers")) {
+        fun count(table: String): Int = if (!tableExists(table)) 0 else
             c.createStatement().use { st ->
-                st.executeUpdate(
-                    """
-                    INSERT INTO $t.zone_fillers(legacy_id, code, label, price, valid_from)
-                    SELECT id, LEFT(code, 32), LEFT(descr, 64), price,
-                           STR_TO_DATE(NULLIF(fromDATE, 0), '%Y%m%d')
-                    FROM $s.zonefillers
-                    WHERE forTV = $forTv
-                    """.trimIndent()
-                )
+                st.executeQuery("SELECT COUNT(*) FROM $t.$table").use { rs -> rs.next(); rs.getInt(1) }
             }
-        } else 0
-        val zones = c.createStatement().use { st ->
-            st.executeUpdate(
-                """
-                INSERT INTO $t.zones(legacy_id, code, label, from_time, end_time, filler_from_time,
-                                     price, valid_from, public_sector, filler_id)
-                SELECT z.id, LEFT(z.code, 32), LEFT(z.descr, 64),
-                       TIME(z.fromTime), TIME(z.endTime), TIME(z.fromFillerTime),
-                       z.price, STR_TO_DATE(NULLIF(z.fromDate, 0), '%Y%m%d'),
-                       COALESCE(z.dimosio, 0), tf.id
-                FROM $s.zones z
-                LEFT JOIN $t.zone_fillers tf ON tf.legacy_id = NULLIF(z.fillerID, -1)
-                WHERE z.forTV = $forTv
-                """.trimIndent()
-            )
-        }
-        return zones to fillers
+        return count("zones") to count("zonefillers")
     }
 
     /** "Μάρτιος 2006" -> 2006 to 3; unparsable parts become 0. */

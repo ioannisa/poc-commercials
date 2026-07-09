@@ -255,41 +255,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
-                // Airtime commercial policy (≙ legacy zones/zonefillers):
-                // the price list, VERSIONED by valid_from - the legacy app
-                // kept every historical price row, and so do we.
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS zone_fillers (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        code VARCHAR(32) NOT NULL,
-                        label VARCHAR(64) NOT NULL,
-                        price DECIMAL(10,2) NOT NULL DEFAULT 0,
-                        valid_from DATE NULL,
-                        KEY idx_zone_fillers_legacy (legacy_id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS zones (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        code VARCHAR(32) NOT NULL,
-                        label VARCHAR(64) NOT NULL,
-                        from_time TIME NULL,
-                        end_time TIME NULL,
-                        filler_from_time TIME NULL,
-                        price DECIMAL(10,2) NOT NULL DEFAULT 0,
-                        valid_from DATE NULL,
-                        public_sector BOOLEAN NOT NULL DEFAULT FALSE,
-                        filler_id BIGINT NULL,
-                        KEY idx_zones_legacy (legacy_id),
-                        CONSTRAINT fk_zones_filler FOREIGN KEY (filler_id) REFERENCES zone_fillers(id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
+                // Airtime price zones: NO app-layer tables here. The FAITHFUL
+                // UNION copies own the legacy names (`zones`/`zonefillers`,
+                // written verbatim by the migration - no feature reads them
+                // yet; the future price-list feature reads the copies
+                // directly). Demo stations simply have no price data.
                 s.executeUpdate(
                     """
                     CREATE TABLE IF NOT EXISTS flow_comments (

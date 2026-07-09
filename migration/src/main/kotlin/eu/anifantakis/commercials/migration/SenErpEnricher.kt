@@ -121,12 +121,14 @@ class SenErpEnricher(
         val allLeeIds = neededLeeIds + traidToLeeId.values.filter { it.isNotEmpty() }
 
         val lee = parse(senDir, "lee", keyColumn = "LEEID", keys = allLeeIds, s = s)
-        val neededAdrIds = lee?.rows?.mapNotNull { lee.value(it, "ADRIDMAIN").takeIf(String::isNotEmpty) }?.toSet().orEmpty()
-        val adr = parse(senDir, "adr", keyColumn = "ADRID", keys = neededAdrIds, s = s)
+        // ALL addresses of the referenced entities (a party can have many)
+        val adr = parse(senDir, "adr", keyColumn = "LEEID", keys = allLeeIds, s = s)
         val sdt = parse(senDir, "sdt", s = s) // 87-row catalog, no filter needed
         val sld = parse(senDir, "sld", keyColumn = "DOCID", keys = neededDocIds, s = s)
         val ssd = parse(senDir, "ssd", keyColumn = "DOCID", keys = neededDocIds, s = s)
         val sti = parse(senDir, "sti", s = s) // 224-row item catalog
+
+        materializeSenTables(lee, cus, adr, sld, ssd, sdt, sti, apply, s)
 
         if (lee != null) enrichCustomers(lee, traidToLeeId, cus, adr, apply, s)
         else log("lee.csv absent - customer identity/contact phases skipped")
@@ -151,6 +153,150 @@ class SenErpEnricher(
         s.rejectedRecords += t.rejected
         log("$table: kept ${t.rows.size} of the export's records (${file.name}${if (t.rejected > 0) ", ${t.rejected} rejected" else ""})")
         return t
+    }
+
+    // ── phase 0: the SEN side of the faithful union layer ───────────────────
+
+    /**
+     * Materializes the Oracle/SEN tables INSIDE the station schema as
+     * `sen_*` tables (faithful union layer, owner directive): exact ERP
+     * column names, the essential fields, MySQL-first filtered rows (only
+     * entities/documents the legacy data references - catalogs whole).
+     * `sen_` prefix because legacy `cus`/`sld` collide with the ERP names.
+     * Rebuilt on every run (derived data): the app's tables stay the working
+     * layer; these are the inspectable ERP truth next to the legacy copies.
+     */
+    private fun materializeSenTables(
+        lee: SenTable?, cus: SenTable?, adr: SenTable?, sld: SenTable?,
+        ssd: SenTable?, sdt: SenTable?, sti: SenTable?, apply: Boolean, s: Summary,
+    ) {
+        if (!apply) {
+            log("sen tables: would materialize sen_lee/sen_cus/sen_adr/sen_sld/sen_ssd/sen_sdt/sen_sti  [DRY RUN]")
+            return
+        }
+
+        fun rebuild(
+            name: String,
+            ddlColumns: String,
+            params: Int,
+            t: SenTable?,
+            insert: (java.sql.PreparedStatement, List<String>) -> Unit,
+        ) {
+            if (t == null) return
+            c.createStatement().use { st ->
+                st.executeUpdate("DROP TABLE IF EXISTS $schema.$name")
+                st.executeUpdate("CREATE TABLE $schema.$name ($ddlColumns) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")
+            }
+            c.prepareStatement(
+                "INSERT INTO $schema.$name VALUES (${List(params) { "?" }.joinToString(",")})"
+            ).use { ps ->
+                var batched = 0
+                for (row in t.rows) {
+                    insert(ps, row)
+                    ps.addBatch()
+                    if (++batched % 500 == 0) ps.executeBatch()
+                }
+                ps.executeBatch()
+            }
+            log("sen tables: $name <- ${t.rows.size} rows")
+        }
+
+        fun str(t: SenTable, row: List<String>, col: String): String? =
+            t.value(row, col).takeIf { it.isNotBlank() }
+        fun lng(t: SenTable, row: List<String>, col: String): Long? =
+            t.value(row, col).toLongOrNull()
+        fun dec(t: SenTable, row: List<String>, col: String): Double? =
+            t.value(row, col).replace(",", ".").toDoubleOrNull()
+        fun dt(t: SenTable, row: List<String>, col: String): java.sql.Date? =
+            SenExports.parseDate(t.value(row, col))?.let(java.sql.Date::valueOf)
+
+        rebuild(
+            "sen_lee",
+            "LEEID BIGINT PRIMARY KEY, LEENAME VARCHAR(255), LEEAFM VARCHAR(16), TXOCODE VARCHAR(16), " +
+                "LEEADT VARCHAR(32), ADRIDMAIN BIGINT, LEECODE VARCHAR(32)",
+            7, lee,
+        ) { ps, r ->
+            lee!!
+            ps.setObject(1, lng(lee, r, "LEEID")); ps.setString(2, str(lee, r, "LEENAME"))
+            ps.setString(3, str(lee, r, "LEEAFM")); ps.setString(4, str(lee, r, "TXOCODE"))
+            ps.setString(5, str(lee, r, "LEEADT")); ps.setObject(6, lng(lee, r, "ADRIDMAIN"))
+            ps.setString(7, str(lee, r, "LEECODE"))
+        }
+        rebuild(
+            "sen_cus",
+            "TRAID BIGINT PRIMARY KEY, LEEID BIGINT, TRACODE VARCHAR(32), ADRIDMAIN BIGINT, " +
+                "ADRIDDEST BIGINT, TRASTARTDATE DATE",
+            6, cus,
+        ) { ps, r ->
+            cus!!
+            ps.setObject(1, lng(cus, r, "TRAID")); ps.setObject(2, lng(cus, r, "LEEID"))
+            ps.setString(3, str(cus, r, "TRACODE")); ps.setObject(4, lng(cus, r, "ADRIDMAIN"))
+            ps.setObject(5, lng(cus, r, "ADRIDDEST")); ps.setDate(6, dt(cus, r, "TRASTARTDATE"))
+        }
+        rebuild(
+            "sen_adr",
+            "ADRID BIGINT PRIMARY KEY, LEEID BIGINT, ADRDESCRIPTION VARCHAR(128), ADRSTREET VARCHAR(255), " +
+                "ADRNUMBER VARCHAR(16), ADRZIPCODE VARCHAR(16), ADRDISTRICT VARCHAR(64), ADRCITY VARCHAR(64), " +
+                "ADRPHONE1 VARCHAR(32), ADRPHONE2 VARCHAR(32), ADRPHONE3 VARCHAR(32), ADRFAX VARCHAR(32), " +
+                "ADREMAIL VARCHAR(128), ISOFFICE VARCHAR(8), KEY idx_sen_adr_lee (LEEID)",
+            14, adr,
+        ) { ps, r ->
+            adr!!
+            ps.setObject(1, lng(adr, r, "ADRID")); ps.setObject(2, lng(adr, r, "LEEID"))
+            ps.setString(3, str(adr, r, "ADRDESCRIPTION")); ps.setString(4, str(adr, r, "ADRSTREET"))
+            ps.setString(5, str(adr, r, "ADRNUMBER")); ps.setString(6, str(adr, r, "ADRZIPCODE"))
+            ps.setString(7, str(adr, r, "ADRDISTRICT")); ps.setString(8, str(adr, r, "ADRCITY"))
+            ps.setString(9, str(adr, r, "ADRPHONE1")); ps.setString(10, str(adr, r, "ADRPHONE2"))
+            ps.setString(11, str(adr, r, "ADRPHONE3")); ps.setString(12, str(adr, r, "ADRFAX"))
+            ps.setString(13, str(adr, r, "ADREMAIL")); ps.setString(14, str(adr, r, "ISOFFICE"))
+        }
+        rebuild(
+            "sen_sld",
+            "DOCID BIGINT PRIMARY KEY, DOTID BIGINT, DOCNUMBER VARCHAR(32), DOCEKDOSISDATE DATE, " +
+                "TDOEKTELESISDATE DATE, TDOOTHERDATE DATE, TRAID BIGINT, TDOLEEAFM VARCHAR(16), " +
+                "TDOQTYA DECIMAL(12,2), TDOQTYB DECIMAL(12,2), TDOGROSSVALUE DECIMAL(14,2), " +
+                "DOCIDTRIANGLE BIGINT, TRAIDPRINCIPAL BIGINT, DOCGUID VARCHAR(40), KEY idx_sen_sld_traid (TRAID)",
+            14, sld,
+        ) { ps, r ->
+            sld!!
+            ps.setObject(1, lng(sld, r, "DOCID")); ps.setObject(2, lng(sld, r, "DOTID"))
+            ps.setString(3, str(sld, r, "DOCNUMBER")); ps.setDate(4, dt(sld, r, "DOCEKDOSISDATE"))
+            ps.setDate(5, dt(sld, r, "TDOEKTELESISDATE")); ps.setDate(6, dt(sld, r, "TDOOTHERDATE"))
+            ps.setObject(7, lng(sld, r, "TRAID")); ps.setString(8, str(sld, r, "TDOLEEAFM"))
+            ps.setObject(9, dec(sld, r, "TDOQTYA")); ps.setObject(10, dec(sld, r, "TDOQTYB"))
+            ps.setObject(11, dec(sld, r, "TDOGROSSVALUE")); ps.setObject(12, lng(sld, r, "DOCIDTRIANGLE"))
+            ps.setObject(13, lng(sld, r, "TRAIDPRINCIPAL")); ps.setString(14, str(sld, r, "DOCGUID"))
+        }
+        rebuild(
+            "sen_ssd",
+            "DOCID BIGINT, LINENO INT, MCIID BIGINT, CODCODE VARCHAR(32), STDDESCRIPTION VARCHAR(255), " +
+                "STDQTYA DECIMAL(12,2), STDQTYB DECIMAL(12,2), SSDEXECDATE DATE, PRIMARY KEY (DOCID, LINENO)",
+            8, ssd,
+        ) { ps, r ->
+            ssd!!
+            ps.setObject(1, lng(ssd, r, "DOCID")); ps.setObject(2, lng(ssd, r, "LINENO"))
+            ps.setObject(3, lng(ssd, r, "MCIID")); ps.setString(4, str(ssd, r, "CODCODE"))
+            ps.setString(5, str(ssd, r, "STDDESCRIPTION")); ps.setObject(6, dec(ssd, r, "STDQTYA"))
+            ps.setObject(7, dec(ssd, r, "STDQTYB")); ps.setDate(8, dt(ssd, r, "SSDEXECDATE"))
+        }
+        rebuild(
+            "sen_sdt",
+            "DOTID BIGINT PRIMARY KEY, DOTCODE VARCHAR(16), DOTDESCRIPTION VARCHAR(128)",
+            3, sdt,
+        ) { ps, r ->
+            sdt!!
+            ps.setObject(1, lng(sdt, r, "DOTID")); ps.setString(2, str(sdt, r, "DOTCODE"))
+            ps.setString(3, str(sdt, r, "DOTDESCRIPTION"))
+        }
+        rebuild(
+            "sen_sti",
+            "MCIID BIGINT NULL, ITMNAME VARCHAR(255), CODCODE VARCHAR(32), DMIID BIGINT, KEY idx_sen_sti_mci (MCIID)",
+            4, sti,
+        ) { ps, r ->
+            sti!!
+            ps.setObject(1, lng(sti, r, "MCIID")); ps.setString(2, str(sti, r, "ITMNAME"))
+            ps.setString(3, str(sti, r, "CODCODE")); ps.setObject(4, lng(sti, r, "DMIID"))
+        }
     }
 
     // ── phase 1+2: customer identity + contacts ─────────────────────────────

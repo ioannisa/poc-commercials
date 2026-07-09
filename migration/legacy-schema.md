@@ -265,3 +265,28 @@ legacy table first and mirror it.
 - `roh_comments`/`roh_print_history`/`zones`/`zonefillers`/`cus`/`sld`/
   `calendar_excluded_docs`: absorbed as listed in the table above, all columns
   either mapped or deliberately dropped (timestamps).
+
+## Faithful UNION layer (owner directive 2026-07-10 — supersedes the mapping-only view)
+
+The station schema CONTAINS both sources as verbatim copies ("ΠΙΣΤΑ
+ΑΝΤΙΓΡΑΦΑ" — exact table and column names), combined into the one
+functional database:
+
+- **Legacy MySQL side** (transformer `copyLegacyTables()`, CREATE LIKE +
+  INSERT): `messages`, `schedule`, `programtypes`, `docref`, `z_commercials`,
+  `cus`, `sld`, `calendar_excluded_docs`, `commercials_calendar_final`,
+  `roh_comments`, `roh_print_history`, `zones`, `zonefillers` — flow-scoped
+  tables filtered to the station's flow; `emailhistory` copied without the
+  heavy bodies (the app's email_log holds the capped ones).
+- **Oracle/SEN side** (enricher `materializeSenTables()`): `sen_lee`,
+  `sen_cus`, `sen_adr` (ALL addresses per entity), `sen_sld`, `sen_ssd`,
+  `sen_sdt`, `sen_sti` — ERP column names, essential fields, MySQL-first
+  filtered rows. The `sen_` prefix exists ONLY because legacy `cus`/`sld`
+  collide with the ERP names.
+- The app's normalized tables (spots/placements/customers/contracts/…)
+  remain the WORKING layer, derived from the copies at migration time; the
+  agreed direction is to converge the app onto the faithful tables and
+  retire the renamed layer.
+- Triangular contracts read straight from the union: `docref.targetleeid`/
+  `pelatislee`, `sen_sld.TRAIDPRINCIPAL`/`DOCIDTRIANGLE`, and the LEE
+  (πελάτης) vs TRA/CUS (συναλλασσόμενος) split across `sen_lee`/`sen_cus`.
