@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
+import eu.anifantakis.commercials.scheduleemail.asScheduleEmailSource
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.authUser
@@ -197,7 +198,8 @@ fun Route.emailRoutes(registry: StationRegistry) {
             val data = withContext(Dispatchers.IO) {
                 access.db.ensureMonthSeeded(year, month)
                 ScheduleEmailAssembler.assemble(
-                    access.db, registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
+                    access.db.asScheduleEmailSource(),
+                    registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
                     year, month, clientCode, byTrader, spotIds, call.request.queryParameters["personalMessage"],
                 )
             }
@@ -241,7 +243,8 @@ fun Route.emailRoutes(registry: StationRegistry) {
 
                 access.db.ensureMonthSeeded(req.year, req.month)
                 val data = ScheduleEmailAssembler.assemble(
-                    access.db, registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
+                    access.db.asScheduleEmailSource(),
+                    registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
                     req.year, req.month, req.clientCode, byTrader, req.spotIds.toSet(), req.personalMessage,
                 )
                     ?: return@withContext SendResult(false, "No spots for customer '${req.clientCode}' this month")

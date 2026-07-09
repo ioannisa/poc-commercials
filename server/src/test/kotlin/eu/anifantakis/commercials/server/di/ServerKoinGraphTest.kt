@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.server.di
 
+import eu.anifantakis.commercials.mcp.McpToolServices
+import eu.anifantakis.commercials.mcp.di.mcpModule
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfig
 import eu.anifantakis.commercials.server.scheduler.CentralDb
@@ -56,8 +58,9 @@ class ServerKoinGraphTest {
             password: test
         """.trimIndent()
     ) {
+        // Exactly what Application.module() installs.
         val app = koinApplication {
-            modules(serverModule)
+            modules(serverModule, mcpModule)
         }
         val koin = app.koin
 
@@ -65,6 +68,8 @@ class ServerKoinGraphTest {
         assertNotNull(koin.get<CentralDb>())
         assertNotNull(koin.get<AuthDb>())
         assertEquals(listOf("station-a"), koin.get<StationRegistry>().ids)
+        // :mcp's own module resolves against the server's persistence graph
+        assertNotNull(koin.get<McpToolServices>())
 
         app.close()
     }
@@ -82,7 +87,7 @@ class ServerKoinGraphTest {
           password: test
         """.trimIndent()
     ) {
-        val app = koinApplication { modules(serverModule) }
+        val app = koinApplication { modules(serverModule, mcpModule) }
         assertEquals(emptyList(), app.koin.get<StationRegistry>().ids)
         app.close()
     }

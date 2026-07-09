@@ -7,7 +7,6 @@ import eu.anifantakis.commercials.mailer.ScheduleEmailData
 import eu.anifantakis.commercials.mailer.SmtpSettings
 import eu.anifantakis.commercials.mailer.SpotSection
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
-import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.time.LocalDate
 import java.time.YearMonth
@@ -23,11 +22,14 @@ import java.time.YearMonth
  * `send_schedule_email` tool. It is PURE: it never seeds demo months - the REST
  * route calls `StationDb.ensureMonthSeeded` itself before assembling; the MCP
  * tool deliberately does not (a real email must not fabricate demo placements).
+ *
+ * It ORGANIZES reads through the [ScheduleEmailSource] port, never touching the
+ * concrete JDBC `StationDb` - which is what makes [assemble] unit-testable.
  */
 object ScheduleEmailAssembler {
 
     fun assemble(
-        db: StationDb,
+        source: ScheduleEmailSource,
         stationName: String,
         year: Int,
         month: Int,
@@ -36,11 +38,11 @@ object ScheduleEmailAssembler {
         spotIds: Set<Long>,
         personalMessage: String?,
     ): ScheduleEmailData? {
-        val customer = db.customerByCode(clientCode) ?: return null
+        val customer = source.customerByCode(clientCode) ?: return null
 
-        val (cells, commercialsByKey) = db.loadMonth(year, month)
+        val (cells, commercialsByKey) = source.loadMonth(year, month)
         val colorByKey = cells.associate { (it.breakId to it.date) to it.zoneColorArgb }
-        val breaks = db.loadBreaks()
+        val breaks = source.loadBreaks()
         val days = YearMonth.of(year, month).lengthOfMonth()
 
         fun isMine(row: CommercialRow): Boolean =

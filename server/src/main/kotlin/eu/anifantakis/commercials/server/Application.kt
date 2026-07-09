@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.server
 
+import eu.anifantakis.commercials.mcp.di.mcpModule
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
 import eu.anifantakis.commercials.server.di.serverModule
@@ -31,7 +32,7 @@ fun main() {
 fun Application.module() {
     install(Koin) {
         slf4jLogger()
-        modules(serverModule)
+        modules(serverModule, mcpModule)
     }
 
     val centralDb by inject<CentralDb>()

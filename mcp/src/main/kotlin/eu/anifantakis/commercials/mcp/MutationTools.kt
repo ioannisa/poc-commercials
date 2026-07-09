@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
+import eu.anifantakis.commercials.scheduleemail.asScheduleEmailSource
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.serialization.json.buildJsonObject
@@ -159,7 +160,7 @@ internal fun Server.registerMutationTools(caller: McpCaller, services: McpToolSe
             val spotIds = a.longListOrNull("spotIds")?.toSet().orEmpty()
 
             val data = ScheduleEmailAssembler.assemble(
-                db = access.db,
+                source = access.db.asScheduleEmailSource(),
                 stationName = services.stationName(access.grant.stationId),
                 year = year, month = month, clientCode = clientCode, byTrader = byTrader,
                 spotIds = spotIds, personalMessage = a.stringOrNull("personalMessage"),

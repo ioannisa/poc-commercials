@@ -41,6 +41,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.slf4j.api)
 
+    // This module owns its own Koin module (di/McpModule.kt): BOTH backend entry
+    // points (the Ktor server and :mcp-stdio) load it, so the bindings cannot drift.
+    implementation(libs.koin.core)
+
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
 }

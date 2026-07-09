@@ -41,6 +41,7 @@ All files below are **new**.
 
 | File | Responsibility |
 |---|---|
+| `di/McpModule.kt` | `val mcpModule` — this module's Koin bindings (`McpToolServices`). Owned by `:mcp` because BOTH entry points load it (the Ktor server and `:mcp-stdio`); each supplies the persistence graph it resolves against. |
 | `CommercialsMcpServer.kt` | `buildCommercialsMcpServer(caller, services): Server` — builds a per-session server, registers read + report tools, and mutation tools only when `services.mutationsEnabled`. |
 | `McpCaller.kt` | Identity wrapper over `AuthUser` (same object the HTTP bearer principal carries), so authz is identical across transports. |
 | `McpToolServices.kt` | The backend facade: `resolveStation` (mirrors `Security.stationAccessOrRespond`: missing→required / no-grant→No access / unhosted→Unknown), `stations`, `isCustomerScoped`/`requireCode` (CUSTOMER_VIEWER scoping), `resolveBreak`/`breakSpots`, `generatePdf`/`saveReport`, and the mutation guardrails `requireStaff`/`smtpFor`/`stationName`/`audit`. Also the top-level `mcpMutationsEnabled()` (reads `COMMERCIALS_MCP_MUTATIONS`, default-deny). |
@@ -67,7 +68,9 @@ All files below are **new**.
 
 | File | Change |
 |---|---|
-| `mcp-stdio/src/main/kotlin/…/mcp/stdio/Main.kt` | **NEW** — boots the persistence/auth stack directly (no Ktor/Koin): `loadHostingConfig()` → `StationRegistry` + `CentralDb` + `AuthDb`, `authDb.bootstrap()`, resolves the caller from `COMMERCIALS_MCP_TOKEN` via `findUserByToken`, then `StdioServerTransport` + `server.createSession()`. Redirects `System.out`→stderr and keeps the real stdout only for the MCP channel. |
+| `mcp-stdio/src/main/kotlin/…/mcp/stdio/di/StdioModule.kt` | **NEW** — `val stdioModule`: this entry point's persistence/auth graph (`HostingConfig`, `StationRegistry`, `CentralDb`, `AuthDb`) — the launcher's counterpart of the server's `serverModule`. |
+| `mcp-stdio/src/main/kotlin/…/mcp/stdio/di/InitKoin.kt` | **NEW** — `initKoin()`: `startKoin { modules(stdioModule, mcpModule) }`, mirroring how the Ktor server installs Koin. |
+| `mcp-stdio/src/main/kotlin/…/mcp/stdio/Main.kt` | **NEW** — `initKoin()`, then resolves `AuthDb`/`McpToolServices` from Koin, `authDb.bootstrap()`, resolves the caller from `COMMERCIALS_MCP_TOKEN` via `findUserByToken`, then `StdioServerTransport` + `server.createSession()`; `stopKoin()` on exit. Redirects `System.out`→stderr and keeps the real stdout only for the MCP channel. |
 | `mcp-stdio/src/main/resources/logback.xml` | **NEW** — all logging to `System.err` (stdout is the protocol channel). |
 | `mcp-stdio/README.md` | **NEW** — build (`installDist`), env vars, and the Claude Desktop `mcpServers` snippet. |
 
@@ -81,8 +84,9 @@ All files below are **new**.
 | `server/build.gradle.kts` | `implementation(projects.mcp)` + `implementation(libs.ktor.server.sse)` |
 | `server/.../plugins/Mcp.kt` | **NEW** `configureMcp()` — `install(SSE)` + `authenticate(AUTH_BEARER) { mcp("/mcp") { buildCommercialsMcpServer(McpCaller.of(call.authUser()), services) } }`. Per-session, grant-scoped. |
 | `server/.../plugins/CORS.kt` | allow/expose `Mcp-Session-Id`, `Mcp-Protocol-Version`. |
-| `server/.../di/ServerModule.kt` | `single<McpToolServices> { McpToolServices(registry = get(), mutationsEnabled = mcpMutationsEnabled()) }`. |
-| `server/.../Application.kt` | call `configureMcp()` after `configureRouting()`. |
+| `server/.../di/ServerModule.kt` | unchanged bindings — the MCP binding lives in `:mcp`'s own `mcpModule`, not here. |
+| `server/.../Application.kt` | `install(Koin) { modules(serverModule, mcpModule) }`; call `configureMcp()` after `configureRouting()`. |
+| `server/src/test/.../ServerKoinGraphTest.kt` | resolves `serverModule + mcpModule` (exactly what `Application.module()` installs) and asserts `McpToolServices` resolves — koin-ktor starts Koin at runtime, so the compiler plugin cannot see this graph. |
 
 ### `persistence` (contract dates + read)
 | File | Change |
@@ -140,7 +144,7 @@ The two assemblers that once existed twice now have a single home each:
 
 | Module | Kind | Holds | Consumed by |
 |---|---|---|---|
-| `:schedule-email` | JVM (`api` persistence + mailer) | `ScheduleEmailAssembler.assemble` (one section per spot, triangular trader logic), `spotLabel`, `SmtpConfig.toSettings`, Greek month names | `server`'s `EmailRoutes` **and** `:mcp`'s `send_schedule_email` |
+| `:schedule-email` | JVM (`api` persistence + mailer) | `ScheduleEmailAssembler.assemble` (one section per spot, triangular trader logic), `spotLabel`, `SmtpConfig.toSettings`, Greek month names — reads go through the narrow `ScheduleEmailSource` port (`StationDb.asScheduleEmailSource()`), so the assembly is fakeable and unit-tested | `server`'s `EmailRoutes` **and** `:mcp`'s `send_schedule_email` |
 | `:reports-model` | Multiplatform (android/ios/jvm/js/wasm; kotlinx-serialization + datetime, no Compose, no reportcore) | `ProgramFlow`: JRXML param/field names, `formatDuration`, `formatGreekDate`, `emptyTime`, `notes`, `FLOW_ROH`, `params()`/`row()` builders | `reports-client`'s `toReportPayload`/`ReportDataFactory` **and** `:mcp`'s `BreakReportAssembler` |
 
 Only the *input mapping* still differs per side (client: grid `CommercialItem`s;

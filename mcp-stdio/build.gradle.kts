@@ -24,8 +24,10 @@ application {
 }
 
 dependencies {
-    // Tool core (brings persistence + the MCP SDK via `api`).
+    // Tool core (brings persistence + the MCP SDK via `api`), whose `mcpModule`
+    // this entry point loads alongside its own `stdioModule`.
     implementation(projects.mcp)
+    implementation(libs.koin.core)
 
     // Logging backend - directed to stderr so it never corrupts the stdout
     // MCP channel (see logback config).

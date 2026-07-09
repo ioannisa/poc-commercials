@@ -1,7 +1,5 @@
 package eu.anifantakis.commercials.server.di
 
-import eu.anifantakis.commercials.mcp.McpToolServices
-import eu.anifantakis.commercials.mcp.mcpMutationsEnabled
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfig
@@ -31,8 +29,6 @@ val serverModule = module {
 
     single<MigrationService>()
 
-    // MCP tool backend: constructor-wired from the registry (report output dir
-    // defaults). Consumed per session by configureMcp(). Mutations are off
-    // unless COMMERCIALS_MCP_MUTATIONS is set (default-deny for a hosted server).
-    single<McpToolServices> { McpToolServices(registry = get(), mutationsEnabled = mcpMutationsEnabled()) }
+    // NOTE: the MCP tool backend's bindings live in :mcp's own `mcpModule`
+    // (di/McpModule.kt) - Application.module() loads it alongside this one.
 }

@@ -3,17 +3,17 @@ package eu.anifantakis.commercials.mcp.stdio
 import eu.anifantakis.commercials.mcp.McpCaller
 import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.mcp.buildCommercialsMcpServer
-import eu.anifantakis.commercials.mcp.mcpMutationsEnabled
+import eu.anifantakis.commercials.mcp.stdio.di.initKoin
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.StationRegistry
-import eu.anifantakis.commercials.server.stations.loadHostingConfig
 import io.modelcontextprotocol.kotlin.sdk.server.StdioServerTransport
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
+import org.koin.core.context.stopKoin
 import org.slf4j.LoggerFactory
 import kotlin.system.exitProcess
 
@@ -26,6 +26,9 @@ private val log = LoggerFactory.getLogger("commercials-mcp-stdio")
  * identity from `COMMERCIALS_MCP_TOKEN` (a real bearer token, so the SAME
  * per-station grant/role checks apply as over HTTP), then serves the tools over
  * stdio.
+ *
+ * The graph is assembled by [initKoin] (`stdioModule` + the shared `mcpModule`),
+ * mirroring how the Ktor server installs Koin.
  *
  * stdout is the MCP protocol channel: logging goes to stderr (see logback.xml)
  * and System.out is redirected to stderr so a stray print cannot corrupt the
@@ -43,12 +46,10 @@ fun main() {
         exitProcess(1)
     }
 
-    // Boot the persistence/auth stack directly (no Ktor, no Koin), same sources
-    // the server uses. Station pools are created lazily on first tool call.
-    val hosting = loadHostingConfig()
-    val registry = StationRegistry(hosting)
-    val centralDb = CentralDb(hosting)
-    val authDb = AuthDb(centralDb, registry, hosting)
+    val koin = initKoin().koin
+    val registry = koin.get<StationRegistry>()
+    val centralDb = koin.get<CentralDb>()
+    val authDb = koin.get<AuthDb>()
     authDb.bootstrap() // idempotent: ensures central tables + super-admin sync
 
     val user = authDb.findUserByToken(token)
@@ -56,11 +57,12 @@ fun main() {
         log.error("COMMERCIALS_MCP_TOKEN is not a valid/active token. Exiting.")
         registry.closeAll()
         centralDb.close()
+        stopKoin()
         exitProcess(1)
     }
     log.info("MCP stdio server ready as '{}' ({} station grant(s))", user.username, user.grants.size)
 
-    val services = McpToolServices(registry, mutationsEnabled = mcpMutationsEnabled())
+    val services = koin.get<McpToolServices>()
     if (services.mutationsEnabled) log.warn("Mutations ENABLED (COMMERCIALS_MCP_MUTATIONS) - write tools are exposed.")
     val server = buildCommercialsMcpServer(McpCaller.of(user), services)
 
@@ -79,5 +81,6 @@ fun main() {
     } finally {
         registry.closeAll()
         centralDb.close()
+        stopKoin()
     }
 }
