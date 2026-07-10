@@ -8,7 +8,11 @@ package eu.anifantakis.commercials.core.presentation.string_resources
  */
 enum class Language(val code: String, val displayName: String) {
     EL("el", "Ελληνικά"),
-    EN("en", "English");
+    EN("en", "English"),
+    DE("de", "Deutsch"),
+    IT("it", "Italiano"),
+    FR("fr", "Français"),
+    HE("he", "עברית");
 
     companion object {
         /** Used when the system locale is none of the supported languages. */

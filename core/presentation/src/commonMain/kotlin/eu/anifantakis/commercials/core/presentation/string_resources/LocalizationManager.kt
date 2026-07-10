@@ -1,8 +1,12 @@
 package eu.anifantakis.commercials.core.presentation.string_resources
 
 import androidx.compose.ui.text.intl.Locale
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.De
 import eu.anifantakis.commercials.core.presentation.string_resources.lang.El
 import eu.anifantakis.commercials.core.presentation.string_resources.lang.En
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.Fr
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.He
+import eu.anifantakis.commercials.core.presentation.string_resources.lang.It
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +22,11 @@ object LocalizationManager {
 
     private val providers: Map<Language, LanguageStrings> = mapOf(
         Language.EL to El(),
-        Language.EN to En()
+        Language.EN to En(),
+        Language.DE to De(),
+        Language.IT to It(),
+        Language.FR to Fr(),
+        Language.HE to He()
     )
 
     private val _currentLanguage = MutableStateFlow(Language.FALLBACK)
