@@ -185,7 +185,8 @@ private fun DeleteStationDialog(
                 onClick = { onIntent(DatabasesIntent.ConfirmDelete) }
             ) {
                 AppText(
-                    if (dialog.hard) "HARD delete" else "Safe delete", AppTextStyle.BUTTON,
+                    Strings[if (dialog.hard) StringKey.DATABASES_HARD_DELETE else StringKey.DATABASES_SAFE_DELETE],
+                    AppTextStyle.BUTTON,
                     color = MaterialTheme.colorScheme.error
                 )
             }

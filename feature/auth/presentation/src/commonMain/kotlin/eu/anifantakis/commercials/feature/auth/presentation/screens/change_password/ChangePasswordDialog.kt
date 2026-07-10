@@ -148,10 +148,7 @@ private fun ChangePasswordDialog(
                     AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
                 Spacer(Modifier.height(8.dp))
-                AppText(
-                    "After the change every session is signed out - log in with the new password.",
-                    AppTextStyle.TINY,
-                )
+                AppText(Strings[StringKey.CHPASS_SIGNOUT_NOTE], AppTextStyle.TINY)
             }
         },
         confirmButton = {

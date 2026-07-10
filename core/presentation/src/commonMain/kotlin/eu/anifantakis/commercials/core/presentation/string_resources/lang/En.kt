@@ -230,6 +230,12 @@ internal class En : LanguageStrings {
         StringKey.LOGIN_BACK_TO_LOGIN -> "Back to login"
         StringKey.LOGIN_FORGOT_PASSWORD -> "Forgot password? Use a recovery code"
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Demo accounts"
+        // The credentials are fixed; only the roles ({0}-{2}) are translated.
+        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
+            "admin / admin123 — {0}\n" +
+                "viewer / viewer123 — {1}\n" +
+                "customer / customer123 — {2}\n" +
+                "superadmin — see server.yaml"
 
         StringKey.COMMON_SAVE -> "Save"
         StringKey.USER_MGMT_TITLE -> "User Management"
@@ -285,6 +291,8 @@ internal class En : LanguageStrings {
         StringKey.CHPASS_CURRENT -> "Current password"
         StringKey.CHPASS_REPEAT -> "Repeat new password"
         StringKey.CHPASS_CHANGE -> "Change"
+        StringKey.CHPASS_SIGNOUT_NOTE ->
+            "After the change every session is signed out - log in with the new password."
         StringKey.RECOVERY_TITLE -> "Recovery codes"
         StringKey.RECOVERY_GENERATE -> "Generate new codes"
         StringKey.RECOVERY_SAVED -> "I saved them"

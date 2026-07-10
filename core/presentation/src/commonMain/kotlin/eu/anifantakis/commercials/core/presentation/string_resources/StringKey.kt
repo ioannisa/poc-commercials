@@ -243,6 +243,7 @@ enum class StringKey(val json: String = "") {
     LOGIN_BACK_TO_LOGIN,
     LOGIN_FORGOT_PASSWORD,
     LOGIN_DEMO_ACCOUNTS,
+    LOGIN_DEMO_ACCOUNTS_BODY,
 
     // ── Admin screens (user mgmt / databases / migration) + auth dialogs ─
     COMMON_SAVE,
@@ -299,6 +300,7 @@ enum class StringKey(val json: String = "") {
     CHPASS_CURRENT,
     CHPASS_REPEAT,
     CHPASS_CHANGE,
+    CHPASS_SIGNOUT_NOTE,
     RECOVERY_TITLE,
     RECOVERY_GENERATE,
     RECOVERY_SAVED,

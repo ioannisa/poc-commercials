@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.auth.presentation.screens.login
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -180,10 +181,13 @@ private fun LoginScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     AppText(
-                        "admin / admin123 — Normal User\n" +
-                            "viewer / viewer123 — Report Viewer\n" +
-                            "customer / customer123 — Customer Viewer\n" +
-                            "superadmin — see server.yaml",
+                        Strings[StringKey.LOGIN_DEMO_ACCOUNTS_BODY].withArgs(
+                            listOf(
+                                Strings[StringKey.ROLE_NORMAL_USER],
+                                Strings[StringKey.ROLE_REPORT_VIEWER],
+                                Strings[StringKey.ROLE_CUSTOMER_VIEWER],
+                            )
+                        ),
                         AppTextStyle.TINY,
                     )
                 }

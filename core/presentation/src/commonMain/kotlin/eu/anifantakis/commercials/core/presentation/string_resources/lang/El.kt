@@ -230,6 +230,12 @@ internal class El : LanguageStrings {
         StringKey.LOGIN_BACK_TO_LOGIN -> "Πίσω στη σύνδεση"
         StringKey.LOGIN_FORGOT_PASSWORD -> "Ξεχάσατε τον κωδικό; Χρησιμοποιήστε κωδικό ανάκτησης"
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Δοκιμαστικοί λογαριασμοί"
+        // Τα διαπιστευτήρια είναι σταθερά· μόνο οι ρόλοι ({0}-{2}) μεταφράζονται.
+        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
+            "admin / admin123 — {0}\n" +
+                "viewer / viewer123 — {1}\n" +
+                "customer / customer123 — {2}\n" +
+                "superadmin — δείτε το server.yaml"
 
         StringKey.COMMON_SAVE -> "Αποθήκευση"
         StringKey.USER_MGMT_TITLE -> "Διαχείριση Χρηστών"
@@ -285,6 +291,8 @@ internal class El : LanguageStrings {
         StringKey.CHPASS_CURRENT -> "Τρέχων κωδικός"
         StringKey.CHPASS_REPEAT -> "Επανάληψη νέου κωδικού"
         StringKey.CHPASS_CHANGE -> "Αλλαγή"
+        StringKey.CHPASS_SIGNOUT_NOTE ->
+            "Μετά την αλλαγή αποσυνδέονται όλες οι συνεδρίες - συνδεθείτε ξανά με τον νέο κωδικό."
         StringKey.RECOVERY_TITLE -> "Κωδικοί ανάκτησης"
         StringKey.RECOVERY_GENERATE -> "Δημιουργία νέων κωδικών"
         StringKey.RECOVERY_SAVED -> "Τους αποθήκευσα"
