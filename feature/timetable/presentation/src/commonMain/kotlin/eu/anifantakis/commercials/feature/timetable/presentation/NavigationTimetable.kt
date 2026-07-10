@@ -126,13 +126,11 @@ private fun TimetableFlowHost(
 
             entry<TimetableStepNavType.CommercialDetail> { route ->
                 CommercialDetailScreenRoot(
-                    breakId = route.breakId,
-                    breakTime = route.breakTime,
-                    date = route.date,
-                    spotCount = route.spotCount,
+                    // The nav arguments are the ViewModel's constructor - the
+                    // Root only wires the VM and the navigation callbacks.
                     viewModel = koinViewModel(
                         key = "commercial-detail-${route.breakId}-${route.date}",
-                    ) { parametersOf(route.breakId, route.date, common) },
+                    ) { parametersOf(route.breakId, route.breakTime, route.date, common) },
                     onBack = { stepStack.removeLastOrNull() },
                     // Προηγούμενο/Επόμενο: RE-TARGET the top entry to the
                     // sibling break (replace, not push - Back still returns

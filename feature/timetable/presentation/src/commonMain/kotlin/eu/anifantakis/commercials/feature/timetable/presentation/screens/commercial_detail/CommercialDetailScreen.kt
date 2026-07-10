@@ -27,11 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,29 +35,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.EnhancedDataGrid
 import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SelectionMode
-import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import eu.anifantakis.commercials.core.presentation.grids.StickyRowsConfig
 import eu.anifantakis.commercials.core.presentation.grids.formatDuration
 import eu.anifantakis.commercials.core.presentation.grids.gridPalette
 import eu.anifantakis.commercials.core.presentation.grids.rememberEnhancedDataGridState
-import eu.anifantakis.commercials.reports.ReportDataFactory
-import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportConfig
-import eu.anifantakis.commercials.reports.print
-import eu.anifantakis.commercials.reports.toReportPayload
-import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
-import org.koin.compose.koinInject
 
 /**
  * Break Console entry point: own ViewModel (per-screen), the cell's
@@ -71,45 +57,36 @@ import org.koin.compose.koinInject
  */
 @Composable
 fun CommercialDetailScreenRoot(
-    breakId: Long,
-    breakTime: String,
-    date: LocalDate,
-    spotCount: Int,
     viewModel: CommercialDetailViewModel,
     onBack: () -> Unit,
     onNavigateToBreak: (breakId: Long, breakTime: String, spotCount: Int) -> Unit,
 ) {
-    val previous = viewModel.state.previousBreak
-    val next = viewModel.state.nextBreak
-    val goToBreak: (BreakRef) -> Unit = { onNavigateToBreak(it.breakId, it.label, it.spotCount) }
     CommercialDetailScreen(
-        breakId = breakId,
-        breakTime = breakTime,
-        date = StableDate(date),
-        spotCount = spotCount,
-        commercials = viewModel.state.commercials,
-        programName = viewModel.state.programName,
-        onCommercialsReorder = { reordered ->
-            viewModel.onAction(CommercialDetailIntent.Reorder(reordered.map { it.id }))
-        },
+        state = viewModel.state,
+        onIntent = viewModel::onAction,
         onNavIntent = { navIntent ->
             when (navIntent) {
                 CommercialDetailScreenNavIntent.OnBack -> onBack()
+                is CommercialDetailScreenNavIntent.OnGoToBreak ->
+                    onNavigateToBreak(
+                        navIntent.target.breakId,
+                        navIntent.target.label,
+                        navIntent.target.spotCount,
+                    )
             }
         },
-        onPrevious = previous?.let { p -> { goToBreak(p) } },
-        onNext = next?.let { n -> { goToBreak(n) } },
     )
 }
 
 /**
  * Navigation-only actions of the detail screen — always via this single
- * parameter (predictable shape). Not a ViewModel [CommercialDetailIntent]
- * (reorder is that); prev/next paging rides the dedicated nullable
- * callbacks the header buttons already expose.
+ * parameter (predictable shape). Not ViewModel [CommercialDetailIntent]s: the
+ * VM computes WHICH break is next (it is state), but going there is navigation.
  */
 private sealed interface CommercialDetailScreenNavIntent {
     data object OnBack : CommercialDetailScreenNavIntent
+    /** Προηγούμενο/Επόμενο - page to a neighbouring occupied break. */
+    data class OnGoToBreak(val target: BreakRef) : CommercialDetailScreenNavIntent
 }
 
 /**
@@ -119,88 +96,16 @@ private sealed interface CommercialDetailScreenNavIntent {
  */
 @Composable
 private fun CommercialDetailScreen(
-    breakId: Long,
-    breakTime: String,
-    date: StableDate,
-    spotCount: Int,
-    commercials: ImmutableList<CommercialItem>,
-    programName: String?,
-    onCommercialsReorder: (List<CommercialItem>) -> Unit,
+    state: CommercialDetailState,
+    onIntent: (CommercialDetailIntent) -> Unit,
     onNavIntent: (CommercialDetailScreenNavIntent) -> Unit,
-    onPrevious: (() -> Unit)? = null,
-    onNext: (() -> Unit)? = null
 ) {
-    // View-only roles can browse and print, but not reorder/edit
-    val authSession = koinInject<UserSession>()
-    val canEdit = authSession.role.canEdit
-
-    // Local mutable state for reordering - synced with parent
-    // We treat the incoming ImmutableList as the initial value.
-    // The internal state holds a List (which might be the ImmutableList or a new ArrayList after modification)
-    var localCommercials by remember(commercials) { mutableStateOf<List<CommercialItem>>(commercials) }
-
-    // Selected item for reordering
-    var selectedIndex by remember { mutableStateOf(-1) }
-
-    // Print this break's program flow (same report the scheduler popups print)
-    val reportScope = rememberCoroutineScope()
-    val reportService = koinInject<ReportService>()
-
-    fun printBreak() {
-        reportScope.launch {
-            val data = ReportDataFactory.createBreakProgramFlowData(
-                date = date.value,
-                breakTimeLabel = breakTime,
-                commercials = localCommercials
-            )
-            if (data.items.isNotEmpty()) {
-                reportService.print(data.toReportPayload(ReportConfig()))
-            }
-        }
-    }
-
-    // Calculate totals from local list
-    val totalDuration = localCommercials.sumOf { it.durationSeconds }
-    val flowCount = localCommercials.count { it.flow == FLOW_ROH }
-    val flowDuration = localCommercials.filter { it.flow == FLOW_ROH }.sumOf { it.durationSeconds }
-
-    // Reorder functions
-    fun moveUp(index: Int) {
-        if (!canEdit) return
-        if (index > 0) {
-            val newList = localCommercials.toMutableList()
-            val item = newList.removeAt(index)
-            newList.add(index - 1, item)
-            localCommercials = newList
-            selectedIndex = index - 1
-            onCommercialsReorder(newList)
-        }
-    }
-
-    fun moveDown(index: Int) {
-        if (!canEdit) return
-        if (index < localCommercials.size - 1) {
-            val newList = localCommercials.toMutableList()
-            val item = newList.removeAt(index)
-            newList.add(index + 1, item)
-            localCommercials = newList
-            selectedIndex = index + 1
-            onCommercialsReorder(newList)
-        }
-    }
-
-    // General reorder function for drag-and-drop
-    fun reorderRow(fromIndex: Int, toIndex: Int) {
-        if (!canEdit) return
-        if (fromIndex != toIndex && fromIndex in localCommercials.indices && toIndex in localCommercials.indices) {
-            val newList = localCommercials.toMutableList()
-            val item = newList.removeAt(fromIndex)
-            newList.add(toIndex, item)
-            localCommercials = newList
-            selectedIndex = toIndex
-            onCommercialsReorder(newList)
-        }
-    }
+    // Everything below RENDERS state. The list is the shared store's (the VM
+    // observes it), reordering is an Intent, and the header stats arrived
+    // pre-computed - no second copy of the truth lives here.
+    val commercials = state.commercials
+    val canEdit = state.canEdit
+    val date = state.date
 
     // Localized day names (Strings[] — recompose on language switch)
     val dayNames = mapOf(
@@ -236,7 +141,7 @@ private fun CommercialDetailScreen(
     val palette = gridPalette()
     val language = LocalLanguage.current
     val gridScale = AppTheme.fontSizeStep.factor
-    val columns = remember(localCommercials, palette, language, gridScale) {
+    val columns = remember(commercials, palette, language, gridScale, canEdit) {
         listOf(
             // Reorder buttons column
             ColumnDef<CommercialItem>(
@@ -248,13 +153,13 @@ private fun CommercialDetailScreen(
                 extractor = { "" },
                 sortable = false,
                 cellContent = { item, _, _ ->
-                    val index = localCommercials.indexOf(item)
+                    val index = commercials.indexOf(item)
                     Row(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(
-                            onClick = { moveUp(index) },
+                            onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index - 1)) },
                             enabled = index > 0,
                             modifier = Modifier.size(24.dp)
                         ) {
@@ -266,15 +171,15 @@ private fun CommercialDetailScreen(
                             )
                         }
                         IconButton(
-                            onClick = { moveDown(index) },
-                            enabled = index < localCommercials.size - 1,
+                            onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index + 1)) },
+                            enabled = index < commercials.size - 1,
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
                                 AppIcons.keyboardArrowDown,
                                 contentDescription = Strings[StringKey.DETAIL_CD_MOVE_DOWN],
                                 modifier = Modifier.size(18.dp),
-                                tint = if (index < localCommercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                                tint = if (index < commercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                             )
                         }
                     }
@@ -289,7 +194,7 @@ private fun CommercialDetailScreen(
                 extractor = { "" },  // Will use row index
                 sortable = false,
                 cellContent = { item, _, _ ->
-                    val index = localCommercials.indexOf(item) + 1
+                    val index = commercials.indexOf(item) + 1
                     Text(
                         text = index.toString(),
                         fontWeight = FontWeight.Bold,
@@ -371,22 +276,28 @@ private fun CommercialDetailScreen(
     ) {
         // Header section matching the screenshot
         DetailHeader(
-            dayName = dayNames[date.value.dayOfWeek] ?: "",
-            dayNumber = date.value.day,
-            monthName = monthOfNames[date.value.month.ordinal],
-            year = date.value.year,
-            breakTime = breakTime,
-            showName = programName,
-            totalSpots = localCommercials.size,
-            flowSpots = flowCount,
-            exceptSpots = localCommercials.size - flowCount,
-            totalDuration = totalDuration,
-            flowDuration = flowDuration,
-            exceptDuration = totalDuration - flowDuration,
+            dayName = dayNames[date.dayOfWeek] ?: "",
+            dayNumber = date.day,
+            monthName = monthOfNames[date.month.ordinal],
+            year = date.year,
+            breakTime = state.breakLabel,
+            showName = state.programName,
+            totalSpots = state.totalSpots,
+            flowSpots = state.flowSpots,
+            exceptSpots = state.excludedSpots,
+            totalDuration = state.totalDuration,
+            flowDuration = state.flowDuration,
+            exceptDuration = state.excludedDuration,
             onBack = { onNavIntent(CommercialDetailScreenNavIntent.OnBack) },
-            onPrevious = onPrevious,
-            onNext = onNext,
-            onPrint = { printBreak() }
+            // The VM decides WHICH break is the neighbour; a null one disables
+            // the button, exactly as the nullable callbacks used to.
+            onPrevious = state.previousBreak?.let { target ->
+                { onNavIntent(CommercialDetailScreenNavIntent.OnGoToBreak(target)) }
+            },
+            onNext = state.nextBreak?.let { target ->
+                { onNavIntent(CommercialDetailScreenNavIntent.OnGoToBreak(target)) }
+            },
+            onPrint = { onIntent(CommercialDetailIntent.PrintBreak) }
         )
 
         HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -394,7 +305,7 @@ private fun CommercialDetailScreen(
         // Data grid with commercials
         EnhancedDataGrid(
             summaryLabel = Strings[StringKey.TIMETABLE_TOTAL_SHORT],
-            items = localCommercials.toImmutableList(),
+            items = commercials,
             columns = columns,
             modifier = Modifier
                 .fillMaxSize()
@@ -416,7 +327,7 @@ private fun CommercialDetailScreen(
                 // Could open edit dialog
             },
             onRowReorder = { fromIndex, toIndex ->
-                reorderRow(fromIndex, toIndex)
+                onIntent(CommercialDetailIntent.MoveRow(fromIndex, toIndex))
             },
             rowKey = { it.id },
             contextMenuItems = { item, rowIndex ->
@@ -425,9 +336,9 @@ private fun CommercialDetailScreen(
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
-                        enabled = localCommercials.isNotEmpty()
+                        enabled = commercials.isNotEmpty()
                     ) {
-                        printBreak()
+                        onIntent(CommercialDetailIntent.PrintBreak)
                     },
 
                     // === SEPARATOR ===
@@ -482,40 +393,34 @@ private fun CommercialDetailScreen(
                         icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                         enabled = canEdit,
                         items = listOf(
+                            // The guards below only DISABLE the entries; the
+                            // ViewModel re-validates every MoveRow anyway.
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_UP.localized(),
                                 icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
                                 enabled = rowIndex > 0
                             ) {
-                                if (rowIndex > 0) {
-                                    reorderRow(rowIndex, rowIndex - 1)
-                                }
+                                onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex - 1))
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_DOWN.localized(),
                                 icon = { Icon(AppIcons.keyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
-                                enabled = rowIndex < localCommercials.size - 1
+                                enabled = rowIndex < commercials.size - 1
                             ) {
-                                if (rowIndex < localCommercials.size - 1) {
-                                    reorderRow(rowIndex, rowIndex + 1)
-                                }
+                                onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex + 1))
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_TOP.localized(),
                                 enabled = rowIndex > 0
                             ) {
-                                if (rowIndex > 0) {
-                                    reorderRow(rowIndex, 0)
-                                }
+                                onIntent(CommercialDetailIntent.MoveRow(rowIndex, 0))
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_BOTTOM.localized(),
-                                enabled = rowIndex < localCommercials.size - 1
+                                enabled = rowIndex < commercials.size - 1
                             ) {
-                                if (rowIndex < localCommercials.size - 1) {
-                                    reorderRow(rowIndex, localCommercials.size - 1)
-                                }
+                                onIntent(CommercialDetailIntent.MoveRow(rowIndex, commercials.size - 1))
                             }
                         )
                     ),

@@ -1,5 +1,8 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
@@ -7,11 +10,15 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTim
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
+import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
+import eu.anifantakis.commercials.reports.ReportPayload
+import eu.anifantakis.commercials.reports.ReportService
+import eu.anifantakis.commercials.reports.models.ReportResult
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -29,6 +36,10 @@ import kotlin.test.assertTrue
  * CommonViewModel - the contract is exactly what makes this cheap. The
  * repository fake feeds the station grid the Προηγούμενο/Επόμενο paging
  * walks (occupied breaks of the day, in air order).
+ *
+ * Reordering, the edit permission and the header stats are the ViewModel's
+ * job (the screen only renders), so they are covered here rather than in a
+ * UI test.
  */
 class CommercialDetailViewModelTest : TimetableTestBase() {
 
@@ -44,21 +55,42 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
             DataResult.Success(MonthSchedule(year, month, emptyList()))
     }
 
+    private class FakeUserSession(override val role: AppRole) : UserSession {
+        override val revision: Int = 0
+        override val displayName: String = "Tester"
+        override val isAdmin: Boolean = false
+        override val stations: List<StationAccess> = emptyList()
+        override val selectedStation: StationAccess? = null
+        override fun selectStation(stationId: String) = Unit
+    }
+
+    private class FakeReportService : ReportService {
+        val printed = mutableListOf<List<ReportPayload>>()
+        override suspend fun exportToPdf(payloads: List<ReportPayload>, suggestedFileName: String) =
+            ReportResult.Success("ok")
+        override suspend fun preview(payloads: List<ReportPayload>) = ReportResult.Success("ok")
+        override suspend fun print(payloads: List<ReportPayload>): ReportResult {
+            printed += payloads
+            return ReportResult.Success("ok")
+        }
+        override fun isReportGenerationAvailable(): Boolean = true
+    }
+
     private fun slot(id: Long, hour: Int, minute: Int = 0) = BreakSlotInfo(
         id = id, hour = hour, minute = minute,
         label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}",
         zone = "DEFAULT", zoneColorArgb = 0,
     )
 
-    private fun item(id: Long) = CommercialItem(
+    private fun item(id: Long, durationSeconds: Int = 30, flow: String = "NORMAL") = CommercialItem(
         id = id,
         clientCode = "CUS$id",
         clientName = "Client $id",
         message = "Spot $id",
-        durationSeconds = 30,
+        durationSeconds = durationSeconds,
         type = "TV",
         contract = "C$id",
-        flow = "NORMAL",
+        flow = flow,
     )
 
     private fun cell(vararg ids: Long) = SchedulerCellData(
@@ -70,11 +102,16 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         common: FakeTimetableCommon,
         breaks: List<BreakSlotInfo> = emptyList(),
         breakId: Long = 1,
+        role: AppRole = AppRole.NORMAL_USER,
+        reportService: ReportService = FakeReportService(),
     ) = CommercialDetailViewModel(
         breakId = breakId,
+        breakLabel = "10:00",
         date = TEST_DATE,
         common = common,
         scheduleRepository = FakeScheduleRepository(breaks),
+        session = FakeUserSession(role),
+        reportService = reportService,
     )
 
     @Test
@@ -119,17 +156,93 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
     }
 
     @Test
-    fun reorderIntentDelegatesToTheCommonContract() = runTest(testDispatcher) {
+    fun moveRowTranslatesIndicesIntoTheNewOrderAndDelegatesUp() = runTest(testDispatcher) {
         val common = FakeTimetableCommon()
         val vm = vm(common)
+        common.emit(TimetableCommonState(cells = persistentMapOf(key to cell(10, 11, 12))))
+        advanceUntilIdle()
 
-        vm.onAction(CommercialDetailIntent.Reorder(orderedIds = listOf(11L, 10L)))
+        // drag the LAST row onto the first
+        vm.onAction(CommercialDetailIntent.MoveRow(from = 2, to = 0))
 
         assertEquals(
-            listOf(Triple(1L, TEST_DATE, listOf(11L, 10L))),
+            listOf(Triple(1L, TEST_DATE, listOf(12L, 10L, 11L))),
             common.reorders,
             "the screen must delegate reorder up - never mutate shared state itself",
         )
+    }
+
+    @Test
+    fun moveRowIgnoresNoOpsAndOutOfBoundsIndices() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+        val vm = vm(common)
+        common.emit(TimetableCommonState(cells = persistentMapOf(key to cell(10, 11))))
+        advanceUntilIdle()
+
+        vm.onAction(CommercialDetailIntent.MoveRow(from = 1, to = 1))   // no-op
+        vm.onAction(CommercialDetailIntent.MoveRow(from = 0, to = 5))   // past the end
+        vm.onAction(CommercialDetailIntent.MoveRow(from = -1, to = 0))  // before the start
+
+        assertTrue(common.reorders.isEmpty(), "bounds are the ViewModel's job, not the grid's")
+    }
+
+    @Test
+    fun viewOnlyRolesCannotReorder() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+        val vm = vm(common, role = AppRole.REPORT_VIEWER)
+        common.emit(TimetableCommonState(cells = persistentMapOf(key to cell(10, 11))))
+        advanceUntilIdle()
+
+        assertTrue(vm.state.canEdit.not(), "a report viewer may browse and print, never edit")
+        vm.onAction(CommercialDetailIntent.MoveRow(from = 0, to = 1))
+
+        assertTrue(common.reorders.isEmpty(), "the permission is enforced in the ViewModel")
+    }
+
+    @Test
+    fun headerStatsSplitTheCellIntoFlowAndExcluded() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+        val vm = vm(common)
+
+        common.emit(
+            TimetableCommonState(
+                cells = persistentMapOf(
+                    key to SchedulerCellData(
+                        commercials = persistentListOf(
+                            item(10, durationSeconds = 30, flow = FLOW_ROH),
+                            item(11, durationSeconds = 20, flow = FLOW_ROH),
+                            item(12, durationSeconds = 15, flow = "NORMAL"),
+                        )
+                    )
+                )
+            )
+        )
+        advanceUntilIdle()
+
+        assertEquals(3, vm.state.totalSpots)
+        assertEquals(65, vm.state.totalDuration)
+        assertEquals(2, vm.state.flowSpots)
+        assertEquals(50, vm.state.flowDuration)
+        assertEquals(1, vm.state.excludedSpots)
+        assertEquals(15, vm.state.excludedDuration)
+    }
+
+    @Test
+    fun printBreakRendersTheCellAndSkipsAnEmptyOne() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+        val reports = FakeReportService()
+        val vm = vm(common, reportService = reports)
+
+        vm.onAction(CommercialDetailIntent.PrintBreak)
+        advanceUntilIdle()
+        assertTrue(reports.printed.isEmpty(), "an empty break has nothing to print")
+
+        common.emit(TimetableCommonState(cells = persistentMapOf(key to cell(10, 11))))
+        advanceUntilIdle()
+        vm.onAction(CommercialDetailIntent.PrintBreak)
+        advanceUntilIdle()
+
+        assertEquals(1, reports.printed.size, "printing is the ViewModel's side effect, not the composable's")
     }
 
     @Test
