@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
@@ -43,6 +44,8 @@ class TimetableCommonViewModel(
 
     override fun clear() = dispatch(TimetableCommonIntent.Clear)
 
+    override fun loadBreaks() = dispatch(TimetableCommonIntent.LoadBreaks)
+
     override fun loadMonth(year: Int, month: Int) =
         dispatch(TimetableCommonIntent.LoadMonth(year, month))
 
@@ -64,21 +67,33 @@ class TimetableCommonViewModel(
                 updateCommonState { TimetableCommonState() }
             }
 
-            is TimetableCommonIntent.LoadMonth -> {
-                when (val result = scheduleRepository.getMonth(intent.year, intent.month)) {
-                    is DataResult.Success -> {
-                        addedByCell.clear()
-                        updateCommonState {
-                            TimetableCommonState(
-                                cells = result.data.cells.associate { c -> c.toUi() }.toImmutableMap()
-                            )
-                        }
+            TimetableCommonIntent.LoadBreaks -> {
+                // Station-scoped and idempotent: the grid and the Break Console
+                // both ask, and the reducer is serialized, so exactly one of
+                // them reaches the network. [Clear] (station switch) re-arms it.
+                if (commonState.value.breaks.isNotEmpty()) return
+                when (val result = scheduleRepository.getBreaks()) {
+                    is DataResult.Success -> updateCommonState { st ->
+                        st.copy(breaks = result.data.map { b -> b.toUi() }.toImmutableList())
                     }
                     is DataResult.Failure -> {
-                        addedByCell.clear()
-                        updateCommonState { TimetableCommonState() }
+                        updateCommonState { st -> st.copy(breaks = persistentListOf()) }
                         showSnackbar(result.error.toUiText())
                     }
+                }
+            }
+
+            is TimetableCommonIntent.LoadMonth -> {
+                // Blank the OLD month's cells before the await - the new month's
+                // header must never sit above the previous month's numbers. The
+                // breaks survive: they belong to the station, not the month.
+                addedByCell.clear()
+                updateCommonState { st -> TimetableCommonState(breaks = st.breaks) }
+                when (val result = scheduleRepository.getMonth(intent.year, intent.month)) {
+                    is DataResult.Success -> updateCommonState { st ->
+                        st.copy(cells = result.data.cells.associate { c -> c.toUi() }.toImmutableMap())
+                    }
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
 

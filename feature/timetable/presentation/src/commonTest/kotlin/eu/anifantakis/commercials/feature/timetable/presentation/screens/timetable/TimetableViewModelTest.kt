@@ -3,7 +3,6 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.timeta
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeFinderRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
@@ -31,13 +30,13 @@ import kotlin.test.assertTrue
  */
 class TimetableViewModelTest : TimetableTestBase() {
 
-    private val schedule = FakeScheduleRepository()
     private val finder = FakeFinderRepository()
     private val partySearch = FakePartySearchRepository()
     private val common = FakeTimetableCommon()
 
+    // No ScheduleRepository: the breaks and the cells both come from `common`.
     private fun vm(prefs: FakeTimetablePreferences = FakeTimetablePreferences()) =
-        TimetableViewModel(schedule, finder, partySearch, common, prefs)
+        TimetableViewModel(finder, partySearch, common, prefs)
 
     private val key = SchedulerKey(1L, TEST_DATE)
 
@@ -68,6 +67,32 @@ class TimetableViewModelTest : TimetableTestBase() {
         advanceUntilIdle()
 
         assertEquals(2, vm.state.cells[key]?.spotCount, "the grid renders straight from the shared cells")
+    }
+
+    @Test
+    fun asksTheCommonContractForTheBreaksInsteadOfFetchingThemItself() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()   // let onStart { loadAll() } settle
+
+        assertEquals(1, common.breakLoads, "the station's grid is requested through the shared owner")
+        assertEquals(
+            listOf(vm.state.year to vm.state.month),
+            common.loads,
+            "and the current month's cells are loaded through it too",
+        )
+    }
+
+    @Test
+    fun monthNavigationKeepsTheStationsBreaks() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.NextMonth)
+        advanceUntilIdle()
+
+        assertEquals(0, common.clears, "changing month must not wipe the station's breaks")
+        assertEquals(1, common.breakLoads, "nor re-fetch them")
+        assertEquals(2, common.loads.size, "it just loads the new month's cells")
     }
 
     @Test

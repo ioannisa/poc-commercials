@@ -5,16 +5,13 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.auth.UserSession
-import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
-import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
-import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportConfig
@@ -23,9 +20,8 @@ import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -81,54 +77,35 @@ sealed interface CommercialDetailIntent {
  * live in the CommonViewModel, once). The screen therefore keeps NO local
  * copy of the list - the store is the single source of truth.
  *
- * Προηγούμενο/Επόμενο (the legacy Break Console's paging) walks the day's
- * OCCUPIED breaks in air order: the station grid comes from the repository
- * once, the occupancy live from the shared cells - so the neighbours stay
- * correct as placements change.
+ * Navigation hands it only the cell's IDENTITY (breakId + date, which is what
+ * a [SchedulerKey] is). Everything else - this break's label, the day's
+ * Προηγούμενο/Επόμενο chain, the occupancy - is read from the shared state,
+ * so the neighbours stay correct as placements change and nothing has to be
+ * threaded through the nav route.
  */
 @Stable
 class CommercialDetailViewModel(
     private val breakId: Long,
-    private val breakLabel: String,
     private val date: LocalDate,
     private val common: TimetableCommon,
-    private val scheduleRepository: ScheduleRepository,
     private val session: UserSession,
     private val reportService: ReportService,
 ) : BaseGlobalViewModel() {
 
     private val key = SchedulerKey(breakId, date)
-    private val breakSlots = MutableStateFlow<List<BreakSlotInfo>>(emptyList())
 
     init {
-        viewModelScope.launch {
-            when (val result = scheduleRepository.getBreaks()) {
-                is DataResult.Success -> breakSlots.value = result.data
-                is DataResult.Failure -> Unit // paging stays disabled; the cell itself still renders
-            }
-        }
+        // Idempotent: the grid has almost certainly loaded them already, but the
+        // screen states its own need rather than assuming the caller's order.
+        common.loadBreaks()
     }
 
-    private val detailState = combine(common.commonState, breakSlots) { commonState, slots ->
-        val cells = commonState.cells
-        val day = slots
-            .sortedBy { it.hour * 60 + it.minute }
-            .mapNotNull { slot ->
-                val spots = cells[SchedulerKey(slot.id, date)]?.spotCount ?: 0
-                // the day's paging chain: occupied breaks + the one being viewed
-                if (spots > 0 || slot.id == breakId) BreakRef(slot.id, slot.label, spots) else null
-            }
-        val at = day.indexOfFirst { it.breakId == breakId }
-        buildState(
-            cell = cells[key],
-            previousBreak = if (at > 0) day[at - 1] else null,
-            nextBreak = if (at >= 0 && at < day.lastIndex) day[at + 1] else null,
-        )
-    }
+    private val detailState = common.commonState
+        .map { commonState -> buildState(commonState) }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
-            buildState(common.commonState.value.cells[key]),
+            buildState(common.commonState.value),
         )
 
     val state by detailState.toComposeState(viewModelScope)
@@ -156,13 +133,13 @@ class CommercialDetailViewModel(
     }
 
     private fun printBreak() {
-        val commercials = detailState.value.commercials
-        if (commercials.isEmpty()) return
+        val current = detailState.value
+        if (current.commercials.isEmpty()) return
         viewModelScope.launch {
             val data = ReportDataFactory.createBreakProgramFlowData(
                 date = date,
-                breakTimeLabel = breakLabel,
-                commercials = commercials,
+                breakTimeLabel = current.breakLabel,
+                commercials = current.commercials,
             )
             if (data.items.isNotEmpty()) {
                 reportService.print(data.toReportPayload(ReportConfig()))
@@ -170,23 +147,38 @@ class CommercialDetailViewModel(
         }
     }
 
-    /** The cell's commercials, programme and header stats - or an empty cell. */
-    private fun buildState(
-        cell: SchedulerCellData?,
-        previousBreak: BreakRef? = null,
-        nextBreak: BreakRef? = null,
-    ): CommercialDetailState {
+    /**
+     * Everything this screen shows, derived from the shared state alone: the
+     * cell's commercials + programme, the header stats, this break's own label
+     * and the day's paging chain. Only [breakId] and [date] came in from
+     * navigation - the rest is PULLED, never pushed.
+     */
+    private fun buildState(commonState: TimetableCommonState): CommercialDetailState {
+        val cells = commonState.cells
+
+        // The day's paging chain: occupied breaks in air order, plus the one
+        // being viewed (so an emptied break still knows its neighbours).
+        val day = commonState.breaks
+            .sortedBy { it.time.hour * 60 + it.time.minute }
+            .mapNotNull { slot ->
+                val spots = cells[SchedulerKey(slot.id, date)]?.spotCount ?: 0
+                if (spots > 0 || slot.id == breakId) BreakRef(slot.id, slot.label, spots) else null
+            }
+        val at = day.indexOfFirst { it.breakId == breakId }
+
+        val cell = cells[key]
         val commercials = cell?.commercials ?: persistentListOf()
         val flow = commercials.filter { it.flow == FLOW_ROH }.toImmutableList()
         val totalDuration = commercials.sumOf { it.durationSeconds }
         val flowDuration = flow.sumOf { it.durationSeconds }
+
         return CommercialDetailState(
             date = date,
-            breakLabel = breakLabel,
+            breakLabel = day.getOrNull(at)?.label ?: "",
             commercials = commercials,
             programName = cell?.programName,
-            previousBreak = previousBreak,
-            nextBreak = nextBreak,
+            previousBreak = if (at > 0) day[at - 1] else null,
+            nextBreak = if (at >= 0 && at < day.lastIndex) day[at + 1] else null,
             canEdit = session.role.canEdit,
             totalSpots = commercials.size,
             flowSpots = flow.size,

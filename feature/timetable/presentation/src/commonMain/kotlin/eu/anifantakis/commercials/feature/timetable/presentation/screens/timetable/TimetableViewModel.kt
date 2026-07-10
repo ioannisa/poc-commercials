@@ -13,12 +13,10 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
-import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
-import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
@@ -92,9 +90,9 @@ sealed interface TimetableIntent {
 
     data class SelectionChanged(val row: Int, val column: Int) : TimetableIntent
     data object ToggleShowTimes : TimetableIntent
+    /** [spotCount] only decides WHETHER the cell opens; it never travels on. */
     data class OpenCell(
         val breakId: Long,
-        val breakLabel: String,
         val date: LocalDate,
         val spotCount: Int,
     ) : TimetableIntent
@@ -113,12 +111,11 @@ sealed interface TimetableIntent {
 }
 
 sealed interface TimetableEffect {
-    data class OpenDetail(
-        val breakId: Long,
-        val breakLabel: String,
-        val date: LocalDate,
-        val spotCount: Int,
-    ) : TimetableEffect
+    /**
+     * The cell IDENTITY, nothing more: the detail ViewModel pulls the label,
+     * the commercials and the paging chain from the shared state itself.
+     */
+    data class OpenDetail(val breakId: Long, val date: LocalDate) : TimetableEffect
 }
 
 /**
@@ -130,7 +127,6 @@ sealed interface TimetableEffect {
  */
 @Stable
 class TimetableViewModel(
-    private val scheduleRepository: ScheduleRepository,
     private val finderRepository: FinderRepository,
     private val partySearch: PartySearchRepository,
     private val common: TimetableCommon,
@@ -153,12 +149,18 @@ class TimetableViewModel(
     private var searchJob: Job? = null
 
     init {
-        // The common ViewModel is the single truth for cells; mirror it into
-        // this screen's state so the grid renders straight from TimetableState.
+        // The common ViewModel is the single truth for the station's breaks and
+        // the month's cells; mirror it into this screen's state so the grid
+        // renders straight from TimetableState.
         viewModelScope.launch {
             common.commonState.collect { cs ->
                 _state.update {
-                    it.copy(cells = cs.cells, modifiedCells = cs.modifiedCells, addedCounts = cs.addedCounts)
+                    it.copy(
+                        breaks = cs.breaks,
+                        cells = cs.cells,
+                        modifiedCells = cs.modifiedCells,
+                        addedCounts = cs.addedCounts,
+                    )
                 }
             }
         }
@@ -187,9 +189,7 @@ class TimetableViewModel(
 
             is TimetableIntent.OpenCell -> viewModelScope.launch {
                 if (intent.spotCount > 0) {
-                    eventChannel.send(
-                        TimetableEffect.OpenDetail(intent.breakId, intent.breakLabel, intent.date, intent.spotCount)
-                    )
+                    eventChannel.send(TimetableEffect.OpenDetail(intent.breakId, intent.date))
                 }
             }
 
@@ -224,14 +224,7 @@ class TimetableViewModel(
     // ── data loading ────────────────────────────────────────────────────
 
     private fun loadAll() {
-        viewModelScope.launch {
-            when (val result = scheduleRepository.getBreaks()) {
-                is DataResult.Success -> _state.update {
-                    it.copy(breaks = result.data.map { b -> b.toUi() }.toImmutableList())
-                }
-                is DataResult.Failure -> _state.update { it.copy(breaks = persistentListOf()) }
-            }
-        }
+        common.loadBreaks()
         common.loadMonth(_state.value.year, _state.value.month)
     }
 
@@ -241,7 +234,8 @@ class TimetableViewModel(
         var month = s.month + delta
         if (month == 0) { month = 12; year-- }
         if (month == 13) { month = 1; year++ }
-        common.clear()
+        // No clear() here: loadMonth blanks the month's own cells and keeps the
+        // station's breaks, so the grid does not lose its rows between months.
         _state.update { it.copy(year = year, month = month) }
         common.loadMonth(year, month)
     }

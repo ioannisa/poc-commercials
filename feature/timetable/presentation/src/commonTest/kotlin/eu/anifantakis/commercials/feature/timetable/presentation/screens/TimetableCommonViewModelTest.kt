@@ -40,6 +40,50 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
     }
 
     @Test
+    fun loadBreaksFetchesOnceHoweverManyScreensAsk() = runTest(testDispatcher) {
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10), breakSlot(2L, 12)))
+        val vm = vm()
+
+        vm.loadBreaks()   // the grid asks
+        vm.loadBreaks()   // the Break Console asks
+        advanceUntilIdle()
+
+        assertEquals(1, schedule.breaksFetches, "the station's grid is fetched exactly once")
+        assertEquals(listOf(1L, 2L), vm.commonState.value.breaks.map { it.id })
+    }
+
+    @Test
+    fun breaksAreStationScopedAndSurviveMonthNavigation() = runTest(testDispatcher) {
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10)))
+        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadBreaks()
+        vm.loadMonth(2026, 7)
+        advanceUntilIdle()
+
+        schedule.monthResult = DataResult.Success(month())
+        vm.loadMonth(2026, 8)
+        advanceUntilIdle()
+
+        assertEquals(1, vm.commonState.value.breaks.size, "the rows belong to the station, not the month")
+        assertTrue(vm.commonState.value.cells.isEmpty(), "but the month's cells were replaced")
+        assertEquals(1, schedule.breaksFetches, "and no second /api/breaks was issued")
+    }
+
+    @Test
+    fun clearDropsTheBreaksSoAStationSwitchRefetchesThem() = runTest(testDispatcher) {
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10)))
+        val vm = vm()
+        vm.loadBreaks(); advanceUntilIdle()
+
+        vm.clear(); advanceUntilIdle()
+        assertTrue(vm.commonState.value.breaks.isEmpty(), "the breaks belonged to the OLD station")
+
+        vm.loadBreaks(); advanceUntilIdle()
+        assertEquals(2, schedule.breaksFetches, "the new station's grid is fetched afresh")
+    }
+
+    @Test
     fun addIncrementsCellAndMarksItModified() = runTest(testDispatcher) {
         schedule.monthResult = DataResult.Success(month(cell(commercials = emptyList())))
         placements.nextAdded = placed(id = 100, durationSeconds = 45)

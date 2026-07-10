@@ -93,13 +93,30 @@ fun cell(
 fun month(vararg cells: ScheduleCell): MonthSchedule =
     MonthSchedule(year = 2026, month = 7, cells = cells.toList())
 
+/** One row of the station's airtime grid, as the repository returns it. */
+fun breakSlot(id: Long, hour: Int, minute: Int = 0): BreakSlotInfo = BreakSlotInfo(
+    id = id,
+    hour = hour,
+    minute = minute,
+    label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}",
+    zone = "DEFAULT",
+    zoneColorArgb = 0,
+)
+
 // ── fakes over the domain interfaces (mandatory in KMP) ──────────────────
 
 class FakeScheduleRepository : ScheduleRepository {
     var monthResult: DataResult<MonthSchedule, DataError.Network> = DataResult.Success(month())
 
-    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> =
-        DataResult.Success(emptyList())
+    /** The station's airtime grid. Counted: it must be fetched ONCE. */
+    var breaksResult: DataResult<List<BreakSlotInfo>, DataError.Network> = DataResult.Success(emptyList())
+    var breaksFetches = 0
+        private set
+
+    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> {
+        breaksFetches++
+        return breaksResult
+    }
 
     override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
         monthResult
@@ -162,12 +179,14 @@ class FakeTimetableCommon : TimetableCommon {
     fun emit(state: TimetableCommonState) { _commonState.value = state }
 
     var clears = 0
+    var breakLoads = 0
     val loads = mutableListOf<Pair<Int, Int>>()
     val adds = mutableListOf<Triple<Long, Long, LocalDate>>()
     val removes = mutableListOf<Pair<Long, LocalDate>>()
     val reorders = mutableListOf<Triple<Long, LocalDate, List<Long>>>()
 
     override fun clear() { clears++ }
+    override fun loadBreaks() { breakLoads++ }
     override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
     override fun add(spotId: Long, breakId: Long, date: LocalDate) { adds += Triple(spotId, breakId, date) }
     override fun removeLast(breakId: Long, date: LocalDate) { removes += (breakId to date) }

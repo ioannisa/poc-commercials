@@ -41,12 +41,11 @@ sealed interface TimetableStepNavType : NavKey {
     @Serializable
     data object Grid : TimetableStepNavType
 
+    /** The cell's identity - the ViewModel pulls everything else from the flow. */
     @Serializable
     data class CommercialDetail(
         val breakId: Long,
-        val breakTime: String,
         val date: LocalDate,
-        val spotCount: Int,
     ) : TimetableStepNavType
 }
 
@@ -113,10 +112,8 @@ private fun TimetableFlowHost(
             entry<TimetableStepNavType.Grid> {
                 TimetableScreenRoot(
                     viewModel = koinViewModel { parametersOf(common) },
-                    onOpenDetail = { breakId, breakTime, date, spotCount ->
-                        stepStack.add(
-                            TimetableStepNavType.CommercialDetail(breakId, breakTime, date, spotCount)
-                        )
+                    onOpenDetail = { breakId, date ->
+                        stepStack.add(TimetableStepNavType.CommercialDetail(breakId, date))
                     },
                     onOpenEmailDialog = onOpenEmailDialog,
                     onLogout = onLogout,
@@ -130,14 +127,14 @@ private fun TimetableFlowHost(
                     // Root only wires the VM and the navigation callbacks.
                     viewModel = koinViewModel(
                         key = "commercial-detail-${route.breakId}-${route.date}",
-                    ) { parametersOf(route.breakId, route.breakTime, route.date, common) },
+                    ) { parametersOf(route.breakId, route.date, common) },
                     onBack = { stepStack.removeLastOrNull() },
                     // Προηγούμενο/Επόμενο: RE-TARGET the top entry to the
                     // sibling break (replace, not push - Back still returns
                     // to the grid, exactly like the legacy Break Console).
-                    onNavigateToBreak = { breakId, breakTime, spotCount ->
+                    onNavigateToBreak = { breakId ->
                         stepStack[stepStack.lastIndex] =
-                            TimetableStepNavType.CommercialDetail(breakId, breakTime, route.date, spotCount)
+                            TimetableStepNavType.CommercialDetail(breakId, route.date)
                     },
                 )
             }

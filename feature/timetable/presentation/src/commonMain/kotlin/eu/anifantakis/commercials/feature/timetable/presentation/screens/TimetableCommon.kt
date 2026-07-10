@@ -1,10 +1,13 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Immutable
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.flow.StateFlow
@@ -22,10 +25,17 @@ interface TimetableCommon {
 
     val commonState: StateFlow<TimetableCommonState>
 
-    /** Fresh slate: login/station switch or month navigation. */
+    /** Fresh slate: login or station switch (the breaks belong to a station). */
     fun clear()
 
-    /** Loads the month's cells (replaces the current ones). */
+    /**
+     * Loads the station's airtime grid ONCE. Idempotent: callers that need the
+     * breaks (the grid's rows, the detail's break label and its Προηγούμενο/
+     * Επόμενο chain) may each ask, and only the first ask hits the network.
+     */
+    fun loadBreaks()
+
+    /** Loads the month's cells (blanks the old ones first, keeps the breaks). */
     fun loadMonth(year: Int, month: Int)
 
     /** Persists a placement of [spotId] into the cell, then applies it. */
@@ -44,6 +54,12 @@ interface TimetableCommon {
 /** Flow-wide state - the `Common` infix is mandatory (ownership is visible). */
 @Immutable
 data class TimetableCommonState(
+    /**
+     * The station's airtime grid, in air order. STATION-scoped (the cells
+     * below are MONTH-scoped), so it survives month navigation and is fetched
+     * once - both the grid and the Break Console read it from here.
+     */
+    val breaks: ImmutableList<BreakSlot> = persistentListOf(),
     val cells: ImmutableMap<SchedulerKey, SchedulerCellData> = persistentMapOf(),
     /** Cells this session touched - the classic black marker. */
     val modifiedCells: ImmutableSet<SchedulerKey> = persistentSetOf(),
@@ -57,6 +73,7 @@ data class TimetableCommonState(
  */
 sealed interface TimetableCommonIntent {
     data object Clear : TimetableCommonIntent
+    data object LoadBreaks : TimetableCommonIntent
     data class LoadMonth(val year: Int, val month: Int) : TimetableCommonIntent
     data class Add(val spotId: Long, val breakId: Long, val date: LocalDate) : TimetableCommonIntent
     data class RemoveLast(val breakId: Long, val date: LocalDate) : TimetableCommonIntent

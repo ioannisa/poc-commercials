@@ -87,15 +87,14 @@ import org.koin.compose.koinInject
 @Composable
 fun TimetableScreenRoot(
     viewModel: TimetableViewModel,
-    onOpenDetail: (breakId: Long, breakTime: String, date: LocalDate, spotCount: Int) -> Unit,
+    onOpenDetail: (breakId: Long, date: LocalDate) -> Unit,
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
 ) {
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
-            is TimetableEffect.OpenDetail ->
-                onOpenDetail(effect.breakId, effect.breakLabel, effect.date, effect.spotCount)
+            is TimetableEffect.OpenDetail -> onOpenDetail(effect.breakId, effect.date)
         }
     }
 
@@ -305,7 +304,6 @@ private fun TimetableScreen(
                 onIntent(
                     TimetableIntent.OpenCell(
                         breakId = breakSlot.id,
-                        breakLabel = formatTime(breakSlot.time.hour, breakSlot.time.minute),
                         date = date,
                         spotCount = data?.spotCount ?: 0,
                     )
@@ -336,7 +334,6 @@ private fun TimetableScreen(
                         onIntent(
                             TimetableIntent.OpenCell(
                                 breakId = breakSlot.id,
-                                breakLabel = formatTime(breakSlot.time.hour, breakSlot.time.minute),
                                 date = date,
                                 spotCount = spotCount,
                             )

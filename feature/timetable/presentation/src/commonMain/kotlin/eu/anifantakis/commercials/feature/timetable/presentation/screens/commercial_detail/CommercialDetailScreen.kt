@@ -59,7 +59,7 @@ import kotlinx.datetime.LocalDate
 fun CommercialDetailScreenRoot(
     viewModel: CommercialDetailViewModel,
     onBack: () -> Unit,
-    onNavigateToBreak: (breakId: Long, breakTime: String, spotCount: Int) -> Unit,
+    onNavigateToBreak: (breakId: Long) -> Unit,
 ) {
     CommercialDetailScreen(
         state = viewModel.state,
@@ -68,11 +68,7 @@ fun CommercialDetailScreenRoot(
             when (navIntent) {
                 CommercialDetailScreenNavIntent.OnBack -> onBack()
                 is CommercialDetailScreenNavIntent.OnGoToBreak ->
-                    onNavigateToBreak(
-                        navIntent.target.breakId,
-                        navIntent.target.label,
-                        navIntent.target.spotCount,
-                    )
+                    onNavigateToBreak(navIntent.target.breakId)
             }
         },
     )

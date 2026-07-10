@@ -36,9 +36,7 @@ class NavStepConfigTest {
     fun dataClassRouteWithArgumentsSurvivesTheRoundTrip() {
         val route = TimetableStepNavType.CommercialDetail(
             breakId = 7,
-            breakTime = "21:45",
             date = TEST_DATE,
-            spotCount = 12,
         )
         assertEquals(route, roundTrip(route))
     }

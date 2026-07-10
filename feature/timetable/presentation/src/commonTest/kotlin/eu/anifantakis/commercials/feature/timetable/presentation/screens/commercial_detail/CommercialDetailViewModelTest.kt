@@ -3,19 +3,15 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.commer
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
-import eu.anifantakis.commercials.core.domain.util.DataError
-import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
-import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
-import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportResult
@@ -23,6 +19,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -34,8 +31,9 @@ import kotlin.test.assertTrue
  * flows DOWN (its cell's commercials, merged from commonState) and the
  * reorder command goes UP (delegated to the contract). No concrete
  * CommonViewModel - the contract is exactly what makes this cheap. The
- * repository fake feeds the station grid the Προηγούμενο/Επόμενο paging
- * walks (occupied breaks of the day, in air order).
+ * station's breaks live in that same shared state, so the fake feeds the
+ * Προηγούμενο/Επόμενο chain (occupied breaks of the day, in air order)
+ * without any repository at all.
  *
  * Reordering, the edit permission and the header stats are the ViewModel's
  * job (the screen only renders), so they are covered here rather than in a
@@ -44,16 +42,6 @@ import kotlin.test.assertTrue
 class CommercialDetailViewModelTest : TimetableTestBase() {
 
     private val key = SchedulerKey(1L, TEST_DATE)
-
-    private class FakeScheduleRepository(
-        private val breaks: List<BreakSlotInfo> = emptyList(),
-    ) : ScheduleRepository {
-        override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> =
-            DataResult.Success(breaks)
-
-        override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
-            DataResult.Success(MonthSchedule(year, month, emptyList()))
-    }
 
     private class FakeUserSession(override val role: AppRole) : UserSession {
         override val revision: Int = 0
@@ -76,10 +64,11 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         override fun isReportGenerationAvailable(): Boolean = true
     }
 
-    private fun slot(id: Long, hour: Int, minute: Int = 0) = BreakSlotInfo(
-        id = id, hour = hour, minute = minute,
+    /** A break as the SHARED state carries it (the grid's UI model). */
+    private fun slot(id: Long, hour: Int, minute: Int = 0) = BreakSlot(
+        id = id,
+        time = LocalTime(hour, minute),
         label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}",
-        zone = "DEFAULT", zoneColorArgb = 0,
     )
 
     private fun item(id: Long, durationSeconds: Int = 30, flow: String = "NORMAL") = CommercialItem(
@@ -100,16 +89,13 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
 
     private fun vm(
         common: FakeTimetableCommon,
-        breaks: List<BreakSlotInfo> = emptyList(),
         breakId: Long = 1,
         role: AppRole = AppRole.NORMAL_USER,
         reportService: ReportService = FakeReportService(),
     ) = CommercialDetailViewModel(
         breakId = breakId,
-        breakLabel = "10:00",
         date = TEST_DATE,
         common = common,
-        scheduleRepository = FakeScheduleRepository(breaks),
         session = FakeUserSession(role),
         reportService = reportService,
     )
@@ -248,11 +234,12 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
     @Test
     fun previousAndNextWalkTheDaysOccupiedBreaksInAirOrder() = runTest(testDispatcher) {
         val common = FakeTimetableCommon()
-        // grid: 08:00(#5, occupied) 10:00(#1, THIS) 12:00(#7, EMPTY) 14:00(#9, occupied)
-        val vm = vm(common, breaks = listOf(slot(9, 14), slot(1, 10), slot(5, 8), slot(7, 12)))
+        val vm = vm(common)
 
+        // grid: 08:00(#5, occupied) 10:00(#1, THIS) 12:00(#7, EMPTY) 14:00(#9, occupied)
         common.emit(
             TimetableCommonState(
+                breaks = persistentListOf(slot(9, 14), slot(1, 10), slot(5, 8), slot(7, 12)),
                 cells = persistentMapOf(
                     SchedulerKey(5L, TEST_DATE) to cell(50),
                     key to cell(10, 11),
@@ -262,6 +249,7 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         )
         advanceUntilIdle()
 
+        assertEquals("10:00", vm.state.breakLabel, "its own label is PULLED from the shared breaks")
         assertEquals(5L, vm.state.previousBreak?.breakId, "previous = the earlier occupied break")
         assertEquals("08:00", vm.state.previousBreak?.label)
         assertEquals(9L, vm.state.nextBreak?.breakId, "the EMPTY 12:00 break is skipped")
@@ -271,10 +259,11 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
     @Test
     fun edgesOfTheDayDisableTheCorrespondingDirection() = runTest(testDispatcher) {
         val common = FakeTimetableCommon()
-        val vm = vm(common, breaks = listOf(slot(1, 10), slot(9, 14)))
+        val vm = vm(common)
 
         common.emit(
             TimetableCommonState(
+                breaks = persistentListOf(slot(1, 10), slot(9, 14)),
                 cells = persistentMapOf(
                     key to cell(10),
                     SchedulerKey(9L, TEST_DATE) to cell(90),
