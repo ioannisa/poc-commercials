@@ -40,11 +40,9 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,29 +50,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import eu.anifantakis.commercials.core.domain.auth.UserSession
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
-import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.grids.formatTime
-import eu.anifantakis.commercials.reports.ReportDataFactory
-import eu.anifantakis.commercials.reports.ReportPayload
-import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportConfig
-import eu.anifantakis.commercials.reports.print
-import eu.anifantakis.commercials.reports.toReportPayload
 import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
-import kotlinx.collections.immutable.toImmutableMap
-import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
-import org.koin.compose.koinInject
 
 /**
  * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
@@ -98,19 +87,6 @@ fun TimetableScreenRoot(
         }
     }
 
-    // Session revision drives reloads: login, logout and station switches
-    // must refetch with the new token/role and drop per-station edits.
-    val authSession = koinInject<UserSession>()
-    val revision = authSession.revision
-    var lastRevision by remember { mutableStateOf(revision) }
-    LaunchedEffect(revision) {
-        if (revision != lastRevision) {
-            lastRevision = revision
-            viewModel.onAction(TimetableIntent.Reload)
-        }
-    }
-    val canEdit = authSession.role.canEdit
-
     TimetableScreen(
         state = viewModel.state,
         onIntent = viewModel::onAction,
@@ -121,7 +97,6 @@ fun TimetableScreenRoot(
                 TimetableScreenNavIntent.OnPreferences -> onPreferences()
             }
         },
-        canEdit = canEdit,
     )
 }
 
@@ -142,7 +117,6 @@ private fun TimetableScreen(
     state: TimetableState,
     onIntent: (TimetableIntent) -> Unit,
     onNavIntent: (TimetableScreenNavIntent) -> Unit,
-    canEdit: Boolean,
 ) {
     val year = state.year
     val month = state.month
@@ -150,9 +124,7 @@ private fun TimetableScreen(
     val cellData = state.cells
     val finder = state.finder
     val showSpotTimes = state.showSpotTimes
-
-    // Daily totals for the Σύνολα footer, recomputed when cells change
-    val dailyTotals = remember(cellData) { calculateDailyTotals(cellData).toImmutableMap() }
+    val canEdit = state.canEdit
 
     // Localized month names (Strings[] — recompose on language switch)
     val monthNames = listOf(
@@ -164,63 +136,16 @@ private fun TimetableScreen(
         Strings[StringKey.MONTH_NOVEMBER], Strings[StringKey.MONTH_DECEMBER]
     )
 
-    // Report printing from popup menus (day header, break header, cell)
-    val reportScope = rememberCoroutineScope()
-    val reportService = koinInject<ReportService>()
-
-    fun printDay(date: LocalDate) {
-        reportScope.launch {
-            val data = ReportDataFactory.createProgramFlowData(date, breaks, cellData)
-            if (data.items.isNotEmpty()) {
-                reportService.print(data.toReportPayload(ReportConfig()))
-            }
-        }
-    }
-
-    fun printBreak(breakSlot: BreakSlot, date: LocalDate) {
-        reportScope.launch {
-            val commercials = cellData[SchedulerKey(breakSlot.id, date)]?.commercials ?: return@launch
-            val data = ReportDataFactory.createBreakProgramFlowData(
-                date = date,
-                breakTimeLabel = formatTime(breakSlot.time.hour, breakSlot.time.minute),
-                commercials = commercials
-            )
-            if (data.items.isNotEmpty()) {
-                reportService.print(data.toReportPayload(ReportConfig()))
-            }
-        }
-    }
-
-    fun printBreakForMonth(breakSlot: BreakSlot) {
-        reportScope.launch {
-            val payloads: List<ReportPayload> = ReportDataFactory
-                .createMonthProgramFlowData(year, month, listOf(breakSlot), cellData)
-                .map { it.toReportPayload(ReportConfig()) }
-            if (payloads.isNotEmpty()) {
-                reportService.print(payloads)
-            }
-        }
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         KeyboardEnabledHeader(
-            year = year,
-            month = month,
+            state = state,
             monthName = monthNames[month - 1],
-            breaks = breaks,
-            cellData = cellData,
-            canEdit = canEdit,
-            showSpotTimes = showSpotTimes,
-            onToggleShowTimes = { onIntent(TimetableIntent.ToggleShowTimes) },
-            onEmail = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) },
-            onLogout = { onNavIntent(TimetableScreenNavIntent.OnLogout) },
-            onPreferences = { onNavIntent(TimetableScreenNavIntent.OnPreferences) },
-            onPreviousMonth = { onIntent(TimetableIntent.PreviousMonth) },
-            onNextMonth = { onIntent(TimetableIntent.NextMonth) },
+            onIntent = onIntent,
+            onNavIntent = onNavIntent,
         )
 
         // Finder toolbar: Εύρεση opens the Details Console; the dropdown
@@ -318,7 +243,7 @@ private fun TimetableScreen(
             onDeleteSpot = if (!canEdit) null else { breakSlot, date ->
                 onIntent(TimetableIntent.RemoveLastAt(breakSlot.id, date))
             },
-            dailyTotals = dailyTotals,
+            dailyTotals = state.dailyTotals,
             contextMenuItems = { breakSlot, date, data ->
                 val spotCount = data?.spotCount ?: 0
                 val key = SchedulerKey(breakSlot.id, date)
@@ -346,7 +271,7 @@ private fun TimetableScreen(
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
-                        printDay(date)
+                        onIntent(TimetableIntent.PrintDay(date))
                     })
 
                     // Print this break's commercials
@@ -355,7 +280,7 @@ private fun TimetableScreen(
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = spotCount > 0
                     ) {
-                        printBreak(breakSlot, date)
+                        onIntent(TimetableIntent.PrintBreak(breakSlot.id, date))
                     })
 
                     // Legacy popup option: cells show spot counts or the
@@ -415,7 +340,7 @@ private fun TimetableScreen(
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
-                        printDay(date)
+                        onIntent(TimetableIntent.PrintDay(date))
                     }
                 )
             },
@@ -427,7 +352,7 @@ private fun TimetableScreen(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK_MONTH.localized().withArgs(listOf(label)),
                         icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) }
                     ) {
-                        printBreakForMonth(breakSlot)
+                        onIntent(TimetableIntent.PrintBreakMonth(breakSlot.id))
                     }
                 )
             }
@@ -441,17 +366,21 @@ private fun dayMenuLabel(date: LocalDate): String =
 
 /**
  * Shows which station's data is on screen. With a single grant it's a plain
- * label; with several it becomes a dropdown - selecting one switches the
- * whole app to that station's schema (data refetch + role re-evaluation are
- * driven by the session revision bump in [UserSession.selectStation]).
+ * label; with several it becomes a dropdown - selecting one asks the ViewModel
+ * to switch, and the session revision it raises refetches the data and
+ * re-evaluates the role.
  */
 @Composable
-private fun StationSelector(authSession: UserSession) {
-    val current = authSession.selectedStation ?: return
+private fun StationSelector(
+    stations: ImmutableList<StationAccess>,
+    current: StationAccess?,
+    onSelectStation: (String) -> Unit,
+) {
+    if (current == null) return
     var expanded by remember { mutableStateOf(false) }
 
     Box {
-        if (authSession.stations.size > 1) {
+        if (stations.size > 1) {
             TextButton(onClick = { expanded = true }) {
                 AppText(
                     current.name,
@@ -465,7 +394,7 @@ private fun StationSelector(authSession: UserSession) {
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                authSession.stations.forEach { station ->
+                stations.forEach { station ->
                     DropdownMenuItem(
                         text = { AppText(station.name, AppTextStyle.BUTTON) },
                         leadingIcon = {
@@ -477,7 +406,7 @@ private fun StationSelector(authSession: UserSession) {
                         },
                         onClick = {
                             expanded = false
-                            authSession.selectStation(station.id)
+                            onSelectStation(station.id)
                         }
                     )
                 }
@@ -495,19 +424,10 @@ private fun StationSelector(authSession: UserSession) {
 
 @Composable
 private fun KeyboardEnabledHeader(
-    year: Int,
-    month: Int,
+    state: TimetableState,
     monthName: String,
-    breaks: ImmutableList<BreakSlot>,
-    cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
-    canEdit: Boolean,
-    showSpotTimes: Boolean,
-    onToggleShowTimes: () -> Unit,
-    onEmail: () -> Unit,
-    onLogout: () -> Unit,
-    onPreferences: () -> Unit,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit
+    onIntent: (TimetableIntent) -> Unit,
+    onNavIntent: (TimetableScreenNavIntent) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -523,7 +443,7 @@ private fun KeyboardEnabledHeader(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Month navigation
-                IconButton(onClick = onPreviousMonth) {
+                IconButton(onClick = { onIntent(TimetableIntent.PreviousMonth) }) {
                     Icon(
                         AppIcons.arrowBack,
                         contentDescription = Strings[StringKey.TIMETABLE_CD_PREV_MONTH]
@@ -531,12 +451,12 @@ private fun KeyboardEnabledHeader(
                 }
 
                 AppText(
-                    "$monthName $year",
+                    "$monthName ${state.year}",
                     AppTextStyle.SCREEN_TITLE,
                     modifier = Modifier.width(200.dp)
                 )
 
-                IconButton(onClick = onNextMonth) {
+                IconButton(onClick = { onIntent(TimetableIntent.NextMonth) }) {
                     Icon(
                         AppIcons.arrowForward,
                         contentDescription = Strings[StringKey.TIMETABLE_CD_NEXT_MONTH]
@@ -548,7 +468,7 @@ private fun KeyboardEnabledHeader(
                 // Keyboard shortcut hints
                 Column {
                     AppText(
-                        Strings[if (canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
+                        Strings[if (state.canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
                         AppTextStyle.TINY,
                     )
                     AppText(
@@ -559,24 +479,26 @@ private fun KeyboardEnabledHeader(
 
                 // Cells: spot count <-> summed spot time (persisted; the
                 // icon shows the mode you'll switch TO)
-                IconButton(onClick = onToggleShowTimes) {
+                IconButton(onClick = { onIntent(TimetableIntent.ToggleShowTimes) }) {
                     Icon(
-                        if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
-                        contentDescription = Strings[if (showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES]
+                        if (state.showSpotTimes) AppIcons.numbers else AppIcons.timer,
+                        contentDescription = Strings[if (state.showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES]
                     )
                 }
 
                 // Station switcher (dropdown only when the user can access
                 // more than one station)
-                val authSession = koinInject<UserSession>()
-                @Suppress("UNUSED_EXPRESSION") authSession.revision
-                StationSelector(authSession)
+                StationSelector(
+                    stations = state.stations,
+                    current = state.selectedStation,
+                    onSelectStation = { onIntent(TimetableIntent.SelectStation(it)) },
+                )
 
                 // Email a party their schedule (staff action) - the dialog
                 // belongs to :feature:schedule-email, so the app layer
                 // renders it; this is just the launch point.
-                if (canEdit) {
-                    IconButton(onClick = onEmail) {
+                if (state.canEdit) {
+                    IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) }) {
                         Icon(AppIcons.email, contentDescription = Strings[StringKey.TIMETABLE_CD_EMAIL_SCHEDULE])
                     }
                 }
@@ -584,14 +506,18 @@ private fun KeyboardEnabledHeader(
                 // Logged-in user: clicking the badge opens the account menu
                 // (change password / recovery codes, or user management for
                 // the super admin)
-                AccountBadge(authSession)
-                IconButton(onClick = onPreferences) {
+                AccountBadge(
+                    displayName = state.displayName,
+                    isAdmin = state.isAdmin,
+                    role = state.role,
+                )
+                IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnPreferences) }) {
                     Icon(
                         AppIcons.settings,
                         contentDescription = Strings[StringKey.TIMETABLE_CD_PREFERENCES]
                     )
                 }
-                IconButton(onClick = onLogout) {
+                IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnLogout) }) {
                     Icon(
                         AppIcons.logout,
                         contentDescription = Strings[StringKey.TIMETABLE_CD_LOGOUT],
@@ -602,11 +528,11 @@ private fun KeyboardEnabledHeader(
 
             // Report toolbar - Preview/Print/Export cover the entire month
             ReportToolbar(
-                year = year,
-                month = month,
+                year = state.year,
+                month = state.month,
                 labels = reportToolbarLabels(),
-                breaks = breaks,
-                cellData = cellData,
+                breaks = state.breaks,
+                cellData = state.cells,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
@@ -619,14 +545,14 @@ private fun KeyboardEnabledHeader(
  * credentials are managed in server.yaml, not through the API.
  */
 @Composable
-private fun AccountBadge(authSession: UserSession) {
+private fun AccountBadge(displayName: String, isAdmin: Boolean, role: AppRole) {
     Column(
         horizontalAlignment = Alignment.End,
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        AppText(authSession.displayName, AppTextStyle.BODY_STRONG)
+        AppText(displayName, AppTextStyle.BODY_STRONG)
         AppText(
-            if (authSession.isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[authSession.role.toStringKey()],
+            if (isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[role.toStringKey()],
             AppTextStyle.TINY,
         )
     }

@@ -1,7 +1,11 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeFinderRepository
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
@@ -10,12 +14,16 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.cell
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.placed
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
+import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,12 +41,18 @@ class TimetableViewModelTest : TimetableTestBase() {
     private val finder = FakeFinderRepository()
     private val partySearch = FakePartySearchRepository()
     private val common = FakeTimetableCommon()
+    private val reports = FakeReportService()
 
     // No ScheduleRepository: the breaks and the cells both come from `common`.
-    private fun vm(prefs: FakeTimetablePreferences = FakeTimetablePreferences()) =
-        TimetableViewModel(finder, partySearch, common, prefs)
+    private fun vm(
+        prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
+        session: FakeUserSession = FakeUserSession(),
+    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reports)
 
     private val key = SchedulerKey(1L, TEST_DATE)
+
+    private fun station(id: String, name: String) =
+        StationAccess(id = id, name = name, role = AppRole.NORMAL_USER.name)
 
     @Test
     fun showSpotTimesInitialValueComesFromPrefs() = runTest(testDispatcher) {
@@ -93,6 +107,100 @@ class TimetableViewModelTest : TimetableTestBase() {
         assertEquals(0, common.clears, "changing month must not wipe the station's breaks")
         assertEquals(1, common.breakLoads, "nor re-fetch them")
         assertEquals(2, common.loads.size, "it just loads the new month's cells")
+    }
+
+    @Test
+    fun sessionFactsSeedTheStateSoTheChromeNeverTouchesUserSession() = runTest(testDispatcher) {
+        val session = FakeUserSession(
+            role = AppRole.REPORT_VIEWER,
+            displayName = "Maria",
+            stations = listOf(station("crete-tv", "Crete TV"), station("crete-fm", "Crete FM")),
+        )
+        val vm = vm(session = session)
+        advanceUntilIdle()
+
+        assertFalse(vm.state.canEdit, "a report viewer browses and prints, never edits")
+        assertEquals("Maria", vm.state.displayName)
+        assertEquals(AppRole.REPORT_VIEWER, vm.state.role)
+        assertEquals(listOf("crete-tv", "crete-fm"), vm.state.stations.map { it.id })
+        assertEquals("crete-tv", vm.state.selectedStation?.id)
+    }
+
+    @Test
+    fun selectStationDelegatesToTheSessionAndReloadsWithTheNewRole() = runTest(testDispatcher) {
+        val session = FakeUserSession(
+            role = AppRole.NORMAL_USER,
+            stations = listOf(station("crete-tv", "Crete TV"), station("crete-fm", "Crete FM")),
+        )
+        val vm = vm(session = session)
+        advanceUntilIdle()
+        val loadsAfterStartup = common.loads.size
+
+        vm.onAction(TimetableIntent.SelectStation("crete-fm"))
+        advanceUntilIdle()
+
+        assertEquals("crete-fm", vm.state.selectedStation?.id, "the chrome follows the session")
+        assertEquals(1, common.clears, "a station switch drops the previous station's data")
+        assertEquals(loadsAfterStartup + 1, common.loads.size, "and refetches the month")
+    }
+
+    @Test
+    fun aSessionChangeOutsideThisScreenAlsoReloads() = runTest(testDispatcher) {
+        val session = FakeUserSession()
+        val vm = vm(session = session)
+        advanceUntilIdle()
+        assertEquals(0, common.clears, "seeding the facts must NOT count as a change")
+
+        session.bumpRevision()   // e.g. a re-login elsewhere in the app
+        advanceUntilIdle()
+
+        assertEquals(1, common.clears, "the revision bridge lives in the ViewModel, not a LaunchedEffect")
+        assertEquals(2, common.breakLoads, "the new session refetches the station's grid")
+    }
+
+    @Test
+    fun dailyTotalsAreDerivedFromTheSharedCells() = runTest(testDispatcher) {
+        val vm = vm()
+        val (k, data) = cell(commercials = listOf(placed(10), placed(11))).toUi()
+
+        common.emit(TimetableCommonState(cells = persistentMapOf(k to data)))
+        advanceUntilIdle()
+
+        assertEquals(
+            2,
+            vm.state.dailyTotals[StableDate(TEST_DATE)]?.spotCount,
+            "the Σύνολα footer is state, not a calculation inside a composable",
+        )
+    }
+
+    @Test
+    fun printBreakAssemblesThePayloadAndUsesTheReportService() = runTest(testDispatcher) {
+        val vm = vm()
+        val (k, data) = cell(commercials = listOf(placed(10))).toUi()
+        common.emit(
+            TimetableCommonState(
+                breaks = persistentListOf(BreakSlot(id = 1L, time = LocalTime(10, 0), label = "10:00")),
+                cells = persistentMapOf(k to data),
+            )
+        )
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.PrintBreak(breakId = 1L, date = TEST_DATE))
+        advanceUntilIdle()
+
+        assertEquals(1, reports.printed.size, "printing is the ViewModel's side effect, not the composable's")
+    }
+
+    @Test
+    fun printingAnUnknownBreakIsANoOp() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.PrintBreak(breakId = 99L, date = TEST_DATE))
+        vm.onAction(TimetableIntent.PrintBreakMonth(breakId = 99L))
+        advanceUntilIdle()
+
+        assertTrue(reports.printed.isEmpty(), "no break, no payload - and no crash")
     }
 
     @Test

@@ -1,10 +1,10 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
 import eu.anifantakis.commercials.core.domain.auth.AppRole
-import eu.anifantakis.commercials.core.domain.auth.StationAccess
-import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
@@ -12,9 +12,7 @@ import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportResult
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -42,27 +40,6 @@ import kotlin.test.assertTrue
 class CommercialDetailViewModelTest : TimetableTestBase() {
 
     private val key = SchedulerKey(1L, TEST_DATE)
-
-    private class FakeUserSession(override val role: AppRole) : UserSession {
-        override val revision: Int = 0
-        override val displayName: String = "Tester"
-        override val isAdmin: Boolean = false
-        override val stations: List<StationAccess> = emptyList()
-        override val selectedStation: StationAccess? = null
-        override fun selectStation(stationId: String) = Unit
-    }
-
-    private class FakeReportService : ReportService {
-        val printed = mutableListOf<List<ReportPayload>>()
-        override suspend fun exportToPdf(payloads: List<ReportPayload>, suggestedFileName: String) =
-            ReportResult.Success("ok")
-        override suspend fun preview(payloads: List<ReportPayload>) = ReportResult.Success("ok")
-        override suspend fun print(payloads: List<ReportPayload>): ReportResult {
-            printed += payloads
-            return ReportResult.Success("ok")
-        }
-        override fun isReportGenerationAvailable(): Boolean = true
-    }
 
     /** A break as the SHARED state carries it (the grid's UI model). */
     private fun slot(id: Long, hour: Int, minute: Int = 0) = BreakSlot(

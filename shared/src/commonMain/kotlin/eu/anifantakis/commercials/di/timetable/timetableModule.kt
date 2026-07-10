@@ -44,6 +44,8 @@ val timetableModule = module {
             partySearch = get(),
             common = params.get(),
             prefs = get(),
+            session = get(),
+            reportService = get(),
         )
     }
     viewModel { params ->

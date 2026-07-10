@@ -1,5 +1,11 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.auth.UserSession
+import eu.anifantakis.commercials.reports.ReportPayload
+import eu.anifantakis.commercials.reports.ReportService
+import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
@@ -191,4 +197,51 @@ class FakeTimetableCommon : TimetableCommon {
     override fun add(spotId: Long, breakId: Long, date: LocalDate) { adds += Triple(spotId, breakId, date) }
     override fun removeLast(breakId: Long, date: LocalDate) { removes += (breakId to date) }
     override fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(breakId, date, orderedIds) }
+}
+
+/**
+ * A session with a fixed role. The ViewModel enforces `canEdit` and mirrors
+ * the chrome's facts from here, so a fake is all the screens' tests need.
+ * [selectStation] bumps [revision] exactly like the real AuthSession, which
+ * is what drives the ViewModel's reload.
+ */
+class FakeUserSession(
+    override val role: AppRole = AppRole.NORMAL_USER,
+    override val displayName: String = "Tester",
+    override val isAdmin: Boolean = false,
+    override val stations: List<StationAccess> = emptyList(),
+) : UserSession {
+    private val _revision = MutableStateFlow(0)
+    override val revision: StateFlow<Int> = _revision.asStateFlow()
+
+    var selectedStationId: String? = stations.firstOrNull()?.id
+        private set
+
+    override val selectedStation: StationAccess?
+        get() = stations.firstOrNull { it.id == selectedStationId } ?: stations.firstOrNull()
+
+    override fun selectStation(stationId: String) {
+        if (stations.none { it.id == stationId }) return
+        selectedStationId = stationId
+        _revision.value++
+    }
+
+    /** Simulates a login/logout happening outside this screen. */
+    fun bumpRevision() { _revision.value++ }
+}
+
+class FakeReportService : ReportService {
+    val printed = mutableListOf<List<ReportPayload>>()
+
+    override suspend fun exportToPdf(payloads: List<ReportPayload>, suggestedFileName: String) =
+        ReportResult.Success("ok")
+
+    override suspend fun preview(payloads: List<ReportPayload>) = ReportResult.Success("ok")
+
+    override suspend fun print(payloads: List<ReportPayload>): ReportResult {
+        printed += payloads
+        return ReportResult.Success("ok")
+    }
+
+    override fun isReportGenerationAvailable(): Boolean = true
 }

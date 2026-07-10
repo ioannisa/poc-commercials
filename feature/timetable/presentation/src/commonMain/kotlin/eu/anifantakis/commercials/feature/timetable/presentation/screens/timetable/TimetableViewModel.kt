@@ -9,6 +9,9 @@ import eu.anifantakis.commercials.core.domain.party_search.Party
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toUiText
@@ -21,6 +24,15 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.core.presentation.grids.DailyStats
+import eu.anifantakis.commercials.core.presentation.grids.StableDate
+import eu.anifantakis.commercials.core.presentation.grids.formatTime
+import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
+import eu.anifantakis.commercials.reports.ReportDataFactory
+import eu.anifantakis.commercials.reports.ReportService
+import eu.anifantakis.commercials.reports.models.ReportConfig
+import eu.anifantakis.commercials.reports.print
+import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -37,6 +49,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.collectIndexed
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -69,6 +82,8 @@ data class TimetableState(
     val month: Int,
     val breaks: ImmutableList<BreakSlot> = persistentListOf(),
     val cells: ImmutableMap<SchedulerKey, SchedulerCellData> = persistentMapOf(),
+    /** The Σύνολα footer - derived from [cells], never in a composable. */
+    val dailyTotals: ImmutableMap<StableDate, DailyStats> = persistentMapOf(),
     /** Cells this session touched - the classic black marker. */
     val modifiedCells: ImmutableSet<SchedulerKey> = persistentSetOf(),
     val selectedRow: Int = 0,
@@ -79,14 +94,23 @@ data class TimetableState(
     val finder: FinderUiState = FinderUiState(),
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
+
+    // ── session facts the chrome renders (mirrored from UserSession) ────────
+    /** Only NORMAL_USER edits; viewer roles browse and print. */
+    val canEdit: Boolean = false,
+    val displayName: String = "",
+    val isAdmin: Boolean = false,
+    val role: AppRole = AppRole.REPORT_VIEWER,
+    val stations: ImmutableList<StationAccess> = persistentListOf(),
+    val selectedStation: StationAccess? = null,
 )
 
 sealed interface TimetableIntent {
     data object PreviousMonth : TimetableIntent
     data object NextMonth : TimetableIntent
 
-    /** Session changed (login/station switch) - reload with a clean slate. */
-    data object Reload : TimetableIntent
+    /** Switches the whole app to that station (role and data follow). */
+    data class SelectStation(val stationId: String) : TimetableIntent
 
     data class SelectionChanged(val row: Int, val column: Int) : TimetableIntent
     data object ToggleShowTimes : TimetableIntent
@@ -96,6 +120,12 @@ sealed interface TimetableIntent {
         val date: LocalDate,
         val spotCount: Int,
     ) : TimetableIntent
+
+    // Printing: the popup gives the cell/row/column it was opened on; the
+    // ViewModel owns the payload assembly and the report service.
+    data class PrintDay(val date: LocalDate) : TimetableIntent
+    data class PrintBreak(val breakId: Long, val date: LocalDate) : TimetableIntent
+    data class PrintBreakMonth(val breakId: Long) : TimetableIntent
 
     data class AddSpotAt(val breakId: Long, val date: LocalDate) : TimetableIntent
     data class RemoveLastAt(val breakId: Long, val date: LocalDate) : TimetableIntent
@@ -131,12 +161,15 @@ class TimetableViewModel(
     private val partySearch: PartySearchRepository,
     private val common: TimetableCommon,
     private val prefs: TimetablePreferences,
+    private val session: UserSession,
+    private val reportService: ReportService,
 ) : BaseGlobalViewModel() {
 
     private val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 
     private val _state = MutableStateFlow(
         TimetableState(year = today.year, month = today.monthNumber, showSpotTimes = prefs.showSpotTimes)
+            .withSessionFacts()
     )
     val state by _state
         .onStart { loadAll() }
@@ -158,25 +191,48 @@ class TimetableViewModel(
                     it.copy(
                         breaks = cs.breaks,
                         cells = cs.cells,
+                        dailyTotals = calculateDailyTotals(cs.cells).toImmutableMap(),
                         modifiedCells = cs.modifiedCells,
                         addedCounts = cs.addedCounts,
                     )
                 }
             }
         }
+
+        // The session's revision is a plain StateFlow, so this bridge needs no
+        // recomposer (and is unit-testable). Index 0 is the value already
+        // seeded above - only a real CHANGE (login, logout, station switch)
+        // refetches with the new token and re-evaluates the role.
+        viewModelScope.launch {
+            session.revision.collectIndexed { index, _ ->
+                _state.update { it.withSessionFacts() }
+                if (index > 0) reload()
+            }
+        }
     }
+
+    /** The chrome renders these; they change only when [UserSession] does. */
+    private fun TimetableState.withSessionFacts(): TimetableState = copy(
+        canEdit = session.role.canEdit,
+        displayName = session.displayName,
+        isAdmin = session.isAdmin,
+        role = session.role,
+        stations = session.stations.toImmutableList(),
+        selectedStation = session.selectedStation,
+    )
 
     fun onAction(intent: TimetableIntent) {
         when (intent) {
             TimetableIntent.PreviousMonth -> changeMonth(-1)
             TimetableIntent.NextMonth -> changeMonth(+1)
-            TimetableIntent.Reload -> {
-                common.clear()
-                _state.update {
-                    TimetableState(year = it.year, month = it.month, showSpotTimes = it.showSpotTimes)
-                }
-                loadAll()
-            }
+
+            // Only ASK the session to switch: the revision bump it raises is
+            // what re-seeds the facts and reloads (one path, not two).
+            is TimetableIntent.SelectStation -> session.selectStation(intent.stationId)
+
+            is TimetableIntent.PrintDay -> printDay(intent.date)
+            is TimetableIntent.PrintBreak -> printBreak(intent.breakId, intent.date)
+            is TimetableIntent.PrintBreakMonth -> printBreakMonth(intent.breakId)
 
             is TimetableIntent.SelectionChanged ->
                 _state.update { it.copy(selectedRow = intent.row, selectedColumn = intent.column) }
@@ -226,6 +282,51 @@ class TimetableViewModel(
     private fun loadAll() {
         common.loadBreaks()
         common.loadMonth(_state.value.year, _state.value.month)
+    }
+
+    /** A new session (or station): clean slate, keep the month the user was on. */
+    private fun reload() {
+        common.clear()
+        _state.update {
+            TimetableState(year = it.year, month = it.month, showSpotTimes = it.showSpotTimes)
+                .withSessionFacts()
+        }
+        loadAll()
+    }
+
+    // ── printing (payload assembly + the report service live HERE) ───────
+
+    private fun printDay(date: LocalDate) {
+        val s = _state.value
+        viewModelScope.launch {
+            val data = ReportDataFactory.createProgramFlowData(date, s.breaks, s.cells)
+            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
+        }
+    }
+
+    private fun printBreak(breakId: Long, date: LocalDate) {
+        val s = _state.value
+        val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
+        val commercials = s.cells[SchedulerKey(breakId, date)]?.commercials ?: return
+        viewModelScope.launch {
+            val data = ReportDataFactory.createBreakProgramFlowData(
+                date = date,
+                breakTimeLabel = formatTime(slot.time.hour, slot.time.minute),
+                commercials = commercials,
+            )
+            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
+        }
+    }
+
+    private fun printBreakMonth(breakId: Long) {
+        val s = _state.value
+        val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
+        viewModelScope.launch {
+            val payloads = ReportDataFactory
+                .createMonthProgramFlowData(s.year, s.month, listOf(slot), s.cells)
+                .map { it.toReportPayload(ReportConfig()) }
+            if (payloads.isNotEmpty()) reportService.print(payloads)
+        }
     }
 
     private fun changeMonth(delta: Int) {

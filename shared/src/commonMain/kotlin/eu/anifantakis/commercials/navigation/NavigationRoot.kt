@@ -8,6 +8,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,7 +81,7 @@ fun NavigationRoot() {
     // If the session becomes invalid at any point (e.g. the server rejects our
     // token with 401 - the auth layer clears it), bounce back to Login instead
     // of sitting on a screen that can't load data.
-    val authRevision = authSession.revision
+    val authRevision by authSession.revision.collectAsState()
     LaunchedEffect(authRevision) {
         if (!authSession.isLoggedIn && navigator.current() != AuthNavType.Login) {
             navigator.resetTo(AuthNavType.Login)

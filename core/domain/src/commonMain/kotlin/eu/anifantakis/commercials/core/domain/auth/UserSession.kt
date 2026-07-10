@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.core.domain.auth
 
+import kotlinx.coroutines.flow.StateFlow
+
 /**
  * The logged-in user's session as the UI consumes it: read-only session facts
  * plus the single action the chrome may trigger (switch the active station).
@@ -14,11 +16,13 @@ package eu.anifantakis.commercials.core.domain.auth
  */
 interface UserSession {
     /**
-     * Bumped on every login/logout/station switch. Read it in a composable
-     * (before the properties below) to make that composable recompose when the
-     * session changes.
+     * Bumped on every login/logout/station switch. A plain StateFlow, not
+     * Compose state: ViewModels collect it (a session change refetches with
+     * the new token and role) and the UI reads it through `collectAsState()`.
+     * Keeping it framework-neutral is what lets those ViewModels be tested
+     * without a recomposer.
      */
-    val revision: Int
+    val revision: StateFlow<Int>
     val displayName: String
     /** Config-managed super administrator (may manage users). */
     val isAdmin: Boolean

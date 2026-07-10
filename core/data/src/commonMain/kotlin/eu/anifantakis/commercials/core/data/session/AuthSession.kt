@@ -1,14 +1,14 @@
 package eu.anifantakis.commercials.core.data.session
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import eu.anifantakis.commercials.core.data.preferences.platformAwaitReady
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.lib.ksafe.KSafe
 import eu.anifantakis.lib.ksafe.invoke
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import org.koin.core.annotation.Provided
 
@@ -29,7 +29,7 @@ data class StoredSession(
 /**
  * The app-wide auth state: an encrypted, persisted [StoredSession] (survives
  * restarts - tokens never expire, so a returning user goes straight in) plus
- * a Compose-observable revision so UI reacts to login/logout/station switches.
+ * an observable revision so UI and ViewModels react to login/logout/station switches.
  *
  * Role and customer scoping are PER STATION: [role]/[clientCode] always
  * reflect the currently [selectedStation], so switching stations can turn an
@@ -49,12 +49,12 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
     private var stored by ksafe(StoredSession(), key = "session_v2")
 
     /**
-     * Bumped on every login/logout/station switch. Composables that read
-     * [revision] (or any property below AFTER reading it) recompose when the
-     * session changes.
+     * Bumped on every login/logout/station switch. A StateFlow, so both the
+     * chrome (collectAsState) and ViewModels (collect) can react - and this
+     * data-layer class stays free of any UI framework.
      */
-    override var revision by mutableStateOf(0)
-        private set
+    private val _revision = MutableStateFlow(0)
+    override val revision: StateFlow<Int> = _revision.asStateFlow()
 
     /**
      * Must be awaited once at startup BEFORE the first session read. Required
@@ -92,7 +92,7 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: ""
         )
-        revision++
+        _revision.value++
     }
 
     /** Switches the active station (no-op for ids the user has no grant on). */
@@ -100,11 +100,11 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
         if (stored.stations.none { it.id == stationId }) return
         if (stored.selectedStationId == stationId) return
         stored = stored.copy(selectedStationId = stationId)
-        revision++
+        _revision.value++
     }
 
     fun clear() {
         stored = StoredSession()
-        revision++
+        _revision.value++
     }
 }

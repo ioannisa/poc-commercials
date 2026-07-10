@@ -16,6 +16,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
+            // StateFlow appears in the UserSession contract - pure kotlinx, no
+            // platform/UI framework, so RULE 1 still holds.
+            api(libs.kotlinx.coroutines.core)
         }
     }
 }
