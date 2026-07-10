@@ -511,11 +511,21 @@ private fun LazyDayHeader(
             ) {
                 Text(
                     text = labels.dayAbbreviations[date.value.dayOfWeek] ?: date.value.dayOfWeek.toGreekAbbrLazy(),
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = nameColor
                 )
             }
+            // A selected column paints BOTH tones with selectedColumnHeader, so
+            // without an explicit rule the name and number rows melt into one
+            // red block. The rule is unconditional - it also sharpens the
+            // chrome/navy edge of every other column.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(palette.headerBorder)
+            )
             Box(
                 modifier = Modifier.fillMaxWidth().weight(0.55f).background(numberBg),
                 contentAlignment = Alignment.Center
