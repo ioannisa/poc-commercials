@@ -33,10 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailPreviewRequest
 import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.email_preview.EmailPreviewDialogRoot
@@ -97,7 +97,7 @@ private fun SendScheduleEmailDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.done != null) {
-                    Text(state.done, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+                    AppText(state.done, AppTextStyle.BODY, color = MaterialTheme.colorScheme.primary)
                     return@Column
                 }
 
@@ -108,8 +108,8 @@ private fun SendScheduleEmailDialog(
                         selected = state.kind == PartyKind.CUSTOMER,
                         onClick = { onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.CUSTOMER)) }
                     )
-                    Text(
-                        Strings[StringKey.FINDER_TAB_CUSTOMERS], fontSize = 13.sp,
+                    AppText(
+                        Strings[StringKey.FINDER_TAB_CUSTOMERS], AppTextStyle.BODY,
                         modifier = Modifier.clickable {
                             onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.CUSTOMER))
                         }
@@ -119,8 +119,8 @@ private fun SendScheduleEmailDialog(
                         selected = state.kind == PartyKind.TRADER,
                         onClick = { onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.TRADER)) }
                     )
-                    Text(
-                        Strings[StringKey.FINDER_TAB_ADVERTISERS], fontSize = 13.sp,
+                    AppText(
+                        Strings[StringKey.FINDER_TAB_ADVERTISERS], AppTextStyle.BODY,
                         modifier = Modifier.clickable {
                             onIntent(SendScheduleEmailIntent.KindChanged(PartyKind.TRADER))
                         }
@@ -145,9 +145,9 @@ private fun SendScheduleEmailDialog(
                 if (state.results.isNotEmpty()) {
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 160.dp)) {
                         items(state.results, key = { it.code }) { c ->
-                            Text(
+                            AppText(
                                 Strings[StringKey.EMAIL_PARTY_SUMMARY].withArgs(listOf(c.name, c.spotCount, c.placementCount)),
-                                fontSize = 13.sp,
+                                AppTextStyle.BODY,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onIntent(SendScheduleEmailIntent.PartySelected(c)) }
@@ -156,32 +156,28 @@ private fun SendScheduleEmailDialog(
                         }
                     }
                 } else if (state.query.trim().length >= 3 && !state.searching) {
-                    Text(
-                        Strings[StringKey.EMAIL_NO_RESULTS],
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    AppText(Strings[StringKey.EMAIL_NO_RESULTS], AppTextStyle.NOTE)
                 }
 
                 state.selectedParty?.let { sel ->
-                    Text(
+                    AppText(
                         Strings[if (state.selectedKind == PartyKind.TRADER) StringKey.EMAIL_LABEL_ADVERTISER else StringKey.EMAIL_LABEL_CUSTOMER] + sel.name,
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold
+                        AppTextStyle.BODY_STRONG,
                     )
 
                     // year -> month drill-down over the party's airings
                     if (state.loadingActivity) {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     } else if (state.activity.isEmpty()) {
-                        Text(Strings[StringKey.EMAIL_NO_ACTIVITY], fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AppText(Strings[StringKey.EMAIL_NO_ACTIVITY], AppTextStyle.NOTE)
                     } else {
                         Row(Modifier.fillMaxWidth().height(140.dp)) {
                             LazyColumn(Modifier.weight(0.35f).fillMaxHeight()) {
                                 items(state.activity.map { it.year }.distinct(), key = { it }) { y ->
                                     val isSel = y == state.selectedYear
-                                    Text(
+                                    AppText(
                                         "$y",
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        if (isSel) AppTextStyle.BODY_STRONG else AppTextStyle.BODY,
                                         color = if (isSel) MaterialTheme.colorScheme.primary
                                                 else MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier
@@ -206,16 +202,15 @@ private fun SendScheduleEmailDialog(
                                             .padding(vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
+                                        AppText(
                                             monthName(am.month),
-                                            fontSize = 13.sp,
-                                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                            if (isSel) AppTextStyle.BODY_STRONG else AppTextStyle.BODY,
                                             color = if (isSel) MaterialTheme.colorScheme.primary
                                                     else MaterialTheme.colorScheme.onSurface,
                                             modifier = Modifier.weight(1f)
                                         )
-                                        Text(
-                                            "${am.placements}", fontSize = 13.sp,
+                                        AppText(
+                                            "${am.placements}", AppTextStyle.BODY,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -235,9 +230,9 @@ private fun SendScheduleEmailDialog(
                     )
 
                     // spot checklist - each becomes a table in the one email
-                    Text(
+                    AppText(
                         Strings[StringKey.EMAIL_SPOTS_INCLUDED].withArgs(listOf(state.chosenSpotIds.size, state.spots.size)),
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold
+                        AppTextStyle.BODY_STRONG,
                     )
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 150.dp)) {
                         items(state.spots, key = { it.spotId }) { spot ->
@@ -251,11 +246,12 @@ private fun SendScheduleEmailDialog(
                                     checked = spot.spotId in state.includedSpotIds,
                                     onCheckedChange = { onIntent(SendScheduleEmailIntent.SpotToggled(spot.spotId)) }
                                 )
-                                Text(spot.description, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                                Text(
-                                    "${spot.placements}", fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                AppText(
+                                    spot.description, AppTextStyle.NOTE,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                AppText("${spot.placements}", AppTextStyle.NOTE)
                             }
                         }
                     }
@@ -266,23 +262,23 @@ private fun SendScheduleEmailDialog(
                         label = { Text(Strings[StringKey.EMAIL_PERSONAL_MESSAGE]) },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text(
+                    AppText(
                         Strings[StringKey.EMAIL_ONE_EMAIL_NOTE].withArgs(listOf(state.chosenSpotIds.size)),
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        AppTextStyle.TINY,
                     )
                 }
 
                 // audit trail: prior sends to this party (anti double-send)
                 if (state.selectedParty != null && state.history.isNotEmpty()) {
                     Spacer(Modifier.height(4.dp))
-                    Text(Strings[StringKey.EMAIL_HISTORY], fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    AppText(Strings[StringKey.EMAIL_HISTORY], AppTextStyle.BODY_STRONG)
                     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 96.dp)) {
                         items(state.history, key = { it.id }) { h ->
                             val failed = h.status != "SENT"
-                            Text(
+                            AppText(
                                 "${h.sentAt.take(16)} · ${monthShort(h.month)} ${h.year} · ${h.recipient} · ${h.sentBy}" +
                                     if (failed) Strings[StringKey.EMAIL_FAILED_SUFFIX] else "",
-                                fontSize = 11.sp,
+                                AppTextStyle.TINY,
                                 color = if (failed) MaterialTheme.colorScheme.error
                                         else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -290,7 +286,7 @@ private fun SendScheduleEmailDialog(
                     }
                 }
 
-                state.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                state.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
             }
         },
         confirmButton = {

@@ -29,9 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -80,7 +78,7 @@ private fun DatabasesScreen(
             IconButton(onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) }) {
                 Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text(Strings[StringKey.PREFERENCES_DATABASES], fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            AppText(Strings[StringKey.PREFERENCES_DATABASES], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { onIntent(DatabasesIntent.Reload) }) {
                 Icon(AppIcons.refresh, contentDescription = Strings[StringKey.DATABASES_CD_RELOAD])
@@ -88,11 +86,11 @@ private fun DatabasesScreen(
         }
 
         state.message?.let {
-            Text(it.asString(), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+            AppText(it.asString(), AppTextStyle.BODY, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(4.dp))
         }
         state.error?.let {
-            Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            AppText(it.asString(), AppTextStyle.ERROR_NOTE)
             Spacer(Modifier.height(4.dp))
         }
 
@@ -105,21 +103,21 @@ private fun DatabasesScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(station.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                AppText(station.name, AppTextStyle.ITEM_TITLE)
                                 Spacer(Modifier.width(8.dp))
-                                Text(station.id, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AppText(station.id, AppTextStyle.NOTE)
                             }
                             AppText(
                                 station.database,
                                 AppTextStyle.LOG_LINE,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Text(
+                            AppText(
                                 if (!station.reachable) Strings[StringKey.DATABASES_UNREACHABLE]
                                 else Strings[StringKey.DATABASES_STATION_SUMMARY].withArgs(
                                     listOf(station.placements ?: 0, station.dateRange ?: Strings[StringKey.DATABASES_EMPTY_RANGE])
                                 ),
-                                fontSize = 12.sp,
+                                AppTextStyle.NOTE,
                                 color = if (station.reachable) MaterialTheme.colorScheme.onSurface
                                         else MaterialTheme.colorScheme.error
                             )
@@ -156,20 +154,20 @@ private fun DeleteStationDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = !dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(false)) })
                     Column {
-                        Text(Strings[StringKey.DATABASES_SAFE_DELETE], fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(
+                        AppText(Strings[StringKey.DATABASES_SAFE_DELETE], AppTextStyle.BODY_STRONG)
+                        AppText(
                             Strings[StringKey.DATABASES_SAFE_DELETE_DESC].withArgs(listOf(station.database)),
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            AppTextStyle.NOTE,
                         )
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(true)) })
                     Column {
-                        Text(Strings[StringKey.DATABASES_HARD_DELETE], fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-                        Text(
+                        AppText(Strings[StringKey.DATABASES_HARD_DELETE], AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.error)
+                        AppText(
                             Strings[StringKey.DATABASES_HARD_DELETE_DESC],
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            AppTextStyle.NOTE,
                         )
                     }
                 }
@@ -179,7 +177,7 @@ private fun DeleteStationDialog(
                     label = { Text(Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id))) },
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
-                dialog.error?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
             }
         },
         confirmButton = {

@@ -44,10 +44,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.presentation.files.nativeFilePickerAvailable
 import eu.anifantakis.commercials.core.presentation.files.pickFileNative
 import kotlinx.coroutines.launch
@@ -120,11 +118,11 @@ private fun MigrationScreen(
             IconButton(onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) }) {
                 Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text(Strings[StringKey.PREFERENCES_MIGRATION], fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            AppText(Strings[StringKey.PREFERENCES_MIGRATION], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
             if (state.running) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text(status.state, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            AppText(status.state, AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.primary)
         }
 
         // ── completion banner: unmissable outcome ───────────────────────
@@ -136,14 +134,15 @@ private fun MigrationScreen(
                 )
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
+                    AppText(
                         Strings[StringKey.MIGRATION_COMPLETE_TITLE],
-                        fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        AppTextStyle.ITEM_TITLE,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                    Text(
+                    AppText(
                         Strings[StringKey.MIGRATION_COMPLETE_BODY].withArgs(listOf(status.schema ?: "")),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer
+                        AppTextStyle.BODY,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
@@ -156,14 +155,15 @@ private fun MigrationScreen(
                 )
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
+                    AppText(
                         Strings[StringKey.MIGRATION_FAILED_TITLE],
-                        fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onErrorContainer
+                        AppTextStyle.ITEM_TITLE,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
                     )
-                    Text(
+                    AppText(
                         status.error ?: Strings[StringKey.MIGRATION_SEE_LOG],
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer
+                        AppTextStyle.BODY,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
                     )
                 }
             }
@@ -173,7 +173,7 @@ private fun MigrationScreen(
         if (status.state == "IDLE") {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(Strings[StringKey.MIGRATION_STEP1], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    AppText(Strings[StringKey.MIGRATION_STEP1], AppTextStyle.SECTION_TITLE)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.dumpPath,
@@ -237,9 +237,9 @@ private fun MigrationScreen(
                             checked = state.createSchema,
                             onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) }
                         )
-                        Text(Strings[StringKey.MIGRATION_CREATE_SCHEMA], fontSize = 13.sp)
+                        AppText(Strings[StringKey.MIGRATION_CREATE_SCHEMA], AppTextStyle.BODY)
                     }
-                    state.formError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
                     Button(
                         enabled = state.canStart,
                         onClick = { onIntent(MigrationIntent.Start) }
@@ -253,13 +253,13 @@ private fun MigrationScreen(
         if (status.state == "AWAITING_FLOW") {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+                    AppText(
                         Strings[StringKey.MIGRATION_STEP2].withArgs(listOf(status.schema ?: "")),
-                        fontWeight = FontWeight.Bold, fontSize = 14.sp
+                        AppTextStyle.SECTION_TITLE,
                     )
-                    Text(
+                    AppText(
                         Strings[StringKey.MIGRATION_FLOW_INFO],
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        AppTextStyle.NOTE,
                     )
                     status.flows.forEach { flow ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -267,12 +267,12 @@ private fun MigrationScreen(
                                 selected = state.selectedFlow == flow.forTv,
                                 onClick = { onIntent(MigrationIntent.FlowSelected(flow.forTv)) }
                             )
-                            Text(
+                            AppText(
                                 Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
                                     Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
                                     flow.spots, flow.placements,
                                 )),
-                                fontSize = 13.sp
+                                AppTextStyle.BODY,
                             )
                         }
                     }
@@ -281,7 +281,7 @@ private fun MigrationScreen(
                             checked = state.addToYaml,
                             onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) }
                         )
-                        Text(Strings[StringKey.MIGRATION_ADD_TO_YAML], fontSize = 13.sp)
+                        AppText(Strings[StringKey.MIGRATION_ADD_TO_YAML], AppTextStyle.BODY)
                     }
                     if (state.addToYaml) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -299,7 +299,7 @@ private fun MigrationScreen(
                             )
                         }
                     }
-                    state.formError?.let { Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
                     Button(
                         enabled = state.canChooseFlow,
                         onClick = { onIntent(MigrationIntent.ChooseFlow) }
@@ -313,36 +313,33 @@ private fun MigrationScreen(
         status.summary?.let { s ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(Strings[StringKey.MIGRATION_SUMMARY], fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text(Strings[StringKey.MIGRATION_SUM_BREAKS].withArgs(listOf(s.breaks)), fontSize = 13.sp)
-                    Text(Strings[StringKey.MIGRATION_SUM_PROGRAMS].withArgs(listOf(s.programs)), fontSize = 13.sp)
-                    Text(
+                    AppText(Strings[StringKey.MIGRATION_SUMMARY], AppTextStyle.SECTION_TITLE)
+                    AppText(Strings[StringKey.MIGRATION_SUM_BREAKS].withArgs(listOf(s.breaks)), AppTextStyle.BODY)
+                    AppText(Strings[StringKey.MIGRATION_SUM_PROGRAMS].withArgs(listOf(s.programs)), AppTextStyle.BODY)
+                    AppText(
                         Strings[StringKey.MIGRATION_SUM_CUSTOMERS].withArgs(listOf(s.customers, s.customers - s.customersSynthetic, s.customersSynthetic)),
-                        fontSize = 13.sp
+                        AppTextStyle.BODY,
                     )
-                    Text(Strings[StringKey.MIGRATION_SUM_CONTRACTS].withArgs(listOf(s.contracts, s.contractsSynthetic, s.contractLines)), fontSize = 13.sp)
-                    Text(Strings[StringKey.MIGRATION_SUM_SPOTS].withArgs(listOf(s.spots, s.placements)), fontSize = 13.sp)
-                    Text(Strings[StringKey.MIGRATION_SUM_COMMENTS].withArgs(listOf(s.flowComments, s.printAudits)), fontSize = 13.sp)
-                    Text(Strings[StringKey.MIGRATION_SUM_RANGE].withArgs(listOf(s.dateRange)), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text(
+                    AppText(Strings[StringKey.MIGRATION_SUM_CONTRACTS].withArgs(listOf(s.contracts, s.contractsSynthetic, s.contractLines)), AppTextStyle.BODY)
+                    AppText(Strings[StringKey.MIGRATION_SUM_SPOTS].withArgs(listOf(s.spots, s.placements)), AppTextStyle.BODY)
+                    AppText(Strings[StringKey.MIGRATION_SUM_COMMENTS].withArgs(listOf(s.flowComments, s.printAudits)), AppTextStyle.BODY)
+                    AppText(Strings[StringKey.MIGRATION_SUM_RANGE].withArgs(listOf(s.dateRange)), AppTextStyle.BODY_STRONG)
+                    AppText(
                         Strings[StringKey.MIGRATION_COVERAGE].withArgs(listOf(s.placements, s.dumpScheduleRows)) +
                             (if (s.otherFlowRows > 0) Strings[StringKey.MIGRATION_COVERAGE_OTHER_FLOW].withArgs(listOf(s.otherFlowRows)) else "") +
                             (if (s.orphanedRows > 0) Strings[StringKey.MIGRATION_COVERAGE_ORPHANED].withArgs(listOf(s.orphanedRows)) else "") +
                             (if (s.zeroDateRows > 0) Strings[StringKey.MIGRATION_COVERAGE_ZERO_DATES].withArgs(listOf(s.zeroDateRows)) else ""),
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        AppTextStyle.BODY_STRONG,
+                        color = MaterialTheme.colorScheme.primary,
                     )
-                    Text(
-                        Strings[StringKey.MIGRATION_SYNTHETIC_NOTE],
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    AppText(Strings[StringKey.MIGRATION_SYNTHETIC_NOTE], AppTextStyle.NOTE)
                 }
             }
             Spacer(Modifier.height(12.dp))
         }
 
         status.error?.let {
-            Text(Strings[StringKey.MIGRATION_ERROR].withArgs(listOf(it)), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            AppText(Strings[StringKey.MIGRATION_ERROR].withArgs(listOf(it)), AppTextStyle.ERROR_NOTE)
             Spacer(Modifier.height(8.dp))
         }
 
@@ -357,7 +354,7 @@ private fun MigrationScreen(
 
         // ── live log ────────────────────────────────────────────────────
         if (status.log.isNotEmpty()) {
-            Text(Strings[StringKey.MIGRATION_PROGRESS], fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            AppText(Strings[StringKey.MIGRATION_PROGRESS], AppTextStyle.SECTION_TITLE)
             Spacer(Modifier.height(4.dp))
             val listState = rememberLazyListState()
             LaunchedEffect(status.log.size) {
@@ -406,7 +403,7 @@ private fun ServerFileBrowserDialog(
                 )
                 browser.error?.let {
                     Spacer(Modifier.height(4.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
                 Spacer(Modifier.height(8.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
@@ -420,7 +417,7 @@ private fun ServerFileBrowserDialog(
                             ) {
                                 Icon(AppIcons.folder, null, modifier = Modifier.height(18.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("..", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                AppText("..", AppTextStyle.BODY_STRONG)
                             }
                         }
                     }
@@ -447,13 +444,9 @@ private fun ServerFileBrowserDialog(
                                        else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(entry.name, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            AppText(entry.name, AppTextStyle.BODY, modifier = Modifier.weight(1f))
                             if (!entry.isDir) {
-                                Text(
-                                    "${entry.sizeBytes / 1_048_576} MB",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                AppText("${entry.sizeBytes / 1_048_576} MB", AppTextStyle.TINY)
                             }
                         }
                     }

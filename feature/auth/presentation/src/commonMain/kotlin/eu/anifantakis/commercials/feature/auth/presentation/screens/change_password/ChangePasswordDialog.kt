@@ -1,6 +1,5 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.change_password
 
-import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.helper.UiText
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,8 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
@@ -147,13 +146,12 @@ private fun ChangePasswordDialog(
                 )
                 state.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(
+                AppText(
                     "After the change every session is signed out - log in with the new password.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    AppTextStyle.TINY,
                 )
             }
         },

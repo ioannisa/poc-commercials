@@ -24,6 +24,8 @@ enum class AppTextStyle {
     SCREEN_TITLE,
     /** Card/section/dialog headers. */
     SECTION_TITLE,
+    /** Prominent title of a list item / banner (station name, user name). */
+    ITEM_TITLE,
     /** Emphasised inline text (bold body). */
     BODY_STRONG,
     /** The default reading text of the app. */
@@ -32,6 +34,12 @@ enum class AppTextStyle {
     NOTE,
     /** The smallest text (chips, footnotes, dense meta). */
     TINY,
+    /** Column header of a dense data table (finder console, placements). */
+    TABLE_HEADER,
+    /** Cell of a dense data table. */
+    TABLE_CELL,
+    /** Emphasised (e.g. selected-row) cell of a dense data table. */
+    TABLE_CELL_STRONG,
     /** Console/log lines - monospaced, dense. */
     LOG_LINE,
     /** Monospaced emphasis (recovery codes, tokens, ids). */
@@ -50,10 +58,14 @@ private fun resolveAppTextStyle(style: AppTextStyle): Pair<TextStyle, Color> {
     val actualStyle: TextStyle = when (style) {
         AppTextStyle.SCREEN_TITLE -> t.screenTitle
         AppTextStyle.SECTION_TITLE -> t.sectionTitle
+        AppTextStyle.ITEM_TITLE -> t.material.titleMedium
         AppTextStyle.BODY_STRONG -> t.material.bodyMedium.copy(fontWeight = FontWeight.Bold)
         AppTextStyle.BODY -> t.material.bodyMedium
         AppTextStyle.NOTE -> t.material.bodySmall
         AppTextStyle.TINY -> t.material.labelSmall
+        AppTextStyle.TABLE_HEADER -> t.material.labelSmall.copy(fontWeight = FontWeight.Bold)
+        AppTextStyle.TABLE_CELL -> t.material.bodySmall
+        AppTextStyle.TABLE_CELL_STRONG -> t.material.bodySmall.copy(fontWeight = FontWeight.Bold)
         AppTextStyle.LOG_LINE -> t.logLine
         AppTextStyle.MONO -> t.mono
         AppTextStyle.STAT_VALUE -> t.statValue
@@ -63,8 +75,12 @@ private fun resolveAppTextStyle(style: AppTextStyle): Pair<TextStyle, Color> {
     val defaultColor: Color = when (style) {
         AppTextStyle.SCREEN_TITLE,
         AppTextStyle.SECTION_TITLE,
+        AppTextStyle.ITEM_TITLE,
         AppTextStyle.BODY_STRONG,
         AppTextStyle.BODY,
+        AppTextStyle.TABLE_HEADER,
+        AppTextStyle.TABLE_CELL,
+        AppTextStyle.TABLE_CELL_STRONG,
         AppTextStyle.LOG_LINE,
         AppTextStyle.MONO,
         AppTextStyle.STAT_VALUE -> MaterialTheme.colorScheme.onSurface

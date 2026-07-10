@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,12 +28,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -77,15 +78,14 @@ private fun LoginScreen(
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Commercials Manager",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
+                AppText(
+                    "Commercials Manager",
+                    AppTextStyle.SCREEN_TITLE,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    text = if (state.recoveryMode) Strings[StringKey.LOGIN_RECOVERY_TITLE] else Strings[StringKey.LOGIN_SIGN_IN_TITLE],
-                    fontSize = 14.sp,
+                AppText(
+                    if (state.recoveryMode) Strings[StringKey.LOGIN_RECOVERY_TITLE] else Strings[StringKey.LOGIN_SIGN_IN_TITLE],
+                    AppTextStyle.BODY,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
@@ -140,11 +140,11 @@ private fun LoginScreen(
 
                 state.errorMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(text = message.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(message.asString(), AppTextStyle.ERROR_NOTE)
                 }
                 state.infoMessage?.let { message ->
                     Spacer(Modifier.height(12.dp))
-                    Text(text = message.asString(), color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    AppText(message.asString(), AppTextStyle.BODY, color = MaterialTheme.colorScheme.primary)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -164,29 +164,28 @@ private fun LoginScreen(
                 Spacer(Modifier.height(8.dp))
 
                 TextButton(onClick = { onIntent(LoginIntent.ToggleRecoveryMode) }) {
-                    Text(
+                    AppText(
                         Strings[if (state.recoveryMode) StringKey.LOGIN_BACK_TO_LOGIN
                         else StringKey.LOGIN_FORGOT_PASSWORD],
-                        fontSize = 12.sp
+                        AppTextStyle.NOTE,
+                        color = LocalContentColor.current,
                     )
                 }
 
                 if (!state.recoveryMode) {
                     Spacer(Modifier.height(16.dp))
                     // Demo accounts - one per access layer (demo convenience)
-                    Text(
-                        text = Strings[StringKey.LOGIN_DEMO_ACCOUNTS],
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                    AppText(
+                        Strings[StringKey.LOGIN_DEMO_ACCOUNTS],
+                        AppTextStyle.TABLE_HEADER,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "admin / admin123 — Normal User\n" +
+                    AppText(
+                        "admin / admin123 — Normal User\n" +
                             "viewer / viewer123 — Report Viewer\n" +
                             "customer / customer123 — Customer Viewer\n" +
                             "superadmin — see server.yaml",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        AppTextStyle.TINY,
                     )
                 }
             }

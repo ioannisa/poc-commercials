@@ -9,6 +9,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +31,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eu.anifantakis.commercials.core.domain.auth.UserSession
@@ -238,16 +240,18 @@ private fun TimetableScreen(
                     onClick = { spotMenu = true },
                     enabled = finder.spots.isNotEmpty()
                 ) {
-                    Text(
+                    AppText(
                         finder.selectedSpot?.description?.take(48) ?: Strings[StringKey.TIMETABLE_NO_SPOT_SELECTED],
-                        maxLines = 1, fontSize = 12.sp
+                        AppTextStyle.NOTE,
+                        color = LocalContentColor.current,
+                        maxLines = 1,
                     )
                     Icon(AppIcons.arrowDropDown, contentDescription = null)
                 }
                 DropdownMenu(expanded = spotMenu, onDismissRequest = { spotMenu = false }) {
                     finder.spots.forEach { spot ->
                         DropdownMenuItem(
-                            text = { Text("${spot.description} (${spot.durationSeconds}″)", fontSize = 12.sp) },
+                            text = { AppText("${spot.description} (${spot.durationSeconds}″)", AppTextStyle.NOTE, color = LocalContentColor.current) },
                             onClick = {
                                 onIntent(TimetableIntent.FinderSpotSelected(spot))
                                 spotMenu = false
@@ -449,10 +453,9 @@ private fun StationSelector(authSession: UserSession) {
     Box {
         if (authSession.stations.size > 1) {
             TextButton(onClick = { expanded = true }) {
-                Text(
-                    text = current.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                AppText(
+                    current.name,
+                    AppTextStyle.SECTION_TITLE,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Icon(
@@ -480,10 +483,9 @@ private fun StationSelector(authSession: UserSession) {
                 }
             }
         } else {
-            Text(
-                text = current.name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+            AppText(
+                current.name,
+                AppTextStyle.SECTION_TITLE,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 8.dp)
             )
@@ -528,10 +530,9 @@ private fun KeyboardEnabledHeader(
                     )
                 }
 
-                Text(
-                    text = "$monthName $year",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
+                AppText(
+                    "$monthName $year",
+                    AppTextStyle.SCREEN_TITLE,
                     modifier = Modifier.width(200.dp)
                 )
 
@@ -546,15 +547,13 @@ private fun KeyboardEnabledHeader(
 
                 // Keyboard shortcut hints
                 Column {
-                    Text(
-                        text = Strings[if (canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    AppText(
+                        Strings[if (canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
+                        AppTextStyle.TINY,
                     )
-                    Text(
-                        text = Strings[StringKey.TIMETABLE_HINT_CLICK_FOCUS],
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    AppText(
+                        Strings[StringKey.TIMETABLE_HINT_CLICK_FOCUS],
+                        AppTextStyle.TINY,
                     )
                 }
 
@@ -625,15 +624,10 @@ private fun AccountBadge(authSession: UserSession) {
         horizontalAlignment = Alignment.End,
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text(
-            text = authSession.displayName,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = if (authSession.isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[authSession.role.toStringKey()],
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        AppText(authSession.displayName, AppTextStyle.BODY_STRONG)
+        AppText(
+            if (authSession.isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[authSession.role.toStringKey()],
+            AppTextStyle.TINY,
         )
     }
 }
@@ -664,7 +658,7 @@ private fun SpotFinderDialog(
             tonalElevation = 6.dp
         ) {
             Column(Modifier.padding(14.dp)) {
-                Text(Strings[StringKey.FINDER_CONSOLE_TITLE], fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                AppText(Strings[StringKey.FINDER_CONSOLE_TITLE], AppTextStyle.ITEM_TITLE)
 
                 // ═══ ΠΕΛΑΤΗΣ ═══════════════════════════════════════════
                 SectionTitle(Strings[StringKey.FINDER_SECTION_CUSTOMER])
@@ -673,8 +667,8 @@ private fun SpotFinderDialog(
                         selected = finder.kind == PartyKind.CUSTOMER,
                         onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER)) }
                     )
-                    Text(
-                        Strings[StringKey.FINDER_TAB_CUSTOMERS], fontSize = 13.sp,
+                    AppText(
+                        Strings[StringKey.FINDER_TAB_CUSTOMERS], AppTextStyle.BODY,
                         modifier = Modifier.clickable {
                             onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER))
                         }
@@ -684,8 +678,8 @@ private fun SpotFinderDialog(
                         selected = finder.kind == PartyKind.TRADER,
                         onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER)) }
                     )
-                    Text(
-                        Strings[StringKey.FINDER_TAB_ADVERTISERS], fontSize = 13.sp,
+                    AppText(
+                        Strings[StringKey.FINDER_TAB_ADVERTISERS], AppTextStyle.BODY,
                         modifier = Modifier.clickable {
                             onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER))
                         }
@@ -694,7 +688,7 @@ private fun SpotFinderDialog(
                     OutlinedTextField(
                         value = finder.query,
                         onValueChange = { onIntent(TimetableIntent.FinderQueryChanged(it)) },
-                        label = { Text(Strings[StringKey.FINDER_SEARCH_LABEL], fontSize = 12.sp) },
+                        label = { AppText(Strings[StringKey.FINDER_SEARCH_LABEL], AppTextStyle.NOTE, color = LocalContentColor.current) },
                         singleLine = true, modifier = Modifier.weight(1f),
                         trailingIcon = {
                             if (finder.searching) {
@@ -793,8 +787,8 @@ private fun SpotFinderDialog(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(
-        text, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+    AppText(
+        text, AppTextStyle.TABLE_HEADER,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
     )
@@ -809,8 +803,8 @@ private fun HeaderRow(vararg columns: Pair<String, Float>) {
             .padding(horizontal = 6.dp, vertical = 3.dp)
     ) {
         for ((label, weight) in columns) {
-            Text(
-                label, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            AppText(
+                label, AppTextStyle.TABLE_HEADER,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(weight)
             )
@@ -836,9 +830,9 @@ private fun TableRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         for ((value, weight) in cells) {
-            Text(
-                value, fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            AppText(
+                value,
+                if (selected) AppTextStyle.TABLE_CELL_STRONG else AppTextStyle.TABLE_CELL,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(weight)
             )

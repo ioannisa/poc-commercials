@@ -1,31 +1,27 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes
 
-import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
-import eu.anifantakis.commercials.core.presentation.string_resources.Strings
-import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.foundation.layout.Column
-import androidx.compose.runtime.Stable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
-import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.toUiText
 import kotlinx.collections.immutable.ImmutableList
@@ -100,15 +96,9 @@ private fun RecoveryCodesDialog(
         text = {
             Column {
                 if (state.codes == null) {
-                    Text(
-                        Strings[StringKey.RECOVERY_INFO],
-                        fontSize = 13.sp
-                    )
+                    AppText(Strings[StringKey.RECOVERY_INFO], AppTextStyle.BODY)
                 } else {
-                    Text(
-                        Strings[StringKey.RECOVERY_SAVE_NOW],
-                        fontSize = 13.sp, fontWeight = FontWeight.Bold
-                    )
+                    AppText(Strings[StringKey.RECOVERY_SAVE_NOW], AppTextStyle.BODY_STRONG)
                     Spacer(Modifier.height(8.dp))
                     state.codes.forEach { code ->
                         AppText(code, AppTextStyle.MONO)
@@ -116,7 +106,7 @@ private fun RecoveryCodesDialog(
                 }
                 state.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
             }
         },

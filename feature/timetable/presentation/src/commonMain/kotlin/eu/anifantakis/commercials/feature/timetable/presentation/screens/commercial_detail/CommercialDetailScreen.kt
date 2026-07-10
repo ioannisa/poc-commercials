@@ -5,6 +5,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -605,25 +607,24 @@ private fun DetailHeader(
                         }
 
                         Column {
-                            Text(
-                                text = "$dayName - $dayNumber $monthName $year",
+                            AppText(
+                                "$dayName - $dayNumber $monthName $year",
+                                AppTextStyle.ITEM_TITLE,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = Strings[StringKey.DETAIL_BREAK_TIME],
-                                    fontSize = 12.sp
+                                AppText(
+                                    Strings[StringKey.DETAIL_BREAK_TIME],
+                                    AppTextStyle.NOTE,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
-                                Text(
-                                    text = breakTime,
+                                AppText(
+                                    breakTime,
+                                    AppTextStyle.STAT_VALUE,
                                     color = MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
                                 )
                             }
                         }
@@ -663,11 +664,10 @@ private fun DetailHeader(
                     // The programme airing in this break, when one is on record
                     // (migrated stations carry it; demo data has none).
                     if (!showName.isNullOrBlank()) {
-                        Text(
-                            text = showName,
+                        AppText(
+                            showName,
+                            AppTextStyle.ITEM_TITLE,
                             color = gridPalette().positiveValue,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -731,33 +731,26 @@ private fun StatColumn(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (label.isNotEmpty()) {
-            Text(
-                text = label,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            AppText(label, AppTextStyle.STAT_LABEL)
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = value1,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+            AppText(
+                value1,
+                AppTextStyle.TABLE_CELL_STRONG,
                 modifier = Modifier.width(50.dp),
                 textAlign = TextAlign.Center
             )
-            Text(
-                text = value2,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+            AppText(
+                value2,
+                AppTextStyle.TABLE_CELL_STRONG,
                 modifier = Modifier.width(50.dp),
                 textAlign = TextAlign.Center
             )
-            Text(
-                text = value3,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
+            AppText(
+                value3,
+                AppTextStyle.TABLE_CELL_STRONG,
                 modifier = Modifier.width(50.dp),
                 textAlign = TextAlign.Center
             )

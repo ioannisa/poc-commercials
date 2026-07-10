@@ -6,6 +6,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,10 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -89,7 +90,7 @@ private fun UserManagementScreen(
             IconButton(onClick = { onNavIntent(UserManagementScreenNavIntent.OnBack) }) {
                 Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
             }
-            Text(Strings[StringKey.USER_MGMT_TITLE], fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            AppText(Strings[StringKey.USER_MGMT_TITLE], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
             Button(onClick = { onIntent(UserManagementIntent.ShowCreate) }) {
                 Icon(AppIcons.add, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -99,7 +100,7 @@ private fun UserManagementScreen(
         }
 
         state.message?.let {
-            Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
 
         Spacer(Modifier.height(8.dp))
@@ -113,15 +114,14 @@ private fun UserManagementScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(user.username, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                AppText(user.username, AppTextStyle.ITEM_TITLE)
                                 Spacer(Modifier.width(8.dp))
-                                Text(user.displayName, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AppText(user.displayName, AppTextStyle.BODY, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 if (user.isAdmin) {
                                     Spacer(Modifier.width(8.dp))
-                                    Text(
+                                    AppText(
                                         Strings[StringKey.USER_MGMT_SUPER_ADMIN_BADGE],
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        AppTextStyle.TINY,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -131,7 +131,7 @@ private fun UserManagementScreen(
                                     val cc = it.clientCode?.let { c -> " ($c)" } ?: ""
                                     "${it.stationId}: ${AppRole.parse(it.role).toStringKey().localized()}$cc"
                                 }.ifEmpty { Strings[StringKey.USER_MGMT_NO_ACCESS] }
-                                Text(summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AppText(summary, AppTextStyle.NOTE)
                             }
                         }
                         if (!user.isAdmin) {
@@ -199,12 +199,13 @@ private fun GrantsEditor(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(stationName, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            AppText(stationName, AppTextStyle.BODY, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { expanded = true }) {
-                Text(
+                AppText(
                     if (role == NO_ACCESS) Strings[StringKey.USER_MGMT_NO_ACCESS]
                     else Strings[AppRole.parse(role).toStringKey()],
-                    fontSize = 12.sp
+                    AppTextStyle.NOTE,
+                    color = LocalContentColor.current,
                 )
             }
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -264,7 +265,7 @@ private fun CreateUserDialog(
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                Text(Strings[StringKey.USER_MGMT_STATION_ACCESS], fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                AppText(Strings[StringKey.USER_MGMT_STATION_ACCESS], AppTextStyle.BODY_STRONG)
                 GrantsEditor(
                     stationChoices = stationChoices,
                     grants = dialog.grants,
@@ -273,7 +274,7 @@ private fun CreateUserDialog(
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
             }
         },
@@ -299,10 +300,7 @@ private fun ResetPasswordDialog(
         title = { Text(Strings[StringKey.USER_MGMT_RESET_TITLE].withArgs(listOf(dialog.user.username))) },
         text = {
             Column {
-                Text(
-                    Strings[StringKey.USER_MGMT_RESET_INFO],
-                    fontSize = 13.sp
-                )
+                AppText(Strings[StringKey.USER_MGMT_RESET_INFO], AppTextStyle.BODY)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.password,
@@ -312,7 +310,7 @@ private fun ResetPasswordDialog(
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
             }
         },
@@ -347,7 +345,7 @@ private fun EditGrantsDialog(
                 )
                 dialog.error?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it.asString(), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
                 }
             }
         },

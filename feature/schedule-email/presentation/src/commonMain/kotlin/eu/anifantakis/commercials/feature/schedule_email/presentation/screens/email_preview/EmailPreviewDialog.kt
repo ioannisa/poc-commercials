@@ -21,9 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import eu.anifantakis.commercials.feature.schedule_email.domain.EmailPreviewRequest
 import eu.anifantakis.commercials.feature.schedule_email.presentation.webview.EmailHtmlPreview
@@ -79,9 +80,9 @@ private fun EmailPreviewDialog(
             tonalElevation = 6.dp
         ) {
             Column(Modifier.padding(12.dp)) {
-                Text(
+                AppText(
                     title,
-                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    AppTextStyle.SECTION_TITLE,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 when {
@@ -106,11 +107,11 @@ private fun EmailPreviewDialog(
                 ) {
                     val err = state.error
                     if (err != null && state.html != null) {
-                        Text(err.asString(), color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        AppText(err.asString(), AppTextStyle.ERROR_NOTE, modifier = Modifier.weight(1f))
                     } else {
-                        Text(
+                        AppText(
                             Strings[StringKey.EMAIL_TO].withArgs(listOf(recipient)),
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            AppTextStyle.NOTE,
                             modifier = Modifier.weight(1f)
                         )
                     }
