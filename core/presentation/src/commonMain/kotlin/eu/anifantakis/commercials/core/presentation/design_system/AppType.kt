@@ -62,6 +62,15 @@ val LocalAppTypography = staticCompositionLocalOf<AppTypography> {
 }
 
 /**
+ * The active [FontSizeStep] itself, for the few callers that need the raw
+ * FACTOR rather than a ready-made [TextStyle]: the standalone grid toolkits
+ * are leaf modules that cannot see [AppTypography], so the screen hands them
+ * `AppTheme.fontSizeStep.factor` as their `scale` (they size their own dense
+ * type and cell geometry from it).
+ */
+val LocalFontSizeStep = staticCompositionLocalOf { FontSizeStep.DEFAULT }
+
+/**
  * Clean access to the app typography, mimicking `MaterialTheme.typography`
  * (dealer-totem convention: `AppTheme.typography.<role>`).
  */
@@ -69,6 +78,10 @@ object AppTheme {
     val typography: AppTypography
         @Composable
         get() = LocalAppTypography.current
+
+    val fontSizeStep: FontSizeStep
+        @Composable
+        get() = LocalFontSizeStep.current
 }
 
 /** The bundled Roboto family (full Greek coverage on every platform). */

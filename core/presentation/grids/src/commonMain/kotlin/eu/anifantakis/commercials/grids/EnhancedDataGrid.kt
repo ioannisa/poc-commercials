@@ -29,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -455,6 +456,17 @@ fun <T> EnhancedDataGrid(
     state: EnhancedDataGridState<T> = rememberEnhancedDataGridState(columns),
     selectionMode: SelectionMode = SelectionMode.SINGLE,
 
+    /**
+     * Uniform density knob for this grid's OWN type and row/header heights.
+     * 1f is the original density.
+     *
+     * Column WIDTHS are deliberately not touched here: they live in
+     * [ColumnDef], are user-resizable through [EnhancedDataGridState], and a
+     * caller that wants them to grow scales them where it builds the columns
+     * (otherwise a scale change would silently discard manual resizes).
+     */
+    scale: Float = 1f,
+
     // Row configuration
     showRowNumbers: Boolean = false,
     /** Header of the totals row's number column (legacy «Σ» = Σύνολο). */
@@ -490,6 +502,13 @@ fun <T> EnhancedDataGrid(
     emptyContent: @Composable () -> Unit = { DefaultEmptyContent() }
 ) {
     val palette = gridPalette()
+
+    // Clamped once; rows and header grow with the type so the cells keep
+    // breathing room instead of clipping their (ellipsized) text.
+    val s = scale.coerceIn(MIN_GRID_SCALE, MAX_GRID_SCALE)
+    val rowNumberW = rowNumberWidth * s
+    val rowH = rowHeight * s
+    val headerH = headerHeight * s
 
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
@@ -753,8 +772,8 @@ fun <T> EnhancedDataGrid(
     }
 
     // Calculate widths for frozen sections
-    val frozenLeftWidth = remember(frozenLeftCols, state.columnStates, showRowNumbers, rowNumberWidth, stickyColumns) {
-        var width = if (showRowNumbers && stickyColumns.freezeRowNumbers) rowNumberWidth else 0.dp
+    val frozenLeftWidth = remember(frozenLeftCols, state.columnStates, showRowNumbers, rowNumberW, stickyColumns) {
+        var width = if (showRowNumbers && stickyColumns.freezeRowNumbers) rowNumberW else 0.dp
         frozenLeftCols.forEach { col -> width += state.getColumnWidth(col.id) }
         width
     }
@@ -766,60 +785,32 @@ fun <T> EnhancedDataGrid(
     }
 
     // Main layout using Box for layered sticky regions
-    Box(
-        modifier = modifier
-            .focusRequester(focusRequester)
-            .focusable()
-            .onFocusChanged { hasFocus = it.hasFocus }
-            .onPreviewKeyEvent { handleKeyboard(it) }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                focusRequester.requestFocus()
-            }
-            .border(1.dp, if (hasFocus) MaterialTheme.colorScheme.primary else palette.headerBorder)
-    ) {
-        if (sortedItems.isEmpty()) {
-            // Empty state
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Still show header
-                StickyHeaderRow(
-                    columns = allVisibleCols,
-                    state = state,
-                    showRowNumbers = showRowNumbers,
-                    rowNumberWidth = rowNumberWidth,
-                    headerHeight = headerHeight,
-                    horizontalScrollState = horizontalScrollState,
-                    frozenLeftWidth = frozenLeftWidth,
-                    frozenRightWidth = frozenRightWidth,
-                    frozenLeftCols = frozenLeftCols,
-                    frozenRightCols = frozenRightCols,
-                    scrollableCols = scrollableCols,
-                    stickyColumns = stickyColumns,
-                    allColumns = columns,
-                    onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
-                )
-
-                HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
-
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+    // One place publishes the scale; every dense Text below reads it.
+    CompositionLocalProvider(LocalGridScale provides s) {
+        Box(
+            modifier = modifier
+                .focusRequester(focusRequester)
+                .focusable()
+                .onFocusChanged { hasFocus = it.hasFocus }
+                .onPreviewKeyEvent { handleKeyboard(it) }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
                 ) {
-                    emptyContent()
+                    focusRequester.requestFocus()
                 }
-            }
-        } else {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ===== STICKY HEADER =====
-                if (stickyRows.stickyHeader) {
+                .border(1.dp, if (hasFocus) MaterialTheme.colorScheme.primary else palette.headerBorder)
+        ) {
+            if (sortedItems.isEmpty()) {
+                // Empty state
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Still show header
                     StickyHeaderRow(
                         columns = allVisibleCols,
                         state = state,
                         showRowNumbers = showRowNumbers,
-                        rowNumberWidth = rowNumberWidth,
-                        headerHeight = headerHeight,
+                        rowNumberWidth = rowNumberW,
+                        headerHeight = headerH,
                         horizontalScrollState = horizontalScrollState,
                         frozenLeftWidth = frozenLeftWidth,
                         frozenRightWidth = frozenRightWidth,
@@ -832,137 +823,168 @@ fun <T> EnhancedDataGrid(
                     )
 
                     HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
-                }
 
-                // ===== SCROLLABLE BODY =====
-                Box(modifier = Modifier.weight(1f)) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        // Frozen left section (including row numbers)
-                        if (frozenLeftWidth > 0.dp) {
-                            FrozenLeftSection(
-                                items = sortedItems,
-                                columns = frozenLeftCols,
-                                state = state,
-                                showRowNumbers = showRowNumbers && stickyColumns.freezeRowNumbers,
-                                rowNumberWidth = rowNumberWidth,
-                                rowHeight = rowHeight,
-                                verticalScrollState = verticalScrollState,
-                                hasFocus = hasFocus,
-                                enableEditing = enableEditing,
-                                onCellValueChanged = onCellValueChanged,
-                                selectionMode = selectionMode,
-                                onRowClick = onRowClick,
-                                onRowDoubleClick = onRowDoubleClick,
-                                onRowRightClick = wrappedOnRowRightClick,
-                                contextMenuItems = contextMenuItems, // Pass menu items down
-                                rowKey = rowKey,
-                                allColumns = columns,
-                                allItems = sortedItems,
-                                onRowReorder = wrappedOnRowReorder
-                            )
-
-                            // Shadow/divider for frozen left
-                            Box(
-                                modifier = Modifier
-                                    .width(2.dp)
-                                    .fillMaxHeight()
-                                    .background(palette.headerBorder)
-                            )
-                        }
-
-                        // Scrollable middle section
-                        Box(modifier = Modifier.weight(1f)) {
-                            ScrollableMiddleSection(
-                                items = sortedItems,
-                                columns = scrollableCols,
-                                state = state,
-                                showRowNumbers = showRowNumbers && !stickyColumns.freezeRowNumbers,
-                                rowNumberWidth = rowNumberWidth,
-                                rowHeight = rowHeight,
-                                verticalScrollState = verticalScrollState,
-                                horizontalScrollState = horizontalScrollState,
-                                hasFocus = hasFocus,
-                                enableEditing = enableEditing,
-                                onCellValueChanged = onCellValueChanged,
-                                selectionMode = selectionMode,
-                                onRowClick = onRowClick,
-                                onRowDoubleClick = onRowDoubleClick,
-                                onRowRightClick = wrappedOnRowRightClick,
-                                contextMenuItems = contextMenuItems, // Pass menu items down
-                                rowKey = rowKey,
-                                allColumns = columns,
-                                allItems = sortedItems,
-                                frozenLeftCols = frozenLeftCols,
-                                onRowReorder = wrappedOnRowReorder
-                            )
-
-                            // Scrollbars (platform-specific - shown on desktop/web, hidden on mobile)
-                            PlatformVerticalScrollbar(
-                                lazyListState = verticalScrollState,
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                            )
-
-                            PlatformHorizontalScrollbar(
-                                scrollState = horizontalScrollState,
-                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                            )
-                        }
-
-                        // Frozen right section
-                        if (frozenRightWidth > 0.dp) {
-                            // Shadow/divider for frozen right
-                            Box(
-                                modifier = Modifier
-                                    .width(2.dp)
-                                    .fillMaxHeight()
-                                    .background(palette.headerBorder)
-                            )
-
-                            FrozenRightSection(
-                                items = sortedItems,
-                                columns = frozenRightCols,
-                                state = state,
-                                rowHeight = rowHeight,
-                                verticalScrollState = verticalScrollState,
-                                hasFocus = hasFocus,
-                                enableEditing = enableEditing,
-                                onCellValueChanged = onCellValueChanged,
-                                selectionMode = selectionMode,
-                                onRowClick = onRowClick,
-                                onRowDoubleClick = onRowDoubleClick,
-                                onRowRightClick = wrappedOnRowRightClick,
-                                contextMenuItems = contextMenuItems, // Pass menu items down
-                                rowKey = rowKey,
-                                allColumns = columns,
-                                allItems = sortedItems,
-                                frozenLeftCols = frozenLeftCols,
-                                scrollableCols = scrollableCols,
-                                onRowReorder = wrappedOnRowReorder
-                            )
-                        }
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        emptyContent()
                     }
                 }
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ===== STICKY HEADER =====
+                    if (stickyRows.stickyHeader) {
+                        StickyHeaderRow(
+                            columns = allVisibleCols,
+                            state = state,
+                            showRowNumbers = showRowNumbers,
+                            rowNumberWidth = rowNumberW,
+                            headerHeight = headerH,
+                            horizontalScrollState = horizontalScrollState,
+                            frozenLeftWidth = frozenLeftWidth,
+                            frozenRightWidth = frozenRightWidth,
+                            frozenLeftCols = frozenLeftCols,
+                            frozenRightCols = frozenRightCols,
+                            scrollableCols = scrollableCols,
+                            stickyColumns = stickyColumns,
+                            allColumns = columns,
+                            onHeaderReorder = { fromId, toId -> state.swapColumns(fromId, toId) }
+                        )
 
-                // ===== STICKY FOOTER (TOTALS) =====
-                if (stickyRows.stickyFooter && totalsRow != null) {
-                    HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
+                        HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
+                    }
 
-                    StickyFooterRow(
-                        totals = totalsRow(sortedItems),
-                        columns = allVisibleCols,
-                        state = state,
-                        showRowNumbers = showRowNumbers,
-                        summaryLabel = summaryLabel,
-                        rowNumberWidth = rowNumberWidth,
-                        rowHeight = rowHeight,
-                        horizontalScrollState = horizontalScrollState,
-                        frozenLeftWidth = frozenLeftWidth,
-                        frozenRightWidth = frozenRightWidth,
-                        frozenLeftCols = frozenLeftCols,
-                        frozenRightCols = frozenRightCols,
-                        scrollableCols = scrollableCols,
-                        stickyColumns = stickyColumns
-                    )
+                    // ===== SCROLLABLE BODY =====
+                    Box(modifier = Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            // Frozen left section (including row numbers)
+                            if (frozenLeftWidth > 0.dp) {
+                                FrozenLeftSection(
+                                    items = sortedItems,
+                                    columns = frozenLeftCols,
+                                    state = state,
+                                    showRowNumbers = showRowNumbers && stickyColumns.freezeRowNumbers,
+                                    rowNumberWidth = rowNumberW,
+                                    rowHeight = rowH,
+                                    verticalScrollState = verticalScrollState,
+                                    hasFocus = hasFocus,
+                                    enableEditing = enableEditing,
+                                    onCellValueChanged = onCellValueChanged,
+                                    selectionMode = selectionMode,
+                                    onRowClick = onRowClick,
+                                    onRowDoubleClick = onRowDoubleClick,
+                                    onRowRightClick = wrappedOnRowRightClick,
+                                    contextMenuItems = contextMenuItems, // Pass menu items down
+                                    rowKey = rowKey,
+                                    allColumns = columns,
+                                    allItems = sortedItems,
+                                    onRowReorder = wrappedOnRowReorder
+                                )
+
+                                // Shadow/divider for frozen left
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .fillMaxHeight()
+                                        .background(palette.headerBorder)
+                                )
+                            }
+
+                            // Scrollable middle section
+                            Box(modifier = Modifier.weight(1f)) {
+                                ScrollableMiddleSection(
+                                    items = sortedItems,
+                                    columns = scrollableCols,
+                                    state = state,
+                                    showRowNumbers = showRowNumbers && !stickyColumns.freezeRowNumbers,
+                                    rowNumberWidth = rowNumberW,
+                                    rowHeight = rowH,
+                                    verticalScrollState = verticalScrollState,
+                                    horizontalScrollState = horizontalScrollState,
+                                    hasFocus = hasFocus,
+                                    enableEditing = enableEditing,
+                                    onCellValueChanged = onCellValueChanged,
+                                    selectionMode = selectionMode,
+                                    onRowClick = onRowClick,
+                                    onRowDoubleClick = onRowDoubleClick,
+                                    onRowRightClick = wrappedOnRowRightClick,
+                                    contextMenuItems = contextMenuItems, // Pass menu items down
+                                    rowKey = rowKey,
+                                    allColumns = columns,
+                                    allItems = sortedItems,
+                                    frozenLeftCols = frozenLeftCols,
+                                    onRowReorder = wrappedOnRowReorder
+                                )
+
+                                // Scrollbars (platform-specific - shown on desktop/web, hidden on mobile)
+                                PlatformVerticalScrollbar(
+                                    lazyListState = verticalScrollState,
+                                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                                )
+
+                                PlatformHorizontalScrollbar(
+                                    scrollState = horizontalScrollState,
+                                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                )
+                            }
+
+                            // Frozen right section
+                            if (frozenRightWidth > 0.dp) {
+                                // Shadow/divider for frozen right
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .fillMaxHeight()
+                                        .background(palette.headerBorder)
+                                )
+
+                                FrozenRightSection(
+                                    items = sortedItems,
+                                    columns = frozenRightCols,
+                                    state = state,
+                                    rowHeight = rowH,
+                                    verticalScrollState = verticalScrollState,
+                                    hasFocus = hasFocus,
+                                    enableEditing = enableEditing,
+                                    onCellValueChanged = onCellValueChanged,
+                                    selectionMode = selectionMode,
+                                    onRowClick = onRowClick,
+                                    onRowDoubleClick = onRowDoubleClick,
+                                    onRowRightClick = wrappedOnRowRightClick,
+                                    contextMenuItems = contextMenuItems, // Pass menu items down
+                                    rowKey = rowKey,
+                                    allColumns = columns,
+                                    allItems = sortedItems,
+                                    frozenLeftCols = frozenLeftCols,
+                                    scrollableCols = scrollableCols,
+                                    onRowReorder = wrappedOnRowReorder
+                                )
+                            }
+                        }
+                    }
+
+                    // ===== STICKY FOOTER (TOTALS) =====
+                    if (stickyRows.stickyFooter && totalsRow != null) {
+                        HorizontalDivider(thickness = 2.dp, color = palette.headerBorder)
+
+                        StickyFooterRow(
+                            totals = totalsRow(sortedItems),
+                            columns = allVisibleCols,
+                            state = state,
+                            showRowNumbers = showRowNumbers,
+                            summaryLabel = summaryLabel,
+                            rowNumberWidth = rowNumberW,
+                            rowHeight = rowH,
+                            horizontalScrollState = horizontalScrollState,
+                            frozenLeftWidth = frozenLeftWidth,
+                            frozenRightWidth = frozenRightWidth,
+                            frozenLeftCols = frozenLeftCols,
+                            frozenRightCols = frozenRightCols,
+                            scrollableCols = scrollableCols,
+                            stickyColumns = stickyColumns
+                        )
+                    }
                 }
             }
         }
@@ -1133,6 +1155,7 @@ private fun <T> HeaderCell(
     onReorder: ((String, String) -> Unit)?,
     columnDragState: ColumnDragState? = null
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     val density = LocalDensity.current
@@ -1252,7 +1275,7 @@ private fun <T> HeaderCell(
             Text(
                 text = text,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
+                fontSize = (13 * gridScale).sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
@@ -1405,6 +1428,7 @@ private fun <T> FrozenLeftRow(
     totalRows: Int = 0,
     onRowReorder: ((Int, Int) -> Unit)? = null
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     // Extract actual item from stable wrapper
@@ -1510,7 +1534,7 @@ private fun <T> FrozenLeftRow(
             ) {
                 Text(
                     text = (rowIndex + 1).toString(),
-                    fontSize = 12.sp,
+                    fontSize = (12 * gridScale).sp,
                     color = palette.mutedText
                 )
             }
@@ -1677,6 +1701,7 @@ private fun <T> ScrollableMiddleRow(
     totalRows: Int = 0,
     onRowReorder: ((Int, Int) -> Unit)? = null
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     // Extract actual item from stable wrapper
@@ -1793,7 +1818,7 @@ private fun <T> ScrollableMiddleRow(
             ) {
                 Text(
                     text = (rowIndex + 1).toString(),
-                    fontSize = 12.sp,
+                    fontSize = (12 * gridScale).sp,
                     color = palette.mutedText
                 )
             }
@@ -2102,6 +2127,7 @@ private fun <T> DataCell(
     allItems: ImmutableList<T>,
     onCellRightClick: ((Offset) -> Unit)? = null
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     // Extract actual item from stable wrapper
@@ -2184,7 +2210,7 @@ private fun <T> DataCell(
             ) {
                 Text(
                     text = column.extractor(item),
-                    fontSize = 13.sp,
+                    fontSize = (13 * gridScale).sp,
                     color = cellTextColor,
                     fontWeight = fontWeight,
                     maxLines = 1,
@@ -2219,6 +2245,7 @@ private fun EditableCell(
     onCancel: () -> Unit,
     textAlign: TextAlign
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     val focusRequester = remember { FocusRequester() }
@@ -2259,7 +2286,7 @@ private fun EditableCell(
                     } else false
                 },
             textStyle = TextStyle(
-                fontSize = 13.sp,
+                fontSize = (13 * gridScale).sp,
                 textAlign = textAlign
             ),
             singleLine = true,
@@ -2326,6 +2353,7 @@ private fun <T> StickyFooterRow(
     scrollableCols: ImmutableList<ColumnDef<T>>,
     stickyColumns: StickyColumnsConfig
 ) {
+    val gridScale = LocalGridScale.current
     val palette = gridPalette()
 
     Row(
@@ -2347,7 +2375,7 @@ private fun <T> StickyFooterRow(
                         Text(
                             text = summaryLabel,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = (14 * gridScale).sp
                         )
                     }
                 }
@@ -2385,7 +2413,7 @@ private fun <T> StickyFooterRow(
                     Text(
                         text = summaryLabel,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = (14 * gridScale).sp
                     )
                 }
             }
@@ -2427,6 +2455,7 @@ private fun TotalsCell(
     width: Dp,
     alignment: TextAlign
 ) {
+    val gridScale = LocalGridScale.current
     Box(
         modifier = Modifier
             .width(width)
@@ -2441,7 +2470,7 @@ private fun TotalsCell(
     ) {
         Text(
             text = value,
-            fontSize = 13.sp,
+            fontSize = (13 * gridScale).sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

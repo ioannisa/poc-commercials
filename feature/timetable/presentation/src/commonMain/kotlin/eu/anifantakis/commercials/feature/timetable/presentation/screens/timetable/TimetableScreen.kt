@@ -9,6 +9,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
@@ -283,6 +284,10 @@ private fun TimetableScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(8.dp),
+            // The grid toolkit is a leaf - it can't read AppTheme.typography,
+            // so we hand it the preference's raw factor. Cells and type grow
+            // together; a bigger step trades days-per-screen for legibility.
+            scale = AppTheme.fontSizeStep.factor,
             breakColumnWidth = 70.dp,
             dayColumnWidth = 42.dp,
             rowHeight = 28.dp,

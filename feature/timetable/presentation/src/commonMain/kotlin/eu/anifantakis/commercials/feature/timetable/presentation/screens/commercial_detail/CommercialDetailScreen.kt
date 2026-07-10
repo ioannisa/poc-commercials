@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
@@ -228,15 +229,20 @@ private fun CommercialDetailScreen(
     // Keyed into the remember so a live theme OR LANGUAGE switch rebuilds
     // the columns (headers resolve via .localized() inside the non-composable
     // remember block).
+    //
+    // gridScale is a key too: EnhancedDataGrid scales its own type and row
+    // heights, but column WIDTHS come from these ColumnDefs - they have to be
+    // rebuilt (wider) so the bigger text is not merely ellipsized.
     val palette = gridPalette()
     val language = LocalLanguage.current
-    val columns = remember(localCommercials, palette, language) {
+    val gridScale = AppTheme.fontSizeStep.factor
+    val columns = remember(localCommercials, palette, language, gridScale) {
         listOf(
             // Reorder buttons column
             ColumnDef<CommercialItem>(
                 id = "reorder",
                 header = "↕",
-                width = 70.dp,
+                width = 70.dp * gridScale,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
                 extractor = { "" },
@@ -277,7 +283,7 @@ private fun CommercialDetailScreen(
             ColumnDef<CommercialItem>(
                 id = "index",
                 header = StringKey.DETAIL_COL_NUMBER.localized(),
-                width = 60.dp,
+                width = 60.dp * gridScale,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
                 extractor = { "" },  // Will use row index
@@ -294,28 +300,28 @@ private fun CommercialDetailScreen(
             ColumnDef(
                 id = "clientCode",
                 header = StringKey.DETAIL_COL_CUSTOMER_CODE.localized(),
-                width = 90.dp,
+                width = 90.dp * gridScale,
                 alignment = TextAlign.Start,
                 extractor = { it.clientCode }
             ),
             ColumnDef(
                 id = "clientName",
                 header = StringKey.DETAIL_COL_CUSTOMER.localized(),
-                width = 220.dp,
+                width = 220.dp * gridScale,
                 alignment = TextAlign.Start,
                 extractor = { it.clientName }
             ),
             ColumnDef(
                 id = "message",
                 header = StringKey.DETAIL_COL_MESSAGE.localized(),
-                width = 280.dp,
+                width = 280.dp * gridScale,
                 alignment = TextAlign.Start,
                 extractor = { it.message }
             ),
             ColumnDef(
                 id = "duration",
                 header = "sec",
-                width = 60.dp,
+                width = 60.dp * gridScale,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
                 extractor = { it.durationSeconds.toString() }
@@ -323,7 +329,7 @@ private fun CommercialDetailScreen(
             ColumnDef(
                 id = "type",
                 header = StringKey.DETAIL_COL_TYPE.localized(),
-                width = 200.dp,
+                width = 200.dp * gridScale,
                 alignment = TextAlign.Start,
                 // The legacy Break Console shows the contract line's SALES
                 // item here ('Διαφ. TV Κρήτη Σ73.002', 'Διαφημίσεις
@@ -335,7 +341,7 @@ private fun CommercialDetailScreen(
             ColumnDef(
                 id = "contract",
                 header = StringKey.DETAIL_COL_CONTRACT.localized(),
-                width = 80.dp,
+                width = 80.dp * gridScale,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
                 // Always the contract NUMBER, like the legacy console - the
@@ -345,7 +351,7 @@ private fun CommercialDetailScreen(
             ColumnDef(
                 id = "flow",
                 header = StringKey.DETAIL_COL_FLOW.localized(),
-                width = 60.dp,
+                width = 60.dp * gridScale,
                 alignment = TextAlign.Center,
                 headerAlignment = TextAlign.Center,
                 extractor = { it.flow },
@@ -396,6 +402,7 @@ private fun CommercialDetailScreen(
             state = gridState,
             selectionMode = SelectionMode.SINGLE,
             showRowNumbers = false,
+            scale = gridScale,
             rowHeight = 32.dp,
             headerHeight = 36.dp,
             stickyRows = StickyRowsConfig(

@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,7 +66,6 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
@@ -74,6 +74,24 @@ import kotlinx.collections.immutable.ImmutableList
 // ============================================================================
 // CORE DATA STRUCTURES
 // ============================================================================
+
+/**
+ * Bounds for a grid's `scale` knob. The grids are dense, fixed-geometry
+ * tools: below [MIN_GRID_SCALE] the cells stop being clickable targets and
+ * above [MAX_GRID_SCALE] almost nothing fits on screen without scrolling.
+ * Callers are clamped, not trusted.
+ */
+internal const val MIN_GRID_SCALE = 0.5f
+internal const val MAX_GRID_SCALE = 2f
+
+/**
+ * The active (already clamped) grid scale, published by each public grid at
+ * its own root. The dense type lives in ~30 private composables across this
+ * module; a composition local sizes them all without threading a Float
+ * through every signature. Static: a scale change must re-lay-out the whole
+ * grid anyway, and reads stay free.
+ */
+internal val LocalGridScale = staticCompositionLocalOf { 1f }
 
 /**
  * Sort direction for columns
@@ -838,7 +856,7 @@ private fun RichContextMenuEntry(
                             if (entry.shortcut != null) {
                                 Text(
                                     text = entry.shortcut,
-                                    fontSize = 12.sp,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = LocalContentColor.current.copy(alpha = 0.6f),
                                     modifier = Modifier.padding(start = 24.dp)
                                 )
@@ -983,7 +1001,7 @@ private fun RichContextMenuEntrySimple(
                         if (entry.shortcut != null) {
                             Text(
                                 text = entry.shortcut,
-                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = LocalContentColor.current.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(start = 24.dp)
                             )

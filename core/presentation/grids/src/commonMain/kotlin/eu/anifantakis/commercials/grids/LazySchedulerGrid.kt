@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,17 @@ fun LazySchedulerGrid(
      */
     showTimes: Boolean = false,
     labels: SchedulerLabels = SchedulerLabels(),
+    /**
+     * Uniform density knob: multiplies BOTH this grid's own type and its cell
+     * geometry, so the legacy proportions survive. 1f is the original density.
+     *
+     * This toolkit is a standalone leaf (it never sees the app's typography),
+     * so the calling screen decides what drives it - today the user's
+     * font-size preference. Note the trade-off the caller is making: at 1.15f
+     * a 31-day month is ~15% wider, so fewer days fit before the horizontal
+     * scroll kicks in.
+     */
+    scale: Float = 1f,
     breakColumnWidth: Dp = 70.dp,
     dayColumnWidth: Dp = 42.dp,
     rowHeight: Dp = 28.dp,
@@ -97,6 +109,14 @@ fun LazySchedulerGrid(
     breakHeaderContextMenuItems: ((BreakSlot) -> List<ContextMenuEntry>)? = null
 ) {
     val palette = gridPalette()
+
+    // Clamp before anything derives from it: a 0f (or negative) scale would
+    // collapse every column to zero width and make the grid unclickable.
+    val s = scale.coerceIn(MIN_GRID_SCALE, MAX_GRID_SCALE)
+    val breakColumnW = breakColumnWidth * s
+    val dayColumnW = dayColumnWidth * s
+    val rowH = rowHeight * s
+    val headerH = headerHeight * s
 
     // Keyboard navigation state - use rememberSaveable to survive configuration changes
     var selectedRow by rememberSaveable { mutableStateOf(initialSelectedRow) }
@@ -148,7 +168,7 @@ fun LazySchedulerGrid(
     val horizontalScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
 
     // Calculate total content width
-    val totalDaysWidth = dayColumnWidth * daysInMonth
+    val totalDaysWidth = dayColumnW * daysInMonth
 
     // Helper to update selection and notify parent
     fun updateSelection(newRow: Int, newCol: Int) {
@@ -243,8 +263,9 @@ fun LazySchedulerGrid(
         }
     }
 
-    // Auto-scroll logic remains the same...
-    val dayColumnWidthPx = with(density) { dayColumnWidth.toPx() }
+    // Auto-scroll logic remains the same... (measured from the SCALED column
+    // width - the keyboard's "keep the selection visible" maths is in pixels)
+    val dayColumnWidthPx = with(density) { dayColumnW.toPx() }
 
     // Vertical scroll - use LazyListState
     LaunchedEffect(selectedRow) {
@@ -274,171 +295,50 @@ fun LazySchedulerGrid(
         }
     }
 
-    Column(
-        modifier = modifier
-            .border(
-                width = 2.dp,
-                color = if (hasFocus) MaterialTheme.colorScheme.primary else palette.gridBorderUnfocused
-            )
-            .focusRequester(focusRequester)
-            .focusable()
-            .onFocusChanged { hasFocus = it.hasFocus }
-            .onPreviewKeyEvent { handleKeyboard(it) }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                focusRequester.requestFocus()
-            }
-    ) {
-        // ===== HEADER ROW =====
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(headerHeight)
-                .background(palette.headerBackground)
-        ) {
-            // Break time header (frozen)
-            Box(
-                modifier = Modifier
-                    .width(breakColumnWidth)
-                    .fillMaxHeight()
-                    .background(palette.headerBackground)
-                    .border(0.5.dp, palette.headerBorder),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = labels.timeDay,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
+    // Publish the clamped scale so this grid's dense type (day headers,
+    // cells, totals) sizes itself from one place.
+    CompositionLocalProvider(LocalGridScale provides s) {
+        Column(
+            modifier = modifier
+                .border(
+                    width = 2.dp,
+                    color = if (hasFocus) MaterialTheme.colorScheme.primary else palette.gridBorderUnfocused
                 )
-            }
-
-            // Day headers (scrollable)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .horizontalScroll(horizontalScrollState)
-            ) {
-                Row(modifier = Modifier.width(totalDaysWidth)) {
-                    allDays.forEachIndexed { colIndex, date ->
-                        LazyDayHeader(
-                            date = StableDate(date),
-                            width = dayColumnWidth,
-                            labels = labels,
-                            isSelected = colIndex == selectedColumn,
-                            menuEntriesProvider = if (dayHeaderContextMenuItems != null) {
-                                { dayHeaderContextMenuItems(date) }
-                            } else null,
-                            onMenuOpen = { updateSelection(selectedRow, colIndex) }
-                        )
-                    }
+                .focusRequester(focusRequester)
+                .focusable()
+                .onFocusChanged { hasFocus = it.hasFocus }
+                .onPreviewKeyEvent { handleKeyboard(it) }
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    focusRequester.requestFocus()
                 }
-            }
-        }
-
-        // ===== BODY - Single LazyColumn for proper vertical scroll sync =====
-        CachedLazyColumn(
-            state = lazyListState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
         ) {
-            itemsIndexed(
-                items = visibleBreaks,
-                key = { _, breakSlot -> "row_${breakSlot.id}" }
-            ) { rowIndex, breakSlot ->
-                val isRowSelected = rowIndex == selectedRow
-
-                Row(modifier = Modifier.fillMaxWidth().height(rowHeight)) {
-                    // Break time column (frozen - not in horizontal scroll):
-                    // same legacy navy band as the day-number strip, white
-                    // times, red on the selected row
-                    FrozenHeaderBox(
-                        modifier = Modifier
-                            .width(breakColumnWidth)
-                            .fillMaxHeight()
-                            .background(
-                                if (isRowSelected) palette.selectedRowHeader else palette.dayNumberStrip
-                            )
-                            .border(0.5.dp, palette.cellBorder),
-                        menuEntriesProvider = if (breakHeaderContextMenuItems != null) {
-                            { breakHeaderContextMenuItems(breakSlot) }
-                        } else null,
-                        onMenuOpen = { updateSelection(rowIndex, selectedColumn) }
-                    ) {
-                        Text(
-                            text = formatTime(breakSlot.time.hour, breakSlot.time.minute),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isRowSelected) palette.onSelectionHeader else palette.onDayNumberStrip
-                        )
-                    }
-
-                    // Cells (scrollable horizontally)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .horizontalScroll(horizontalScrollState)
-                    ) {
-                        Row(modifier = Modifier.width(totalDaysWidth)) {
-                            allDays.forEachIndexed { colIndex, date ->
-                                val cellKey = SchedulerKey(breakSlot.id, date)
-                                val data = cellData[cellKey]
-                                val isModified = modifiedCells.contains(cellKey)
-
-                                // Pass the menu items provider lambda to the cell
-                                // The cell will call this only when clicked
-                                // PERFORMANCE: Wrap LocalDate in StableDate to satisfy Compose stability.
-                                // isSelected is resolved HERE so that a selection move only
-                                // recomposes the two affected cells - all others skip.
-                                GridCell(
-                                    data = data,
-                                    dateWrapper = StableDate(date),
-                                    width = dayColumnWidth,
-                                    showTimes = showTimes,
-                                    isModified = isModified,
-                                    isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
-                                    onSelect = { updateSelection(rowIndex, colIndex) },
-                                    onDoubleClick = { onCellDoubleClick?.invoke(breakSlot, date, data) },
-                                    // Pass the menu provider if the parent provided contextMenuItems
-                                    menuEntriesProvider = if (contextMenuItems != null) {
-                                        { contextMenuItems(breakSlot, date, data) }
-                                    } else null
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ===== FOOTER (TOTALS) =====
-        if (dailyTotals != null) {
+            // ===== HEADER ROW =====
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(rowHeight)
+                    .height(headerH)
                     .background(palette.headerBackground)
             ) {
-                // Totals label
+                // Break time header (frozen)
                 Box(
                     modifier = Modifier
-                        .width(breakColumnWidth)
+                        .width(breakColumnW)
                         .fillMaxHeight()
+                        .background(palette.headerBackground)
                         .border(0.5.dp, palette.headerBorder),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = labels.totals,
+                        text = labels.timeDay,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
+                        fontSize = (10 * s).sp
                     )
                 }
 
-                // Daily totals (scrollable)
+                // Day headers (scrollable)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -446,20 +346,145 @@ fun LazySchedulerGrid(
                         .horizontalScroll(horizontalScrollState)
                 ) {
                     Row(modifier = Modifier.width(totalDaysWidth)) {
-                        allDays.forEach { date ->
-                            val total = dailyTotals[StableDate(date)]
-                            Box(
-                                modifier = Modifier
-                                    .width(dayColumnWidth)
-                                    .fillMaxHeight()
-                                    .border(0.5.dp, palette.headerBorder),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = (total?.spotCount ?: 0).toString(),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                        allDays.forEachIndexed { colIndex, date ->
+                            LazyDayHeader(
+                                date = StableDate(date),
+                                width = dayColumnW,
+                                labels = labels,
+                                isSelected = colIndex == selectedColumn,
+                                menuEntriesProvider = if (dayHeaderContextMenuItems != null) {
+                                    { dayHeaderContextMenuItems(date) }
+                                } else null,
+                                onMenuOpen = { updateSelection(selectedRow, colIndex) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ===== BODY - Single LazyColumn for proper vertical scroll sync =====
+            CachedLazyColumn(
+                state = lazyListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                itemsIndexed(
+                    items = visibleBreaks,
+                    key = { _, breakSlot -> "row_${breakSlot.id}" }
+                ) { rowIndex, breakSlot ->
+                    val isRowSelected = rowIndex == selectedRow
+
+                    Row(modifier = Modifier.fillMaxWidth().height(rowH)) {
+                        // Break time column (frozen - not in horizontal scroll):
+                        // same legacy navy band as the day-number strip, white
+                        // times, red on the selected row
+                        FrozenHeaderBox(
+                            modifier = Modifier
+                                .width(breakColumnW)
+                                .fillMaxHeight()
+                                .background(
+                                    if (isRowSelected) palette.selectedRowHeader else palette.dayNumberStrip
                                 )
+                                .border(0.5.dp, palette.cellBorder),
+                            menuEntriesProvider = if (breakHeaderContextMenuItems != null) {
+                                { breakHeaderContextMenuItems(breakSlot) }
+                            } else null,
+                            onMenuOpen = { updateSelection(rowIndex, selectedColumn) }
+                        ) {
+                            Text(
+                                text = formatTime(breakSlot.time.hour, breakSlot.time.minute),
+                                fontSize = (11 * s).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isRowSelected) palette.onSelectionHeader else palette.onDayNumberStrip
+                            )
+                        }
+
+                        // Cells (scrollable horizontally)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .horizontalScroll(horizontalScrollState)
+                        ) {
+                            Row(modifier = Modifier.width(totalDaysWidth)) {
+                                allDays.forEachIndexed { colIndex, date ->
+                                    val cellKey = SchedulerKey(breakSlot.id, date)
+                                    val data = cellData[cellKey]
+                                    val isModified = modifiedCells.contains(cellKey)
+
+                                    // Pass the menu items provider lambda to the cell
+                                    // The cell will call this only when clicked
+                                    // PERFORMANCE: Wrap LocalDate in StableDate to satisfy Compose stability.
+                                    // isSelected is resolved HERE so that a selection move only
+                                    // recomposes the two affected cells - all others skip.
+                                    GridCell(
+                                        data = data,
+                                        dateWrapper = StableDate(date),
+                                        width = dayColumnW,
+                                        showTimes = showTimes,
+                                        isModified = isModified,
+                                        isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
+                                        onSelect = { updateSelection(rowIndex, colIndex) },
+                                        onDoubleClick = { onCellDoubleClick?.invoke(breakSlot, date, data) },
+                                        // Pass the menu provider if the parent provided contextMenuItems
+                                        menuEntriesProvider = if (contextMenuItems != null) {
+                                            { contextMenuItems(breakSlot, date, data) }
+                                        } else null
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ===== FOOTER (TOTALS) =====
+            if (dailyTotals != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(rowH)
+                        .background(palette.headerBackground)
+                ) {
+                    // Totals label
+                    Box(
+                        modifier = Modifier
+                            .width(breakColumnW)
+                            .fillMaxHeight()
+                            .border(0.5.dp, palette.headerBorder),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = labels.totals,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (10 * s).sp
+                        )
+                    }
+
+                    // Daily totals (scrollable)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .horizontalScroll(horizontalScrollState)
+                    ) {
+                        Row(modifier = Modifier.width(totalDaysWidth)) {
+                            allDays.forEach { date ->
+                                val total = dailyTotals[StableDate(date)]
+                                Box(
+                                    modifier = Modifier
+                                        .width(dayColumnW)
+                                        .fillMaxHeight()
+                                        .border(0.5.dp, palette.headerBorder),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = (total?.spotCount ?: 0).toString(),
+                                        fontSize = (10 * s).sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -478,6 +503,7 @@ private fun LazyDayHeader(
     menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null,
     onMenuOpen: (() -> Unit)? = null
 ) {
+    val scale = LocalGridScale.current
     val palette = gridPalette()
     val isWeekend = date.value.dayOfWeek == DayOfWeek.SATURDAY || date.value.dayOfWeek == DayOfWeek.SUNDAY
 
@@ -511,7 +537,7 @@ private fun LazyDayHeader(
             ) {
                 Text(
                     text = labels.dayAbbreviations[date.value.dayOfWeek] ?: date.value.dayOfWeek.toGreekAbbrLazy(),
-                    fontSize = 11.sp,
+                    fontSize = (11 * scale).sp,
                     fontWeight = FontWeight.Bold,
                     color = nameColor
                 )
@@ -532,7 +558,7 @@ private fun LazyDayHeader(
             ) {
                 Text(
                     text = date.value.day.toString(),
-                    fontSize = 12.sp,
+                    fontSize = (12 * scale).sp,
                     fontWeight = FontWeight.Bold,
                     color = palette.onDayNumberStrip
                 )
@@ -613,6 +639,7 @@ private fun GridCell(
     onDoubleClick: () -> Unit,
     menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null
 ) {
+    val scale = LocalGridScale.current
     // Extract LocalDate from stable wrapper (StableDate is @Immutable)
     val date = dateWrapper.value
 
@@ -714,7 +741,7 @@ private fun GridCell(
                 // "spots times" mode: the cell's summed durations as MM:SS
                 // (10 spots x 342s total -> 05:42), like the legacy app
                 text = if (showTimes && data != null) data.formattedDuration else spotCount.toString(),
-                fontSize = 10.sp,
+                fontSize = (10 * scale).sp,
                 fontWeight = if (isSelected || isModified) FontWeight.Bold else FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 maxLines = 1,

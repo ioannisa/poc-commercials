@@ -99,7 +99,10 @@ fun CommercialsTheme(
         robotoMono = robotoMonoFamily(),
         step = fontSizeStep,
     )
-    CompositionLocalProvider(LocalAppTypography provides appTypography) {
+    CompositionLocalProvider(
+        LocalAppTypography provides appTypography,
+        LocalFontSizeStep provides fontSizeStep,
+    ) {
         MaterialTheme(
             colorScheme = if (darkTheme) BrandDark else BrandLight,
             shapes = AppShapes,
