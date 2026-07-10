@@ -230,18 +230,30 @@ class FakeUserSession(
     fun bumpRevision() { _revision.value++ }
 }
 
-class FakeReportService : ReportService {
+class FakeReportService(
+    private val available: Boolean = true,
+) : ReportService {
     val printed = mutableListOf<List<ReportPayload>>()
+    val previewed = mutableListOf<List<ReportPayload>>()
+    val exported = mutableListOf<String>()
 
-    override suspend fun exportToPdf(payloads: List<ReportPayload>, suggestedFileName: String) =
-        ReportResult.Success("ok")
+    /** Override to exercise the Cancelled / Error outcome branches. */
+    var result: ReportResult = ReportResult.Success("ok")
 
-    override suspend fun preview(payloads: List<ReportPayload>) = ReportResult.Success("ok")
+    override suspend fun exportToPdf(payloads: List<ReportPayload>, suggestedFileName: String): ReportResult {
+        exported += suggestedFileName
+        return result
+    }
+
+    override suspend fun preview(payloads: List<ReportPayload>): ReportResult {
+        previewed += payloads
+        return result
+    }
 
     override suspend fun print(payloads: List<ReportPayload>): ReportResult {
         printed += payloads
-        return ReportResult.Success("ok")
+        return result
     }
 
-    override fun isReportGenerationAvailable(): Boolean = true
+    override fun isReportGenerationAvailable(): Boolean = available
 }

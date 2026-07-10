@@ -1,101 +1,71 @@
 package eu.anifantakis.commercials.reports.ui
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableMap
-import eu.anifantakis.commercials.reports.ReportDataFactory
-import eu.anifantakis.commercials.reports.ReportPayload
-import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportConfig
-import eu.anifantakis.commercials.reports.models.ReportResult
-import eu.anifantakis.commercials.reports.toReportPayload
-import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
-/**
- * Toolbar with report generation buttons for the visible month.
- * Preview, Print, and Export PDF all produce the ENTIRE month - one daily
- * Program Flow report per day that has spots, merged into one document.
- */
 /**
  * Display labels for [ReportToolbar]. reports-client is a standalone module
  * (no dependency on the app's localization), so callers inject localized
  * labels; English defaults keep it usable standalone.
+ *
+ * Only BUTTON text lives here. What a report OUTCOME says ("no spots",
+ * "cancelled", "PDF saved: …") is the caller's message, delivered wherever
+ * that app shows results - in this app, the one global snackbar.
  */
 @Immutable
 data class ReportToolbarLabels(
     val preview: String = "Preview",
     val print: String = "Print",
     val exportPdf: String = "Export PDF",
-    val noSpots: String = "No spots in this month",
-    val pdfSavedPrefix: String = "PDF saved: ",
-    val cancelled: String = "Cancelled",
     val notAvailable: String = "(Reports not available on this platform)",
 )
 
+/**
+ * Preview / Print / Export PDF over whatever the caller decides to report on.
+ *
+ * STATELESS on purpose. This module knows how to BUILD a report
+ * ([eu.anifantakis.commercials.reports.ReportDataFactory]) and how to RUN one
+ * ([eu.anifantakis.commercials.reports.ReportService]) - but a toolbar is the
+ * place to do neither. It renders three buttons and reports clicks; the
+ * calling ViewModel owns the payload, the service and the outcome. That also
+ * keeps this leaf module free of Koin.
+ *
+ * @param busy an action is running - the buttons wait for it
+ * @param available this platform can generate reports at all
+ */
 @Composable
 fun ReportToolbar(
-    year: Int,
-    month: Int,
-    breaks: ImmutableList<BreakSlot>,
-    cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
+    onPreview: () -> Unit,
+    onPrint: () -> Unit,
+    onExportPdf: () -> Unit,
     modifier: Modifier = Modifier,
+    busy: Boolean = false,
+    available: Boolean = true,
     labels: ReportToolbarLabels = ReportToolbarLabels(),
 ) {
-    val scope = rememberCoroutineScope()
-    val reportService = koinInject<ReportService>()
-    var isLoading by remember { mutableStateOf(false) }
-    var resultMessage by remember { mutableStateOf<String?>(null) }
-    var resultOk by remember { mutableStateOf(false) }
-
-    val isReportAvailable = reportService.isReportGenerationAvailable()
-
-    fun monthPayloads(): List<ReportPayload> =
-        ReportDataFactory.createMonthProgramFlowData(year, month, breaks, cellData)
-            .map { it.toReportPayload(ReportConfig()) }
-
-    fun runReportAction(action: suspend (List<ReportPayload>) -> ReportResult) {
-        scope.launch {
-            isLoading = true
-            resultMessage = null
-
-            val payloads = monthPayloads()
-            val result = if (payloads.isEmpty()) {
-                ReportResult.Error(labels.noSpots)
-            } else {
-                action(payloads)
-            }
-
-            resultOk = result is ReportResult.Success
-            resultMessage = when (result) {
-                is ReportResult.Success -> result.filePath?.let { labels.pdfSavedPrefix + it } ?: result.message
-                is ReportResult.Error -> result.message
-                is ReportResult.Cancelled -> labels.cancelled
-            }
-
-            isLoading = false
-        }
-    }
+    val enabled = !busy && available
 
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Preview button
-        OutlinedButton(
-            onClick = { runReportAction { reportService.preview(it) } },
-            enabled = !isLoading && isReportAvailable
-        ) {
+        OutlinedButton(onClick = onPreview, enabled = enabled) {
             Icon(
                 ReportIcons.visibility,
                 contentDescription = labels.preview,
@@ -105,11 +75,7 @@ fun ReportToolbar(
             Text(labels.preview)
         }
 
-        // Print button
-        OutlinedButton(
-            onClick = { runReportAction { reportService.print(it) } },
-            enabled = !isLoading && isReportAvailable
-        ) {
+        OutlinedButton(onClick = onPrint, enabled = enabled) {
             Icon(
                 ReportIcons.print,
                 contentDescription = labels.print,
@@ -119,15 +85,8 @@ fun ReportToolbar(
             Text(labels.print)
         }
 
-        // Export PDF button
-        Button(
-            onClick = {
-                val fileName = "ProgramFlow_${year}-${month.toString().padStart(2, '0')}.pdf"
-                runReportAction { reportService.exportToPdf(it, fileName) }
-            },
-            enabled = !isLoading && isReportAvailable
-        ) {
-            if (isLoading) {
+        Button(onClick = onExportPdf, enabled = enabled) {
+            if (busy) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp
@@ -143,23 +102,11 @@ fun ReportToolbar(
             Text(labels.exportPdf)
         }
 
-        // Show message if report generation is not available
-        if (!isReportAvailable) {
+        if (!available) {
             Text(
                 text = labels.notAvailable,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Result message
-        resultMessage?.let { message ->
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (resultOk) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.error
             )
         }
     }

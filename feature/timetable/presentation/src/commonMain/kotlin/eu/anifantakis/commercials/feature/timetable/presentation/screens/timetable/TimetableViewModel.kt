@@ -14,6 +14,8 @@ import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
@@ -29,8 +31,10 @@ import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import eu.anifantakis.commercials.core.presentation.grids.formatTime
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
 import eu.anifantakis.commercials.reports.ReportDataFactory
+import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportConfig
+import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.reports.print
 import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
@@ -95,6 +99,11 @@ data class TimetableState(
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
 
+    /** This platform can generate reports at all (desktop/browser yes, mobile no). */
+    val reportsAvailable: Boolean = false,
+    /** A month report is running - the toolbar waits for it. */
+    val reportBusy: Boolean = false,
+
     // ── session facts the chrome renders (mirrored from UserSession) ────────
     /** Only NORMAL_USER edits; viewer roles browse and print. */
     val canEdit: Boolean = false,
@@ -126,6 +135,11 @@ sealed interface TimetableIntent {
     data class PrintDay(val date: LocalDate) : TimetableIntent
     data class PrintBreak(val breakId: Long, val date: LocalDate) : TimetableIntent
     data class PrintBreakMonth(val breakId: Long) : TimetableIntent
+
+    // The report toolbar: the WHOLE visible month, three ways.
+    data object PreviewMonth : TimetableIntent
+    data object PrintMonth : TimetableIntent
+    data object ExportMonthPdf : TimetableIntent
 
     data class AddSpotAt(val breakId: Long, val date: LocalDate) : TimetableIntent
     data class RemoveLastAt(val breakId: Long, val date: LocalDate) : TimetableIntent
@@ -168,8 +182,12 @@ class TimetableViewModel(
     private val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 
     private val _state = MutableStateFlow(
-        TimetableState(year = today.year, month = today.monthNumber, showSpotTimes = prefs.showSpotTimes)
-            .withSessionFacts()
+        TimetableState(
+            year = today.year,
+            month = today.monthNumber,
+            showSpotTimes = prefs.showSpotTimes,
+            reportsAvailable = reportService.isReportGenerationAvailable(),
+        ).withSessionFacts()
     )
     val state by _state
         .onStart { loadAll() }
@@ -234,6 +252,14 @@ class TimetableViewModel(
             is TimetableIntent.PrintBreak -> printBreak(intent.breakId, intent.date)
             is TimetableIntent.PrintBreakMonth -> printBreakMonth(intent.breakId)
 
+            TimetableIntent.PreviewMonth -> runMonthReport { reportService.preview(it) }
+            TimetableIntent.PrintMonth -> runMonthReport { reportService.print(it) }
+            TimetableIntent.ExportMonthPdf -> {
+                val s = _state.value
+                val fileName = "ProgramFlow_${s.year}-${s.month.toString().padStart(2, '0')}.pdf"
+                runMonthReport { reportService.exportToPdf(it, fileName) }
+            }
+
             is TimetableIntent.SelectionChanged ->
                 _state.update { it.copy(selectedRow = intent.row, selectedColumn = intent.column) }
 
@@ -288,8 +314,13 @@ class TimetableViewModel(
     private fun reload() {
         common.clear()
         _state.update {
-            TimetableState(year = it.year, month = it.month, showSpotTimes = it.showSpotTimes)
-                .withSessionFacts()
+            TimetableState(
+                year = it.year,
+                month = it.month,
+                showSpotTimes = it.showSpotTimes,
+                // A platform capability, not session data - it does not reset.
+                reportsAvailable = it.reportsAvailable,
+            ).withSessionFacts()
         }
         loadAll()
     }
@@ -315,6 +346,46 @@ class TimetableViewModel(
                 commercials = commercials,
             )
             if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
+        }
+    }
+
+    /**
+     * The toolbar's three actions differ only in [action]: same month, same
+     * payloads, same outcome policy. An empty month never reaches the service,
+     * and every result surfaces through the app's ONE global snackbar - the
+     * toolbar itself renders no messages.
+     */
+    private fun runMonthReport(action: suspend (List<ReportPayload>) -> ReportResult) {
+        val s = _state.value
+        if (s.reportBusy) return
+
+        val payloads = ReportDataFactory
+            .createMonthProgramFlowData(s.year, s.month, s.breaks, s.cells)
+            .map { it.toReportPayload(ReportConfig()) }
+        if (payloads.isEmpty()) {
+            showSnackbar(StringKey.REPORT_NO_SPOTS)
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(reportBusy = true) }
+            try {
+                when (val result = action(payloads)) {
+                    // The engine's own text is authoritative - never translated.
+                    is ReportResult.Success -> showSnackbar(
+                        UiText.Dynamic(
+                            result.filePath?.let { path -> StringKey.REPORT_PDF_SAVED_PREFIX.localized() + path }
+                                ?: result.message
+                        )
+                    )
+                    is ReportResult.Error -> showSnackbar(UiText.Dynamic(result.message))
+                    ReportResult.Cancelled -> showSnackbar(StringKey.REPORT_CANCELLED)
+                }
+            } finally {
+                // A save dialog can throw or be cancelled; the buttons must
+                // never stay disabled because of it.
+                _state.update { it.copy(reportBusy = false) }
+            }
         }
     }
 

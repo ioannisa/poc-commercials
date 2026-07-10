@@ -88,7 +88,8 @@ kotlin {
             implementation(projects.core.data)
 
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.koin.compose)
+            // No Koin: this module's only composable (ReportToolbar) is now
+            // stateless, so nothing here resolves anything from a container.
         }
         // custom hierarchy group (no generated accessor like webMain has) -
         // configured via the lazy named() lookup rather than an eager delegate

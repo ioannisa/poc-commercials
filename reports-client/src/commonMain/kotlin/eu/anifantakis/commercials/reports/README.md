@@ -57,12 +57,24 @@ fun InvoiceData.toReportPayload(): ReportPayload = ReportPayload(
 )
 ```
 
-That's it - no engine, route, client, or service changes. Any screen then does:
+That's it - no engine, route, client, or service changes. A **ViewModel** then
+constructor-injects the service (Koin binds it per platform) and owns the
+outcome; composables only report the click:
 
 ```kotlin
-val service = koinInject<ReportService>()   // Koin-bound per platform
-service.exportToPdf(data.toReportPayload(), "Invoice_$number.pdf")  // or preview / print
+class InvoiceViewModel(private val reportService: ReportService) : BaseGlobalViewModel() {
+    private fun export(data: InvoiceReportData, number: String) = viewModelScope.launch {
+        when (val result = reportService.exportToPdf(data.toReportPayload(), "Invoice_$number.pdf")) {
+            is ReportResult.Success   -> showSnackbar(/* ... */)   // or preview / print
+            is ReportResult.Error     -> showSnackbar(UiText.Dynamic(result.message))
+            ReportResult.Cancelled    -> showSnackbar(/* ... */)
+        }
+    }
+}
 ```
+
+`ui/ReportToolbar` is the matching **stateless** component: three buttons plus
+`busy`/`available` flags, and it resolves nothing from a container.
 
 ## Server API
 
@@ -81,7 +93,7 @@ for unknown parameter/field names, an empty batch, or a path/body id mismatch,
 
 `ReportService` mirrors this: its methods take `List<ReportPayload>` (with
 single-payload convenience overloads), so "print the whole month" is just the
-list of that month's daily payloads - see `ReportToolbar`.
+list of that month's daily payloads - see `TimetableViewModel.runMonthReport`.
 
 ## Value typing
 

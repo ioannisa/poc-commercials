@@ -526,13 +526,16 @@ private fun KeyboardEnabledHeader(
                 }
             }
 
-            // Report toolbar - Preview/Print/Export cover the entire month
+            // Report toolbar - Preview/Print/Export cover the entire month.
+            // The ViewModel builds the payloads, runs the service and reports
+            // the outcome through the app's global snackbar.
             ReportToolbar(
-                year = state.year,
-                month = state.month,
+                onPreview = { onIntent(TimetableIntent.PreviewMonth) },
+                onPrint = { onIntent(TimetableIntent.PrintMonth) },
+                onExportPdf = { onIntent(TimetableIntent.ExportMonthPdf) },
+                busy = state.reportBusy,
+                available = state.reportsAvailable,
                 labels = reportToolbarLabels(),
-                breaks = state.breaks,
-                cellData = state.cells,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
@@ -783,14 +786,15 @@ private fun schedulerLabels() = SchedulerLabels(
     ),
 )
 
-/** Localized labels for the standalone report toolbar. */
+/**
+ * Localized BUTTON labels for the standalone report toolbar. The outcome
+ * strings (no spots / cancelled / PDF saved) belong to the ViewModel now -
+ * they travel to the global snackbar, not to this component.
+ */
 @Composable
 private fun reportToolbarLabels() = ReportToolbarLabels(
     preview = Strings[StringKey.REPORT_PREVIEW],
     print = Strings[StringKey.REPORT_PRINT],
     exportPdf = Strings[StringKey.REPORT_EXPORT_PDF],
-    noSpots = Strings[StringKey.REPORT_NO_SPOTS],
-    pdfSavedPrefix = Strings[StringKey.REPORT_PDF_SAVED_PREFIX],
-    cancelled = Strings[StringKey.REPORT_CANCELLED],
     notAvailable = Strings[StringKey.REPORT_NOT_AVAILABLE],
 )

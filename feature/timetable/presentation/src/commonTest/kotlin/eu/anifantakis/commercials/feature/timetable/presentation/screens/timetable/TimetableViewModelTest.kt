@@ -14,6 +14,7 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.cell
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.placed
+import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.StableDate
@@ -21,6 +22,8 @@ import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import eu.anifantakis.commercials.reports.models.ReportResult
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalTime
@@ -47,7 +50,17 @@ class TimetableViewModelTest : TimetableTestBase() {
     private fun vm(
         prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
         session: FakeUserSession = FakeUserSession(),
-    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reports)
+        reportService: FakeReportService = reports,
+    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reportService)
+
+    /** A month with one spot in the 10:00 break - enough to build a payload. */
+    private fun aMonthWithOneSpot(): TimetableCommonState {
+        val (k, data) = cell(commercials = listOf(placed(10))).toUi()
+        return TimetableCommonState(
+            breaks = persistentListOf(BreakSlot(id = 1L, time = LocalTime(10, 0), label = "10:00")),
+            cells = persistentMapOf(k to data),
+        )
+    }
 
     private val key = SchedulerKey(1L, TEST_DATE)
 
@@ -201,6 +214,78 @@ class TimetableViewModelTest : TimetableTestBase() {
         advanceUntilIdle()
 
         assertTrue(reports.printed.isEmpty(), "no break, no payload - and no crash")
+    }
+
+    // ── the report toolbar's three actions (the toolbar itself is stateless) ──
+
+    @Test
+    fun reportsAvailableMirrorsThePlatformCapability() = runTest(testDispatcher) {
+        val vm = vm(reportService = FakeReportService(available = false))
+        advanceUntilIdle()
+
+        assertFalse(vm.state.reportsAvailable, "mobile targets cannot generate reports")
+    }
+
+    @Test
+    fun previewMonthBuildsThePayloadsAndCallsTheService() = runTest(testDispatcher) {
+        val vm = vm()
+        common.emit(aMonthWithOneSpot())
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.PreviewMonth)
+        advanceUntilIdle()
+
+        assertEquals(1, reports.previewed.size, "the ViewModel assembles the payload, not the toolbar")
+        assertTrue(reports.previewed.single().isNotEmpty())
+        assertFalse(vm.state.reportBusy, "the toolbar is released when the action finishes")
+    }
+
+    @Test
+    fun exportMonthPdfNamesTheFileAfterTheVisibleMonth() = runTest(testDispatcher) {
+        val vm = vm()
+        common.emit(aMonthWithOneSpot())
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.ExportMonthPdf)
+        advanceUntilIdle()
+
+        val expected = "ProgramFlow_${vm.state.year}-${vm.state.month.toString().padStart(2, '0')}.pdf"
+        assertEquals(listOf(expected), reports.exported)
+    }
+
+    @Test
+    fun anEmptyMonthNeverReachesTheReportService() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        val effects = mutableListOf<GlobalEffect>()
+        backgroundScope.launch { globalContainer.effects.collect { effects += it } }
+
+        vm.onAction(TimetableIntent.PrintMonth)
+        advanceUntilIdle()
+
+        assertTrue(reports.printed.isEmpty(), "nothing to print - the service is never asked")
+        assertEquals(
+            1,
+            effects.count { it is GlobalEffect.SnackBarMessage },
+            "the outcome surfaces once, through the global snackbar the toolbar no longer owns",
+        )
+        assertFalse(vm.state.reportBusy)
+    }
+
+    @Test
+    fun aCancelledSaveDialogStillReleasesTheToolbar() = runTest(testDispatcher) {
+        val reportService = FakeReportService().apply { result = ReportResult.Cancelled }
+        val vm = vm(reportService = reportService)
+        common.emit(aMonthWithOneSpot())
+        advanceUntilIdle()
+        val effects = mutableListOf<GlobalEffect>()
+        backgroundScope.launch { globalContainer.effects.collect { effects += it } }
+
+        vm.onAction(TimetableIntent.ExportMonthPdf)
+        advanceUntilIdle()
+
+        assertFalse(vm.state.reportBusy, "a cancelled dialog must not leave the buttons disabled")
+        assertEquals(1, effects.count { it is GlobalEffect.SnackBarMessage })
     }
 
     @Test
