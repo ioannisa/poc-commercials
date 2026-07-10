@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -109,26 +108,5 @@ fun ReportToolbar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-    }
-}
-
-/**
- * Compact report button for use in toolbars
- */
-@Composable
-fun ReportIconButton(
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier
-) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier
-    ) {
-        Icon(
-            ReportIcons.print,
-            contentDescription = "Generate Report"
-        )
     }
 }
