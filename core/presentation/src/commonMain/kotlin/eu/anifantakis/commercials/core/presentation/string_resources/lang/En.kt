@@ -133,6 +133,7 @@ internal class En : LanguageStrings {
         StringKey.DETAIL_COL_CUSTOMER -> "Customer"
         StringKey.DETAIL_COL_MESSAGE -> "Message"
         StringKey.DETAIL_COL_TYPE -> "Type"
+        StringKey.DETAIL_GIFT_SUFFIX -> "GIFTS"
         StringKey.DETAIL_COL_CONTRACT -> "Contract"
         StringKey.DETAIL_COL_FLOW -> "FLOW"
         StringKey.DETAIL_BREAK_TIME -> "Break Time"

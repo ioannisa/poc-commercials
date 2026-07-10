@@ -43,9 +43,9 @@ enum class FontSizeStep(val factor: Float) {
 data class AppTypography(
     val material: Typography,
 
-    /** Screen header, e.g. "Μεταφορά δεδομένων" next to the back arrow. */
+    /** Screen header next to the back arrow (data migration, preferences). */
     val screenTitle: TextStyle,
-    /** Card/section headers ("Βήμα 1: ...", dialog titles). */
+    /** Card/section headers (step headers, dialog sections). */
     val sectionTitle: TextStyle,
     /** Big numbers in stat headers (Σύνολο Spots / Συνολική Διάρκεια). */
     val statValue: TextStyle,

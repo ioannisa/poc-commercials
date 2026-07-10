@@ -144,6 +144,7 @@ enum class StringKey(val json: String = "") {
     DETAIL_COL_CUSTOMER,
     DETAIL_COL_MESSAGE,
     DETAIL_COL_TYPE,
+    DETAIL_GIFT_SUFFIX,
     DETAIL_COL_CONTRACT,
     DETAIL_COL_FLOW,
     DETAIL_BREAK_TIME,

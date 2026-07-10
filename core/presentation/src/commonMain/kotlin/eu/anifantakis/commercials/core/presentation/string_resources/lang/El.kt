@@ -133,6 +133,7 @@ internal class El : LanguageStrings {
         StringKey.DETAIL_COL_CUSTOMER -> "Πελάτης"
         StringKey.DETAIL_COL_MESSAGE -> "Μήνυμα"
         StringKey.DETAIL_COL_TYPE -> "Τύπος"
+        StringKey.DETAIL_GIFT_SUFFIX -> "ΔΩΡΑ"
         StringKey.DETAIL_COL_CONTRACT -> "Σύμβαση"
         StringKey.DETAIL_COL_FLOW -> "ΡΟΗ"
         StringKey.DETAIL_BREAK_TIME -> "Ώρα Διαλείμματος"

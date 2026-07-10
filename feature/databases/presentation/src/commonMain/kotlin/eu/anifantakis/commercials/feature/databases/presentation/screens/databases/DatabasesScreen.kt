@@ -24,7 +24,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -148,7 +147,7 @@ private fun DeleteStationDialog(
     val station = dialog.station
     AlertDialog(
         onDismissRequest = { onIntent(DatabasesIntent.DismissDelete) },
-        title = { Text(Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name))) },
+        title = { AppText(Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name)), AppTextStyle.DIALOG_TITLE) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,7 +173,7 @@ private fun DeleteStationDialog(
                 OutlinedTextField(
                     value = dialog.confirmId,
                     onValueChange = { onIntent(DatabasesIntent.ConfirmIdChanged(it)) },
-                    label = { Text(Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id))) },
+                    label = { AppText(Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id)), AppTextStyle.FIELD_LABEL) },
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
@@ -185,14 +184,14 @@ private fun DeleteStationDialog(
                 enabled = dialog.canConfirm,
                 onClick = { onIntent(DatabasesIntent.ConfirmDelete) }
             ) {
-                Text(
-                    if (dialog.hard) "HARD delete" else "Safe delete",
+                AppText(
+                    if (dialog.hard) "HARD delete" else "Safe delete", AppTextStyle.BUTTON,
                     color = MaterialTheme.colorScheme.error
                 )
             }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(DatabasesIntent.DismissDelete) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(DatabasesIntent.DismissDelete) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }

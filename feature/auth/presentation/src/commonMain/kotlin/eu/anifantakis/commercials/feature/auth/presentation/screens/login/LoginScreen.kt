@@ -23,7 +23,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -94,7 +93,7 @@ private fun LoginScreen(
                 OutlinedTextField(
                     value = state.username,
                     onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
-                    label = { Text(Strings[StringKey.LOGIN_USERNAME]) },
+                    label = { AppText(Strings[StringKey.LOGIN_USERNAME], AppTextStyle.FIELD_LABEL) },
                     leadingIcon = { Icon(AppIcons.person, contentDescription = null) },
                     singleLine = true,
                     enabled = !state.isLoading,
@@ -106,8 +105,8 @@ private fun LoginScreen(
                     OutlinedTextField(
                         value = state.recoveryCode,
                         onValueChange = { onIntent(LoginIntent.RecoveryCodeChanged(it)) },
-                        label = { Text(Strings[StringKey.LOGIN_RECOVERY_CODE]) },
-                        placeholder = { Text("XXXX-XXXX-XXXX-XXXX") },
+                        label = { AppText(Strings[StringKey.LOGIN_RECOVERY_CODE], AppTextStyle.FIELD_LABEL) },
+                        placeholder = { AppText("XXXX-XXXX-XXXX-XXXX", AppTextStyle.FIELD_LABEL) },
                         leadingIcon = { Icon(AppIcons.key, contentDescription = null) },
                         singleLine = true,
                         enabled = !state.isLoading,
@@ -120,7 +119,7 @@ private fun LoginScreen(
                 OutlinedTextField(
                     value = state.password,
                     onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
-                    label = { Text(Strings[if (state.recoveryMode) StringKey.LOGIN_NEW_PASSWORD else StringKey.LOGIN_PASSWORD]) },
+                    label = { AppText(Strings[if (state.recoveryMode) StringKey.LOGIN_NEW_PASSWORD else StringKey.LOGIN_PASSWORD], AppTextStyle.FIELD_LABEL) },
                     leadingIcon = { Icon(AppIcons.lock, contentDescription = null) },
                     trailingIcon = {
                         IconButton(onClick = { onIntent(LoginIntent.TogglePasswordVisibility) }) {
@@ -158,7 +157,7 @@ private fun LoginScreen(
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(Strings[if (state.recoveryMode) StringKey.LOGIN_RESET_PASSWORD else StringKey.LOGIN_BUTTON])
+                    AppText(Strings[if (state.recoveryMode) StringKey.LOGIN_RESET_PASSWORD else StringKey.LOGIN_BUTTON], AppTextStyle.BUTTON)
                 }
 
                 Spacer(Modifier.height(8.dp))

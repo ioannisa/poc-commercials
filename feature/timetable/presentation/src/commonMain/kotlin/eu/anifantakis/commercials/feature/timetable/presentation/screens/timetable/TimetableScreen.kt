@@ -37,7 +37,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,7 +47,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -233,7 +231,7 @@ private fun TimetableScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             ) {
-                OutlinedButton(onClick = { onIntent(TimetableIntent.OpenFinder) }) { Text(Strings[StringKey.TIMETABLE_FINDER_BUTTON]) }
+                OutlinedButton(onClick = { onIntent(TimetableIntent.OpenFinder) }) { AppText(Strings[StringKey.TIMETABLE_FINDER_BUTTON], AppTextStyle.BUTTON) }
                 Spacer(modifier = Modifier.width(8.dp))
                 var spotMenu by remember { mutableStateOf(false) }
                 OutlinedButton(
@@ -467,7 +465,7 @@ private fun StationSelector(authSession: UserSession) {
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 authSession.stations.forEach { station ->
                     DropdownMenuItem(
-                        text = { Text(station.name) },
+                        text = { AppText(station.name, AppTextStyle.BUTTON) },
                         leadingIcon = {
                             if (station.id == current.id) {
                                 Icon(AppIcons.check, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -770,15 +768,15 @@ private fun SpotFinderDialog(
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) { Text(Strings[StringKey.FINDER_CLEAR]) }
+                    TextButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) { AppText(Strings[StringKey.FINDER_CLEAR], AppTextStyle.BUTTON) }
                     Spacer(Modifier.weight(1f))
                     TextButton(
                         enabled = finder.selectedSpot != null,
                         onClick = { onIntent(TimetableIntent.CloseFinder) }
                     ) {
-                        Text(Strings[StringKey.FINDER_SELECT], fontWeight = FontWeight.Bold)
+                        AppText(Strings[StringKey.FINDER_SELECT], AppTextStyle.BUTTON_STRONG)
                     }
-                    TextButton(onClick = { onIntent(TimetableIntent.CloseFinder) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+                    TextButton(onClick = { onIntent(TimetableIntent.CloseFinder) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
                 }
             }
         }

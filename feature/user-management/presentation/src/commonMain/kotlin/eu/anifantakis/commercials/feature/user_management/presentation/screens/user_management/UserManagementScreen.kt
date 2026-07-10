@@ -31,7 +31,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -95,7 +94,7 @@ private fun UserManagementScreen(
             Button(onClick = { onIntent(UserManagementIntent.ShowCreate) }) {
                 Icon(AppIcons.add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(Strings[StringKey.USER_MGMT_NEW_USER])
+                AppText(Strings[StringKey.USER_MGMT_NEW_USER], AppTextStyle.BUTTON)
             }
         }
 
@@ -167,15 +166,15 @@ private fun UserManagementScreen(
     state.delete?.let { user ->
         AlertDialog(
             onDismissRequest = { onIntent(UserManagementIntent.DismissDelete) },
-            title = { Text(Strings[StringKey.USER_MGMT_DELETE_TITLE].withArgs(listOf(user.username))) },
-            text = { Text(Strings[StringKey.USER_MGMT_DELETE_BODY]) },
+            title = { AppText(Strings[StringKey.USER_MGMT_DELETE_TITLE].withArgs(listOf(user.username)), AppTextStyle.DIALOG_TITLE) },
+            text = { AppText(Strings[StringKey.USER_MGMT_DELETE_BODY], AppTextStyle.BODY) },
             confirmButton = {
                 TextButton(onClick = { onIntent(UserManagementIntent.ConfirmDelete) }) {
-                    Text(Strings[StringKey.COMMON_DELETE], color = MaterialTheme.colorScheme.error)
+                    AppText(Strings[StringKey.COMMON_DELETE], AppTextStyle.BUTTON, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onIntent(UserManagementIntent.DismissDelete) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+                TextButton(onClick = { onIntent(UserManagementIntent.DismissDelete) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
             }
         )
     }
@@ -211,7 +210,7 @@ private fun GrantsEditor(
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                 (listOf(NO_ACCESS) + AppRole.entries.map { it.name }).forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(if (option == NO_ACCESS) Strings[StringKey.USER_MGMT_NO_ACCESS] else Strings[AppRole.parse(option).toStringKey()]) },
+                        text = { AppText(if (option == NO_ACCESS) Strings[StringKey.USER_MGMT_NO_ACCESS] else Strings[AppRole.parse(option).toStringKey()], AppTextStyle.BUTTON) },
                         onClick = {
                             onRoleChanged(stationId, option)
                             expanded = false
@@ -224,7 +223,7 @@ private fun GrantsEditor(
             OutlinedTextField(
                 value = grants.clientCodes[stationId] ?: "",
                 onValueChange = { onCodeChanged(stationId, it) },
-                label = { Text(Strings[StringKey.USER_MGMT_CLIENT_CODE_ON].withArgs(listOf(stationName))) },
+                label = { AppText(Strings[StringKey.USER_MGMT_CLIENT_CODE_ON].withArgs(listOf(stationName)), AppTextStyle.FIELD_LABEL) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -240,27 +239,27 @@ private fun CreateUserDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissCreate) },
-        title = { Text(Strings[StringKey.USER_MGMT_NEW_USER_TITLE]) },
+        title = { AppText(Strings[StringKey.USER_MGMT_NEW_USER_TITLE], AppTextStyle.DIALOG_TITLE) },
         text = {
             Column {
                 OutlinedTextField(
                     value = dialog.username,
                     onValueChange = { onIntent(UserManagementIntent.CreateUsernameChanged(it)) },
-                    label = { Text(Strings[StringKey.LOGIN_USERNAME]) }, singleLine = true,
+                    label = { AppText(Strings[StringKey.LOGIN_USERNAME], AppTextStyle.FIELD_LABEL) }, singleLine = true,
                     enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.displayName,
                     onValueChange = { onIntent(UserManagementIntent.CreateDisplayNameChanged(it)) },
-                    label = { Text(Strings[StringKey.USER_MGMT_DISPLAY_NAME]) }, singleLine = true,
+                    label = { AppText(Strings[StringKey.USER_MGMT_DISPLAY_NAME], AppTextStyle.FIELD_LABEL) }, singleLine = true,
                     enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = dialog.password,
                     onValueChange = { onIntent(UserManagementIntent.CreatePasswordChanged(it)) },
-                    label = { Text(Strings[StringKey.USER_MGMT_INITIAL_PASSWORD]) },
+                    label = { AppText(Strings[StringKey.USER_MGMT_INITIAL_PASSWORD], AppTextStyle.FIELD_LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -282,10 +281,10 @@ private fun CreateUserDialog(
             TextButton(
                 enabled = dialog.canSubmit,
                 onClick = { onIntent(UserManagementIntent.ConfirmCreate) }
-            ) { Text(Strings[StringKey.USER_MGMT_CREATE]) }
+            ) { AppText(Strings[StringKey.USER_MGMT_CREATE], AppTextStyle.BUTTON) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissCreate) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissCreate) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }
@@ -297,7 +296,7 @@ private fun ResetPasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissReset) },
-        title = { Text(Strings[StringKey.USER_MGMT_RESET_TITLE].withArgs(listOf(dialog.user.username))) },
+        title = { AppText(Strings[StringKey.USER_MGMT_RESET_TITLE].withArgs(listOf(dialog.user.username)), AppTextStyle.DIALOG_TITLE) },
         text = {
             Column {
                 AppText(Strings[StringKey.USER_MGMT_RESET_INFO], AppTextStyle.BODY)
@@ -305,7 +304,7 @@ private fun ResetPasswordDialog(
                 OutlinedTextField(
                     value = dialog.password,
                     onValueChange = { onIntent(UserManagementIntent.ResetPasswordChanged(it)) },
-                    label = { Text(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN]) },
+                    label = { AppText(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN], AppTextStyle.FIELD_LABEL) },
                     singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
                 )
                 dialog.error?.let {
@@ -318,10 +317,10 @@ private fun ResetPasswordDialog(
             TextButton(
                 enabled = dialog.canSubmit,
                 onClick = { onIntent(UserManagementIntent.ConfirmReset) }
-            ) { Text(Strings[StringKey.USER_MGMT_RESET]) }
+            ) { AppText(Strings[StringKey.USER_MGMT_RESET], AppTextStyle.BUTTON) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissReset) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissReset) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }
@@ -334,7 +333,7 @@ private fun EditGrantsDialog(
 ) {
     AlertDialog(
         onDismissRequest = { onIntent(UserManagementIntent.DismissGrants) },
-        title = { Text(Strings[StringKey.USER_MGMT_GRANTS_TITLE].withArgs(listOf(dialog.user.username))) },
+        title = { AppText(Strings[StringKey.USER_MGMT_GRANTS_TITLE].withArgs(listOf(dialog.user.username)), AppTextStyle.DIALOG_TITLE) },
         text = {
             Column {
                 GrantsEditor(
@@ -353,10 +352,10 @@ private fun EditGrantsDialog(
             TextButton(
                 enabled = !dialog.busy,
                 onClick = { onIntent(UserManagementIntent.ConfirmGrants) }
-            ) { Text(Strings[StringKey.COMMON_SAVE]) }
+            ) { AppText(Strings[StringKey.COMMON_SAVE], AppTextStyle.BUTTON) }
         },
         dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissGrants) }) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            TextButton(enabled = !dialog.busy, onClick = { onIntent(UserManagementIntent.DismissGrants) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }

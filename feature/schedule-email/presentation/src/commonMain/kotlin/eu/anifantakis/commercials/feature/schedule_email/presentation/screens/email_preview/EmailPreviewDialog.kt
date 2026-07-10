@@ -14,12 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -95,8 +93,9 @@ private fun EmailPreviewDialog(
                     }
                     state.html != null ->
                         EmailHtmlPreview(state.html, Modifier.weight(1f).fillMaxWidth())
-                    else -> Text(
+                    else -> AppText(
                         (state.error ?: UiText.Res(StringKey.EMAIL_PREVIEW_FAILED)).asString(),
+                        AppTextStyle.BODY,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)
                     )
@@ -115,7 +114,7 @@ private fun EmailPreviewDialog(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    TextButton(enabled = !state.sending, onClick = onClose) { Text(Strings[StringKey.COMMON_BACK]) }
+                    TextButton(enabled = !state.sending, onClick = onClose) { AppText(Strings[StringKey.COMMON_BACK], AppTextStyle.BUTTON) }
                     TextButton(
                         enabled = !state.sending && state.html != null,
                         onClick = { onIntent(EmailPreviewIntent.Send) }
@@ -123,7 +122,7 @@ private fun EmailPreviewDialog(
                         if (state.sending) {
                             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                         } else {
-                            Text(Strings[StringKey.EMAIL_SEND_BUTTON], fontWeight = FontWeight.Bold)
+                            AppText(Strings[StringKey.EMAIL_SEND_BUTTON], AppTextStyle.BUTTON_STRONG)
                         }
                     }
                 }

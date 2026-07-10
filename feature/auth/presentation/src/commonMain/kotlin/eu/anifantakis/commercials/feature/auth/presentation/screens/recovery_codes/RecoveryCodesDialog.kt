@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -92,7 +91,7 @@ private fun RecoveryCodesDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { Text(Strings[StringKey.RECOVERY_TITLE]) },
+        title = { AppText(Strings[StringKey.RECOVERY_TITLE], AppTextStyle.DIALOG_TITLE) },
         text = {
             Column {
                 if (state.codes == null) {
@@ -117,14 +116,14 @@ private fun RecoveryCodesDialog(
                     onClick = { onIntent(RecoveryCodesIntent.Generate) }
                 ) {
                     if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    else Text(Strings[StringKey.RECOVERY_GENERATE])
+                    else AppText(Strings[StringKey.RECOVERY_GENERATE], AppTextStyle.BUTTON)
                 }
             } else {
-                TextButton(onClick = onDismiss) { Text(Strings[StringKey.RECOVERY_SAVED]) }
+                TextButton(onClick = onDismiss) { AppText(Strings[StringKey.RECOVERY_SAVED], AppTextStyle.BUTTON) }
             }
         },
         dismissButton = {
-            if (state.codes == null) TextButton(enabled = !state.busy, onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            if (state.codes == null) TextButton(enabled = !state.busy, onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }

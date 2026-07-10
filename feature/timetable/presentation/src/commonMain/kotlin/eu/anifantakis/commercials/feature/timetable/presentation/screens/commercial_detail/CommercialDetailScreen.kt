@@ -330,7 +330,7 @@ private fun CommercialDetailScreen(
                 // τηλεόρασης Δ Ω Ρ Α' - the item name carries the gift
                 // marker). Programme type is the fallback for spots the ERP
                 // never covered, with the marker appended for gifts.
-                extractor = { it.salesItem ?: if (it.isGift) "${it.type} ΔΩΡΑ" else it.type }
+                extractor = { it.salesItem ?: if (it.isGift) "${it.type} ${StringKey.DETAIL_GIFT_SUFFIX.localized()}" else it.type }
             ),
             ColumnDef(
                 id = "contract",
@@ -684,7 +684,7 @@ private fun DetailHeader(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(Strings[StringKey.DETAIL_PRINT])
+                                AppText(Strings[StringKey.DETAIL_PRINT], AppTextStyle.BUTTON)
                             }
                         }
 
@@ -698,14 +698,14 @@ private fun DetailHeader(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(Strings[StringKey.DETAIL_PREVIOUS])
+                            AppText(Strings[StringKey.DETAIL_PREVIOUS], AppTextStyle.BUTTON)
                         }
 
                         OutlinedButton(
                             onClick = { onNext?.invoke() },
                             enabled = onNext != null
                         ) {
-                            Text(Strings[StringKey.DETAIL_NEXT])
+                            AppText(Strings[StringKey.DETAIL_NEXT], AppTextStyle.BUTTON)
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 AppIcons.arrowForward,

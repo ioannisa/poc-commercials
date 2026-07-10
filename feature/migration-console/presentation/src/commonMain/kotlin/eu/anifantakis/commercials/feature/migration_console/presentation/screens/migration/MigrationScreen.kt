@@ -36,7 +36,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -178,13 +177,13 @@ private fun MigrationScreen(
                         OutlinedTextField(
                             value = state.dumpPath,
                             onValueChange = { onIntent(MigrationIntent.DumpPathChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_DUMP_PATH]) },
-                            placeholder = { Text("/backups/commercials3.sql") },
+                            label = { AppText(Strings[StringKey.MIGRATION_DUMP_PATH], AppTextStyle.FIELD_LABEL) },
+                            placeholder = { AppText("/backups/commercials3.sql", AppTextStyle.FIELD_LABEL) },
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
                         // Desktop gets the real OS file dialog; web/mobile
                         // fall back to browsing the server's filesystem.
-                        Button(onClick = onBrowseClicked) { Text(Strings[StringKey.MIGRATION_BROWSE]) }
+                        Button(onClick = onBrowseClicked) { AppText(Strings[StringKey.MIGRATION_BROWSE], AppTextStyle.BUTTON) }
                     }
                     // Optional SEN (Oracle ERP) export folder: when given, the
                     // migration follows the transform with the ERP enrichment
@@ -193,34 +192,34 @@ private fun MigrationScreen(
                         OutlinedTextField(
                             value = state.senDirPath,
                             onValueChange = { onIntent(MigrationIntent.SenDirChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_SEN_DIR]) },
-                            placeholder = { Text("/backups/SEN") },
+                            label = { AppText(Strings[StringKey.MIGRATION_SEN_DIR], AppTextStyle.FIELD_LABEL) },
+                            placeholder = { AppText("/backups/SEN", AppTextStyle.FIELD_LABEL) },
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
-                        Button(onClick = onBrowseSenClicked) { Text(Strings[StringKey.MIGRATION_BROWSE]) }
+                        Button(onClick = onBrowseSenClicked) { AppText(Strings[StringKey.MIGRATION_BROWSE], AppTextStyle.BUTTON) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.host,
                             onValueChange = { onIntent(MigrationIntent.HostChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_HOST]) }, singleLine = true, modifier = Modifier.weight(2f)
+                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_HOST], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(2f)
                         )
                         OutlinedTextField(
                             value = state.port,
                             onValueChange = { onIntent(MigrationIntent.PortChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_PORT]) }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = { AppText(Strings[StringKey.MIGRATION_PORT], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(1f)
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = state.username,
                             onValueChange = { onIntent(MigrationIntent.UsernameChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_USERNAME]) }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_USERNAME], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(1f)
                         )
                         OutlinedTextField(
                             value = state.password,
                             onValueChange = { onIntent(MigrationIntent.PasswordChanged(it)) },
-                            label = { Text(Strings[StringKey.MIGRATION_MYSQL_PASSWORD]) },
+                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_PASSWORD], AppTextStyle.FIELD_LABEL) },
                             visualTransformation = PasswordVisualTransformation(),
                             singleLine = true, modifier = Modifier.weight(1f)
                         )
@@ -228,8 +227,8 @@ private fun MigrationScreen(
                     OutlinedTextField(
                         value = state.schema,
                         onValueChange = { onIntent(MigrationIntent.SchemaChanged(it)) },
-                        label = { Text(Strings[StringKey.MIGRATION_TARGET_SCHEMA]) },
-                        placeholder = { Text("commercials_mystation") },
+                        label = { AppText(Strings[StringKey.MIGRATION_TARGET_SCHEMA], AppTextStyle.FIELD_LABEL) },
+                        placeholder = { AppText("commercials_mystation", AppTextStyle.FIELD_LABEL) },
                         singleLine = true, modifier = Modifier.fillMaxWidth()
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -243,7 +242,7 @@ private fun MigrationScreen(
                     Button(
                         enabled = state.canStart,
                         onClick = { onIntent(MigrationIntent.Start) }
-                    ) { Text(Strings[StringKey.MIGRATION_START]) }
+                    ) { AppText(Strings[StringKey.MIGRATION_START], AppTextStyle.BUTTON) }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -288,13 +287,13 @@ private fun MigrationScreen(
                             OutlinedTextField(
                                 value = state.stationId,
                                 onValueChange = { onIntent(MigrationIntent.StationIdChanged(it)) },
-                                label = { Text(Strings[StringKey.MIGRATION_STATION_ID]) },
+                                label = { AppText(Strings[StringKey.MIGRATION_STATION_ID], AppTextStyle.FIELD_LABEL) },
                                 singleLine = true, modifier = Modifier.weight(1f)
                             )
                             OutlinedTextField(
                                 value = state.stationName,
                                 onValueChange = { onIntent(MigrationIntent.StationNameChanged(it)) },
-                                label = { Text(Strings[StringKey.USER_MGMT_DISPLAY_NAME]) },
+                                label = { AppText(Strings[StringKey.USER_MGMT_DISPLAY_NAME], AppTextStyle.FIELD_LABEL) },
                                 singleLine = true, modifier = Modifier.weight(1f)
                             )
                         }
@@ -303,7 +302,7 @@ private fun MigrationScreen(
                     Button(
                         enabled = state.canChooseFlow,
                         onClick = { onIntent(MigrationIntent.ChooseFlow) }
-                    ) { Text(Strings[StringKey.MIGRATION_MIGRATE_FLOW]) }
+                    ) { AppText(Strings[StringKey.MIGRATION_MIGRATE_FLOW], AppTextStyle.BUTTON) }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -344,7 +343,7 @@ private fun MigrationScreen(
         }
 
         if (status.state in setOf("DONE", "FAILED")) {
-            TextButton(onClick = { onIntent(MigrationIntent.Reset) }) { Text(Strings[StringKey.MIGRATION_START_ANOTHER]) }
+            TextButton(onClick = { onIntent(MigrationIntent.Reset) }) { AppText(Strings[StringKey.MIGRATION_START_ANOTHER], AppTextStyle.BUTTON) }
             Spacer(Modifier.height(8.dp))
         }
 
@@ -392,7 +391,7 @@ private fun ServerFileBrowserDialog(
     AlertDialog(
         onDismissRequest = { onIntent(MigrationIntent.CloseBrowser) },
         title = {
-            Text(Strings[if (browser.forSenDir) StringKey.MIGRATION_PICK_SEN_DIR else StringKey.MIGRATION_PICK_DUMP])
+            AppText(Strings[if (browser.forSenDir) StringKey.MIGRATION_PICK_SEN_DIR else StringKey.MIGRATION_PICK_DUMP], AppTextStyle.DIALOG_TITLE)
         },
         text = {
             Column {
@@ -456,10 +455,10 @@ private fun ServerFileBrowserDialog(
         confirmButton = {
             if (browser.forSenDir && listing != null) {
                 TextButton(onClick = { onIntent(MigrationIntent.SenDirPicked(listing.path)) }) {
-                    Text(Strings[StringKey.MIGRATION_USE_THIS_FOLDER])
+                    AppText(Strings[StringKey.MIGRATION_USE_THIS_FOLDER], AppTextStyle.BUTTON)
                 }
             }
         },
-        dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { Text(Strings[StringKey.COMMON_CANCEL]) } }
+        dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) } }
     )
 }

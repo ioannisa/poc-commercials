@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -118,13 +117,13 @@ private fun ChangePasswordDialog(
 ) {
     AlertDialog(
         onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { Text(Strings[StringKey.CHPASS_TITLE]) },
+        title = { AppText(Strings[StringKey.CHPASS_TITLE], AppTextStyle.DIALOG_TITLE) },
         text = {
             Column {
                 OutlinedTextField(
                     value = state.current,
                     onValueChange = { onIntent(ChangePasswordIntent.CurrentChanged(it)) },
-                    label = { Text(Strings[StringKey.CHPASS_CURRENT]) },
+                    label = { AppText(Strings[StringKey.CHPASS_CURRENT], AppTextStyle.FIELD_LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -132,7 +131,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = state.new1,
                     onValueChange = { onIntent(ChangePasswordIntent.New1Changed(it)) },
-                    label = { Text(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN]) },
+                    label = { AppText(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN], AppTextStyle.FIELD_LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -140,7 +139,7 @@ private fun ChangePasswordDialog(
                 OutlinedTextField(
                     value = state.new2,
                     onValueChange = { onIntent(ChangePasswordIntent.New2Changed(it)) },
-                    label = { Text(Strings[StringKey.CHPASS_REPEAT]) },
+                    label = { AppText(Strings[StringKey.CHPASS_REPEAT], AppTextStyle.FIELD_LABEL) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
                 )
@@ -161,11 +160,11 @@ private fun ChangePasswordDialog(
                 onClick = { onIntent(ChangePasswordIntent.Submit) }
             ) {
                 if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                else Text(Strings[StringKey.CHPASS_CHANGE])
+                else AppText(Strings[StringKey.CHPASS_CHANGE], AppTextStyle.BUTTON)
             }
         },
         dismissButton = {
-            TextButton(enabled = !state.busy, onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            TextButton(enabled = !state.busy, onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }

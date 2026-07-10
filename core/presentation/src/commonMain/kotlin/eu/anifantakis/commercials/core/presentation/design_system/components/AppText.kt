@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.core.presentation.design_system.components
 
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +52,22 @@ enum class AppTextStyle {
     STAT_LABEL,
     /** Inline error/validation text. */
     ERROR_NOTE,
+    /** Title slot of an AlertDialog (keeps the Material dialog-title look). */
+    DIALOG_TITLE,
+    /**
+     * Label inside a Button/TextButton/DropdownMenuItem: the component's own
+     * content color passes through (enabled/disabled/error states keep
+     * working), the size is the Material button label - scaled.
+     */
+    BUTTON,
+    /** Emphasised (bold) button label - the dialog's primary action. */
+    BUTTON_STRONG,
+    /**
+     * Label/placeholder slot of a TextField: inherits BOTH the slot's
+     * animated style (resting <-> floating) and its state color
+     * (focused/unfocused/error) - AppText only routes it through the system.
+     */
+    FIELD_LABEL,
 }
 
 @Composable
@@ -71,6 +89,10 @@ private fun resolveAppTextStyle(style: AppTextStyle): Pair<TextStyle, Color> {
         AppTextStyle.STAT_VALUE -> t.statValue
         AppTextStyle.STAT_LABEL -> t.statLabel
         AppTextStyle.ERROR_NOTE -> t.material.bodySmall
+        AppTextStyle.DIALOG_TITLE -> t.material.headlineSmall
+        AppTextStyle.BUTTON -> t.material.labelLarge
+        AppTextStyle.BUTTON_STRONG -> t.material.labelLarge.copy(fontWeight = FontWeight.Bold)
+        AppTextStyle.FIELD_LABEL -> LocalTextStyle.current
     }
     val defaultColor: Color = when (style) {
         AppTextStyle.SCREEN_TITLE,
@@ -83,13 +105,20 @@ private fun resolveAppTextStyle(style: AppTextStyle): Pair<TextStyle, Color> {
         AppTextStyle.TABLE_CELL_STRONG,
         AppTextStyle.LOG_LINE,
         AppTextStyle.MONO,
-        AppTextStyle.STAT_VALUE -> MaterialTheme.colorScheme.onSurface
+        AppTextStyle.STAT_VALUE,
+        AppTextStyle.DIALOG_TITLE -> MaterialTheme.colorScheme.onSurface
 
         AppTextStyle.NOTE,
         AppTextStyle.TINY,
         AppTextStyle.STAT_LABEL -> MaterialTheme.colorScheme.onSurfaceVariant
 
         AppTextStyle.ERROR_NOTE -> MaterialTheme.colorScheme.error
+
+        // Slot roles: the enclosing component decides (button states,
+        // focused-label color) - never override with a theme constant.
+        AppTextStyle.BUTTON,
+        AppTextStyle.BUTTON_STRONG,
+        AppTextStyle.FIELD_LABEL -> LocalContentColor.current
     }
     return actualStyle to defaultColor
 }

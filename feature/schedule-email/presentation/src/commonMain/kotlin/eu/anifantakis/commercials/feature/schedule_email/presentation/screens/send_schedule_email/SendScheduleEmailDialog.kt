@@ -24,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -93,7 +92,7 @@ private fun SendScheduleEmailDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(Strings[StringKey.EMAIL_SEND_TITLE]) },
+        title = { AppText(Strings[StringKey.EMAIL_SEND_TITLE], AppTextStyle.DIALOG_TITLE) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (state.done != null) {
@@ -130,9 +129,10 @@ private fun SendScheduleEmailDialog(
                     value = state.query,
                     onValueChange = { onIntent(SendScheduleEmailIntent.QueryChanged(it)) },
                     label = {
-                        Text(
+                        AppText(
                             Strings[if (state.kind == PartyKind.CUSTOMER) StringKey.EMAIL_SEARCH_CUSTOMER
-                            else StringKey.EMAIL_SEARCH_ADVERTISER]
+                            else StringKey.EMAIL_SEARCH_ADVERTISER],
+                            AppTextStyle.FIELD_LABEL,
                         )
                     },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -225,7 +225,7 @@ private fun SendScheduleEmailDialog(
                     OutlinedTextField(
                         value = state.recipient,
                         onValueChange = { onIntent(SendScheduleEmailIntent.RecipientChanged(it)) },
-                        label = { Text(Strings[StringKey.EMAIL_RECIPIENT_LABEL]) },
+                        label = { AppText(Strings[StringKey.EMAIL_RECIPIENT_LABEL], AppTextStyle.FIELD_LABEL) },
                         singleLine = true, modifier = Modifier.fillMaxWidth()
                     )
 
@@ -259,7 +259,7 @@ private fun SendScheduleEmailDialog(
                     OutlinedTextField(
                         value = state.note,
                         onValueChange = { onIntent(SendScheduleEmailIntent.NoteChanged(it)) },
-                        label = { Text(Strings[StringKey.EMAIL_PERSONAL_MESSAGE]) },
+                        label = { AppText(Strings[StringKey.EMAIL_PERSONAL_MESSAGE], AppTextStyle.FIELD_LABEL) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     AppText(
@@ -291,18 +291,18 @@ private fun SendScheduleEmailDialog(
         },
         confirmButton = {
             if (state.done != null) {
-                TextButton(onClick = onDismiss) { Text(Strings[StringKey.COMMON_CLOSE]) }
+                TextButton(onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CLOSE], AppTextStyle.BUTTON) }
             } else {
                 TextButton(
                     enabled = state.canPreview,
                     onClick = { onIntent(SendScheduleEmailIntent.RequestPreview) }
                 ) {
-                    Text(Strings[StringKey.EMAIL_PREVIEW_BUTTON])
+                    AppText(Strings[StringKey.EMAIL_PREVIEW_BUTTON], AppTextStyle.BUTTON)
                 }
             }
         },
         dismissButton = {
-            if (state.done == null) TextButton(onClick = onDismiss) { Text(Strings[StringKey.COMMON_CANCEL]) }
+            if (state.done == null) TextButton(onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
     )
 }
