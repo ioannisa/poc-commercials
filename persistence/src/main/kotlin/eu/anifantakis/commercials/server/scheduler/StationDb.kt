@@ -115,11 +115,14 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         address_city VARCHAR(64) NULL,
                         notes TEXT NULL,
                         synthetic BOOLEAN NOT NULL DEFAULT FALSE,
-                        -- Galaxy (the client's NEW ERP) linkage: its ids are UUID
-                        -- strings. NULL until the Galaxy customer import matches this
-                        -- customer by VAT number and stamps the UUID here.
+                        -- Galaxy (the client's NEW ERP) linkage: TRADER.GXID (the
+                        -- identity that carries the VAT, covering advertisers AND
+                        -- agencies). NULL until the Galaxy import stamps it - matched
+                        -- code-first (Galaxy inherited the legacy TRACODEs), then by
+                        -- zero-padded VAT. UNIQUE: one Galaxy trader = one row here.
                         galaxy_id VARCHAR(36) NULL,
-                        KEY idx_customers_legacy (legacy_id)
+                        KEY idx_customers_legacy (legacy_id),
+                        UNIQUE KEY uq_customers_galaxy (galaxy_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -144,8 +147,15 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         renewed_at DATE NULL,
                         dates_provisional BOOLEAN NOT NULL DEFAULT FALSE,
                         synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+                        -- Galaxy linkage: COMMERCIALENTRY.GXID plus the document's
+                        -- sequential number (the one a user quotes on the phone).
+                        -- NULL until the Galaxy contract import stamps them.
+                        galaxy_id VARCHAR(36) NULL,
+                        galaxy_number BIGINT NULL,
                         KEY idx_contracts_number (number),
                         KEY idx_contracts_legacy (legacy_docid),
+                        UNIQUE KEY uq_contracts_galaxy (galaxy_id),
+                        KEY idx_contracts_galaxy_number (galaxy_number),
                         CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
                         CONSTRAINT fk_contracts_agency FOREIGN KEY (agency_id) REFERENCES customers(id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -167,7 +177,10 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         agel_val DECIMAL(10,6) NOT NULL DEFAULT 0,
                         eidikos_val DECIMAL(10,6) NOT NULL DEFAULT 0,
                         zone_val DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        -- Galaxy linkage: CommercEntryLines.GXID. NULL until stamped.
+                        galaxy_id VARCHAR(36) NULL,
                         UNIQUE KEY uq_contract_line (contract_id, line_no),
+                        UNIQUE KEY uq_lines_galaxy (galaxy_id),
                         CONSTRAINT fk_lines_contract FOREIGN KEY (contract_id)
                             REFERENCES contracts(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -188,7 +201,11 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                         name VARCHAR(128) NOT NULL,
                         sales_item VARCHAR(160) NULL,
                         item_code VARCHAR(32) NULL,
-                        UNIQUE KEY uq_spot_types_legacy (legacy_id)
+                        -- Galaxy linkage: ITEM.GXID. The 73.xxx item codes bridge the
+                        -- two catalogs (Galaxy inherited the legacy sales items).
+                        galaxy_id VARCHAR(36) NULL,
+                        UNIQUE KEY uq_spot_types_legacy (legacy_id),
+                        UNIQUE KEY uq_spot_types_galaxy (galaxy_id)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -340,9 +357,20 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             ensureColumn(c, "contracts", "end_date", "DATE NULL")
             ensureColumn(c, "contracts", "renewed_at", "DATE NULL")
             ensureColumn(c, "contracts", "dates_provisional", "BOOLEAN NOT NULL DEFAULT FALSE")
-            // Galaxy (new ERP) UUID - NULL until the Galaxy customer import
-            // matches by VAT number (see the CREATE TABLE note).
+            // Galaxy (new ERP) linkage - see the CREATE TABLE notes. UUIDs are
+            // NULL until the Galaxy import stamps them (customers matched
+            // code-first, then by zero-padded VAT). UNIQUE indexes are safe on
+            // the existing all-NULL data (MySQL allows repeated NULLs).
             ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
+            ensureIndex(c, "customers", "uq_customers_galaxy", "galaxy_id", unique = true)
+            ensureColumn(c, "contracts", "galaxy_id", "VARCHAR(36) NULL")
+            ensureColumn(c, "contracts", "galaxy_number", "BIGINT NULL")
+            ensureIndex(c, "contracts", "uq_contracts_galaxy", "galaxy_id", unique = true)
+            ensureIndex(c, "contracts", "idx_contracts_galaxy_number", "galaxy_number")
+            ensureColumn(c, "contract_lines", "galaxy_id", "VARCHAR(36) NULL")
+            ensureIndex(c, "contract_lines", "uq_lines_galaxy", "galaxy_id", unique = true)
+            ensureColumn(c, "spot_types", "galaxy_id", "VARCHAR(36) NULL")
+            ensureIndex(c, "spot_types", "uq_spot_types_galaxy", "galaxy_id", unique = true)
             // The spot-type catalog reference (see the CREATE TABLE notes) -
             // schemas from before the catalog gain the column; the SEN
             // enrichment backfills it from the legacy messageTypeID.
@@ -417,7 +445,13 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         }
     }
 
-    private fun ensureIndex(c: Connection, table: String, indexName: String, columns: String) {
+    private fun ensureIndex(
+        c: Connection,
+        table: String,
+        indexName: String,
+        columns: String,
+        unique: Boolean = false,
+    ) {
         val exists = c.prepareStatement(
             """
             SELECT 1 FROM information_schema.statistics
@@ -429,7 +463,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             ps.executeQuery().use { it.next() }
         }
         if (!exists) {
-            c.createStatement().use { it.executeUpdate("CREATE INDEX $indexName ON $table($columns)") }
+            val kind = if (unique) "UNIQUE INDEX" else "INDEX"
+            c.createStatement().use { it.executeUpdate("CREATE $kind $indexName ON $table($columns)") }
         }
     }
 
