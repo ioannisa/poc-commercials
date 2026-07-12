@@ -11,6 +11,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.text.nativePlatformImeOptions
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,6 +47,15 @@ fun AppWireframeField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
 ) {
     val t = AppTheme.visualTokens
+    // iOS native text input (native caret/selection/system context menu) is
+    // injected HERE, once, for every form field - unless the caller already
+    // set its own platform IME options.
+    val effectiveKeyboardOptions =
+        if (keyboardOptions.platformImeOptions == null) {
+            nativePlatformImeOptions()
+                ?.let { keyboardOptions.copy(platformImeOptions = it) }
+                ?: keyboardOptions
+        } else keyboardOptions
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -60,7 +70,7 @@ fun AppWireframeField(
         supportingText = errorText?.let { { AppText(it, AppTextStyle.ERROR_NOTE) } },
         singleLine = singleLine,
         visualTransformation = visualTransformation,
-        keyboardOptions = keyboardOptions,
+        keyboardOptions = effectiveKeyboardOptions,
         shape = RoundedCornerShape(t.cornerSmall),
     )
 }

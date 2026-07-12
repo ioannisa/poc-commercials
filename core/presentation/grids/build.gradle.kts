@@ -49,6 +49,18 @@ kotlin {
         browser()
     }
 
+    // Same webMain group as the convention plugin: js + wasmJs share one
+    // source set, so per-target duplicate actuals collapse.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("web") {
+                withJs()
+                withWasmJs()
+            }
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.compose.runtime)
