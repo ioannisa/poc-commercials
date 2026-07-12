@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.reports.model
 
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.number
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -52,8 +53,8 @@ object ProgramFlow {
             DayOfWeek.SUNDAY -> "Κυριακή"
             else -> ""
         }
-        val d = date.dayOfMonth.toString().padStart(2, '0')
-        val m = date.monthNumber.toString().padStart(2, '0')
+        val d = date.day.toString().padStart(2, '0')
+        val m = date.month.number.toString().padStart(2, '0')
         return "$greekDay - $d/$m/${date.year}"
     }
 

@@ -21,7 +21,6 @@ import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
-import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
@@ -45,7 +44,6 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
-import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -59,6 +57,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 
@@ -184,7 +183,7 @@ class TimetableViewModel(
     private val _state = MutableStateFlow(
         TimetableState(
             year = today.year,
-            month = today.monthNumber,
+            month = today.month.number,
             showSpotTimes = prefs.showSpotTimes,
             reportsAvailable = reportService.isReportGenerationAvailable(),
         ).withSessionFacts()

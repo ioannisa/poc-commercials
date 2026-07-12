@@ -54,16 +54,14 @@ import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.grids.formatTime
 import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.number
 
 /**
  * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
@@ -362,7 +360,7 @@ private fun TimetableScreen(
 
 /** Menu label for a day, e.g. "05/12". */
 private fun dayMenuLabel(date: LocalDate): String =
-    "${date.day.toString().padStart(2, '0')}/${date.monthNumber.toString().padStart(2, '0')}"
+    "${date.day.toString().padStart(2, '0')}/${date.month.number.toString().padStart(2, '0')}"
 
 /**
  * Shows which station's data is on screen. With a single grant it's a plain
