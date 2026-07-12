@@ -7,6 +7,7 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
@@ -15,10 +16,20 @@ import kotlinx.serialization.SerializationException
  * Wraps a Ktor call into a [DataResult] (kmp-developer error-handling
  * convention): expected failures are returned as typed [DataError.Network]
  * values, never thrown; CancellationException always rethrows.
+ *
+ * BOTH serialization exception families are caught, on purpose: a malformed
+ * RESPONSE body does NOT throw [SerializationException] — ContentNegotiation
+ * wraps it in `JsonConvertException : ContentConvertException : Exception`, a
+ * separate hierarchy (verified against Ktor 3.5.1). Catching only the kotlinx
+ * one silently downgraded every bad payload to UNKNOWN ("άγνωστο σφάλμα")
+ * instead of SERIALIZATION ("μη αναγνωρίσιμη απόκριση διακομιστή"). The
+ * kotlinx one still fires when SERIALIZING a request body — keep both.
  */
 suspend inline fun <reified T> safeCall(execute: () -> HttpResponse): DataResult<T, DataError.Network> {
     val response = try {
         execute()
+    } catch (e: ContentConvertException) {
+        return DataResult.Failure(DataError.Network.SERIALIZATION)
     } catch (e: SerializationException) {
         return DataResult.Failure(DataError.Network.SERIALIZATION)
     } catch (e: IOException) {
@@ -34,6 +45,8 @@ suspend inline fun <reified T> responseToResult(response: HttpResponse): DataRes
     return when (response.status.value) {
         in 200..299 -> try {
             DataResult.Success(response.body<T>())
+        } catch (e: ContentConvertException) {
+            DataResult.Failure(DataError.Network.SERIALIZATION)
         } catch (e: SerializationException) {
             DataResult.Failure(DataError.Network.SERIALIZATION)
         } catch (e: Exception) {
@@ -76,6 +89,8 @@ suspend inline fun <T> remoteCall(block: () -> T): DataResult<T, RemoteError> = 
     DataResult.Failure(RemoteError.Transport(DataError.Network.UNAUTHORIZED))
 } catch (e: ResponseException) {
     DataResult.Failure(RemoteError.Server(e.response.serverErrorMessage()))
+} catch (e: ContentConvertException) {
+    DataResult.Failure(RemoteError.Transport(DataError.Network.SERIALIZATION))
 } catch (e: SerializationException) {
     DataResult.Failure(RemoteError.Transport(DataError.Network.SERIALIZATION))
 } catch (e: IOException) {
@@ -109,6 +124,8 @@ suspend inline fun <T> dataCall(block: () -> T): DataResult<T, DataError.Network
     DataResult.Failure(DataError.Network.UNAUTHORIZED)
 } catch (e: ResponseException) {
     DataResult.Failure(statusToNetworkError(e.response.status.value))
+} catch (e: ContentConvertException) {
+    DataResult.Failure(DataError.Network.SERIALIZATION)
 } catch (e: SerializationException) {
     DataResult.Failure(DataError.Network.SERIALIZATION)
 } catch (e: IOException) {
