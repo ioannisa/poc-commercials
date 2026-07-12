@@ -37,7 +37,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
 
+/** What macOS shows in the screen menu bar / dock (packaged apps get it from `dockName`). */
+private const val APP_NAME = "Commercials Manager"
+
 fun main() {
+    // MUST be the FIRST thing in main(): macOS reads the application name once,
+    // when AWT initializes. Unset, it falls back to the main CLASS name - which
+    // is why an unbundled `./gradlew run` showed "MainKt" in the menu bar.
+    // Harmless on Windows/Linux.
+    System.setProperty("apple.awt.application.name", APP_NAME)
+
     initKoin()
     // Native file dialogs (reports save panel) need the app identity once.
     FileKit.init(appId = "CommercialsManager")

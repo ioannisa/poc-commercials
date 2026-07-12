@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.timeta
 
 import kotlinx.datetime.DayOfWeek
 import eu.anifantakis.commercials.reports.ui.ReportToolbarLabels
+import eu.anifantakis.commercials.reports.ui.ReportToolbarMetrics
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerLabels
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
@@ -564,6 +565,7 @@ private fun KeyboardEnabledHeader(
                 busy = state.reportBusy,
                 available = state.reportsAvailable,
                 labels = reportToolbarLabels(),
+                metrics = reportToolbarMetrics(),
                 modifier = Modifier.padding(horizontal = UIConst.paddingRegular, vertical = UIConst.paddingExtraSmall)
             )
         }
@@ -819,3 +821,24 @@ private fun reportToolbarLabels() = ReportToolbarLabels(
     exportPdf = Strings[StringKey.REPORT_EXPORT_PDF],
     notAvailable = Strings[StringKey.REPORT_NOT_AVAILABLE],
 )
+
+/**
+ * The platform's control geometry, handed to the leaf report toolkit the same
+ * way its labels are (it cannot see the design system itself). Without this the
+ * toolbar keeps stock Material pills - visibly out of place next to the
+ * desktop-token chrome around it.
+ */
+@Composable
+private fun reportToolbarMetrics(): ReportToolbarMetrics {
+    val t = AppTheme.visualTokens
+    return ReportToolbarMetrics(
+        buttonHeight = t.buttonHeightDense,
+        paddingHorizontal = t.buttonPaddingHorizontal,
+        paddingVertical = t.buttonPaddingVertical,
+        cornerRadius = t.cornerSmall,
+        borderWidth = t.controlBorderWidth,
+        elevation = t.buttonElevation,
+        iconSize = t.iconSmall,
+        gap = UIConst.paddingSmall,
+    )
+}

@@ -339,6 +339,37 @@ class ArchitectureTest {
     }
 
     /**
+     * Leaf toolkits (grids, reports-client) cannot see the design system, so
+     * their look arrives by INJECTION. A call site that forgets the injection
+     * silently renders stock Material next to platform-token chrome - which is
+     * exactly the ReportToolbar bug this rule was written for. Every leaf
+     * component that HAS a metrics door must be handed one.
+     */
+    @Test
+    fun `leaf toolkit call sites inject their metrics`() {
+        val needsMetrics = mapOf(
+            "ReportToolbar(" to "metrics =",
+        )
+        val offenders = featureLayer("presentation").flatMap { it.ktFiles() }
+            .filter { !it.isTestSource() }
+            .flatMap { f ->
+                val text = f.readText()
+                needsMetrics.mapNotNull { (call, injection) ->
+                    // the call must appear as an INVOCATION, not just an import
+                    val invoked = Regex("(?<![A-Za-z.])${Regex.escape(call)}").containsMatchIn(text)
+                    if (invoked && injection !in text)
+                        "  ${f.relativeTo(repoRoot).path}  (calls $call without `$injection`)"
+                    else null
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "leaf toolkit rendered without its platform metrics - inject them (see " +
+                "reportToolbarMetrics() / gridMetrics() in the calling screen):\n" +
+                offenders.joinToString("\n")
+        )
+    }
+
+    /**
      * No hardcoded Greek in the presentation cone: every operator-facing string
      * resolves through StringKey / LocalizationManager (the localization system,
      * fronted by UiText). The language ENDONYMS (`Language.kt`) and the El/En

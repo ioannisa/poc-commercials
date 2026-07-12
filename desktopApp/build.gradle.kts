@@ -28,6 +28,10 @@ dependencies {
 // so configure it via matching to avoid "Task not found" at config time.
 tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
     workingDir = rootProject.projectDir
+    // macOS names the app from the main CLASS when running unbundled ("MainKt").
+    // -Xdock:name is set before the JVM starts, so it wins even if something
+    // touches AWT early; main() also sets apple.awt.application.name as backup.
+    jvmArgs("-Xdock:name=Commercials Manager")
 }
 
 // Dev-only entry: the design-system laboratory (six platform profiles x
