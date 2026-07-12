@@ -45,14 +45,19 @@ object DayReportAssembler {
                 val printable = commercials.filter { !it.excludeFromReports }
                 if (printable.isEmpty()) return@forEach
                 val totalSeconds = printable.sumOf { it.durationSeconds }
+                // ONE break airs inside ONE programme (the slot's, not each spot's).
+                // Take it from the first placement that carries it - the same rule
+                // the client's SchedulerCellData.programName follows.
+                val programme = printable.firstNotNullOfOrNull { it.programName }.orEmpty()
                 printable.forEach { c ->
                     add(
                         ProgramFlow.row(
                             timeSlot = label,
                             message = c.message,
                             duration = ProgramFlow.formatDuration(c.durationSeconds),
-                            program = c.type,
-                            notes = ProgramFlow.notes(c.flow),
+                            program = programme,
+                            // Blank on purpose: the operator writes notes by hand.
+                            notes = "",
                             groupTotalDuration = ProgramFlow.formatDuration(totalSeconds),
                             groupSpotCount = printable.size,
                         )

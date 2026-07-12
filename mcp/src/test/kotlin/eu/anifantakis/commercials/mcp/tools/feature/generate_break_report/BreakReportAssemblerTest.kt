@@ -17,6 +17,7 @@ class BreakReportAssemblerTest {
         flow: String = "",
         excludeFromReports: Boolean = false,
         id: Long = 1,
+        programName: String? = null,
     ) = CommercialRow(
         id = id,
         spotId = id,
@@ -25,6 +26,7 @@ class BreakReportAssemblerTest {
         clientName = "ΠΕΛΑΤΗΣ",
         message = message,
         durationSeconds = durationSeconds,
+        programName = programName,
         type = type,
         contract = "C-1",
         excludeFromReports = excludeFromReports,
@@ -62,18 +64,30 @@ class BreakReportAssemblerTest {
         assertEquals(2, first["groupSpotCount"]!!.jsonPrimitive.content.toInt())
     }
 
+    /**
+     * The report prints the BREAK's programme on every row (one break airs
+     * inside one programme) and leaves Παρατηρήσεις blank for handwriting.
+     *
+     * This replaces a test that locked in the opposite: notes() used to map a
+     * ΡΟΗ placement to the literal "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" - a string copied off
+     * a Christmas sample that would then have printed all year round.
+     */
     @Test
-    fun `FLOW_ROH maps notes to the festive-programme label, other flows pass through`() {
+    fun `every row carries the break's programme and a blank notes cell`() {
         val request = BreakReportAssembler.buildBreakReport(
             date = LocalDate.of(2026, 7, 3),
             breakLabel = "17:30",
             commercials = listOf(
-                row("FLOW SPOT", 30, flow = ProgramFlow.FLOW_ROH),
-                row("PAID SPOT", 30, flow = "ΠΛΗΡΩΜΕΝΟ"),
+                row("FLOW SPOT", 30, flow = ProgramFlow.FLOW_ROH, programName = "ΕΙΔΗΣΕΙΣ"),
+                row("PAID SPOT", 30, flow = "ΠΛΗΡΩΜΕΝΟ", id = 2),
             ),
         )
-        assertEquals("ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ", request.rows[0]["notes"]!!.jsonPrimitive.content)
-        assertEquals("ΠΛΗΡΩΜΕΝΟ", request.rows[1]["notes"]!!.jsonPrimitive.content)
+        // Same programme on BOTH rows - taken from the slot, not from each spot.
+        assertEquals("ΕΙΔΗΣΕΙΣ", request.rows[0]["program"]!!.jsonPrimitive.content)
+        assertEquals("ΕΙΔΗΣΕΙΣ", request.rows[1]["program"]!!.jsonPrimitive.content)
+        // Notes stay empty for the operator's pen.
+        assertEquals("", request.rows[0]["notes"]!!.jsonPrimitive.content)
+        assertEquals("", request.rows[1]["notes"]!!.jsonPrimitive.content)
     }
 
     @Test

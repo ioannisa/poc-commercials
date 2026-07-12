@@ -173,6 +173,7 @@ class CommercialDetailViewModel(
             date = date,
             breakTimeLabel = current.breakLabel,
             commercials = current.commercials,
+            programName = current.programName,
         )
         if (data.items.isEmpty()) {
             showSnackbar(StringKey.REPORT_NO_SPOTS)

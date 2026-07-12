@@ -337,12 +337,14 @@ class TimetableViewModel(
     private fun printBreak(breakId: Long, date: LocalDate) {
         val s = _state.value
         val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
-        val commercials = s.cells[SchedulerKey(breakId, date)]?.commercials ?: return
+        val cell = s.cells[SchedulerKey(breakId, date)] ?: return
+        val commercials = cell.commercials
         viewModelScope.launch {
             val data = ReportDataFactory.createBreakProgramFlowData(
                 date = date,
                 breakTimeLabel = formatTime(slot.time.hour, slot.time.minute),
                 commercials = commercials,
+                programName = cell.programName,
             )
             if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
         }

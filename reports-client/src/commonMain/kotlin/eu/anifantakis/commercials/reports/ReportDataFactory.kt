@@ -56,8 +56,12 @@ object ReportDataFactory {
                         message = commercial.message,
                         duration = formatDuration(commercial.durationSeconds),
                         durationSeconds = commercial.durationSeconds,
-                        program = commercial.type,
-                        notes = ProgramFlow.notes(commercial.flow),
+                        // ONE break airs inside ONE programme - it is a property of
+                        // the slot, not of each spot (commercial.type is the spot's
+                        // own booking type and belongs nowhere on this report).
+                        program = data.programName.orEmpty(),
+                        // Blank on purpose: the operator writes notes by hand.
+                        notes = "",
                         firstInGroup = index == 0,
                         lastInGroup = index == commercials.size - 1,
                         groupTotalDuration = formatDuration(data.totalDurationSeconds),
@@ -104,7 +108,9 @@ object ReportDataFactory {
     fun createBreakProgramFlowData(
         date: LocalDate,
         breakTimeLabel: String,
-        commercials: List<CommercialItem>
+        commercials: List<CommercialItem>,
+        /** The programme airing at this break - printed on every row. */
+        programName: String? = null,
     ): ProgramFlowReportData {
         // calendar_excluded_docs contracts air but stay off printed reports
         @Suppress("NAME_SHADOWING")
@@ -119,8 +125,8 @@ object ReportDataFactory {
                 message = commercial.message,
                 duration = formatDuration(commercial.durationSeconds),
                 durationSeconds = commercial.durationSeconds,
-                program = commercial.type,
-                notes = ProgramFlow.notes(commercial.flow),
+                program = programName.orEmpty(),
+                notes = "",
                 firstInGroup = index == 0,
                 lastInGroup = index == commercials.lastIndex,
                 groupTotalDuration = formatDuration(totalDurationSeconds),

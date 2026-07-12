@@ -84,7 +84,8 @@ data class CommercialItem(
     val clientName: String,
     val message: String,
     val durationSeconds: Int,
-    /** PROGRAMME type - what the Program Flow report prints. */
+    /** The spot's own booking type (Break Console). NOT the break's programme -
+     *  the Program Flow report prints [SchedulerCellData.programName] instead. */
     val type: String,
     /** Sales item of the contract line (Break Console Τύπος); null -> show [type]. */
     val salesItem: String? = null,

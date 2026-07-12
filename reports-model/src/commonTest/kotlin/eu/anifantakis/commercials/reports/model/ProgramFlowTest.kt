@@ -43,13 +43,6 @@ class ProgramFlowTest {
     }
 
     @Test
-    fun `notes maps the ROH wire value to the festive label and passes others through`() {
-        assertEquals("ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ", ProgramFlow.notes(ProgramFlow.FLOW_ROH))
-        assertEquals("ΠΛΗΡΩΜΕΝΟ", ProgramFlow.notes("ΠΛΗΡΩΜΕΝΟ"))
-        assertEquals("", ProgramFlow.notes(""))
-    }
-
-    @Test
     fun `params carry the template's four parameter names`() {
         val p = ProgramFlow.params(
             title = ProgramFlow.TITLE,

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Roboto as a JasperReports font extension - the SAME typeface the app's UI
+  uses (core/presentation composeResources), so a report looks like the screen
+  it was printed from.
+
+  pdfEmbedded=true + Identity-H are what make Greek glyphs survive into the PDF;
+  without them the exporter falls back to a base-14 font and Greek turns into
+  garbage. The `italic` slots reuse the upright faces on purpose - Roboto
+  Italic is not bundled and the report uses no italics except the page footer,
+  which Jasper then synthesises.
+-->
+<fontFamilies>
+
+    <fontFamily name="Roboto">
+        <normal>fonts/roboto/roboto_regular.ttf</normal>
+        <bold>fonts/roboto/roboto_bold.ttf</bold>
+        <italic>fonts/roboto/roboto_regular.ttf</italic>
+        <boldItalic>fonts/roboto/roboto_bold.ttf</boldItalic>
+        <pdfEncoding>Identity-H</pdfEncoding>
+        <pdfEmbedded>true</pdfEmbedded>
+        <exportFonts>
+            <export key="net.sf.jasperreports.html">'Roboto', Arial, Helvetica, sans-serif</export>
+        </exportFonts>
+    </fontFamily>
+
+    <fontFamily name="Roboto Medium">
+        <normal>fonts/roboto/roboto_medium.ttf</normal>
+        <bold>fonts/roboto/roboto_bold.ttf</bold>
+        <italic>fonts/roboto/roboto_medium.ttf</italic>
+        <boldItalic>fonts/roboto/roboto_bold.ttf</boldItalic>
+        <pdfEncoding>Identity-H</pdfEncoding>
+        <pdfEmbedded>true</pdfEmbedded>
+    </fontFamily>
+
+    <fontFamily name="Roboto Mono">
+        <normal>fonts/roboto/roboto_mono_regular.ttf</normal>
+        <bold>fonts/roboto/roboto_mono_regular.ttf</bold>
+        <italic>fonts/roboto/roboto_mono_regular.ttf</italic>
+        <boldItalic>fonts/roboto/roboto_mono_regular.ttf</boldItalic>
+        <pdfEncoding>Identity-H</pdfEncoding>
+        <pdfEmbedded>true</pdfEmbedded>
+    </fontFamily>
+
+</fontFamilies>

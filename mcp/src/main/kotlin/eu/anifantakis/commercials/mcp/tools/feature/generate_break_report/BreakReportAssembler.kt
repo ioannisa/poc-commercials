@@ -40,13 +40,17 @@ object BreakReportAssembler {
             logoPath = null,
         )
 
+        // ONE break airs inside ONE programme (the slot's, not each spot's).
+        val programme = printable.firstNotNullOfOrNull { it.programName }.orEmpty()
+
         val rows: List<JsonObject> = printable.map { c ->
             ProgramFlow.row(
                 timeSlot = breakLabel,
                 message = c.message,
                 duration = ProgramFlow.formatDuration(c.durationSeconds),
-                program = c.type,
-                notes = ProgramFlow.notes(c.flow),
+                program = programme,
+                // Blank on purpose: the operator writes notes by hand.
+                notes = "",
                 groupTotalDuration = ProgramFlow.formatDuration(totalSeconds),
                 groupSpotCount = printable.size,
             )

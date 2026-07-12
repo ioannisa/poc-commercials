@@ -61,9 +61,11 @@ object ProgramFlow {
     /** The report's "empty time" line, e.g. "Κενός Χρόνος: 00:00". */
     fun emptyTime(seconds: Int): String = "Κενός Χρόνος: ${formatDuration(seconds)}"
 
-    /** A placement's notes cell: the festive-programme label for ΡΟΗ, else the raw flow. */
-    fun notes(flow: String): String =
-        if (flow == FLOW_ROH) "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" else flow
+    // notes(flow) is GONE. It hardcoded "ΕΟΡΤΑΣΤΙΚΟ ΠΡΟΓΡΑΜΜΑ" for every ΡΟΗ
+    // placement - a Christmas-sample string that would have printed on every
+    // day of the year. The Παρατηρήσεις column is BLANK BY DESIGN (the operator
+    // writes in it by hand), and the Πρόγραμμα column carries the break's own
+    // programme - one break airs inside exactly one programme.
 
     /** The template's `<parameter>` values. */
     fun params(title: String, reportDate: String, emptyTime: String, logoPath: String?): JsonObject =

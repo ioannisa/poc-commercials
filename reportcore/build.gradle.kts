@@ -53,6 +53,16 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
         }
+        jvmTest.dependencies {
+            implementation(libs.kotlin.test)
+            // Declared EXPLICITLY even though jvmMain already brings them in:
+            // ProgramFlowLayoutTest calls JRPrintText and jsonPrimitive directly,
+            // and a test that uses an API should depend on it rather than lean on
+            // a transitive/associate-compilation path the IDE resolves less
+            // reliably than Gradle does.
+            implementation(libs.jasperreports)
+            implementation(libs.kotlinx.serialization.json)
+        }
         jvmMain.dependencies {
             // JasperReports 7.x (modular). The core engine is `api` because
             // consumers (desktop print/preview) work with JasperPrint and
