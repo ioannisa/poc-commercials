@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,8 +49,10 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -323,13 +326,18 @@ data class ClickConfig(
  * @param onClick Called on primary (left) click with the keyboard modifiers held at click time
  * @param onDoubleClick Called on primary double-click
  * @param onRightClick Called on secondary (right) click with the click position
+ * @param onLongPress Touch/stylus long-press (the finger's "right-click") - gated on the
+ *   EVENT's PointerType, never on the platform: a hybrid device gets touch menus from the
+ *   finger and right-click menus from the mouse in the same session.
  */
 fun Modifier.multiButtonClickable(
     config: ClickConfig = ClickConfig(),
     onClick: ((PointerKeyboardModifiers) -> Unit)? = null,
     onDoubleClick: (() -> Unit)? = null,
-    onRightClick: ((Offset) -> Unit)? = null
-): Modifier = this.pointerInput(config, onClick, onDoubleClick, onRightClick) {
+    onRightClick: ((Offset) -> Unit)? = null,
+    onLongPress: ((Offset) -> Unit)? = null,
+    longPressTimeoutMs: Long = 500L,
+): Modifier = this.pointerInput(config, onClick, onDoubleClick, onRightClick, onLongPress) {
     var lastClickTime = 0L
     var lastClickPosition: Offset? = null
 
@@ -353,8 +361,26 @@ fun Modifier.multiButtonClickable(
             return@awaitEachGesture
         }
 
-        // Handle primary (left) button
-        val up = waitForUpOrCancellation()
+        // Handle primary (left) button. A stationary touch/stylus hold is the
+        // long-press; drag/scroll consumes the pointer, which cancels
+        // waitForUpOrCancellation - so scrolling never opens a menu.
+        val touchLike = down.type == PointerType.Touch || down.type == PointerType.Stylus
+        val up = if (onLongPress != null && touchLike) {
+            try {
+                withTimeout(longPressTimeoutMs) { waitForUpOrCancellation() }
+            } catch (_: PointerEventTimeoutCancellationException) {
+                onLongPress(downPosition)
+                // Swallow the rest of this gesture so no click fires on lift
+                while (true) {
+                    val c = awaitPointerEvent().changes.firstOrNull() ?: break
+                    if (!c.pressed) break
+                    c.consume()
+                }
+                return@awaitEachGesture
+            }
+        } else {
+            waitForUpOrCancellation()
+        }
 
         if (up != null) {
             // REPLACED: Use uptimeMillis for KMP compatibility
@@ -405,20 +431,46 @@ fun Modifier.multiButtonClickable(
  */
 fun Modifier.onRightClick(
     enabled: Boolean = true,
+    /** Touch/stylus long-press opens the same menu (per-event PointerType, not platform). */
+    onLongPress: ((Offset) -> Unit)? = null,
     onRightClick: (Offset) -> Unit
-): Modifier = if (!enabled) this else this.pointerInput(onRightClick) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent()
-            if (event.type == PointerEventType.Press &&
-                event.buttons.isSecondaryPressed) {
-                // Get the click position (local to the composable with this modifier)
-                val position = event.changes.firstOrNull()?.position ?: Offset.Zero
-                onRightClick(position)
+): Modifier = if (!enabled) this else this
+    .pointerInput(onRightClick) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.type == PointerEventType.Press &&
+                    event.buttons.isSecondaryPressed) {
+                    // Get the click position (local to the composable with this modifier)
+                    val position = event.changes.firstOrNull()?.position ?: Offset.Zero
+                    onRightClick(position)
+                }
             }
         }
     }
-}
+    .then(
+        if (onLongPress == null) Modifier
+        else Modifier.pointerInput(onLongPress) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val touchLike = down.type == PointerType.Touch || down.type == PointerType.Stylus
+                if (!touchLike || currentEvent.buttons.isSecondaryPressed) return@awaitEachGesture
+                try {
+                    // Cancelled by scroll/drag consumption; null = lifted early.
+                    withTimeout(viewConfiguration.longPressTimeoutMillis) {
+                        waitForUpOrCancellation()
+                    }
+                } catch (_: PointerEventTimeoutCancellationException) {
+                    onLongPress(down.position)
+                    while (true) {
+                        val c = awaitPointerEvent().changes.firstOrNull() ?: break
+                        if (!c.pressed) break
+                        c.consume()
+                    }
+                }
+            }
+        }
+    )
 
 /**
  * Combined gesture handler for rows that need both:
@@ -439,6 +491,13 @@ fun Modifier.draggableRowGestures(
     onClick: ((PointerKeyboardModifiers) -> Unit)? = null,
     onDoubleClick: (() -> Unit)? = null,
     onRightClick: ((Offset) -> Unit)? = null,
+    /**
+     * Touch/stylus context menu: a long-press that is RELEASED WITHOUT
+     * DRAGGING opens the menu; a long-press that moves reorders as before.
+     * One gesture, two outcomes, no collision - and mouse users keep
+     * right-click untouched.
+     */
+    onLongPress: ((Offset) -> Unit)? = null,
     doubleClickTimeoutMs: Long = 400L
 ): Modifier {
     // Use rememberUpdatedState to ensure callbacks are always current
@@ -449,6 +508,8 @@ fun Modifier.draggableRowGestures(
     val currentOnLongPressStart by rememberUpdatedState(onLongPressStart)
     val currentOnDrag by rememberUpdatedState(onDrag)
     val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnDragCancel by rememberUpdatedState(onDragCancel)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
 
     return if (!enabled) this else this.pointerInput(Unit) {
         var lastClickTime = 0L
@@ -514,17 +575,28 @@ fun Modifier.draggableRowGestures(
                 currentOnLongPressStart()
 
                 // Track drag until release
+                var totalDrag = 0f
                 while (true) {
                     val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Main)
                     val change = event.changes.firstOrNull() ?: break
 
                     if (!change.pressed) {
-                        currentOnDragEnd()
+                        val touchLike = change.type == PointerType.Touch ||
+                            change.type == PointerType.Stylus
+                        if (touchLike && currentOnLongPress != null && totalDrag < 18f) {
+                            // Stationary hold released: the finger's context
+                            // menu. Cancel the drag visuals first.
+                            currentOnDragCancel()
+                            currentOnLongPress?.invoke(downPosition)
+                        } else {
+                            currentOnDragEnd()
+                        }
                         break
                     }
 
                     val dragDelta = change.position - change.previousPosition
                     if (dragDelta != Offset.Zero) {
+                        totalDrag += dragDelta.getDistance()
                         change.consume()
                         currentOnDrag(dragDelta)
                     }
@@ -778,10 +850,14 @@ fun RichContextMenu(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Main)
-                        if (event.type == PointerEventType.Exit && expandedSubmenuIndex == -1) {
+                        // Hover semantics are MOUSE-ONLY: Compose synthesises
+                        // Enter/Exit around taps, so an ungated Exit-dismiss
+                        // makes touch menus flicker closed on first contact.
+                        val isMouse = event.changes.firstOrNull()?.type == PointerType.Mouse
+                        if (event.type == PointerEventType.Exit && isMouse && expandedSubmenuIndex == -1) {
                             // Close main menu when mouse exits its bounds (only if no submenu is open)
                             onDismissRequest()
-                        } else if (event.type == PointerEventType.Move || event.type == PointerEventType.Enter) {
+                        } else if (isMouse && (event.type == PointerEventType.Move || event.type == PointerEventType.Enter)) {
                             val position = event.changes.firstOrNull()?.position ?: continue
                             // Find which entry the pointer is over
                             val hoveredIndex = entryBounds.entries.find { (_, rect) ->
@@ -941,7 +1017,11 @@ private fun RichContextMenuEntry(
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent()
-                                    if (event.type == PointerEventType.Enter) {
+                                    // Mouse-only: touch expands via the click
+                                    // path; a synthesised Enter must not race it.
+                                    if (event.type == PointerEventType.Enter &&
+                                        event.changes.firstOrNull()?.type == PointerType.Mouse
+                                    ) {
                                         onSubmenuExpandChange(true)
                                     }
                                 }
@@ -1183,7 +1263,11 @@ private fun SubmenuPopup(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Exit) {
+                        // Mouse-only (see RichContextMenu): a tap's synthesised
+                        // Exit must not close the submenu the finger just opened.
+                        if (event.type == PointerEventType.Exit &&
+                            event.changes.firstOrNull()?.type == PointerType.Mouse
+                        ) {
                             // Close submenu when mouse exits its bounds
                             onDismissRequest()
                         }
@@ -1221,7 +1305,9 @@ fun ColumnResizeHandle(
 
     Box(
         modifier = modifier
-            .width(10.dp)  // Wider touch target for easier grabbing
+            // Invisible hit width widens on coarse-pointer sessions (injected
+            // slop); the DRAWN line stays hairline either way.
+            .width(10.dp + LocalGridInput.current.handleSlop)
             .fillMaxHeight()
             .pointerHoverIcon(PointerIcon.Crosshair)  // Use crosshair as resize cursor
             .pointerInput(Unit) {
@@ -1344,17 +1430,35 @@ fun Modifier.gridKeyboardNavigation(
 // ============================================================================
 
 /**
- * Simple tooltip wrapper - renders content directly.
- * Note: Platform-specific tooltip implementation can be added using expect/actual.
+ * Cross-platform tooltip: M3's TooltipBox handles hover (desktop/web mouse)
+ * AND long-press (touch) in commonMain - one implementation, no expect/actual.
+ *
+ * CAUTION: TooltipBox's built-in gestures CLAIM the long-press. Use this only
+ * where no long-press semantic exists (headers, handles, toolbar buttons);
+ * data cells whose long-press opens the context menu must NOT be wrapped.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TooltipWrapper(
     tooltip: String?,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    // For multiplatform compatibility, just render content
-    // Tooltips can be implemented per-platform using expect/actual if needed
-    content()
+    if (tooltip.isNullOrBlank()) {
+        content()
+        return
+    }
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults
+            .rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            // PlainTooltip is a TooltipScope member (the lambda's receiver)
+            PlainTooltip { Text(tooltip) }
+        },
+        state = androidx.compose.material3.rememberTooltipState(),
+        modifier = modifier,
+        content = content,
+    )
 }
 
 // ============================================================================

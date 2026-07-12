@@ -507,7 +507,9 @@ fun <T> EnhancedDataGrid(
 
     // Clamped once; rows and header grow with the type so the cells keep
     // breathing room instead of clipping their (ellipsized) text.
-    val s = scale.coerceIn(MIN_GRID_SCALE, MAX_GRID_SCALE)
+    // Coarse-pointer sessions raise the scale floor (injected via
+    // LocalGridInput) so cells stay honestly tappable.
+    val s = scale.coerceIn(maxOf(MIN_GRID_SCALE, LocalGridInput.current.minScale), MAX_GRID_SCALE)
     val rowNumberW = rowNumberWidth * s
     val rowH = rowHeight * s
     val headerH = headerHeight * s
@@ -1526,6 +1528,13 @@ private fun <T> FrozenLeftRow(
                 onDragCancel = {
                     rowDragState?.cancelDrag()
                 },
+                // Touch/stylus: a stationary long-press release opens the SAME
+                // row menu right-click opens; a long-press that drags reorders.
+                onLongPress = { offset ->
+                    clickOffset = offset
+                    menuVisible = true
+                    onRightClick?.invoke(offset)
+                },
                 onClick = onClick,
                 onDoubleClick = onDoubleClick,
                 onRightClick = null  // Right-click handled by separate modifier above
@@ -1798,6 +1807,13 @@ private fun <T> ScrollableMiddleRow(
                 },
                 onDragCancel = {
                     rowDragState?.cancelDrag()
+                },
+                // Touch/stylus: a stationary long-press release opens the SAME
+                // row menu right-click opens; a long-press that drags reorders.
+                onLongPress = { offset ->
+                    clickOffset = offset
+                    menuVisible = true
+                    onRightClick?.invoke(offset)
                 },
                 onClick = onClick,
                 onDoubleClick = {
@@ -2073,6 +2089,13 @@ private fun <T> FrozenRightRow(
                 onDragCancel = {
                     rowDragState?.cancelDrag()
                 },
+                // Touch/stylus: a stationary long-press release opens the SAME
+                // row menu right-click opens; a long-press that drags reorders.
+                onLongPress = { offset ->
+                    clickOffset = offset
+                    menuVisible = true
+                    onRightClick?.invoke(offset)
+                },
                 onClick = onClick,
                 onDoubleClick = onDoubleClick,
                 onRightClick = null  // Right-click handled by separate modifier above
@@ -2183,7 +2206,8 @@ private fun <T> DataCell(
                         state.startEditing(rowIndex, column.id, allColumns, allItems)
                     }
                 },
-                onRightClick = onCellRightClick
+                onRightClick = onCellRightClick,
+                onLongPress = onCellRightClick
             )
             .padding(horizontal = 8.dp),
         contentAlignment = when (column.alignment) {

@@ -13,9 +13,14 @@ import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.CommercialsTheme
 import eu.anifantakis.commercials.core.presentation.design_system.FontSizeStep
 import eu.anifantakis.commercials.core.presentation.design_system.WindowSizeProvider
+import eu.anifantakis.commercials.core.presentation.grids.GridInputConfig
+import eu.anifantakis.commercials.core.presentation.grids.LocalGridInput
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
 import org.koin.compose.koinInject
@@ -61,8 +66,20 @@ fun App() {
                 // Inside safeContentPadding so the window class measures the
                 // area content can actually use (excludes system bars).
                 WindowSizeProvider {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        NavigationRoot()
+                    // The grid toolkit is a leaf - it can't read the design
+                    // system, so the app shell injects its input tuning here,
+                    // derived from the SAME interaction policy everything
+                    // else reads (never from the OS).
+                    val interaction = AppTheme.interaction
+                    CompositionLocalProvider(
+                        LocalGridInput provides GridInputConfig(
+                            minScale = if (interaction.supportsTouchGestures) 1.3f else 1f,
+                            handleSlop = if (interaction.supportsTouchGestures) 14.dp else 0.dp,
+                        ),
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            NavigationRoot()
+                        }
                     }
                 }
             }

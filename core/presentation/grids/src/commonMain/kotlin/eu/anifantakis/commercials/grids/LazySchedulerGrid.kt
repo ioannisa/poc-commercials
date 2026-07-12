@@ -113,7 +113,9 @@ fun LazySchedulerGrid(
 
     // Clamp before anything derives from it: a 0f (or negative) scale would
     // collapse every column to zero width and make the grid unclickable.
-    val s = scale.coerceIn(MIN_GRID_SCALE, MAX_GRID_SCALE)
+    // Coarse-pointer sessions raise the scale floor (injected via
+    // LocalGridInput) so cells stay honestly tappable.
+    val s = scale.coerceIn(maxOf(MIN_GRID_SCALE, LocalGridInput.current.minScale), MAX_GRID_SCALE)
     val breakColumnW = breakColumnWidth * s
     val dayColumnW = dayColumnWidth * s
     val rowH = rowHeight * s
@@ -367,11 +369,13 @@ fun LazySchedulerGrid(
             }
 
             // ===== BODY - Single LazyColumn for proper vertical scroll sync =====
+            // Scrollbars: real on desktop/web, no-op on touch (expect/actual).
+            // A 30-day x 50-break surface without a scroll affordance was a
+            // desktop bug, not just a mobile nicety.
+            Box(Modifier.fillMaxWidth().weight(1f)) {
             CachedLazyColumn(
                 state = lazyListState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
+                modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(
                     items = visibleBreaks,
@@ -442,6 +446,15 @@ fun LazySchedulerGrid(
                     }
                 }
             }
+            PlatformVerticalScrollbar(
+                lazyListState = lazyListState,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
+            }
+            PlatformHorizontalScrollbar(
+                scrollState = horizontalScrollState,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             // ===== FOOTER (TOTALS) =====
             if (dailyTotals != null) {
@@ -592,7 +605,15 @@ private fun FrozenHeaderBox(
     Box(
         modifier = modifier.let { mod ->
             if (menuEntriesProvider != null) {
-                mod.onRightClick { offset ->
+                // Touch/stylus long-press opens the same menu (per-event
+                // PointerType inside the modifier - never a platform branch).
+                mod.onRightClick(
+                    onLongPress = { offset ->
+                        clickOffset = offset
+                        menuVisible = true
+                        onMenuOpen?.invoke()
+                    },
+                ) { offset ->
                     clickOffset = offset
                     menuVisible = true
                     onMenuOpen?.invoke()
@@ -726,7 +747,13 @@ private fun GridCell(
             // Use separate onRightClick modifier for reliable right-click detection (same pattern as EnhancedDataGrid)
             .let { mod ->
                 if (menuEntriesProvider != null) {
-                    mod.onRightClick { offset ->
+                    mod.onRightClick(
+                        onLongPress = { offset ->
+                            clickOffset = offset
+                            menuVisible = true
+                            onSelect()
+                        },
+                    ) { offset ->
                         clickOffset = offset
                         menuVisible = true
                         onSelect()
