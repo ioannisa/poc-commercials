@@ -41,6 +41,8 @@ android {
 
 dependencies {
     implementation(projects.shared)
+    // FileKit.init(activity) - native pickers/share for report PDFs
+    implementation(libs.filekit.dialogs)
     implementation(libs.androidx.activity.compose)
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)

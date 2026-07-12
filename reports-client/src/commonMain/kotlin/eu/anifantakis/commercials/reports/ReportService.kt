@@ -10,8 +10,9 @@ import eu.anifantakis.commercials.reports.models.ReportResult
  *
  * Injected via Koin; the platform module binds the right implementation:
  * - JVM desktop: [DesktopReportService] - fills in-process via the shared engine
- * - Browsers (js/wasmJs): BrowserReportService - POSTs to the report server
- * - Android/iOS: [UnsupportedReportService]
+ * - Everything else: [ServerReportService] - POSTs to the report server and
+ *   hands the bytes to the platform's [PdfSink] (browser download / SAF /
+ *   Files.app). Reports work on ALL FIVE platforms.
  */
 interface ReportService {
     /**
@@ -43,25 +44,3 @@ suspend fun ReportService.exportToPdf(payload: ReportPayload, suggestedFileName:
 suspend fun ReportService.preview(payload: ReportPayload): ReportResult = preview(listOf(payload))
 
 suspend fun ReportService.print(payload: ReportPayload): ReportResult = print(listOf(payload))
-
-/**
- * Bound on platforms that cannot generate reports (Android/iOS).
- */
-class UnsupportedReportService : ReportService {
-
-    override suspend fun exportToPdf(
-        payloads: List<ReportPayload>,
-        suggestedFileName: String
-    ): ReportResult = unsupported()
-
-    override suspend fun preview(payloads: List<ReportPayload>): ReportResult = unsupported()
-
-    override suspend fun print(payloads: List<ReportPayload>): ReportResult = unsupported()
-
-    override fun isReportGenerationAvailable(): Boolean = false
-
-    private fun unsupported() = ReportResult.Error(
-        "Report generation is not available on this platform. " +
-            "Use the Desktop app or the web app instead."
-    )
-}

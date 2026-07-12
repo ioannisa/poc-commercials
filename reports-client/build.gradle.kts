@@ -7,12 +7,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
  * PDF:
  *
  * - commonMain:  report payload model, the payload factory (grid data ->
- *                report rows), the ReportService expect + the ReportToolbar UI
- * - reportsMain: (jvm + js + wasmJs) payload -> :reportcore wire-DTO adapter,
- *                so desktop and browser paths cannot drift apart
+ *                report rows), ReportService + ReportToolbar UI, the
+ *                :reportcore wire-DTO adapter, ReportApiClient (server
+ *                rendering) and the ServerReportService + PdfSink seam
  * - jvmMain:     in-process JasperReports engine (preview, print, save)
- * - webMain:     ReportApiClient - browsers ask the server to render
- * - android/ios: "unsupported" stubs (they never produce reports)
+ * - webMain:     BrowserPdfSink (download / new tab / window.print)
+ * - android/ios: FileKitPdfSink (SAF / Files.app save, system open, share)
  *
  * Mirrors the source-set graph :shared used before the extraction.
  */
@@ -50,17 +50,13 @@ kotlin {
     }
 
 
-    // default hierarchy template + the module's custom sharing: reportsMain
-    // holds the real report engine (jvm + web); android/ios keep stubs.
+    // default hierarchy template + the shared web group (js + wasmJs)
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
     applyDefaultHierarchyTemplate {
         common {
-            group("reports") {
-                withJvm()
-                group("web") {
-                    withJs()
-                    withWasmJs()
-                }
+            group("web") {
+                withJs()
+                withWasmJs()
             }
         }
     }
@@ -88,15 +84,19 @@ kotlin {
             implementation(projects.core.data)
 
             implementation(libs.kotlinx.serialization.json)
+            // Wire DTOs now compile on every client target (mobile posts them
+            // to the report server exactly like the browsers).
+            api(projects.reportcore)
             // No Koin: this module's only composable (ReportToolbar) is now
             // stateless, so nothing here resolves anything from a container.
         }
-        // custom hierarchy group (no generated accessor like webMain has) -
-        // configured via the lazy named() lookup rather than an eager delegate
-        named("reportsMain") {
-            dependencies {
-                api(projects.reportcore)
-            }
+        androidMain.dependencies {
+            // Native save (SAF) / open (ACTION_VIEW) / share sheet for PDFs
+            implementation(libs.filekit.dialogs)
+        }
+        iosMain.dependencies {
+            // UIDocumentPicker save / QuickLook open / share sheet for PDFs
+            implementation(libs.filekit.dialogs)
         }
 
         jvmMain.dependencies {

@@ -8,17 +8,32 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
  * - jvmMain:    the JasperReports engine (template + compile cache + fill +
  *               PDF export), used by BOTH the desktop app and the server.
  *
- * Targets are limited to jvm/js/wasmJs on purpose: Android and iOS do not
- * produce reports (they show "unsupported"), so they never see this module.
+ * Every client target is here: the wire DTOs in commonMain are pure
+ * kotlinx-serialization and compile anywhere - mobile posts them to the
+ * report server exactly like the browsers do. Only the Jasper engine in
+ * jvmMain stays JVM-bound.
  */
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
+    alias(libs.plugins.androidKmpLibrary)
     alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
+    android {
+        namespace = "eu.anifantakis.commercials.reportcore"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_21)
+        }
+    }
+
+    iosArm64()
+    iosSimulatorArm64()
+
     jvm {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)

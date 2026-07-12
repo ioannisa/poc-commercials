@@ -10,6 +10,8 @@ import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.data.config.AndroidAppContext
 import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.di.initKoin
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.dialogs.init
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
 
@@ -20,6 +22,9 @@ class MainActivity : ComponentActivity() {
         // Context first (KSafe needs it), then Koin (idempotent on recreation)
         AndroidAppContext.init(applicationContext)
         initKoin()
+        // Registers the activity-result launchers the native pickers use
+        // (report save/open/share) - must run before onStart.
+        FileKit.init(this)
         runBlocking {
             AppConfig.load()
             // Restore persisted login (no-op wait on Android)
