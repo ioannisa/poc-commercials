@@ -8,6 +8,8 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 
 /**
  * Provided at the app root by [LocalizationProvider]. Reading it in a composable
@@ -53,11 +55,21 @@ fun String.localized(): String {
 fun String.withArgs(args: List<Any>): String =
     args.foldIndexed(this) { i, acc, a -> acc.replace("{$i}", a.toString()) }
 
-/** Wraps the app so every `Strings[...]` recomposes when the language switches. */
+/**
+ * Wraps the app so every `Strings[...]` recomposes when the language switches.
+ * Also owns the composition's layout direction: the UI mirrors for RTL
+ * languages ([Language.isRtl]) and stays LTR otherwise — layout follows the
+ * app language, not the system locale, because the language is user-chosen.
+ */
 @Composable
 fun LocalizationProvider(content: @Composable () -> Unit) {
     val language by LocalizationManager.currentLanguage.collectAsState()
-    CompositionLocalProvider(LocalLanguage provides language, content = content)
+    val layoutDirection = if (language.isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
+    CompositionLocalProvider(
+        LocalLanguage provides language,
+        LocalLayoutDirection provides layoutDirection,
+        content = content,
+    )
 }
 
 /** Current language as Compose state (for the language picker's selection). */

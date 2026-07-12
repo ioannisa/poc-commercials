@@ -8,11 +8,10 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
  * [StringKey] without translating it here is a COMPILE error - the compiler
  * is the completeness guard (golden-standard convention).
  *
- * NOTE: Hebrew is RTL. This provider supplies correct RTL text (rendered
- * right-to-left automatically by the Unicode bidi algorithm), but the app's
- * LAYOUT direction is not wired to [Language] anywhere yet - screens keep
- * their LTR arrangement (icon/back-arrow placement, etc.) regardless of the
- * selected language. See [eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager].
+ * NOTE: Hebrew is RTL. This provider only supplies the text (rendered
+ * right-to-left by the Unicode bidi algorithm); the LAYOUT mirroring comes
+ * from [eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider],
+ * which derives the composition's `LocalLayoutDirection` from `Language.isRtl`.
  */
 internal class He : LanguageStrings {
     override fun getString(key: StringKey): String = when (key) {
