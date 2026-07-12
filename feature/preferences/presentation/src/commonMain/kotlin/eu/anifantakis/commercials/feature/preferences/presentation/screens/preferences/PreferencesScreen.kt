@@ -10,21 +10,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppFormColumn
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadio
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
@@ -97,24 +99,27 @@ private fun PreferencesScreen(
     onNavIntent: (PreferencesScreenNavIntent) -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().padding(UIConst.paddingRegular).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
+        // 560 is this screen's own form cap (start-aligned: header row + cards).
+        AppFormColumn(maxWidth = 560.dp, horizontalAlignment = Alignment.Start) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) }) {
-                    Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
-                }
+                AppIconButton(
+                    label = Strings[StringKey.COMMON_BACK],
+                    icon = AppIcons.arrowBack,
+                    onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) },
+                )
                 AppText(Strings[StringKey.PREFERENCES_TITLE], AppTextStyle.SCREEN_TITLE)
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(UIConst.paddingSmall))
 
             // ── appearance ──────────────────────────────────────────────
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(UIConst.paddingRegular)) {
                     AppText(Strings[StringKey.PREFERENCES_APPEARANCE], AppTextStyle.SECTION_TITLE)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(UIConst.paddingExtraSmall))
                     ThemeOption(theme, ThemePreference.LIGHT, Strings[StringKey.PREFERENCES_THEME_LIGHT], Strings[StringKey.PREFERENCES_THEME_LIGHT_DESC], onIntent)
                     ThemeOption(
                         theme, ThemePreference.DARK, Strings[StringKey.PREFERENCES_THEME_DARK],
@@ -122,7 +127,7 @@ private fun PreferencesScreen(
                     )
                     ThemeOption(theme, ThemePreference.SYSTEM, Strings[StringKey.PREFERENCES_THEME_SYSTEM], Strings[StringKey.PREFERENCES_THEME_SYSTEM_DESC], onIntent)
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(UIConst.paddingCompact))
 
                     // Text size: 5 discrete steps; the whole app restyles live
                     // as the slider moves (the theme rebuilds its typography).
@@ -145,40 +150,40 @@ private fun PreferencesScreen(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(UIConst.paddingSmall))
 
             // ── language ─────────────────────────────────────────────────
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(UIConst.paddingRegular)) {
                     AppText(Strings[StringKey.PREFERENCES_LANGUAGE], AppTextStyle.SECTION_TITLE)
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(UIConst.paddingExtraSmall))
                     Language.entries.forEach { lang ->
                         LanguageOption(language, lang, onIntent)
                     }
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(UIConst.paddingCompact))
 
             // ── account (server refuses these for the YAML super admin) ─
             if (!isAdmin) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
+                AppCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(UIConst.paddingRegular)) {
                         AppText(Strings[StringKey.PREFERENCES_ACCOUNT], AppTextStyle.SECTION_TITLE)
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(UIConst.paddingExtraSmall))
                         PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
                         PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_RECOVERY_CODES], Strings[StringKey.PREFERENCES_RECOVERY_CODES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(UIConst.paddingCompact))
             }
 
             // ── maintenance (super admin) ───────────────────────────────
             if (isAdmin) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
+                AppCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(UIConst.paddingRegular)) {
                         AppText(Strings[StringKey.PREFERENCES_MAINTENANCE], AppTextStyle.SECTION_TITLE)
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(UIConst.paddingExtraSmall))
                         PreferenceEntry(AppIcons.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
                         PreferenceEntry(AppIcons.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
                         PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
@@ -207,13 +212,15 @@ private fun ThemeOption(
     description: String,
     onIntent: (PreferencesIntent) -> Unit,
 ) {
+    // Two-line label (title + description): AppRadioRow only carries a single
+    // string label, so the row stays hand-built around AppRadio.
     Row(
         modifier = Modifier.fillMaxWidth()
             .clickable { onIntent(PreferencesIntent.ThemeSelected(value)) }
-            .padding(vertical = 2.dp),
+            .padding(vertical = UIConst.paddingHairline),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = current == value, onClick = { onIntent(PreferencesIntent.ThemeSelected(value)) })
+        AppRadio(selected = current == value, onClick = { onIntent(PreferencesIntent.ThemeSelected(value)) })
         Column {
             AppText(label, AppTextStyle.BODY)
             AppText(description, AppTextStyle.TINY)
@@ -227,15 +234,12 @@ private fun LanguageOption(
     value: Language,
     onIntent: (PreferencesIntent) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .clickable { onIntent(PreferencesIntent.LanguageSelected(value)) }
-            .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(selected = current == value, onClick = { onIntent(PreferencesIntent.LanguageSelected(value)) })
-        AppText(value.displayName, AppTextStyle.BODY)
-    }
+    AppRadioRow(
+        selected = current == value,
+        onClick = { onIntent(PreferencesIntent.LanguageSelected(value)) },
+        label = value.displayName,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -246,11 +250,11 @@ private fun PreferenceEntry(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = UIConst.paddingSmall),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingCompact)
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        AppIcon(icon, size = AppIconSize.SMALL, tint = MaterialTheme.colorScheme.primary)
         Column {
             AppText(label, AppTextStyle.BODY)
             AppText(description, AppTextStyle.TINY)

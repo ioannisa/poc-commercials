@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.e
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import eu.anifantakis.commercials.core.presentation.helper.UiText
@@ -10,17 +11,15 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
@@ -68,64 +67,60 @@ private fun EmailPreviewDialog(
     onIntent: (EmailPreviewIntent) -> Unit,
     onClose: () -> Unit,
 ) {
-    Dialog(
+    AppPopup(
         onDismissRequest = { if (!state.sending) onClose() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 6.dp
-        ) {
-            Column(Modifier.padding(12.dp)) {
-                AppText(
-                    title,
-                    AppTextStyle.SECTION_TITLE,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                when {
-                    state.loading -> Row(
-                        Modifier.weight(1f).fillMaxWidth(),
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                    state.html != null ->
-                        EmailHtmlPreview(state.html, Modifier.weight(1f).fillMaxWidth())
-                    else -> AppText(
-                        (state.error ?: UiText.Res(StringKey.EMAIL_PREVIEW_FAILED)).asString(),
-                        AppTextStyle.BODY,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
+        Column(Modifier.padding(UIConst.paddingCompact)) {
+            AppText(
+                title,
+                AppTextStyle.SECTION_TITLE,
+                modifier = Modifier.padding(bottom = UIConst.paddingSmall)
+            )
+            when {
+                state.loading -> Row(
+                    Modifier.weight(1f).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val err = state.error
-                    if (err != null && state.html != null) {
-                        AppText(err.asString(), AppTextStyle.ERROR_NOTE, modifier = Modifier.weight(1f))
-                    } else {
-                        AppText(
-                            Strings[StringKey.EMAIL_TO].withArgs(listOf(recipient)),
-                            AppTextStyle.NOTE,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    TextButton(enabled = !state.sending, onClick = onClose) { AppText(Strings[StringKey.COMMON_BACK], AppTextStyle.BUTTON) }
-                    TextButton(
-                        enabled = !state.sending && state.html != null,
-                        onClick = { onIntent(EmailPreviewIntent.Send) }
-                    ) {
-                        if (state.sending) {
-                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                        } else {
-                            AppText(Strings[StringKey.EMAIL_SEND_BUTTON], AppTextStyle.BUTTON_STRONG)
-                        }
-                    }
+                    CircularProgressIndicator()
                 }
+                state.html != null ->
+                    EmailHtmlPreview(state.html, Modifier.weight(1f).fillMaxWidth())
+                else -> AppText(
+                    (state.error ?: UiText.Res(StringKey.EMAIL_PREVIEW_FAILED)).asString(),
+                    AppTextStyle.BODY,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(UIConst.paddingRegular)
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(top = UIConst.paddingSmall),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val err = state.error
+                if (err != null && state.html != null) {
+                    AppText(err.asString(), AppTextStyle.ERROR_NOTE, modifier = Modifier.weight(1f))
+                } else {
+                    AppText(
+                        Strings[StringKey.EMAIL_TO].withArgs(listOf(recipient)),
+                        AppTextStyle.NOTE,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                AppButton(
+                    text = Strings[StringKey.COMMON_BACK],
+                    onClick = onClose,
+                    variant = AppButtonVariant.TEXT,
+                    enabled = !state.sending,
+                )
+                AppButton(
+                    text = Strings[StringKey.EMAIL_SEND_BUTTON],
+                    onClick = { onIntent(EmailPreviewIntent.Send) },
+                    variant = AppButtonVariant.TEXT,
+                    enabled = state.html != null,
+                    busy = state.sending,
+                )
             }
         }
     }

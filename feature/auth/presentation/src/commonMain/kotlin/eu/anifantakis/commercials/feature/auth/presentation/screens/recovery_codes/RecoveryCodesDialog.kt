@@ -1,19 +1,12 @@
 package eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
@@ -89,41 +82,30 @@ private fun RecoveryCodesDialog(
     onIntent: (RecoveryCodesIntent) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { AppText(Strings[StringKey.RECOVERY_TITLE], AppTextStyle.DIALOG_TITLE) },
-        text = {
+    AppDialog(
+        title = Strings[StringKey.RECOVERY_TITLE],
+        onDismiss = onDismiss,
+        confirmText = Strings[if (state.codes == null) StringKey.RECOVERY_GENERATE else StringKey.RECOVERY_SAVED],
+        onConfirm = {
+            if (state.codes == null) onIntent(RecoveryCodesIntent.Generate) else onDismiss()
+        },
+        dismissText = if (state.codes == null) Strings[StringKey.COMMON_CANCEL] else null,
+        confirmBusy = state.busy,
+    ) {
+        if (state.codes == null) {
+            AppText(Strings[StringKey.RECOVERY_INFO], AppTextStyle.BODY)
+        } else {
+            AppText(Strings[StringKey.RECOVERY_SAVE_NOW], AppTextStyle.BODY_STRONG)
+            // Inner column keeps the code lines a tight block (no ladder gaps
+            // between codes - only the dialog's own gap above/below the block).
             Column {
-                if (state.codes == null) {
-                    AppText(Strings[StringKey.RECOVERY_INFO], AppTextStyle.BODY)
-                } else {
-                    AppText(Strings[StringKey.RECOVERY_SAVE_NOW], AppTextStyle.BODY_STRONG)
-                    Spacer(Modifier.height(8.dp))
-                    state.codes.forEach { code ->
-                        AppText(code, AppTextStyle.MONO)
-                    }
-                }
-                state.error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
+                state.codes.forEach { code ->
+                    AppText(code, AppTextStyle.MONO)
                 }
             }
-        },
-        confirmButton = {
-            if (state.codes == null) {
-                TextButton(
-                    enabled = !state.busy,
-                    onClick = { onIntent(RecoveryCodesIntent.Generate) }
-                ) {
-                    if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    else AppText(Strings[StringKey.RECOVERY_GENERATE], AppTextStyle.BUTTON)
-                }
-            } else {
-                TextButton(onClick = onDismiss) { AppText(Strings[StringKey.RECOVERY_SAVED], AppTextStyle.BUTTON) }
-            }
-        },
-        dismissButton = {
-            if (state.codes == null) TextButton(enabled = !state.busy, onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
-    )
+        state.error?.let {
+            AppText(it.asString(), AppTextStyle.ERROR_NOTE)
+        }
+    }
 }

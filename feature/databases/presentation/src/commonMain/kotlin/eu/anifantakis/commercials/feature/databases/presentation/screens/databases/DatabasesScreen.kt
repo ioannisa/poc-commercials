@@ -4,7 +4,13 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadio
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,18 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -72,38 +70,42 @@ private fun DatabasesScreen(
     onIntent: (DatabasesIntent) -> Unit,
     onNavIntent: (DatabasesScreenNavIntent) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(UIConst.paddingRegular)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) }) {
-                Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
-            }
+            AppIconButton(
+                label = Strings[StringKey.COMMON_BACK],
+                icon = AppIcons.arrowBack,
+                onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) },
+            )
             AppText(Strings[StringKey.PREFERENCES_DATABASES], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = { onIntent(DatabasesIntent.Reload) }) {
-                Icon(AppIcons.refresh, contentDescription = Strings[StringKey.DATABASES_CD_RELOAD])
-            }
+            AppIconButton(
+                label = Strings[StringKey.DATABASES_CD_RELOAD],
+                icon = AppIcons.refresh,
+                onClick = { onIntent(DatabasesIntent.Reload) },
+            )
         }
 
         state.message?.let {
             AppText(it.asString(), AppTextStyle.BODY, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(UIConst.paddingExtraSmall))
         }
         state.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(UIConst.paddingExtraSmall))
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
             items(state.stations, key = { it.id }) { station ->
-                Card(Modifier.fillMaxWidth()) {
+                AppCard(Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(UIConst.paddingCompact),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 AppText(station.name, AppTextStyle.ITEM_TITLE)
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(UIConst.paddingSmall))
                                 AppText(station.id, AppTextStyle.NOTE)
                             }
                             AppText(
@@ -121,13 +123,12 @@ private fun DatabasesScreen(
                                         else MaterialTheme.colorScheme.error
                             )
                         }
-                        IconButton(onClick = { onIntent(DatabasesIntent.DeleteRequested(station)) }) {
-                            Icon(
-                                AppIcons.delete,
-                                contentDescription = Strings[StringKey.DATABASES_CD_DELETE],
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                        AppIconButton(
+                            label = Strings[StringKey.DATABASES_CD_DELETE],
+                            icon = AppIcons.delete,
+                            onClick = { onIntent(DatabasesIntent.DeleteRequested(station)) },
+                            tint = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
@@ -145,54 +146,44 @@ private fun DeleteStationDialog(
     onIntent: (DatabasesIntent) -> Unit,
 ) {
     val station = dialog.station
-    AlertDialog(
-        onDismissRequest = { onIntent(DatabasesIntent.DismissDelete) },
-        title = { AppText(Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name)), AppTextStyle.DIALOG_TITLE) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = !dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(false)) })
-                    Column {
-                        AppText(Strings[StringKey.DATABASES_SAFE_DELETE], AppTextStyle.BODY_STRONG)
-                        AppText(
-                            Strings[StringKey.DATABASES_SAFE_DELETE_DESC].withArgs(listOf(station.database)),
-                            AppTextStyle.NOTE,
-                        )
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(true)) })
-                    Column {
-                        AppText(Strings[StringKey.DATABASES_HARD_DELETE], AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.error)
-                        AppText(
-                            Strings[StringKey.DATABASES_HARD_DELETE_DESC],
-                            AppTextStyle.NOTE,
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = dialog.confirmId,
-                    onValueChange = { onIntent(DatabasesIntent.ConfirmIdChanged(it)) },
-                    label = { AppText(Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id)), AppTextStyle.FIELD_LABEL) },
-                    singleLine = true, enabled = !dialog.busy, modifier = Modifier.fillMaxWidth()
-                )
-                dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = dialog.canConfirm,
-                onClick = { onIntent(DatabasesIntent.ConfirmDelete) }
-            ) {
+    AppDialog(
+        title = Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name)),
+        onDismiss = { onIntent(DatabasesIntent.DismissDelete) },
+        confirmText = Strings[if (dialog.hard) StringKey.DATABASES_HARD_DELETE else StringKey.DATABASES_SAFE_DELETE],
+        onConfirm = { onIntent(DatabasesIntent.ConfirmDelete) },
+        dismissText = Strings[StringKey.COMMON_CANCEL],
+        confirmEnabled = dialog.canConfirm,
+        confirmBusy = dialog.busy,
+        destructive = true,
+    ) {
+        // Two-line labels (title + description): AppRadioRow only carries a
+        // single string label, so these rows stay hand-built around AppRadio.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppRadio(selected = !dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(false)) })
+            Column {
+                AppText(Strings[StringKey.DATABASES_SAFE_DELETE], AppTextStyle.BODY_STRONG)
                 AppText(
-                    Strings[if (dialog.hard) StringKey.DATABASES_HARD_DELETE else StringKey.DATABASES_SAFE_DELETE],
-                    AppTextStyle.BUTTON,
-                    color = MaterialTheme.colorScheme.error
+                    Strings[StringKey.DATABASES_SAFE_DELETE_DESC].withArgs(listOf(station.database)),
+                    AppTextStyle.NOTE,
                 )
             }
-        },
-        dismissButton = {
-            TextButton(enabled = !dialog.busy, onClick = { onIntent(DatabasesIntent.DismissDelete) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
         }
-    )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppRadio(selected = dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(true)) })
+            Column {
+                AppText(Strings[StringKey.DATABASES_HARD_DELETE], AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.error)
+                AppText(
+                    Strings[StringKey.DATABASES_HARD_DELETE_DESC],
+                    AppTextStyle.NOTE,
+                )
+            }
+        }
+        AppTextField(
+            value = dialog.confirmId,
+            onValueChange = { onIntent(DatabasesIntent.ConfirmIdChanged(it)) },
+            label = Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id)),
+            enabled = !dialog.busy,
+        )
+        dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
+    }
 }

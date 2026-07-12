@@ -223,6 +223,122 @@ class ArchitectureTest {
     }
 
     /**
+     * The presentation cone builds its UI from the App* facade, never raw
+     * Material widgets: the facade is where platform visual tokens, the
+     * interaction policy and a11y semantics are applied - a raw call site
+     * silently opts out of all three. The design system itself (and the
+     * showcase, which deliberately probes raw M3 limits) is the sanctioned
+     * home of the raw calls. NOT banned (kept raw on purpose, too few sites
+     * to earn a door): Slider, DropdownMenu(Item), HorizontalDivider,
+     * Surface, Scaffold, CircularProgressIndicator (the full-size one; the
+     * small busy spinner IS AppSpinner).
+     *
+     * The lookbehind excludes letters AND '.' so `AppButton(`, `Foo.Text(`
+     * and `errorText(` never false-positive - the same trap class as the
+     * icons rule's `AppIcons.`.
+     */
+    @Test
+    fun `the presentation cone uses the App component facade`() {
+        val banned = listOf(
+            "Button", "OutlinedButton", "TextButton", "IconButton",
+            "Text", "Icon",
+            "OutlinedTextField", "TextField",
+            "Card", "AlertDialog", "Dialog",
+            "Checkbox", "RadioButton", "Switch",
+        )
+        val rx = Regex("(?<![A-Za-z.])(${banned.joinToString("|")})\\s*\\(")
+        val offenders = presentationRoots.flatMap { it.ktFiles() }
+            .filter { f ->
+                !f.isTestSource() &&
+                    "/design_system/" !in f.path &&      // the facade + showcase
+                    "/scaffold/" !in f.path              // ApplicationScaffold
+            }
+            .flatMap { f ->
+                f.lineHits { line ->
+                    val t = line.trimStart()
+                    !t.startsWith("//") && !t.startsWith("*") && rx.containsMatchIn(line)
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "raw Material composable in the presentation cone - use the App* facade " +
+                "(AppButton/AppText/AppIcon/AppTextField/AppCard/AppDialog/...):\n" +
+                offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * Spacing names a rung of the UIConst ladder, never a dp literal.
+     * Deliberately NARROW: only spacing verbs (padding/spacedBy/height/width)
+     * with on-ladder values - arbitrary geometry (a 200.dp logo, a 42.dp
+     * timetable column, weight()s) stays legal, which is what keeps this rule
+     * shippable instead of a permanent exemption list. Domain/component
+     * geometry that repeats earns a named `private val` at the owning site.
+     */
+    @Test
+    fun `screens space themselves from the UIConst ladder`() {
+        val rx = Regex("""\b(padding|spacedBy|height|width)\(\s*(?:[a-z]+\s*=\s*)?(2|4|8|12|16|24|32|48|64)\.dp\b""")
+        val offenders = presentationRoots.flatMap { it.ktFiles() }
+            .filter { f -> !f.isTestSource() && "/design_system/" !in f.path && "/scaffold/" !in f.path }
+            .flatMap { f ->
+                f.lineHits { line ->
+                    val t = line.trimStart()
+                    !t.startsWith("//") && !t.startsWith("*") && rx.containsMatchIn(line)
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "on-ladder dp literal used for spacing - name the rung " +
+                "(UIConst.paddingSmall/.paddingRegular/...):\n" + offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * Platform and raw input capabilities never reach feature UI: the look
+     * comes from AppTheme.visualTokens, interaction policy from
+     * AppTheme.interaction, and per-gesture behaviour from the event's own
+     * PointerType. (`internal` visibility already blocks cross-module use -
+     * this rule turns the cryptic compiler error into a named convention,
+     * and guards same-module drift inside core:presentation screens too.)
+     */
+    @Test
+    fun `feature UI never branches on platform or raw capabilities`() {
+        val rx = Regex("""\b(UiPlatform|InputCapabilities|EffectiveDensity|detectUiPlatform)\b""")
+        val offenders = featureLayer("presentation").flatMap { it.ktFiles() }
+            .filter { !it.isTestSource() }
+            .flatMap { f ->
+                f.lineHits { line ->
+                    val t = line.trimStart()
+                    !t.startsWith("//") && !t.startsWith("*") && rx.containsMatchIn(line)
+                }
+            }
+        if (offenders.isNotEmpty()) fail(
+            "feature UI must not see UiPlatform/InputCapabilities - read " +
+                "AppTheme.visualTokens / AppTheme.interaction, or gate gestures on the " +
+                "event's PointerType:\n" + offenders.joinToString("\n")
+        )
+    }
+
+    /**
+     * Exactly ONE OS-detection point in the client codebase: the jvm actual
+     * of detectUiPlatform. Everything else consumes a capability derived from
+     * it (DesktopPlatformCapabilities, tokens) - a second `os.name` read is a
+     * second source of truth waiting to disagree.
+     */
+    @Test
+    fun `os name is read exactly once`() {
+        val sanctioned = "core/presentation/src/jvmMain/kotlin/eu/anifantakis/commercials/" +
+            "core/presentation/design_system/platform/UiPlatform.jvm.kt"
+        val clientRoots = (uiRoots + entryAppRoots + listOf(dir("shared/src"))).roots()
+        val offenders = clientRoots.flatMap { it.ktFiles() }
+            .filter { it.relativeTo(repoRoot).path != sanctioned }
+            .flatMap { f -> f.lineHits { "System.getProperty(\"os.name\")" in it } }
+        if (offenders.isNotEmpty()) fail(
+            "os.name is read outside the sanctioned detection point " +
+                "($sanctioned) - consume a derived capability instead:\n" +
+                offenders.joinToString("\n")
+        )
+    }
+
+    /**
      * No hardcoded Greek in the presentation cone: every operator-facing string
      * resolves through StringKey / LocalizationManager (the localization system,
      * fronted by UiText). The language ENDONYMS (`Language.kt`) and the El/En

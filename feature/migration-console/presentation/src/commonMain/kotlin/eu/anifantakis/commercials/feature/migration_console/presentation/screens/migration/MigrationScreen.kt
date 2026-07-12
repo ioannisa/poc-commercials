@@ -5,8 +5,21 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxRow
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppSpinner
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppWireframeField
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,18 +38,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,28 +113,28 @@ private fun MigrationScreen(
     val status = state.status
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())
+        modifier = Modifier.fillMaxSize().padding(UIConst.paddingRegular).verticalScroll(rememberScrollState())
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) }) {
-                Icon(AppIcons.arrowBack, contentDescription = Strings[StringKey.COMMON_BACK])
-            }
+            AppIconButton(
+                label = Strings[StringKey.COMMON_BACK],
+                icon = AppIcons.arrowBack,
+                onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) },
+            )
             AppText(Strings[StringKey.PREFERENCES_MIGRATION], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
-            if (state.running) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(20.dp))
-            Spacer(Modifier.width(8.dp))
+            if (state.running) AppSpinner()
+            Spacer(Modifier.width(UIConst.paddingSmall))
             AppText(status.state, AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.primary)
         }
 
         // ── completion banner: unmissable outcome ───────────────────────
         if (status.state == "DONE") {
-            Card(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+            AppCard(
+                Modifier.fillMaxWidth().padding(vertical = UIConst.paddingSmall),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
             ) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(UIConst.paddingRegular)) {
                     AppText(
                         Strings[StringKey.MIGRATION_COMPLETE_TITLE],
                         AppTextStyle.ITEM_TITLE,
@@ -147,13 +149,11 @@ private fun MigrationScreen(
             }
         }
         if (status.state == "FAILED") {
-            Card(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
+            AppCard(
+                Modifier.fillMaxWidth().padding(vertical = UIConst.paddingSmall),
+                containerColor = MaterialTheme.colorScheme.errorContainer,
             ) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(UIConst.paddingRegular)) {
                     AppText(
                         Strings[StringKey.MIGRATION_FAILED_TITLE],
                         AppTextStyle.ITEM_TITLE,
@@ -170,88 +170,101 @@ private fun MigrationScreen(
 
         // ── step 1: source & target ─────────────────────────────────────
         if (status.state == "IDLE") {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(UIConst.paddingRegular),
+                    verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
+                ) {
                     AppText(Strings[StringKey.MIGRATION_STEP1], AppTextStyle.SECTION_TITLE)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
+                    ) {
+                        AppTextField(
                             value = state.dumpPath,
                             onValueChange = { onIntent(MigrationIntent.DumpPathChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_DUMP_PATH], AppTextStyle.FIELD_LABEL) },
-                            placeholder = { AppText("/backups/commercials3.sql", AppTextStyle.FIELD_LABEL) },
-                            singleLine = true, modifier = Modifier.weight(1f)
+                            label = Strings[StringKey.MIGRATION_DUMP_PATH],
+                            placeholder = "/backups/commercials3.sql",
+                            modifier = Modifier.weight(1f),
                         )
                         // Desktop gets the real OS file dialog; web/mobile
                         // fall back to browsing the server's filesystem.
-                        Button(onClick = onBrowseClicked) { AppText(Strings[StringKey.MIGRATION_BROWSE], AppTextStyle.BUTTON) }
+                        AppButton(text = Strings[StringKey.MIGRATION_BROWSE], onClick = onBrowseClicked)
                     }
                     // Optional SEN (Oracle ERP) export folder: when given, the
                     // migration follows the transform with the ERP enrichment
                     // (real customer names/VAT/contacts, real contract periods).
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
+                    ) {
+                        AppTextField(
                             value = state.senDirPath,
                             onValueChange = { onIntent(MigrationIntent.SenDirChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_SEN_DIR], AppTextStyle.FIELD_LABEL) },
-                            placeholder = { AppText("/backups/SEN", AppTextStyle.FIELD_LABEL) },
-                            singleLine = true, modifier = Modifier.weight(1f)
+                            label = Strings[StringKey.MIGRATION_SEN_DIR],
+                            placeholder = "/backups/SEN",
+                            modifier = Modifier.weight(1f),
                         )
-                        Button(onClick = onBrowseSenClicked) { AppText(Strings[StringKey.MIGRATION_BROWSE], AppTextStyle.BUTTON) }
+                        AppButton(text = Strings[StringKey.MIGRATION_BROWSE], onClick = onBrowseSenClicked)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                    Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+                        AppTextField(
                             value = state.host,
                             onValueChange = { onIntent(MigrationIntent.HostChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_HOST], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(2f)
+                            label = Strings[StringKey.MIGRATION_MYSQL_HOST],
+                            modifier = Modifier.weight(2f),
                         )
-                        OutlinedTextField(
+                        AppTextField(
                             value = state.port,
                             onValueChange = { onIntent(MigrationIntent.PortChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_PORT], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = Strings[StringKey.MIGRATION_PORT],
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                    Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+                        AppTextField(
                             value = state.username,
                             onValueChange = { onIntent(MigrationIntent.UsernameChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_USERNAME], AppTextStyle.FIELD_LABEL) }, singleLine = true, modifier = Modifier.weight(1f)
+                            label = Strings[StringKey.MIGRATION_MYSQL_USERNAME],
+                            modifier = Modifier.weight(1f),
                         )
-                        OutlinedTextField(
+                        AppWireframeField(
                             value = state.password,
                             onValueChange = { onIntent(MigrationIntent.PasswordChanged(it)) },
-                            label = { AppText(Strings[StringKey.MIGRATION_MYSQL_PASSWORD], AppTextStyle.FIELD_LABEL) },
+                            label = Strings[StringKey.MIGRATION_MYSQL_PASSWORD],
                             visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true, modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                    OutlinedTextField(
+                    AppTextField(
                         value = state.schema,
                         onValueChange = { onIntent(MigrationIntent.SchemaChanged(it)) },
-                        label = { AppText(Strings[StringKey.MIGRATION_TARGET_SCHEMA], AppTextStyle.FIELD_LABEL) },
-                        placeholder = { AppText("commercials_mystation", AppTextStyle.FIELD_LABEL) },
-                        singleLine = true, modifier = Modifier.fillMaxWidth()
+                        label = Strings[StringKey.MIGRATION_TARGET_SCHEMA],
+                        placeholder = "commercials_mystation",
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = state.createSchema,
-                            onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) }
-                        )
-                        AppText(Strings[StringKey.MIGRATION_CREATE_SCHEMA], AppTextStyle.BODY)
-                    }
+                    AppCheckboxRow(
+                        checked = state.createSchema,
+                        onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) },
+                        label = Strings[StringKey.MIGRATION_CREATE_SCHEMA],
+                    )
                     state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
-                    Button(
+                    AppButton(
+                        text = Strings[StringKey.MIGRATION_START],
+                        onClick = { onIntent(MigrationIntent.Start) },
                         enabled = state.canStart,
-                        onClick = { onIntent(MigrationIntent.Start) }
-                    ) { AppText(Strings[StringKey.MIGRATION_START], AppTextStyle.BUTTON) }
+                    )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(UIConst.paddingCompact))
         }
 
         // ── step 2: flow choice ─────────────────────────────────────────
         if (status.state == "AWAITING_FLOW") {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(UIConst.paddingRegular),
+                    verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
+                ) {
                     AppText(
                         Strings[StringKey.MIGRATION_STEP2].withArgs(listOf(status.schema ?: "")),
                         AppTextStyle.SECTION_TITLE,
@@ -261,57 +274,54 @@ private fun MigrationScreen(
                         AppTextStyle.NOTE,
                     )
                     status.flows.forEach { flow ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = state.selectedFlow == flow.forTv,
-                                onClick = { onIntent(MigrationIntent.FlowSelected(flow.forTv)) }
-                            )
-                            AppText(
-                                Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
-                                    Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
-                                    flow.spots, flow.placements,
-                                )),
-                                AppTextStyle.BODY,
-                            )
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = state.addToYaml,
-                            onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) }
+                        AppRadioRow(
+                            selected = state.selectedFlow == flow.forTv,
+                            onClick = { onIntent(MigrationIntent.FlowSelected(flow.forTv)) },
+                            label = Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
+                                Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
+                                flow.spots, flow.placements,
+                            )),
                         )
-                        AppText(Strings[StringKey.MIGRATION_ADD_TO_YAML], AppTextStyle.BODY)
                     }
+                    AppCheckboxRow(
+                        checked = state.addToYaml,
+                        onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) },
+                        label = Strings[StringKey.MIGRATION_ADD_TO_YAML],
+                    )
                     if (state.addToYaml) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
+                        Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+                            AppTextField(
                                 value = state.stationId,
                                 onValueChange = { onIntent(MigrationIntent.StationIdChanged(it)) },
-                                label = { AppText(Strings[StringKey.MIGRATION_STATION_ID], AppTextStyle.FIELD_LABEL) },
-                                singleLine = true, modifier = Modifier.weight(1f)
+                                label = Strings[StringKey.MIGRATION_STATION_ID],
+                                modifier = Modifier.weight(1f),
                             )
-                            OutlinedTextField(
+                            AppTextField(
                                 value = state.stationName,
                                 onValueChange = { onIntent(MigrationIntent.StationNameChanged(it)) },
-                                label = { AppText(Strings[StringKey.USER_MGMT_DISPLAY_NAME], AppTextStyle.FIELD_LABEL) },
-                                singleLine = true, modifier = Modifier.weight(1f)
+                                label = Strings[StringKey.USER_MGMT_DISPLAY_NAME],
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
                     state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
-                    Button(
+                    AppButton(
+                        text = Strings[StringKey.MIGRATION_MIGRATE_FLOW],
+                        onClick = { onIntent(MigrationIntent.ChooseFlow) },
                         enabled = state.canChooseFlow,
-                        onClick = { onIntent(MigrationIntent.ChooseFlow) }
-                    ) { AppText(Strings[StringKey.MIGRATION_MIGRATE_FLOW], AppTextStyle.BUTTON) }
+                    )
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(UIConst.paddingCompact))
         }
 
         // ── summary ─────────────────────────────────────────────────────
         status.summary?.let { s ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AppCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(UIConst.paddingRegular),
+                    verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall)
+                ) {
                     AppText(Strings[StringKey.MIGRATION_SUMMARY], AppTextStyle.SECTION_TITLE)
                     AppText(Strings[StringKey.MIGRATION_SUM_BREAKS].withArgs(listOf(s.breaks)), AppTextStyle.BODY)
                     AppText(Strings[StringKey.MIGRATION_SUM_PROGRAMS].withArgs(listOf(s.programs)), AppTextStyle.BODY)
@@ -334,17 +344,21 @@ private fun MigrationScreen(
                     AppText(Strings[StringKey.MIGRATION_SYNTHETIC_NOTE], AppTextStyle.NOTE)
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(UIConst.paddingCompact))
         }
 
         status.error?.let {
             AppText(Strings[StringKey.MIGRATION_ERROR].withArgs(listOf(it)), AppTextStyle.ERROR_NOTE)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(UIConst.paddingSmall))
         }
 
         if (status.state in setOf("DONE", "FAILED")) {
-            TextButton(onClick = { onIntent(MigrationIntent.Reset) }) { AppText(Strings[StringKey.MIGRATION_START_ANOTHER], AppTextStyle.BUTTON) }
-            Spacer(Modifier.height(8.dp))
+            AppButton(
+                text = Strings[StringKey.MIGRATION_START_ANOTHER],
+                onClick = { onIntent(MigrationIntent.Reset) },
+                variant = AppButtonVariant.TEXT,
+            )
+            Spacer(Modifier.height(UIConst.paddingSmall))
         }
 
         state.browser?.let { browser ->
@@ -354,11 +368,13 @@ private fun MigrationScreen(
         // ── live log ────────────────────────────────────────────────────
         if (status.log.isNotEmpty()) {
             AppText(Strings[StringKey.MIGRATION_PROGRESS], AppTextStyle.SECTION_TITLE)
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(UIConst.paddingExtraSmall))
             val listState = rememberLazyListState()
             LaunchedEffect(status.log.size) {
                 if (status.log.isNotEmpty()) listState.scrollToItem(status.log.size - 1)
             }
+            // Console colours/heights are the console's own look - only the
+            // container spacing is on the UIConst ladder.
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -366,7 +382,7 @@ private fun MigrationScreen(
                     .heightIn(min = 120.dp, max = 320.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(8.dp)
+                    .padding(UIConst.paddingSmall)
             ) {
                 items(status.log) { line ->
                     AppText(line, AppTextStyle.LOG_LINE)
@@ -388,77 +404,67 @@ private fun ServerFileBrowserDialog(
     onIntent: (MigrationIntent) -> Unit,
 ) {
     val listing = browser.listing
-    AlertDialog(
-        onDismissRequest = { onIntent(MigrationIntent.CloseBrowser) },
-        title = {
-            AppText(Strings[if (browser.forSenDir) StringKey.MIGRATION_PICK_SEN_DIR else StringKey.MIGRATION_PICK_DUMP], AppTextStyle.DIALOG_TITLE)
-        },
-        text = {
-            Column {
-                AppText(
-                    listing?.path ?: "…",
-                    AppTextStyle.LOG_LINE,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                browser.error?.let {
-                    Spacer(Modifier.height(4.dp))
-                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
-                }
-                Spacer(Modifier.height(8.dp))
-                LazyColumn(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
-                    listing?.parent?.let { parent ->
-                        item(key = "..") {
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .clickable { onIntent(MigrationIntent.BrowseTo(parent)) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(AppIcons.folder, null, modifier = Modifier.height(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                AppText("..", AppTextStyle.BODY_STRONG)
-                            }
-                        }
-                    }
-                    items(listing?.entries.orEmpty(), key = { it.name }) { entry ->
-                        val base = listing?.path?.trimEnd('/') ?: ""
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clickable {
-                                    when {
-                                        entry.isDir -> onIntent(MigrationIntent.BrowseTo("$base/${entry.name}"))
-                                        // folder mode: files are context, not choices
-                                        browser.forSenDir -> Unit
-                                        else -> onIntent(MigrationIntent.DumpPicked("$base/${entry.name}"))
-                                    }
-                                }
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                if (entry.isDir) AppIcons.folder else AppIcons.description,
-                                null,
-                                modifier = Modifier.height(18.dp),
-                                tint = if (entry.isDir) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            AppText(entry.name, AppTextStyle.BODY, modifier = Modifier.weight(1f))
-                            if (!entry.isDir) {
-                                AppText("${entry.sizeBytes / 1_048_576} MB", AppTextStyle.TINY)
-                            }
-                        }
+    AppDialog(
+        title = Strings[if (browser.forSenDir) StringKey.MIGRATION_PICK_SEN_DIR else StringKey.MIGRATION_PICK_DUMP],
+        onDismiss = { onIntent(MigrationIntent.CloseBrowser) },
+        // AppDialog always renders its confirm slot; in dump-pick mode the
+        // rows themselves are the choice, so the confirm stays disabled.
+        confirmText = Strings[StringKey.MIGRATION_USE_THIS_FOLDER],
+        onConfirm = { listing?.let { onIntent(MigrationIntent.SenDirPicked(it.path)) } },
+        confirmEnabled = browser.forSenDir && listing != null,
+        dismissText = Strings[StringKey.COMMON_CANCEL],
+    ) {
+        AppText(
+            listing?.path ?: "…",
+            AppTextStyle.LOG_LINE,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        browser.error?.let {
+            AppText(it.asString(), AppTextStyle.ERROR_NOTE)
+        }
+        LazyColumn(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
+            listing?.parent?.let { parent ->
+                item(key = "..") {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable { onIntent(MigrationIntent.BrowseTo(parent)) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppIcon(AppIcons.folder, size = AppIconSize.SMALL)
+                        Spacer(Modifier.width(UIConst.paddingSmall))
+                        AppText("..", AppTextStyle.BODY_STRONG)
                     }
                 }
             }
-        },
-        confirmButton = {
-            if (browser.forSenDir && listing != null) {
-                TextButton(onClick = { onIntent(MigrationIntent.SenDirPicked(listing.path)) }) {
-                    AppText(Strings[StringKey.MIGRATION_USE_THIS_FOLDER], AppTextStyle.BUTTON)
+            items(listing?.entries.orEmpty(), key = { it.name }) { entry ->
+                val base = listing?.path?.trimEnd('/') ?: ""
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable {
+                            when {
+                                entry.isDir -> onIntent(MigrationIntent.BrowseTo("$base/${entry.name}"))
+                                // folder mode: files are context, not choices
+                                browser.forSenDir -> Unit
+                                else -> onIntent(MigrationIntent.DumpPicked("$base/${entry.name}"))
+                            }
+                        }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppIcon(
+                        if (entry.isDir) AppIcons.folder else AppIcons.description,
+                        size = AppIconSize.SMALL,
+                        tint = if (entry.isDir) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.width(UIConst.paddingSmall))
+                    AppText(entry.name, AppTextStyle.BODY, modifier = Modifier.weight(1f))
+                    if (!entry.isDir) {
+                        AppText("${entry.sizeBytes / 1_048_576} MB", AppTextStyle.TINY)
+                    }
                 }
             }
-        },
-        dismissButton = { TextButton(onClick = { onIntent(MigrationIntent.CloseBrowser) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) } }
-    )
+        }
+    }
 }

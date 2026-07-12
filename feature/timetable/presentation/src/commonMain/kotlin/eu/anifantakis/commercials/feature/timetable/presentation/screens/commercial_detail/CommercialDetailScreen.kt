@@ -6,6 +6,12 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
@@ -21,20 +27,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
@@ -47,7 +48,6 @@ import eu.anifantakis.commercials.core.presentation.grids.gridPalette
 import eu.anifantakis.commercials.core.presentation.grids.rememberEnhancedDataGridState
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DayOfWeek
-import kotlinx.datetime.LocalDate
 
 /**
  * Break Console entry point: own ViewModel (per-screen), the cell's
@@ -154,30 +154,26 @@ private fun CommercialDetailScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
+                        // 24dp is grid-cell geometry: two buttons must fit the
+                        // dense reorder column, so the touch floor is opted out.
+                        AppIconButton(
+                            label = Strings[StringKey.DETAIL_CD_MOVE_UP],
+                            icon = AppIcons.keyboardArrowUp,
                             onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index - 1)) },
                             enabled = index > 0,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                AppIcons.keyboardArrowUp,
-                                contentDescription = Strings[StringKey.DETAIL_CD_MOVE_UP],
-                                modifier = Modifier.size(18.dp),
-                                tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                            )
-                        }
-                        IconButton(
+                            modifier = Modifier.size(24.dp),
+                            size = AppIconSize.SMALL,
+                            tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                        )
+                        AppIconButton(
+                            label = Strings[StringKey.DETAIL_CD_MOVE_DOWN],
+                            icon = AppIcons.keyboardArrowDown,
                             onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index + 1)) },
                             enabled = index < commercials.size - 1,
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                AppIcons.keyboardArrowDown,
-                                contentDescription = Strings[StringKey.DETAIL_CD_MOVE_DOWN],
-                                modifier = Modifier.size(18.dp),
-                                tint = if (index < commercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                            )
-                        }
+                            modifier = Modifier.size(24.dp),
+                            size = AppIconSize.SMALL,
+                            tint = if (index < commercials.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                        )
                     }
                 }
             ),
@@ -191,11 +187,7 @@ private fun CommercialDetailScreen(
                 sortable = false,
                 cellContent = { item, _, _ ->
                     val index = commercials.indexOf(item) + 1
-                    Text(
-                        text = index.toString(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    AppText(index.toString(), AppTextStyle.TABLE_CELL_STRONG)
                 }
             ),
             ColumnDef(
@@ -305,7 +297,7 @@ private fun CommercialDetailScreen(
             columns = columns,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(UIConst.paddingSmall),
             state = gridState,
             selectionMode = SelectionMode.SINGLE,
             showRowNumbers = false,
@@ -331,7 +323,7 @@ private fun CommercialDetailScreen(
                     // Print this break's program flow
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
-                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
                         enabled = commercials.isNotEmpty()
                     ) {
                         onIntent(CommercialDetailIntent.PrintBreak)
@@ -343,7 +335,7 @@ private fun CommercialDetailScreen(
                     // Edit action
                     ContextMenuEntry.Item(
                         label = StringKey.DETAIL_MENU_EDIT_COMMERCIAL.localized(),
-                        icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.edit, size = AppIconSize.SMALL) },
                         shortcut = "⌘E",
                         enabled = canEdit
                     ) {
@@ -356,26 +348,26 @@ private fun CommercialDetailScreen(
                     // Clipboard submenu
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_CLIPBOARD.localized(),
-                        icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.contentCopy, size = AppIconSize.SMALL) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_COPY.localized(),
-                                icon = { Icon(AppIcons.contentCopy, null, modifier = Modifier.size(16.dp)) },
+                                icon = { AppIcon(AppIcons.contentCopy, size = AppIconSize.SMALL) },
                                 shortcut = "⌘C"
                             ) {
                                 println("Copy: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_CUT.localized(),
-                                icon = { Icon(AppIcons.contentCut, null, modifier = Modifier.size(16.dp)) },
+                                icon = { AppIcon(AppIcons.contentCut, size = AppIconSize.SMALL) },
                                 shortcut = "⌘X"
                             ) {
                                 println("Cut: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_PASTE.localized(),
-                                icon = { Icon(AppIcons.contentPaste, null, modifier = Modifier.size(16.dp)) },
+                                icon = { AppIcon(AppIcons.contentPaste, size = AppIconSize.SMALL) },
                                 shortcut = "⌘V"
                             ) {
                                 println("Paste at index $rowIndex")
@@ -386,21 +378,21 @@ private fun CommercialDetailScreen(
                     // Move submenu
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_MOVE.localized(),
-                        icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.keyboardArrowUp, size = AppIconSize.SMALL) },
                         enabled = canEdit,
                         items = listOf(
                             // The guards below only DISABLE the entries; the
                             // ViewModel re-validates every MoveRow anyway.
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_UP.localized(),
-                                icon = { Icon(AppIcons.keyboardArrowUp, null, modifier = Modifier.size(16.dp)) },
+                                icon = { AppIcon(AppIcons.keyboardArrowUp, size = AppIconSize.SMALL) },
                                 enabled = rowIndex > 0
                             ) {
                                 onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex - 1))
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_DOWN.localized(),
-                                icon = { Icon(AppIcons.keyboardArrowDown, null, modifier = Modifier.size(16.dp)) },
+                                icon = { AppIcon(AppIcons.keyboardArrowDown, size = AppIconSize.SMALL) },
                                 enabled = rowIndex < commercials.size - 1
                             ) {
                                 onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex + 1))
@@ -427,7 +419,7 @@ private fun CommercialDetailScreen(
                     // Delete action
                     ContextMenuEntry.Item(
                         label = StringKey.COMMON_DELETE.localized(),
-                        icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.delete, size = AppIconSize.SMALL) },
                         shortcut = "⌫",
                         enabled = canEdit
                     ) {
@@ -440,24 +432,24 @@ private fun CommercialDetailScreen(
                     // More options
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_MORE.localized(),
-                        icon = { Icon(AppIcons.moreVert, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.moreVert, size = AppIconSize.SMALL) },
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_PREVIEW.localized(),
-                                icon = { Icon(AppIcons.playArrow, null, modifier = Modifier.size(16.dp)) }
+                                icon = { AppIcon(AppIcons.playArrow, size = AppIconSize.SMALL) }
                             ) {
                                 println("Preview: ${item.message}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_HISTORY.localized(),
-                                icon = { Icon(AppIcons.history, null, modifier = Modifier.size(16.dp)) }
+                                icon = { AppIcon(AppIcons.history, size = AppIconSize.SMALL) }
                             ) {
                                 println("History for: ${item.clientName}")
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_DETAILS.localized(),
-                                icon = { Icon(AppIcons.info, null, modifier = Modifier.size(16.dp)) }
+                                icon = { AppIcon(AppIcons.info, size = AppIconSize.SMALL) }
                             ) {
                                 println("Details: Client=${item.clientCode}, Duration=${item.durationSeconds}s, Contract=${item.contract}")
                             }
@@ -493,7 +485,7 @@ private fun DetailHeader(
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(UIConst.paddingRegular)
         ) {
             // Top row with date info and navigation
             Row(
@@ -507,12 +499,11 @@ private fun DetailHeader(
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                AppIcons.arrowBack,
-                                contentDescription = Strings[StringKey.COMMON_BACK]
-                            )
-                        }
+                        AppIconButton(
+                            label = Strings[StringKey.COMMON_BACK],
+                            icon = AppIcons.arrowBack,
+                            onClick = onBack,
+                        )
 
                         Column {
                             AppText(
@@ -522,7 +513,7 @@ private fun DetailHeader(
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
                             ) {
                                 AppText(
                                     Strings[StringKey.DETAIL_BREAK_TIME],
@@ -538,11 +529,11 @@ private fun DetailHeader(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(UIConst.paddingSmall))
 
                     // Stats row
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingAverage)
                     ) {
                         StatColumn(
                             label = "",
@@ -578,55 +569,45 @@ private fun DetailHeader(
                             color = gridPalette().positiveValue,
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(UIConst.paddingRegular))
                     }
 
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
                     ) {
                         if (onPrint != null) {
-                            OutlinedButton(onClick = onPrint) {
-                                Icon(
-                                    AppIcons.print,
-                                    contentDescription = Strings[StringKey.DETAIL_CD_PRINT_BREAK],
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                AppText(Strings[StringKey.DETAIL_PRINT], AppTextStyle.BUTTON)
-                            }
+                            AppButton(
+                                text = Strings[StringKey.DETAIL_PRINT],
+                                onClick = onPrint,
+                                variant = AppButtonVariant.SECONDARY,
+                                leadingIcon = AppIcons.print,
+                            )
                         }
 
-                        OutlinedButton(
+                        AppButton(
+                            text = Strings[StringKey.DETAIL_PREVIOUS],
                             onClick = { onPrevious?.invoke() },
-                            enabled = onPrevious != null
-                        ) {
-                            Icon(
-                                AppIcons.arrowBack,
-                                contentDescription = Strings[StringKey.DETAIL_PREVIOUS],
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            AppText(Strings[StringKey.DETAIL_PREVIOUS], AppTextStyle.BUTTON)
-                        }
+                            variant = AppButtonVariant.SECONDARY,
+                            enabled = onPrevious != null,
+                            leadingIcon = AppIcons.arrowBack,
+                        )
 
-                        OutlinedButton(
+                        AppButton(
+                            text = Strings[StringKey.DETAIL_NEXT],
                             onClick = { onNext?.invoke() },
-                            enabled = onNext != null
-                        ) {
-                            AppText(Strings[StringKey.DETAIL_NEXT], AppTextStyle.BUTTON)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                AppIcons.arrowForward,
-                                contentDescription = Strings[StringKey.DETAIL_NEXT],
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                            variant = AppButtonVariant.SECONDARY,
+                            enabled = onNext != null,
+                            trailingIcon = AppIcons.arrowForward,
+                        )
                     }
                 }
             }
         }
     }
 }
+
+/** Stat-box width: domain geometry (three aligned columns of counts), not spacing. */
+private val statCellWidth = 50.dp
 
 @Composable
 private fun StatColumn(
@@ -642,24 +623,24 @@ private fun StatColumn(
             AppText(label, AppTextStyle.STAT_LABEL)
         }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular)
         ) {
             AppText(
                 value1,
                 AppTextStyle.TABLE_CELL_STRONG,
-                modifier = Modifier.width(50.dp),
+                modifier = Modifier.width(statCellWidth),
                 textAlign = TextAlign.Center
             )
             AppText(
                 value2,
                 AppTextStyle.TABLE_CELL_STRONG,
-                modifier = Modifier.width(50.dp),
+                modifier = Modifier.width(statCellWidth),
                 textAlign = TextAlign.Center
             )
             AppText(
                 value3,
                 AppTextStyle.TABLE_CELL_STRONG,
-                modifier = Modifier.width(50.dp),
+                modifier = Modifier.width(statCellWidth),
                 textAlign = TextAlign.Center
             )
         }

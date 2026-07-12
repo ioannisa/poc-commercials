@@ -47,7 +47,49 @@ fun AppButton(
     /** Shows an inline spinner and disables the button (submit-in-flight). */
     busy: Boolean = false,
     leadingIcon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
     fillMaxWidth: Boolean = false,
+) = AppButton(
+    onClick = onClick,
+    modifier = modifier,
+    variant = variant,
+    enabled = enabled && !busy,
+    fillMaxWidth = fillMaxWidth,
+) {
+    when {
+        busy -> {
+            AppSpinner(size = AppIconSize.SMALL)
+            Spacer(Modifier.width(UIConst.paddingSmall))
+        }
+        leadingIcon != null -> {
+            AppIcon(leadingIcon, contentDescription = null, size = AppIconSize.SMALL)
+            Spacer(Modifier.width(UIConst.paddingExtraSmall))
+        }
+    }
+    AppText(
+        text,
+        if (variant == AppButtonVariant.PRIMARY) AppTextStyle.BUTTON_STRONG else AppTextStyle.BUTTON,
+    )
+    if (trailingIcon != null && !busy) {
+        Spacer(Modifier.width(UIConst.paddingExtraSmall))
+        AppIcon(trailingIcon, contentDescription = null, size = AppIconSize.SMALL)
+    }
+}
+
+/**
+ * Content-slot overload for the anchor/custom cases the text overload can't
+ * express (a dropdown anchor with a truncating label + caret, a two-part
+ * label). Still token-styled - shape, height, padding, elevation and the
+ * interactive floor all apply; only the CONTENT is the caller's.
+ */
+@Composable
+fun AppButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    variant: AppButtonVariant = AppButtonVariant.SECONDARY,
+    enabled: Boolean = true,
+    fillMaxWidth: Boolean = false,
+    content: @Composable RowScope.() -> Unit,
 ) {
     val t = AppTheme.visualTokens
     val shape = RoundedCornerShape(t.cornerSmall)
@@ -59,24 +101,8 @@ fun AppButton(
         .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
         .minimumInteractiveComponentSize()
         .heightIn(min = t.buttonHeight)
-    val clickable = enabled && !busy
-
-    val body: @Composable RowScope.() -> Unit = {
-        when {
-            busy -> {
-                AppSpinner(size = AppIconSize.SMALL)
-                Spacer(Modifier.width(UIConst.paddingSmall))
-            }
-            leadingIcon != null -> {
-                AppIcon(leadingIcon, contentDescription = null, size = AppIconSize.SMALL)
-                Spacer(Modifier.width(UIConst.paddingExtraSmall))
-            }
-        }
-        AppText(
-            text,
-            if (variant == AppButtonVariant.PRIMARY) AppTextStyle.BUTTON_STRONG else AppTextStyle.BUTTON,
-        )
-    }
+    val clickable = enabled
+    val body = content
 
     when (variant) {
         AppButtonVariant.PRIMARY -> Button(

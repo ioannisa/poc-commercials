@@ -10,7 +10,17 @@ import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppSpinner
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,18 +37,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,8 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
@@ -152,12 +153,18 @@ private fun TimetableScreen(
         if (canEdit) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                modifier = Modifier.padding(horizontal = UIConst.paddingRegular, vertical = UIConst.paddingHairline)
             ) {
-                OutlinedButton(onClick = { onIntent(TimetableIntent.OpenFinder) }) { AppText(Strings[StringKey.TIMETABLE_FINDER_BUTTON], AppTextStyle.BUTTON) }
-                Spacer(modifier = Modifier.width(8.dp))
+                AppButton(
+                    text = Strings[StringKey.TIMETABLE_FINDER_BUTTON],
+                    onClick = { onIntent(TimetableIntent.OpenFinder) },
+                    variant = AppButtonVariant.SECONDARY,
+                )
+                Spacer(modifier = Modifier.width(UIConst.paddingSmall))
                 var spotMenu by remember { mutableStateOf(false) }
-                OutlinedButton(
+                // Content-slot AppButton: dropdown anchor with custom content
+                // (truncated spot description + caret).
+                AppButton(
                     onClick = { spotMenu = true },
                     enabled = finder.spots.isNotEmpty()
                 ) {
@@ -167,7 +174,7 @@ private fun TimetableScreen(
                         color = LocalContentColor.current,
                         maxLines = 1,
                     )
-                    Icon(AppIcons.arrowDropDown, contentDescription = null)
+                    AppIcon(AppIcons.arrowDropDown)
                 }
                 DropdownMenu(expanded = spotMenu, onDismissRequest = { spotMenu = false }) {
                     finder.spots.forEach { spot ->
@@ -181,9 +188,11 @@ private fun TimetableScreen(
                     }
                 }
                 if (finder.selectedParty != null) {
-                    IconButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) {
-                        Icon(AppIcons.clear, contentDescription = Strings[StringKey.TIMETABLE_CD_CLEAR_FINDER])
-                    }
+                    AppIconButton(
+                        label = Strings[StringKey.TIMETABLE_CD_CLEAR_FINDER],
+                        icon = AppIcons.clear,
+                        onClick = { onIntent(TimetableIntent.ClearFinder) },
+                    )
                 }
             }
         }
@@ -205,7 +214,7 @@ private fun TimetableScreen(
             showTimes = showSpotTimes,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(UIConst.paddingSmall),
             // The grid toolkit is a leaf - it can't read AppTheme.typography,
             // so we hand it the preference's raw factor. Cells and type grow
             // together; a bigger step trades days-per-screen for legibility.
@@ -250,7 +259,7 @@ private fun TimetableScreen(
                     // Open/View details
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_OPEN_DETAILS.localized(),
-                        icon = { Icon(AppIcons.openInNew, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.openInNew, size = AppIconSize.SMALL) },
                         shortcut = "Enter",
                         enabled = spotCount > 0
                     ) {
@@ -266,7 +275,7 @@ private fun TimetableScreen(
                     // Print the whole day this cell belongs to
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
-                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         onIntent(TimetableIntent.PrintDay(date))
@@ -275,7 +284,7 @@ private fun TimetableScreen(
                     // Print this break's commercials
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
-                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
                         enabled = spotCount > 0
                     ) {
                         onIntent(TimetableIntent.PrintBreak(breakSlot.id, date))
@@ -287,10 +296,9 @@ private fun TimetableScreen(
                     add(ContextMenuEntry.Item(
                         label = (if (showSpotTimes) StringKey.TIMETABLE_MENU_SHOW_COUNTS else StringKey.TIMETABLE_MENU_SHOW_TIMES).localized(),
                         icon = {
-                            Icon(
+                            AppIcon(
                                 if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
-                                null,
-                                modifier = Modifier.size(16.dp)
+                                size = AppIconSize.SMALL,
                             )
                         }
                     ) {
@@ -306,13 +314,13 @@ private fun TimetableScreen(
                         // keys drive (add needs a spot armed via Εύρεση)
                         add(ContextMenuEntry.SubMenu(
                             label = StringKey.TIMETABLE_MENU_EDIT.localized(),
-                            icon = { Icon(AppIcons.edit, null, modifier = Modifier.size(16.dp)) },
+                            icon = { AppIcon(AppIcons.edit, size = AppIconSize.SMALL) },
                             items = listOf(
                                 ContextMenuEntry.Item(
                                     label = finder.selectedSpot
                                         ?.let { StringKey.TIMETABLE_ADD_SPOT_NAMED.localized().withArgs(listOf(it.description.take(30))) }
                                         ?: StringKey.TIMETABLE_ADD_SPOT_HINT.localized(),
-                                    icon = { Icon(AppIcons.add, null, modifier = Modifier.size(16.dp)) },
+                                    icon = { AppIcon(AppIcons.add, size = AppIconSize.SMALL) },
                                     shortcut = "A",
                                     enabled = finder.selectedSpot != null
                                 ) {
@@ -320,7 +328,7 @@ private fun TimetableScreen(
                                 },
                                 ContextMenuEntry.Item(
                                     label = StringKey.TIMETABLE_MENU_REMOVE_LAST.localized(),
-                                    icon = { Icon(AppIcons.delete, null, modifier = Modifier.size(16.dp)) },
+                                    icon = { AppIcon(AppIcons.delete, size = AppIconSize.SMALL) },
                                     shortcut = "R",
                                     enabled = (state.addedCounts[key] ?: 0) > 0
                                 ) {
@@ -335,7 +343,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
-                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) },
+                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         onIntent(TimetableIntent.PrintDay(date))
@@ -348,7 +356,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK_MONTH.localized().withArgs(listOf(label)),
-                        icon = { Icon(AppIcons.print, null, modifier = Modifier.size(16.dp)) }
+                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) }
                     ) {
                         onIntent(TimetableIntent.PrintBreakMonth(breakSlot.id))
                     }
@@ -379,13 +387,13 @@ private fun StationSelector(
 
     Box {
         if (stations.size > 1) {
-            TextButton(onClick = { expanded = true }) {
+            AppButton(onClick = { expanded = true }, variant = AppButtonVariant.TEXT) {
                 AppText(
                     current.name,
                     AppTextStyle.SECTION_TITLE,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Icon(
+                AppIcon(
                     AppIcons.arrowDropDown,
                     contentDescription = Strings[StringKey.TIMETABLE_CD_SWITCH_STATION],
                     tint = MaterialTheme.colorScheme.primary
@@ -397,7 +405,7 @@ private fun StationSelector(
                         text = { AppText(station.name, AppTextStyle.BUTTON) },
                         leadingIcon = {
                             if (station.id == current.id) {
-                                Icon(AppIcons.check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                AppIcon(AppIcons.check, size = AppIconSize.SMALL)
                             } else {
                                 Spacer(Modifier.size(16.dp))
                             }
@@ -414,7 +422,7 @@ private fun StationSelector(
                 current.name,
                 AppTextStyle.SECTION_TITLE,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = Modifier.padding(horizontal = UIConst.paddingSmall)
             )
         }
     }
@@ -436,30 +444,30 @@ private fun KeyboardEnabledHeader(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = UIConst.paddingRegular, vertical = UIConst.paddingSmall),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular)
             ) {
                 // Month navigation
-                IconButton(onClick = { onIntent(TimetableIntent.PreviousMonth) }) {
-                    Icon(
-                        AppIcons.arrowBack,
-                        contentDescription = Strings[StringKey.TIMETABLE_CD_PREV_MONTH]
-                    )
-                }
+                AppIconButton(
+                    label = Strings[StringKey.TIMETABLE_CD_PREV_MONTH],
+                    icon = AppIcons.arrowBack,
+                    onClick = { onIntent(TimetableIntent.PreviousMonth) },
+                )
 
                 AppText(
                     "$monthName ${state.year}",
                     AppTextStyle.SCREEN_TITLE,
+                    // 200dp is component geometry: a fixed title box so the
+                    // header doesn't reflow between month-name lengths.
                     modifier = Modifier.width(200.dp)
                 )
 
-                IconButton(onClick = { onIntent(TimetableIntent.NextMonth) }) {
-                    Icon(
-                        AppIcons.arrowForward,
-                        contentDescription = Strings[StringKey.TIMETABLE_CD_NEXT_MONTH]
-                    )
-                }
+                AppIconButton(
+                    label = Strings[StringKey.TIMETABLE_CD_NEXT_MONTH],
+                    icon = AppIcons.arrowForward,
+                    onClick = { onIntent(TimetableIntent.NextMonth) },
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
 
@@ -477,12 +485,11 @@ private fun KeyboardEnabledHeader(
 
                 // Cells: spot count <-> summed spot time (persisted; the
                 // icon shows the mode you'll switch TO)
-                IconButton(onClick = { onIntent(TimetableIntent.ToggleShowTimes) }) {
-                    Icon(
-                        if (state.showSpotTimes) AppIcons.numbers else AppIcons.timer,
-                        contentDescription = Strings[if (state.showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES]
-                    )
-                }
+                AppIconButton(
+                    label = Strings[if (state.showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES],
+                    icon = if (state.showSpotTimes) AppIcons.numbers else AppIcons.timer,
+                    onClick = { onIntent(TimetableIntent.ToggleShowTimes) },
+                )
 
                 // Station switcher (dropdown only when the user can access
                 // more than one station)
@@ -496,9 +503,11 @@ private fun KeyboardEnabledHeader(
                 // belongs to :feature:schedule-email, so the app layer
                 // renders it; this is just the launch point.
                 if (state.canEdit) {
-                    IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) }) {
-                        Icon(AppIcons.email, contentDescription = Strings[StringKey.TIMETABLE_CD_EMAIL_SCHEDULE])
-                    }
+                    AppIconButton(
+                        label = Strings[StringKey.TIMETABLE_CD_EMAIL_SCHEDULE],
+                        icon = AppIcons.email,
+                        onClick = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) },
+                    )
                 }
 
                 // Logged-in user: clicking the badge opens the account menu
@@ -509,19 +518,17 @@ private fun KeyboardEnabledHeader(
                     isAdmin = state.isAdmin,
                     role = state.role,
                 )
-                IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnPreferences) }) {
-                    Icon(
-                        AppIcons.settings,
-                        contentDescription = Strings[StringKey.TIMETABLE_CD_PREFERENCES]
-                    )
-                }
-                IconButton(onClick = { onNavIntent(TimetableScreenNavIntent.OnLogout) }) {
-                    Icon(
-                        AppIcons.logout,
-                        contentDescription = Strings[StringKey.TIMETABLE_CD_LOGOUT],
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
+                AppIconButton(
+                    label = Strings[StringKey.TIMETABLE_CD_PREFERENCES],
+                    icon = AppIcons.settings,
+                    onClick = { onNavIntent(TimetableScreenNavIntent.OnPreferences) },
+                )
+                AppIconButton(
+                    label = Strings[StringKey.TIMETABLE_CD_LOGOUT],
+                    icon = AppIcons.logout,
+                    onClick = { onNavIntent(TimetableScreenNavIntent.OnLogout) },
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
 
             // Report toolbar - Preview/Print/Export cover the entire month.
@@ -534,7 +541,7 @@ private fun KeyboardEnabledHeader(
                 busy = state.reportBusy,
                 available = state.reportsAvailable,
                 labels = reportToolbarLabels(),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                modifier = Modifier.padding(horizontal = UIConst.paddingRegular, vertical = UIConst.paddingExtraSmall)
             )
         }
     }
@@ -549,7 +556,7 @@ private fun KeyboardEnabledHeader(
 private fun AccountBadge(displayName: String, isAdmin: Boolean, role: AppRole) {
     Column(
         horizontalAlignment = Alignment.End,
-        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        modifier = Modifier.padding(horizontal = UIConst.paddingSmall, vertical = UIConst.paddingHairline)
     ) {
         AppText(displayName, AppTextStyle.BODY_STRONG)
         AppText(
@@ -575,138 +582,131 @@ private fun SpotFinderDialog(
     finder: FinderUiState,
     onIntent: (TimetableIntent) -> Unit,
 ) {
-    Dialog(
+    AppPopup(
         onDismissRequest = { onIntent(TimetableIntent.CloseFinder) },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.92f),
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.92f),
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 6.dp
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                AppText(Strings[StringKey.FINDER_CONSOLE_TITLE], AppTextStyle.ITEM_TITLE)
+        Column(Modifier.padding(UIConst.paddingCompact)) {
+            AppText(Strings[StringKey.FINDER_CONSOLE_TITLE], AppTextStyle.ITEM_TITLE)
 
-                // ═══ ΠΕΛΑΤΗΣ ═══════════════════════════════════════════
-                SectionTitle(Strings[StringKey.FINDER_SECTION_CUSTOMER])
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = finder.kind == PartyKind.CUSTOMER,
-                        onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER)) }
-                    )
-                    AppText(
-                        Strings[StringKey.FINDER_TAB_CUSTOMERS], AppTextStyle.BODY,
-                        modifier = Modifier.clickable {
-                            onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER))
-                        }
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    RadioButton(
-                        selected = finder.kind == PartyKind.TRADER,
-                        onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER)) }
-                    )
-                    AppText(
-                        Strings[StringKey.FINDER_TAB_ADVERTISERS], AppTextStyle.BODY,
-                        modifier = Modifier.clickable {
-                            onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER))
-                        }
-                    )
-                    Spacer(Modifier.width(16.dp))
-                    OutlinedTextField(
-                        value = finder.query,
-                        onValueChange = { onIntent(TimetableIntent.FinderQueryChanged(it)) },
-                        label = { AppText(Strings[StringKey.FINDER_SEARCH_LABEL], AppTextStyle.NOTE, color = LocalContentColor.current) },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                        trailingIcon = {
-                            if (finder.searching) {
-                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    )
-                }
-                HeaderRow(
-                    Strings[StringKey.FINDER_COL_CODE] to 0.14f, Strings[StringKey.FINDER_COL_NAME] to 0.44f,
-                    Strings[StringKey.FINDER_COL_VAT] to 0.14f, Strings[StringKey.FINDER_COL_PHONE] to 0.14f, Strings[StringKey.FINDER_COL_SPOTS] to 0.14f,
+            // ═══ ΠΕΛΑΤΗΣ ═══════════════════════════════════════════
+            SectionTitle(Strings[StringKey.FINDER_SECTION_CUSTOMER])
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppRadioRow(
+                    selected = finder.kind == PartyKind.CUSTOMER,
+                    onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER)) },
+                    label = Strings[StringKey.FINDER_TAB_CUSTOMERS],
                 )
-                // While a search runs the matches fill the table; the
-                // chosen party stays pinned as its single (highlighted) row.
-                val partyRows = finder.results.ifEmpty { listOfNotNull(finder.selectedParty) }
-                LazyColumn(Modifier.fillMaxWidth().weight(0.24f)) {
-                    items(partyRows, key = { it.code }) { c ->
-                        val isSel = c.code == finder.selectedParty?.code && finder.results.isEmpty()
-                        TableRow(
-                            selected = isSel,
-                            onClick = { onIntent(TimetableIntent.FinderPartySelected(c)) },
-                            c.code to 0.14f,
-                            c.name to 0.44f,
-                            (c.vatNumber ?: "") to 0.14f,
-                            (c.phone ?: "") to 0.14f,
-                            "${c.spotCount}" to 0.14f,
-                        )
-                    }
-                }
-
-                // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
-                SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
-                HeaderRow(
-                    Strings[StringKey.FINDER_COL_CONTRACT] to 0.16f, Strings[StringKey.FINDER_COL_LINE] to 0.06f, Strings[StringKey.FINDER_COL_DESCRIPTION] to 0.34f,
-                    Strings[StringKey.FINDER_COL_SPOTS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_SECS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_ISSUE_DATE] to 0.20f,
+                Spacer(Modifier.width(UIConst.paddingCompact))
+                AppRadioRow(
+                    selected = finder.kind == PartyKind.TRADER,
+                    onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER)) },
+                    label = Strings[StringKey.FINDER_TAB_ADVERTISERS],
                 )
-                if (finder.loadingLines) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                }
-                LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
-                    items(finder.lines, key = { it.lineId }) { line ->
-                        TableRow(
-                            selected = line.lineId == finder.selectedLine?.lineId,
-                            onClick = { onIntent(TimetableIntent.FinderLineSelected(line)) },
-                            line.contractNumber to 0.16f,
-                            "${line.lineNo}" to 0.06f,
-                            (if (line.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]) to 0.34f,
-                            "${line.placements}" to 0.12f,
-                            "${line.totalSeconds}" to 0.12f,
-                            (line.entryDate ?: "") to 0.20f,
-                        )
+                Spacer(Modifier.width(UIConst.paddingRegular))
+                AppTextField(
+                    value = finder.query,
+                    onValueChange = { onIntent(TimetableIntent.FinderQueryChanged(it)) },
+                    label = Strings[StringKey.FINDER_SEARCH_LABEL],
+                    modifier = Modifier.weight(1f),
+                    trailingIcon = {
+                        if (finder.searching) {
+                            AppSpinner()
+                        }
                     }
-                }
-
-                // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
-                SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
-                HeaderRow(
-                    Strings[StringKey.FINDER_COL_MSG_DESCRIPTION] to 0.52f, Strings[StringKey.FINDER_COL_DURATION] to 0.16f,
-                    Strings[StringKey.FINDER_COL_USED_SPOTS] to 0.16f, Strings[StringKey.FINDER_COL_USED_SECS] to 0.16f,
                 )
-                if (finder.loadingSpots) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+            }
+            HeaderRow(
+                Strings[StringKey.FINDER_COL_CODE] to 0.14f, Strings[StringKey.FINDER_COL_NAME] to 0.44f,
+                Strings[StringKey.FINDER_COL_VAT] to 0.14f, Strings[StringKey.FINDER_COL_PHONE] to 0.14f, Strings[StringKey.FINDER_COL_SPOTS] to 0.14f,
+            )
+            // While a search runs the matches fill the table; the
+            // chosen party stays pinned as its single (highlighted) row.
+            val partyRows = finder.results.ifEmpty { listOfNotNull(finder.selectedParty) }
+            LazyColumn(Modifier.fillMaxWidth().weight(0.24f)) {
+                items(partyRows, key = { it.code }) { c ->
+                    val isSel = c.code == finder.selectedParty?.code && finder.results.isEmpty()
+                    TableRow(
+                        selected = isSel,
+                        onClick = { onIntent(TimetableIntent.FinderPartySelected(c)) },
+                        c.code to 0.14f,
+                        c.name to 0.44f,
+                        (c.vatNumber ?: "") to 0.14f,
+                        (c.phone ?: "") to 0.14f,
+                        "${c.spotCount}" to 0.14f,
+                    )
                 }
-                LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
-                    items(finder.spots, key = { it.spotId }) { spot ->
-                        TableRow(
-                            selected = spot.spotId == finder.selectedSpot?.spotId,
-                            onClick = { onIntent(TimetableIntent.FinderSpotSelected(spot)) },
-                            spot.description to 0.52f,
-                            "${spot.durationSeconds}" to 0.16f,
-                            "${spot.placements}" to 0.16f,
-                            "${spot.totalSeconds}" to 0.16f,
-                        )
-                    }
-                }
+            }
 
-                // ═══ Επιλογή / Άκυρο (bottom-right, like the original) ══
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = { onIntent(TimetableIntent.ClearFinder) }) { AppText(Strings[StringKey.FINDER_CLEAR], AppTextStyle.BUTTON) }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(
-                        enabled = finder.selectedSpot != null,
-                        onClick = { onIntent(TimetableIntent.CloseFinder) }
-                    ) {
-                        AppText(Strings[StringKey.FINDER_SELECT], AppTextStyle.BUTTON_STRONG)
-                    }
-                    TextButton(onClick = { onIntent(TimetableIntent.CloseFinder) }) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
+            // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
+            SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
+            HeaderRow(
+                Strings[StringKey.FINDER_COL_CONTRACT] to 0.16f, Strings[StringKey.FINDER_COL_LINE] to 0.06f, Strings[StringKey.FINDER_COL_DESCRIPTION] to 0.34f,
+                Strings[StringKey.FINDER_COL_SPOTS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_SECS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_ISSUE_DATE] to 0.20f,
+            )
+            if (finder.loadingLines) {
+                AppSpinner()
+            }
+            LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
+                items(finder.lines, key = { it.lineId }) { line ->
+                    TableRow(
+                        selected = line.lineId == finder.selectedLine?.lineId,
+                        onClick = { onIntent(TimetableIntent.FinderLineSelected(line)) },
+                        line.contractNumber to 0.16f,
+                        "${line.lineNo}" to 0.06f,
+                        (if (line.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]) to 0.34f,
+                        "${line.placements}" to 0.12f,
+                        "${line.totalSeconds}" to 0.12f,
+                        (line.entryDate ?: "") to 0.20f,
+                    )
                 }
+            }
+
+            // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
+            SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
+            HeaderRow(
+                Strings[StringKey.FINDER_COL_MSG_DESCRIPTION] to 0.52f, Strings[StringKey.FINDER_COL_DURATION] to 0.16f,
+                Strings[StringKey.FINDER_COL_USED_SPOTS] to 0.16f, Strings[StringKey.FINDER_COL_USED_SECS] to 0.16f,
+            )
+            if (finder.loadingSpots) {
+                AppSpinner()
+            }
+            LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
+                items(finder.spots, key = { it.spotId }) { spot ->
+                    TableRow(
+                        selected = spot.spotId == finder.selectedSpot?.spotId,
+                        onClick = { onIntent(TimetableIntent.FinderSpotSelected(spot)) },
+                        spot.description to 0.52f,
+                        "${spot.durationSeconds}" to 0.16f,
+                        "${spot.placements}" to 0.16f,
+                        "${spot.totalSeconds}" to 0.16f,
+                    )
+                }
+            }
+
+            // ═══ Επιλογή / Άκυρο (bottom-right, like the original) ══
+            Row(
+                Modifier.fillMaxWidth().padding(top = UIConst.paddingSmall),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppButton(
+                    text = Strings[StringKey.FINDER_CLEAR],
+                    onClick = { onIntent(TimetableIntent.ClearFinder) },
+                    variant = AppButtonVariant.TEXT,
+                )
+                Spacer(Modifier.weight(1f))
+                // Επιλογή is the dialog's primary action - PRIMARY keeps
+                // the emphasis the old BUTTON_STRONG TextButton carried.
+                AppButton(
+                    text = Strings[StringKey.FINDER_SELECT],
+                    onClick = { onIntent(TimetableIntent.CloseFinder) },
+                    enabled = finder.selectedSpot != null,
+                )
+                AppButton(
+                    text = Strings[StringKey.COMMON_CANCEL],
+                    onClick = { onIntent(TimetableIntent.CloseFinder) },
+                    variant = AppButtonVariant.TEXT,
+                )
             }
         }
     }
@@ -717,7 +717,7 @@ private fun SectionTitle(text: String) {
     AppText(
         text, AppTextStyle.TABLE_HEADER,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+        modifier = Modifier.padding(top = UIConst.paddingSmall, bottom = UIConst.paddingHairline)
     )
 }
 

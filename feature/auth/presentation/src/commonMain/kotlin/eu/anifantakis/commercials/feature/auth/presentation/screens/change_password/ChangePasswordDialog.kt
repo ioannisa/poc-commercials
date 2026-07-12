@@ -3,24 +3,15 @@ package eu.anifantakis.commercials.feature.auth.presentation.screens.change_pass
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.helper.UiText
-import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Stable
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppWireframeField
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
@@ -115,53 +106,40 @@ private fun ChangePasswordDialog(
     onIntent: (ChangePasswordIntent) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = { if (!state.busy) onDismiss() },
-        title = { AppText(Strings[StringKey.CHPASS_TITLE], AppTextStyle.DIALOG_TITLE) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = state.current,
-                    onValueChange = { onIntent(ChangePasswordIntent.CurrentChanged(it)) },
-                    label = { AppText(Strings[StringKey.CHPASS_CURRENT], AppTextStyle.FIELD_LABEL) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = state.new1,
-                    onValueChange = { onIntent(ChangePasswordIntent.New1Changed(it)) },
-                    label = { AppText(Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN], AppTextStyle.FIELD_LABEL) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = state.new2,
-                    onValueChange = { onIntent(ChangePasswordIntent.New2Changed(it)) },
-                    label = { AppText(Strings[StringKey.CHPASS_REPEAT], AppTextStyle.FIELD_LABEL) },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true, enabled = !state.busy, modifier = Modifier.fillMaxWidth()
-                )
-                state.error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    AppText(it.asString(), AppTextStyle.ERROR_NOTE)
-                }
-                Spacer(Modifier.height(8.dp))
-                AppText(Strings[StringKey.CHPASS_SIGNOUT_NOTE], AppTextStyle.TINY)
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = state.canSubmit,
-                onClick = { onIntent(ChangePasswordIntent.Submit) }
-            ) {
-                if (state.busy) CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                else AppText(Strings[StringKey.CHPASS_CHANGE], AppTextStyle.BUTTON)
-            }
-        },
-        dismissButton = {
-            TextButton(enabled = !state.busy, onClick = onDismiss) { AppText(Strings[StringKey.COMMON_CANCEL], AppTextStyle.BUTTON) }
+    AppDialog(
+        title = Strings[StringKey.CHPASS_TITLE],
+        onDismiss = onDismiss,
+        confirmText = Strings[StringKey.CHPASS_CHANGE],
+        onConfirm = { onIntent(ChangePasswordIntent.Submit) },
+        dismissText = Strings[StringKey.COMMON_CANCEL],
+        confirmEnabled = state.canSubmit,
+        confirmBusy = state.busy,
+    ) {
+        // Always-masked fields (no reveal toggle by design - three in a row).
+        AppWireframeField(
+            value = state.current,
+            onValueChange = { onIntent(ChangePasswordIntent.CurrentChanged(it)) },
+            label = Strings[StringKey.CHPASS_CURRENT],
+            visualTransformation = PasswordVisualTransformation(),
+            enabled = !state.busy,
+        )
+        AppWireframeField(
+            value = state.new1,
+            onValueChange = { onIntent(ChangePasswordIntent.New1Changed(it)) },
+            label = Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN],
+            visualTransformation = PasswordVisualTransformation(),
+            enabled = !state.busy,
+        )
+        AppWireframeField(
+            value = state.new2,
+            onValueChange = { onIntent(ChangePasswordIntent.New2Changed(it)) },
+            label = Strings[StringKey.CHPASS_REPEAT],
+            visualTransformation = PasswordVisualTransformation(),
+            enabled = !state.busy,
+        )
+        state.error?.let {
+            AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
-    )
+        AppText(Strings[StringKey.CHPASS_SIGNOUT_NOTE], AppTextStyle.TINY)
+    }
 }

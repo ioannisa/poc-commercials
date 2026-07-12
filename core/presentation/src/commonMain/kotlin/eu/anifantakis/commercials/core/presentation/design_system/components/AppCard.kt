@@ -8,6 +8,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 
@@ -21,6 +22,8 @@ import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
+    /** Banner/status cards tint their container (primaryContainer/errorContainer). */
+    containerColor: Color = Color.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val t = AppTheme.visualTokens
@@ -32,6 +35,9 @@ fun AppCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(t.cornerMedium),
+        colors = if (containerColor != Color.Unspecified)
+            CardDefaults.cardColors(containerColor = containerColor)
+        else CardDefaults.cardColors(),
         elevation = CardDefaults.cardElevation(defaultElevation = t.cardElevation),
         border = if (borderWidth > 0.dp)
             BorderStroke(borderWidth, MaterialTheme.colorScheme.outlineVariant) else null,
