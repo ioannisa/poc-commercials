@@ -70,19 +70,9 @@ val LocalAppTypography = staticCompositionLocalOf<AppTypography> {
  */
 val LocalFontSizeStep = staticCompositionLocalOf { FontSizeStep.DEFAULT }
 
-/**
- * Clean access to the app typography, mimicking `MaterialTheme.typography`
- * (dealer-totem convention: `AppTheme.typography.<role>`).
- */
-object AppTheme {
-    val typography: AppTypography
-        @Composable
-        get() = LocalAppTypography.current
-
-    val fontSizeStep: FontSizeStep
-        @Composable
-        get() = LocalFontSizeStep.current
-}
+// The `AppTheme` accessor object lives in AppTheme.kt (with the theme
+// composable and the rest of the ambient accessors) - the filename says
+// where to find it.
 
 /** The bundled Roboto family (full Greek coverage on every platform). */
 @Composable

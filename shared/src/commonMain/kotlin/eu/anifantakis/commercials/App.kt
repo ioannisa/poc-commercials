@@ -2,14 +2,11 @@ package eu.anifantakis.commercials
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.isSystemInDarkTheme
 import eu.anifantakis.commercials.navigation.NavigationRoot
 import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
@@ -18,6 +15,7 @@ import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
 import eu.anifantakis.commercials.core.presentation.design_system.CommercialsTheme
 import eu.anifantakis.commercials.core.presentation.design_system.FontSizeStep
+import eu.anifantakis.commercials.core.presentation.design_system.WindowSizeProvider
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
 import org.koin.compose.koinInject
@@ -60,8 +58,12 @@ fun App() {
                     .fillMaxSize()
                     .safeContentPadding()
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    NavigationRoot()
+                // Inside safeContentPadding so the window class measures the
+                // area content can actually use (excludes system bars).
+                WindowSizeProvider {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NavigationRoot()
+                    }
                 }
             }
         }

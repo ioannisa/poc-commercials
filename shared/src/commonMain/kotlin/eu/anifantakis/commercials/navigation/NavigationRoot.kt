@@ -15,6 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -22,6 +24,8 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.mediumSpec
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
 import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
@@ -110,6 +114,14 @@ fun NavigationRoot() {
     // point on every target, so no per-platform BackHandler is needed.
     val globalStateContainer = koinInject<GlobalStateContainer>()
 
+    // Transition policy, read at composition (the spec lambdas run outside
+    // it): platform motion tokens, honouring reduced motion (snap), and
+    // mirrored under RTL — "forward" slides from the START edge, so Hebrew
+    // navigation no longer animates backwards.
+    val motion = AppTheme.visualTokens.motion
+    val a11y = AppTheme.a11y
+    val forward = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
+
     ApplicationScaffold { scaffoldPadding ->
         NavDisplay(
             backStack = navigator.backStack,
@@ -122,12 +134,12 @@ fun NavigationRoot() {
                 rememberViewModelStoreNavEntryDecorator()
             ),
             transitionSpec = {
-                slideInHorizontally { it } + fadeIn() togetherWith
-                        slideOutHorizontally { -it } + fadeOut()
+                slideInHorizontally(motion.mediumSpec(a11y)) { forward * it } + fadeIn(motion.mediumSpec(a11y)) togetherWith
+                        slideOutHorizontally(motion.mediumSpec(a11y)) { -forward * it } + fadeOut(motion.mediumSpec(a11y))
             },
             popTransitionSpec = {
-                slideInHorizontally { -it } + fadeIn() togetherWith
-                        slideOutHorizontally { it } + fadeOut()
+                slideInHorizontally(motion.mediumSpec(a11y)) { -forward * it } + fadeIn(motion.mediumSpec(a11y)) togetherWith
+                        slideOutHorizontally(motion.mediumSpec(a11y)) { forward * it } + fadeOut(motion.mediumSpec(a11y))
             },
             entryProvider = entryProvider {
 

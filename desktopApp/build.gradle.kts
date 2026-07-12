@@ -10,6 +10,9 @@ plugins {
 
 dependencies {
     implementation(projects.shared)
+    // Direct dep (shared only `implementation`s it): the PlatformShowcase
+    // dev entry renders the design-system lab without the app shell.
+    implementation(projects.core.presentation)
     implementation(compose.desktop.currentOs)
     implementation(libs.compose.runtime)
     implementation(libs.compose.foundation)
@@ -20,6 +23,18 @@ dependencies {
 // the shared dev config file. Compose Desktop registers the `run` task lazily,
 // so configure it via matching to avoid "Task not found" at config time.
 tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
+    workingDir = rootProject.projectDir
+}
+
+// Dev-only entry: the design-system laboratory (six platform profiles x
+// input/density/a11y/RTL/font/window simulation on one machine).
+// ./gradlew :desktopApp:runShowcase
+tasks.register<JavaExec>("runShowcase") {
+    group = "application"
+    description = "Runs the PlatformShowcase design-system lab"
+    dependsOn("classes")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("eu.anifantakis.commercials.PlatformShowcaseMainKt")
     workingDir = rootProject.projectDir
 }
 
