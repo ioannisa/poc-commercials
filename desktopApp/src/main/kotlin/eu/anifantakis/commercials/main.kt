@@ -24,18 +24,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberWindowState
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.data.config.AppConfig
+import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
 import eu.anifantakis.commercials.di.initKoin
+import eu.anifantakis.commercials.window.AppMenuBar
+import eu.anifantakis.commercials.window.WindowStateStore
+import eu.anifantakis.commercials.window.rememberPersistedWindowState
+import io.github.vinceglb.filekit.FileKit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.koin.mp.KoinPlatform
 
 fun main() {
     initKoin()
+    // Native file dialogs (reports save panel) need the app identity once.
+    FileKit.init(appId = "CommercialsManager")
     runBlocking {
         AppConfig.load()
         // Restore persisted login (no-op wait on JVM)
@@ -43,13 +48,18 @@ fun main() {
     }
 
     application {
+        // Window geometry survives relaunches (KSafe Plain, debounced,
+        // clamped against the current screens).
+        val windowStore = remember { WindowStateStore(KoinPlatform.getKoin().get()) }
+        val commandRegistry = remember { KoinPlatform.getKoin().get<CommandRegistry>() }
         Window(
             onCloseRequest = ::exitApplication,
             title = "Commercials Manager",
-            // Occupy the whole available screen area (respects the OS menu
-            // bar/dock/taskbar - unlike fullscreen, the window chrome stays).
-            state = rememberWindowState(placement = WindowPlacement.Maximized),
+            state = rememberPersistedWindowState(windowStore),
         ) {
+            // Real screen menu bar on macOS, in-window menu on Win/Linux;
+            // items grey out from the command registry's live state.
+            AppMenuBar(commandRegistry)
             var isLoading by remember { mutableStateOf(true) }
 
             LaunchedEffect(Unit) {

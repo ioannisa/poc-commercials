@@ -102,6 +102,9 @@ kotlin {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
+            // Native save dialog (IFileDialog/NSSavePanel/XDG portal) - kills
+            // the Swing JFileChooser, the one visibly non-native dialog.
+            implementation(libs.filekit.dialogs)
         }
         jvmTest.dependencies {
             implementation(libs.kotlin.test)

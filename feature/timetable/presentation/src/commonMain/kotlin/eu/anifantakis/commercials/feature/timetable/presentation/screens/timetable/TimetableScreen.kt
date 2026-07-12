@@ -54,7 +54,11 @@ import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
+import eu.anifantakis.commercials.core.presentation.commands.AppCommand
+import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
+import eu.anifantakis.commercials.core.presentation.commands.RegisterAppCommand
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
+import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
@@ -85,6 +89,25 @@ fun TimetableScreenRoot(
             is TimetableEffect.OpenDetail -> onOpenDetail(effect.breakId, effect.date)
         }
     }
+
+    // App-chrome commands (desktop MenuBar / shortcuts): this screen owns the
+    // report + email + account actions while it is composed; the registry
+    // greys the menu items out everywhere else. Handlers route onto EXISTING
+    // intents/callbacks only.
+    val commandRegistry = koinInject<CommandRegistry>()
+    val owner = "TimetableScreen"
+    RegisterAppCommand(commandRegistry, owner, AppCommand.EXPORT_PDF, enabled = viewModel.state.reportsAvailable) {
+        viewModel.onAction(TimetableIntent.ExportMonthPdf)
+    }
+    RegisterAppCommand(commandRegistry, owner, AppCommand.PRINT_REPORT, enabled = viewModel.state.reportsAvailable) {
+        viewModel.onAction(TimetableIntent.PrintMonth)
+    }
+    RegisterAppCommand(commandRegistry, owner, AppCommand.PREVIEW_REPORT, enabled = viewModel.state.reportsAvailable) {
+        viewModel.onAction(TimetableIntent.PreviewMonth)
+    }
+    RegisterAppCommand(commandRegistry, owner, AppCommand.SEND_SCHEDULE_EMAIL) { onOpenEmailDialog() }
+    RegisterAppCommand(commandRegistry, owner, AppCommand.PREFERENCES) { onPreferences() }
+    RegisterAppCommand(commandRegistry, owner, AppCommand.LOGOUT) { onLogout() }
 
     TimetableScreen(
         state = viewModel.state,

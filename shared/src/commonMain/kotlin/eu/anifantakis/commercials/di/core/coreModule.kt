@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePartySearchDataSource
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
+import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
@@ -28,6 +29,11 @@ val coreModule = module {
 
     // App-wide MVI container (kmp-developer global state)
     single { GlobalStateContainer() }
+
+    // Command router between app chrome (desktop MenuBar/shortcuts) and the
+    // screen that currently owns each action. Bound on every platform - it
+    // is inert where no chrome consumes it.
+    single { CommandRegistry() }
 
     // App language: ONE persisted KSafe entry behind the domain AppLanguageStore
     // seam; the global LocalizationManager attaches it at startup (App.kt).

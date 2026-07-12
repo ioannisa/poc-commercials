@@ -2,6 +2,10 @@ package eu.anifantakis.commercials.reports
 
 import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.reports.models.ReportResult
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.dialogs.openFileSaver
+import io.github.vinceglb.filekit.dialogs.openFileWithDefaultApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
@@ -10,10 +14,7 @@ import net.sf.jasperreports.engine.JasperPrintManager
 import net.sf.jasperreports.engine.export.JRPrintServiceExporter
 import net.sf.jasperreports.export.SimpleExporterInput
 import net.sf.jasperreports.export.SimplePrintServiceExporterConfiguration
-import java.awt.Desktop
 import java.io.File
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * JVM/Desktop implementation of ReportService (Koin-bound on this platform).
@@ -29,10 +30,10 @@ class DesktopReportService : ReportService {
     ): ReportResult {
         if (payloads.isEmpty()) return ReportResult.Error("Nothing to export: the report is empty")
         return try {
-            // Swing components must be used on the EDT
-            val outputFile = withContext(Dispatchers.Swing) {
-                showSaveDialog(suggestedFileName)
-            } ?: return ReportResult.Cancelled
+            // Genuinely native save panel (NSSavePanel / IFileDialog / XDG
+            // portal via FileKit) - the Swing JFileChooser is gone.
+            val outputFile = showSaveDialog(suggestedFileName)
+                ?: return ReportResult.Cancelled
 
             withContext(Dispatchers.IO) {
                 ReportEngine.exportToPdfFile(fillAll(payloads), outputFile)
@@ -54,12 +55,8 @@ class DesktopReportService : ReportService {
             ReportEngine.exportToPdfFile(fillAll(payloads), tempFile)
 
             // Open in default PDF viewer
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(tempFile)
-                ReportResult.Success("Preview opened in default PDF viewer")
-            } else {
-                ReportResult.Error("Desktop is not supported on this system")
-            }
+            FileKit.openFileWithDefaultApplication(PlatformFile(tempFile))
+            ReportResult.Success("Preview opened in default PDF viewer")
         } catch (e: Exception) {
             e.printStackTrace()
             ReportResult.Error("Failed to preview report: ${e.message}", e)
@@ -106,22 +103,15 @@ class DesktopReportService : ReportService {
         exporter.exportReport()
     }
 
-    private fun showSaveDialog(suggestedFileName: String): File? {
-        val fileChooser = JFileChooser()
-        fileChooser.dialogTitle = "Save Report"
-        fileChooser.selectedFile = File(suggestedFileName)
-        fileChooser.fileFilter = FileNameExtensionFilter("PDF Files", "pdf")
-
-        val result = fileChooser.showSaveDialog(null)
-        if (result == JFileChooser.APPROVE_OPTION) {
-            var file = fileChooser.selectedFile
-            // Ensure .pdf extension
-            if (!file.name.lowercase().endsWith(".pdf")) {
-                file = File(file.absolutePath + ".pdf")
-            }
-            return file
-        }
-        return null
+    private suspend fun showSaveDialog(suggestedFileName: String): File? {
+        val picked = FileKit.openFileSaver(
+            suggestedName = suggestedFileName.removeSuffix(".pdf"),
+            defaultExtension = "pdf",
+        ) ?: return null
+        val file = picked.file
+        // Ensure .pdf extension (some platforms let the user strip it)
+        return if (file.name.lowercase().endsWith(".pdf")) file
+        else File(file.absolutePath + ".pdf")
     }
 }
 

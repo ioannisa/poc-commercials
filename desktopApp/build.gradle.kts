@@ -17,6 +17,10 @@ dependencies {
     implementation(libs.compose.runtime)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
+    // FileKit.init (native save dialogs live in reports-client jvmMain)
+    implementation(libs.filekit.dialogs)
+    // Window-geometry persistence (Plain mode - x/y/w/h are not secrets)
+    implementation(libs.ksafe)
 }
 
 // Run the desktop app from the repo root so ./config.properties resolves to

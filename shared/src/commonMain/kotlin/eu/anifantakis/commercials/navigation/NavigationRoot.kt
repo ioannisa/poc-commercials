@@ -24,6 +24,9 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.presentation.commands.AppCommand
+import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
+import eu.anifantakis.commercials.core.presentation.commands.RegisterAppCommand
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.mediumSpec
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
@@ -40,6 +43,8 @@ import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavTyp
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
 import eu.anifantakis.commercials.feature.migration_console.presentation.MigrationNavType
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
+import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
+import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.feature.preferences.presentation.PreferencesNavType
 import eu.anifantakis.commercials.feature.preferences.presentation.preferencesEntries
 import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailDialogRoot
@@ -121,6 +126,29 @@ fun NavigationRoot() {
     val motion = AppTheme.visualTokens.motion
     val a11y = AppTheme.a11y
     val forward = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
+
+    // App-chrome commands owned by the navigation root: text zoom (global,
+    // maps onto the persisted font-size preference the theme already reads)
+    // and the account dialogs it hosts (greyed on the Login screen).
+    val commandRegistry = koinInject<CommandRegistry>()
+    val prefs = koinInject<UserPreferences>()
+    val loggedIn = navigator.backStack.lastOrNull() != AuthNavType.Login
+    val navOwner = "NavigationRoot"
+    RegisterAppCommand(commandRegistry, navOwner, AppCommand.FONT_LARGER) {
+        FontSizePreference.entries.getOrNull(prefs.fontSize.ordinal + 1)?.let { prefs.fontSize = it }
+    }
+    RegisterAppCommand(commandRegistry, navOwner, AppCommand.FONT_SMALLER) {
+        FontSizePreference.entries.getOrNull(prefs.fontSize.ordinal - 1)?.let { prefs.fontSize = it }
+    }
+    RegisterAppCommand(commandRegistry, navOwner, AppCommand.FONT_RESET) {
+        prefs.fontSize = FontSizePreference.MEDIUM
+    }
+    RegisterAppCommand(commandRegistry, navOwner, AppCommand.CHANGE_PASSWORD, enabled = loggedIn) {
+        showChangePassword = true
+    }
+    RegisterAppCommand(commandRegistry, navOwner, AppCommand.RECOVERY_CODES, enabled = loggedIn) {
+        showRecoveryCodes = true
+    }
 
     ApplicationScaffold { scaffoldPadding ->
         NavDisplay(
