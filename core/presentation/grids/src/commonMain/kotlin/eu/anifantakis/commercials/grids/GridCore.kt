@@ -57,6 +57,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -895,8 +896,9 @@ private fun RichContextMenuEntry(
         is ContextMenuEntry.SubMenu -> {
             val isExpanded = expandedSubmenuIndex == entryIndex
             // Which side the submenu actually opened on, reported back by
-            // SubmenuPopup from its measured placement
-            var opensOnLeft by remember { mutableStateOf(false) }
+            // SubmenuPopup from its measured placement (forward = left in RTL)
+            val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            var opensOnLeft by remember { mutableStateOf(isRtl) }
 
             Box(
                 modifier = Modifier.onGloballyPositioned { coordinates ->
@@ -919,7 +921,10 @@ private fun RichContextMenuEntry(
                                     LocalContentColor.current.copy(alpha = 0.38f)
                             )
                             Icon(
-                                imageVector = if (opensOnLeft)
+                                // opensOnLeft is a VISUAL side but the icons are
+                                // AutoMirrored (render flipped in RTL) — undo the
+                                // flip so the chevron points where the submenu opens
+                                imageVector = if (opensOnLeft != isRtl)
                                     GridIcons.keyboardArrowLeft
                                 else
                                     GridIcons.keyboardArrowRight,
@@ -1034,8 +1039,9 @@ private fun RichContextMenuEntrySimple(
             // For nested submenus, use click to expand (simplified behavior)
             var subMenuExpanded by remember { mutableStateOf(false) }
             // Which side the submenu actually opened on, reported back by
-            // SubmenuPopup from its measured placement
-            var opensOnLeft by remember { mutableStateOf(false) }
+            // SubmenuPopup from its measured placement (forward = left in RTL)
+            val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            var opensOnLeft by remember { mutableStateOf(isRtl) }
 
             Box {
                 DropdownMenuItem(
@@ -1053,7 +1059,10 @@ private fun RichContextMenuEntrySimple(
                                     LocalContentColor.current.copy(alpha = 0.38f)
                             )
                             Icon(
-                                imageVector = if (opensOnLeft)
+                                // opensOnLeft is a VISUAL side but the icons are
+                                // AutoMirrored (render flipped in RTL) — undo the
+                                // flip so the chevron points where the submenu opens
+                                imageVector = if (opensOnLeft != isRtl)
                                     GridIcons.keyboardArrowLeft
                                 else
                                     GridIcons.keyboardArrowRight,
@@ -1097,10 +1106,11 @@ private fun RichContextMenuEntrySimple(
 /**
  * Popup container for nested submenus with classic desktop-menu positioning.
  *
- * Opens to the right of the parent item (flipping to the left when there is no
- * room) with its first item top-aligned to the parent item. When the submenu
- * would overflow the window bottom, it flips upward so its LAST item stays
- * aligned with the parent item, as native desktop menus do.
+ * Opens "forward" per reading direction — right of the parent item in LTR,
+ * left in RTL — flipping to the other side when there is no room, with its
+ * first item top-aligned to the parent item. When the submenu would overflow
+ * the window bottom, it flips upward so its LAST item stays aligned with the
+ * parent item, as native desktop menus do.
  */
 @Composable
 private fun SubmenuPopup(
@@ -1125,7 +1135,13 @@ private fun SubmenuPopup(
                 layoutDirection: LayoutDirection,
                 popupContentSize: IntSize
             ): IntOffset {
-                val opensLeft = anchorBounds.right + popupContentSize.width > windowSize.width
+                // Open "forward" per reading direction (right in LTR, left in
+                // RTL); flip to the other side only when there is no room.
+                val opensLeft = if (layoutDirection == LayoutDirection.Rtl) {
+                    anchorBounds.left - popupContentSize.width >= 0
+                } else {
+                    anchorBounds.right + popupContentSize.width > windowSize.width
+                }
                 currentOnOpensLeftChange(opensLeft)
 
                 val x = (
@@ -1243,7 +1259,11 @@ fun ColumnResizeHandle(
 // ============================================================================
 
 /**
- * Keyboard event handler for grid navigation
+ * Keyboard event handler for grid navigation.
+ *
+ * Pass [isRtl] (`LocalLayoutDirection.current == LayoutDirection.Rtl`) so the
+ * horizontal arrow keys move the focus visually — in RTL the columns are laid
+ * out mirrored, so visual-left is column index +1.
  */
 fun Modifier.gridKeyboardNavigation(
     onNavigate: (deltaRow: Int, deltaCol: Int) -> Unit,
@@ -1255,7 +1275,8 @@ fun Modifier.gridKeyboardNavigation(
     onPageDown: () -> Unit,
     onHome: () -> Unit,
     onEnd: () -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    isRtl: Boolean = false
 ): Modifier = this.onPreviewKeyEvent { event ->
     if (!enabled || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
@@ -1269,11 +1290,11 @@ fun Modifier.gridKeyboardNavigation(
             true
         }
         Key.DirectionLeft -> {
-            onNavigate(0, -1)
+            onNavigate(0, if (isRtl) 1 else -1)
             true
         }
         Key.DirectionRight -> {
-            onNavigate(0, 1)
+            onNavigate(0, if (isRtl) -1 else 1)
             true
         }
         Key.Enter, Key.NumPadEnter -> {

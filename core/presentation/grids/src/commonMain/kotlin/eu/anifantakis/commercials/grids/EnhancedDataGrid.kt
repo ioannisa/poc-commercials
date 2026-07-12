@@ -60,6 +60,7 @@ import androidx.compose.ui.input.pointer.isCtrlPressed as pointerIsCtrlPressed
 import androidx.compose.ui.input.pointer.isShiftPressed as pointerIsShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -603,6 +605,10 @@ fun <T> EnhancedDataGrid(
         }
     }
 
+    // In RTL the columns are laid out mirrored (first column rightmost), so the
+    // horizontal arrow keys must move the focus visually, not by column index.
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+
     // Keyboard handler
     fun handleKeyboard(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
@@ -672,15 +678,17 @@ fun <T> EnhancedDataGrid(
             }
             Key.DirectionLeft -> {
                 val allCols = allVisibleCols
-                if (state.focusedColumn > 0) {
-                    state.focusedColumn--
+                val newCol = state.focusedColumn + if (isRtl) 1 else -1
+                if (newCol in 0..allCols.lastIndex) {
+                    state.focusedColumn = newCol
                 }
                 true
             }
             Key.DirectionRight -> {
                 val allCols = allVisibleCols
-                if (state.focusedColumn < allCols.lastIndex) {
-                    state.focusedColumn++
+                val newCol = state.focusedColumn + if (isRtl) -1 else 1
+                if (newCol in 0..allCols.lastIndex) {
+                    state.focusedColumn = newCol
                 }
                 true
             }

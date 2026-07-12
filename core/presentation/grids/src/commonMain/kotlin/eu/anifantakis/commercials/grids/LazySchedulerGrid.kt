@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,10 +44,12 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.collections.immutable.ImmutableList
@@ -124,6 +125,9 @@ fun LazySchedulerGrid(
     val focusRequester = remember { FocusRequester() }
     var hasFocus by remember { mutableStateOf(false) }
     val density = LocalDensity.current
+    // In RTL the day axis is mirrored (day 1 rightmost), so the horizontal
+    // arrow keys must move the selection visually, not by column index.
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
     // Sync with external selection state
     LaunchedEffect(initialSelectedRow, initialSelectedColumn) {
@@ -210,12 +214,12 @@ fun LazySchedulerGrid(
                 true
             }
             Key.DirectionLeft -> {
-                val newCol = (selectedColumn - 1).coerceIn(0, maxCol)
+                val newCol = (selectedColumn + if (isRtl) 1 else -1).coerceIn(0, maxCol)
                 updateSelection(selectedRow, newCol)
                 true
             }
             Key.DirectionRight -> {
-                val newCol = (selectedColumn + 1).coerceIn(0, maxCol)
+                val newCol = (selectedColumn + if (isRtl) -1 else 1).coerceIn(0, maxCol)
                 updateSelection(selectedRow, newCol)
                 true
             }
