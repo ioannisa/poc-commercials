@@ -1,8 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
 import kotlinx.datetime.DayOfWeek
-import eu.anifantakis.commercials.reports.ui.ReportToolbarLabels
-import eu.anifantakis.commercials.reports.ui.ReportToolbarMetrics
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerLabels
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
@@ -64,6 +62,8 @@ import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.grids.formatTime
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarLabels
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarMetrics
 import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.LocalDate
@@ -814,31 +814,4 @@ private fun schedulerLabels() = SchedulerLabels(
  * strings (no spots / cancelled / PDF saved) belong to the ViewModel now -
  * they travel to the global snackbar, not to this component.
  */
-@Composable
-private fun reportToolbarLabels() = ReportToolbarLabels(
-    preview = Strings[StringKey.REPORT_PREVIEW],
-    print = Strings[StringKey.REPORT_PRINT],
-    exportPdf = Strings[StringKey.REPORT_EXPORT_PDF],
-    notAvailable = Strings[StringKey.REPORT_NOT_AVAILABLE],
-)
 
-/**
- * The platform's control geometry, handed to the leaf report toolkit the same
- * way its labels are (it cannot see the design system itself). Without this the
- * toolbar keeps stock Material pills - visibly out of place next to the
- * desktop-token chrome around it.
- */
-@Composable
-private fun reportToolbarMetrics(): ReportToolbarMetrics {
-    val t = AppTheme.visualTokens
-    return ReportToolbarMetrics(
-        buttonHeight = t.buttonHeightDense,
-        paddingHorizontal = t.buttonPaddingHorizontal,
-        paddingVertical = t.buttonPaddingVertical,
-        cornerRadius = t.cornerSmall,
-        borderWidth = t.controlBorderWidth,
-        elevation = t.buttonElevation,
-        iconSize = t.iconSmall,
-        gap = UIConst.paddingSmall,
-    )
-}

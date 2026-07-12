@@ -1,5 +1,8 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail
 
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarLabels
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarMetrics
+import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
@@ -26,7 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -285,7 +287,9 @@ private fun CommercialDetailScreen(
             onNext = state.nextBreak?.let { target ->
                 { onNavIntent(CommercialDetailScreenNavIntent.OnGoToBreak(target)) }
             },
-            onPrint = { onIntent(CommercialDetailIntent.PrintBreak) }
+            reportBusy = state.reportBusy,
+            reportsAvailable = state.reportsAvailable,
+            onIntent = onIntent,
         )
 
         HorizontalDivider(thickness = 2.dp, color = MaterialTheme.colorScheme.outlineVariant)
@@ -478,7 +482,10 @@ private fun DetailHeader(
     onBack: () -> Unit,
     onPrevious: (() -> Unit)?,
     onNext: (() -> Unit)?,
-    onPrint: (() -> Unit)? = null
+    /** This break's own report actions, rendered as a ReportToolbar. */
+    reportBusy: Boolean,
+    reportsAvailable: Boolean,
+    onIntent: (CommercialDetailIntent) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -531,29 +538,44 @@ private fun DetailHeader(
 
                     Spacer(modifier = Modifier.height(UIConst.paddingSmall))
 
-                    // Stats row
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingAverage)
-                    ) {
-                        StatColumn(
-                            label = "",
-                            value1 = Strings[StringKey.DETAIL_TOTAL_ALL],
-                            value2 = Strings[StringKey.DETAIL_TOTAL_FLOW],
-                            value3 = Strings[StringKey.DETAIL_TOTAL_EXCLUDED]
-                        )
-                        StatColumn(
-                            label = Strings[StringKey.DETAIL_TOTAL_SPOTS],
-                            value1 = totalSpots.toString(),
-                            value2 = flowSpots.toString(),
-                            value3 = exceptSpots.toString()
-                        )
-                        StatColumn(
-                            label = Strings[StringKey.DETAIL_TOTAL_DURATION],
-                            value1 = formatDuration(totalDuration),
-                            value2 = formatDuration(flowDuration),
-                            value3 = formatDuration(exceptDuration)
-                        )
-                    }
+                    // Stats: a real 2D grid - ΟΛΑ/ΡΟΗΣ/ΕΞΑΙΡ. head the COLUMNS and
+                    // each metric is a ROW, so every value sits under its own label.
+                    // (The old layout put the three legends in a fourth column with an
+                    // empty label, which floated them up onto the header line.)
+                    StatGrid(
+                        columnLabels = listOf(
+                            Strings[StringKey.DETAIL_TOTAL_ALL],
+                            Strings[StringKey.DETAIL_TOTAL_FLOW],
+                            Strings[StringKey.DETAIL_TOTAL_EXCLUDED],
+                        ),
+                        rows = listOf(
+                            Strings[StringKey.DETAIL_TOTAL_SPOTS] to listOf(
+                                totalSpots.toString(),
+                                flowSpots.toString(),
+                                exceptSpots.toString(),
+                            ),
+                            Strings[StringKey.DETAIL_TOTAL_DURATION] to listOf(
+                                formatDuration(totalDuration),
+                                formatDuration(flowDuration),
+                                formatDuration(exceptDuration),
+                            ),
+                        ),
+                    )
+
+                    Spacer(modifier = Modifier.height(UIConst.paddingCompact))
+
+                    // This break's own report (preview / print / export PDF) - the
+                    // same toolkit the month report uses, wearing the platform's
+                    // control geometry.
+                    ReportToolbar(
+                        onPreview = { onIntent(CommercialDetailIntent.PreviewBreak) },
+                        onPrint = { onIntent(CommercialDetailIntent.PrintBreak) },
+                        onExportPdf = { onIntent(CommercialDetailIntent.ExportBreakPdf) },
+                        busy = reportBusy,
+                        available = reportsAvailable,
+                        labels = reportToolbarLabels(),
+                        metrics = reportToolbarMetrics(),
+                    )
                 }
 
                 // Right side - Show name and navigation
@@ -575,15 +597,8 @@ private fun DetailHeader(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)
                     ) {
-                        if (onPrint != null) {
-                            AppButton(
-                                text = Strings[StringKey.DETAIL_PRINT],
-                                onClick = onPrint,
-                                variant = AppButtonVariant.SECONDARY,
-                                leadingIcon = AppIcons.print,
-                            )
-                        }
-
+                        // Print moved into the ReportToolbar on the left (it is one
+                        // of three report actions, not a lone navigation button).
                         AppButton(
                             text = Strings[StringKey.DETAIL_PREVIOUS],
                             onClick = { onPrevious?.invoke() },
@@ -606,43 +621,42 @@ private fun DetailHeader(
     }
 }
 
-/** Stat-box width: domain geometry (three aligned columns of counts), not spacing. */
-private val statCellWidth = 50.dp
+/** Stat-column width: domain geometry (aligned columns of counts), not spacing. */
+private val statCellWidth = 64.dp
 
+/**
+ * The header stats as a proper table: [columnLabels] head the columns
+ * (ΟΛΑ / ΡΟΗΣ / ΕΞΑΙΡ.) and each row is one metric, so a value is always
+ * directly under the label that names it.
+ */
 @Composable
-private fun StatColumn(
-    label: String,
-    value1: String,
-    value2: String,
-    value3: String
+private fun StatGrid(
+    columnLabels: List<String>,
+    rows: List<Pair<String, List<String>>>,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (label.isNotEmpty()) {
-            AppText(label, AppTextStyle.STAT_LABEL)
+    Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        // Row-label column: a blank cell keeps it aligned with the header line
+        // (an empty AppText, so it scales with the font-size preference).
+        Column(horizontalAlignment = Alignment.Start) {
+            AppText("", AppTextStyle.STAT_LABEL)
+            rows.forEach { (rowLabel, _) ->
+                AppText(rowLabel, AppTextStyle.STAT_LABEL)
+            }
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular)
-        ) {
-            AppText(
-                value1,
-                AppTextStyle.TABLE_CELL_STRONG,
+        columnLabels.forEachIndexed { column, columnLabel ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(statCellWidth),
-                textAlign = TextAlign.Center
-            )
-            AppText(
-                value2,
-                AppTextStyle.TABLE_CELL_STRONG,
-                modifier = Modifier.width(statCellWidth),
-                textAlign = TextAlign.Center
-            )
-            AppText(
-                value3,
-                AppTextStyle.TABLE_CELL_STRONG,
-                modifier = Modifier.width(statCellWidth),
-                textAlign = TextAlign.Center
-            )
+            ) {
+                AppText(columnLabel, AppTextStyle.STAT_LABEL, textAlign = TextAlign.Center)
+                rows.forEach { (_, values) ->
+                    AppText(
+                        values.getOrElse(column) { "" },
+                        AppTextStyle.TABLE_CELL_STRONG,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
         }
     }
 }

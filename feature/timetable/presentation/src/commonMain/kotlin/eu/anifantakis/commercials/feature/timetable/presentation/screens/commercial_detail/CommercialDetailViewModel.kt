@@ -12,16 +12,21 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
+import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.reports.ReportDataFactory
+import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.models.ReportConfig
-import eu.anifantakis.commercials.reports.print
+import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
@@ -55,6 +60,10 @@ data class CommercialDetailState(
     val totalDuration: Int = 0,
     val flowDuration: Int = 0,
     val excludedDuration: Int = 0,
+    /** A report action is running - the toolbar waits for it. */
+    val reportBusy: Boolean = false,
+    /** This platform can generate reports at all (mobile now can too). */
+    val reportsAvailable: Boolean = false,
 )
 
 sealed interface CommercialDetailIntent {
@@ -65,8 +74,14 @@ sealed interface CommercialDetailIntent {
      */
     data class MoveRow(val from: Int, val to: Int) : CommercialDetailIntent
 
+    /** Preview this break's programme flow. */
+    data object PreviewBreak : CommercialDetailIntent
+
     /** Print this break's programme flow (the same report the grid popups print). */
     data object PrintBreak : CommercialDetailIntent
+
+    /** Export this break's programme flow as a PDF (native save dialog). */
+    data object ExportBreakPdf : CommercialDetailIntent
 }
 
 /**
@@ -100,8 +115,14 @@ class CommercialDetailViewModel(
         common.loadBreaks()
     }
 
-    private val detailState = common.commonState
-        .map { commonState -> buildState(commonState) }
+    /** The screen's state is DERIVED from the shared store, so the transient
+     *  report-busy flag lives beside it and is combined in - never a second
+     *  copy of the list. */
+    private val reportBusy = MutableStateFlow(false)
+
+    private val detailState = combine(common.commonState, reportBusy) { commonState, busy ->
+        buildState(commonState).copy(reportBusy = busy)
+    }
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000L),
@@ -113,7 +134,13 @@ class CommercialDetailViewModel(
     fun onAction(intent: CommercialDetailIntent) {
         when (intent) {
             is CommercialDetailIntent.MoveRow -> moveRow(intent.from, intent.to)
-            CommercialDetailIntent.PrintBreak -> printBreak()
+            CommercialDetailIntent.PreviewBreak -> runBreakReport { reportService.preview(it) }
+            CommercialDetailIntent.PrintBreak -> runBreakReport { reportService.print(it) }
+            CommercialDetailIntent.ExportBreakPdf -> {
+                val s = detailState.value
+                val fileName = "ProgramFlow_${s.date}_${s.breakLabel.replace(':', '-')}.pdf"
+                runBreakReport { reportService.exportToPdf(it, fileName) }
+            }
         }
     }
 
@@ -132,17 +159,45 @@ class CommercialDetailViewModel(
         common.reorder(breakId, date, reordered.map { it.id })
     }
 
-    private fun printBreak() {
+    /**
+     * The one report primitive for this break - preview/print/export differ
+     * only in the ACTION, so the payload, the empty check, the busy flag and
+     * the outcome policy live here once (mirrors TimetableViewModel's
+     * runMonthReport).
+     */
+    private fun runBreakReport(action: suspend (List<ReportPayload>) -> ReportResult) {
         val current = detailState.value
-        if (current.commercials.isEmpty()) return
+        if (current.reportBusy) return
+
+        val data = ReportDataFactory.createBreakProgramFlowData(
+            date = date,
+            breakTimeLabel = current.breakLabel,
+            commercials = current.commercials,
+        )
+        if (data.items.isEmpty()) {
+            showSnackbar(StringKey.REPORT_NO_SPOTS)
+            return
+        }
+        val payloads = listOf(data.toReportPayload(ReportConfig()))
+
         viewModelScope.launch {
-            val data = ReportDataFactory.createBreakProgramFlowData(
-                date = date,
-                breakTimeLabel = current.breakLabel,
-                commercials = current.commercials,
-            )
-            if (data.items.isNotEmpty()) {
-                reportService.print(data.toReportPayload(ReportConfig()))
+            reportBusy.value = true
+            try {
+                when (val result = action(payloads)) {
+                    // The engine's own text is authoritative - never translated.
+                    is ReportResult.Success -> showSnackbar(
+                        UiText.Dynamic(
+                            result.filePath?.let { path -> StringKey.REPORT_PDF_SAVED_PREFIX.localized() + path }
+                                ?: result.message
+                        )
+                    )
+                    is ReportResult.Error -> showSnackbar(UiText.Dynamic(result.message))
+                    ReportResult.Cancelled -> showSnackbar(StringKey.REPORT_CANCELLED)
+                }
+            } finally {
+                // A save dialog can throw or be cancelled; the buttons must
+                // never stay disabled because of it.
+                reportBusy.value = false
             }
         }
     }
@@ -174,6 +229,7 @@ class CommercialDetailViewModel(
 
         return CommercialDetailState(
             date = date,
+            reportsAvailable = reportService.isReportGenerationAvailable(),
             breakLabel = day.getOrNull(at)?.label ?: "",
             commercials = commercials,
             programName = cell?.programName,
