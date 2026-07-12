@@ -22,21 +22,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +42,18 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckbox
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxRow
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppPasswordField
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadio
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.design_system.platform.InputCapabilities
 
 /**
@@ -235,37 +239,60 @@ private fun Samples() {
         )
         HorizontalDivider()
 
-        SampleSection("Buttons (h=${t.buttonHeight})") {
+        SampleSection("AppButton (h=${t.buttonHeight})") {
             Row(
                 Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val shape = RoundedCornerShape(t.cornerSmall)
-                val pad = PaddingValues(horizontal = t.buttonPaddingHorizontal, vertical = t.buttonPaddingVertical)
-                Button(
-                    onClick = {},
-                    modifier = Modifier.heightIn(min = t.buttonHeight),
-                    shape = shape, contentPadding = pad,
-                    elevation = if (t.buttonElevation > 0.dp)
-                        ButtonDefaults.buttonElevation(defaultElevation = t.buttonElevation) else null,
-                ) { Text("Primary") }
-                OutlinedButton(
-                    onClick = {},
-                    modifier = Modifier.heightIn(min = t.buttonHeight),
-                    shape = shape, contentPadding = pad,
-                    border = BorderStroke(t.controlBorderWidth, MaterialTheme.colorScheme.outline),
-                ) { Text("Secondary") }
-                TextButton(
-                    onClick = {},
-                    modifier = Modifier.heightIn(min = t.buttonHeight),
-                    shape = shape, contentPadding = pad,
-                ) { Text("Text") }
-                Button(
-                    onClick = {}, enabled = false,
-                    modifier = Modifier.heightIn(min = t.buttonHeight),
-                    shape = shape, contentPadding = pad,
-                ) { Text("Disabled") }
+                AppButton("Primary", onClick = {})
+                AppButton("Secondary", onClick = {}, variant = AppButtonVariant.SECONDARY)
+                AppButton("Text", onClick = {}, variant = AppButtonVariant.TEXT)
+                AppButton("Delete", onClick = {}, variant = AppButtonVariant.DESTRUCTIVE)
+                AppButton("Disabled", onClick = {}, enabled = false)
+                var busy by remember { mutableStateOf(false) }
+                AppButton("Busy", onClick = { busy = !busy }, busy = busy)
+                AppButton("Icon", onClick = {}, leadingIcon = AppIcons.add)
+                AppIconButton(label = "Settings", icon = AppIcons.settings, onClick = {})
+            }
+        }
+
+        SampleSection("AppTextField / AppPasswordField (facade)") {
+            Column(
+                Modifier.widthIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+            ) {
+                var name by remember { mutableStateOf("") }
+                AppTextField(name, { name = it }, label = "Username", leadingIcon = AppIcons.person)
+                var pw by remember { mutableStateOf("hunter2") }
+                var pwVisible by remember { mutableStateOf(false) }
+                AppPasswordField(
+                    pw, { pw = it }, label = "Password",
+                    visible = pwVisible, onToggleVisibility = { pwVisible = !pwVisible },
+                    leadingIcon = AppIcons.lock,
+                )
+                var err by remember { mutableStateOf("bad value") }
+                AppTextField(err, { err = it }, label = "With error", isError = true, errorText = "This is the error line")
+            }
+        }
+
+        SampleSection("AppDialog") {
+            var open by remember { mutableStateOf(false) }
+            AppButton("Open dialog", onClick = { open = true }, variant = AppButtonVariant.SECONDARY)
+            if (open) {
+                AppDialog(
+                    title = "Confirm action",
+                    onDismiss = { open = false },
+                    confirmText = "Confirm",
+                    onConfirm = { open = false },
+                    dismissText = "Cancel",
+                    icon = AppIcons.info,
+                ) {
+                    AppText(
+                        "Full-bleed on COMPACT, token width elsewhere, platform corner + tonal depth.",
+                        AppTextStyle.BODY,
+                    )
+                }
             }
         }
 
@@ -286,25 +313,22 @@ private fun Samples() {
                 var checked by remember { mutableStateOf(true) }
                 var picked by remember { mutableStateOf(0) }
                 Box(Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))) {
-                    Checkbox(checked, { checked = it })
+                    AppCheckbox(checked, { checked = it })
                 }
                 Box(Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))) {
-                    RadioButton(picked == 0, { picked = 0 })
+                    AppRadio(picked == 0, { picked = 0 })
                 }
                 Box(Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))) {
-                    RadioButton(picked == 1, { picked = 1 })
+                    AppRadio(picked == 1, { picked = 1 })
                 }
                 Text("boxes show the reserved interactive area", style = AppTheme.typography.statLabel)
             }
+            var rowChecked by remember { mutableStateOf(true) }
+            AppCheckboxRow(rowChecked, { rowChecked = it }, label = "Labelled row = whole-row target")
         }
 
-        SampleSection("Card depth (elevation=${t.cardElevation} border=${t.cardBorderWidth})") {
-            Card(
-                shape = RoundedCornerShape(t.cornerMedium),
-                elevation = CardDefaults.cardElevation(defaultElevation = t.cardElevation),
-                border = if (t.cardBorderWidth > 0.dp)
-                    BorderStroke(t.cardBorderWidth, MaterialTheme.colorScheme.outlineVariant) else null,
-            ) {
+        SampleSection("AppCard (elevation=${t.cardElevation} border=${t.cardBorderWidth})") {
+            AppCard {
                 Column(Modifier.padding(t.cardPadding)) {
                     Text("Card title", style = AppTheme.typography.sectionTitle)
                     Text(
@@ -326,7 +350,7 @@ private fun Samples() {
                 horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = { moved = !moved }) { Text("Animate") }
+                AppButton("Animate", onClick = { moved = !moved }, variant = AppButtonVariant.TEXT)
                 Box(
                     Modifier.offset(x = offset).size(24.dp)
                         .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(t.cornerSmall)),

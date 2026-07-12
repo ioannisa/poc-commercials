@@ -1,0 +1,44 @@
+package eu.anifantakis.commercials.core.presentation.design_system.components
+
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+
+/**
+ * Icon-only action. [label] is MANDATORY and localized: it is the a11y name
+ * of the control (and, once tooltips land, its hover/long-press tooltip).
+ * The inner icon is decorative (`contentDescription = null`) - labelling the
+ * ACTIONABLE node once is the rule; labelling both reads twice.
+ *
+ * Hit area: M3 IconButton consumes LocalMinimumInteractiveComponentSize,
+ * which CommercialsTheme feeds from the interaction policy - no explicit
+ * floor needed here.
+ */
+@Composable
+fun AppIconButton(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    size: AppIconSize = AppIconSize.MEDIUM,
+    tint: Color = Color.Unspecified,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.semantics { contentDescription = label },
+        enabled = enabled,
+    ) {
+        AppIcon(
+            imageVector = icon,
+            contentDescription = null,
+            size = size,
+            tint = if (tint != Color.Unspecified) tint else LocalContentColor.current,
+        )
+    }
+}
