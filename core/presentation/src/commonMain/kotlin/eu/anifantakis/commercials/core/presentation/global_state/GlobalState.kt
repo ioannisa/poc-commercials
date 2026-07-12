@@ -19,7 +19,8 @@ data class GlobalState(
 
 sealed interface GlobalIntent {
     data class ShowLoading(val critical: Boolean = false) : GlobalIntent
-    data object HideLoading : GlobalIntent
+    /** [critical] must MATCH the ShowLoading it balances (ref-counted per tier). */
+    data class HideLoading(val critical: Boolean = false) : GlobalIntent
     data class UpdateHasContent(val hasContent: Boolean) : GlobalIntent
     /** Routed to [GlobalEffect.SnackBarMessage]; state is unchanged. */
     data class ShowSnackbar(val message: UiText, val actionLabel: String? = null) : GlobalIntent

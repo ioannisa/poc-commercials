@@ -23,7 +23,9 @@ abstract class BaseGlobalViewModel(
     /** [critical] = uninterruptible: the nav host also blocks back while it shows. */
     fun showLoading(critical: Boolean = false) =
         globalStateContainer.dispatch(GlobalIntent.ShowLoading(critical))
-    fun hideLoading() = globalStateContainer.dispatch(GlobalIntent.HideLoading)
+    /** [critical] must match the corresponding showLoading (ref-counted per tier). */
+    fun hideLoading(critical: Boolean = false) =
+        globalStateContainer.dispatch(GlobalIntent.HideLoading(critical))
     fun updateHasContent(has: Boolean) = globalStateContainer.dispatch(GlobalIntent.UpdateHasContent(has))
 
     /** Golden-standard carrier: [UiText] resolves at the UI edge, in the display-time language. */
@@ -48,7 +50,7 @@ abstract class BaseGlobalViewModel(
         } catch (e: Exception) {
             Result.failure(e)
         } finally {
-            hideLoading()
+            hideLoading(critical)
         }
     }
 }
