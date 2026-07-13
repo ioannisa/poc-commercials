@@ -889,7 +889,10 @@ CREATE TABLE IF NOT EXISTS spots (
                 """
                 SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placements,
-                       COALESCE(SUM(p.duration_seconds), 0) AS total_secs
+                       -- the SPOT's duration, not the airing's (see durationSeconds
+                       -- on CommercialRow). The CASE is what the LEFT JOIN needs: a
+                       -- spot with no airings must contribute 0, not its length.
+                       COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
                 FROM contract_lines cl
                 JOIN contracts ct ON ct.id = cl.contract_id
                 JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE
@@ -936,7 +939,9 @@ CREATE TABLE IF NOT EXISTS spots (
             c.prepareStatement(
                 """
                 SELECT s.id, s.description, s.duration_seconds, COUNT(p.id) AS placements,
-                       COALESCE(SUM(p.duration_seconds), 0) AS total_secs
+                       -- the SPOT's duration, not the airing's (see durationSeconds
+                       -- on CommercialRow); 0 for a spot that never aired.
+                       COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
                 FROM spots s
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE s.contract_line_id = ? AND s.hidden = FALSE
@@ -1075,7 +1080,7 @@ CREATE TABLE IF NOT EXISTS spots (
     private fun placementRow(c: Connection, placementId: Long): CommercialRow? =
         c.prepareStatement(
             """
-            SELECT p.id, p.spot_id, p.position, p.duration_seconds,
+            SELECT p.id, p.spot_id, p.position, s.duration_seconds,
                    s.description, s.booked_program AS spot_type, s.flow,
                    sty.name AS sales_item,
                    cu.code AS client_code, cu.name AS client_name,
@@ -1268,7 +1273,7 @@ CREATE TABLE IF NOT EXISTS spots (
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
+                SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, s.duration_seconds,
                        s.description, s.booked_program AS spot_type, s.flow,
                        sty.name AS sales_item,
                        cu.code AS client_code, cu.name AS client_name,

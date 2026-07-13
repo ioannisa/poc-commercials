@@ -36,6 +36,18 @@ data class CommercialRow(
     val clientCode: String,
     val clientName: String,
     val message: String,
+    /**
+     * The SPOT's duration, NOT the airing's - matching the legacy Break Console,
+     * whose "sec" column and ΣΥΝΟΛΙΚΗ ΔΙΑΡΚΕΙΑ both read the message.
+     *
+     * The legacy `schedule` row carries its own `durationSecs`, and it disagrees
+     * with the message on 22.68% of airings. Mostly that is a stale snapshot
+     * (the length was corrected on the message afterwards and the old schedule
+     * rows kept the old value), though 1,530 spots do genuinely vary per airing.
+     * Both readings are defensible; the owner chose parity with the legacy tool
+     * (2026-07-13), so `placements.duration_seconds` is preserved in the data but
+     * is deliberately NOT what this row - or any total built from it - reports.
+     */
     val durationSeconds: Int,
     /** PROGRAMME type (programtypes) - printed on the Program Flow report. */
     val type: String,
