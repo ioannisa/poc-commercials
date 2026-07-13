@@ -13,6 +13,8 @@ import eu.anifantakis.commercials.core.presentation.design_system.platform.Input
 import eu.anifantakis.commercials.core.presentation.design_system.platform.UiPlatform
 import eu.anifantakis.commercials.core.presentation.design_system.platform.detectUiPlatform
 import eu.anifantakis.commercials.core.presentation.design_system.platform.startupInputCapabilities
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.runtime.LaunchedEffect
 
 /**
  * The application's Material 3 theme (named after the brand, dealer-totem
@@ -176,7 +178,33 @@ private fun CommercialsThemeImpl(
         roboto = robotoFamily(),
         robotoMono = robotoMonoFamily(),
         step = fontSizeStep,
+        minWeight = visual.minTextWeight,
     )
+
+    // THE STEP THAT MAKES GLYPH FALLBACK WORK.
+    //
+    // Skia falls back per glyph, but only across typefaces it has actually been
+    // handed: every font Compose LOADS is registered as a fallback candidate
+    // (TypefaceFontProviderWithFallback), and FontMgrWithFallback is wired in as
+    // the default font manager. A font nobody loads is a font Skia cannot reach.
+    //
+    // Listing the Hebrew faces inside robotoFamily() would NOT load them - a
+    // FontFamily is a selection list, Roboto wins every weight, and the loser is
+    // never touched. preload() resolves EVERY Font in a family, so one call puts
+    // the whole fallback chain in front of Skia. See fallbackFontFamilies().
+    //
+    // Cheap and idempotent: the typefaces are cached, so this is one pass at
+    // startup, not per recomposition. Text drawn in the very first frame may
+    // briefly miss a fallback glyph and then settle - the same deal as any
+    // asynchronously loaded font resource.
+    val fontResolver = LocalFontFamilyResolver.current
+    val fallbacks = fallbackFontFamilies()
+    LaunchedEffect(fontResolver, fallbacks) {
+        fallbacks.forEach { family ->
+            // A missing/corrupt fallback face must cost its script, never the app.
+            runCatching { fontResolver.preload(family) }
+        }
+    }
 
     CompositionLocalProvider(
         LocalAppTypography provides appTypography,

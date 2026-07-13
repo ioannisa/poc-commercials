@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -2171,7 +2172,15 @@ private fun <T> DataCell(
 
     val cellBg = column.cellBackground?.invoke(item) ?: Color.Transparent
     val cellTextColor = column.cellTextColor?.invoke(item) ?: Color.Unspecified
-    val fontWeight = column.fontWeight?.invoke(item) ?: FontWeight.Normal
+    // INHERIT the ambient weight; do not hardcode Normal. This grid is a leaf
+    // toolkit with no view of the design system, and pinning every data cell to
+    // FontWeight.Normal quietly overrode the theme - which is how the browser's
+    // thin-stem compensation (PlatformVisualTokens.minTextWeight lifts Regular to
+    // Medium there) reached every screen in the app EXCEPT its main working
+    // surface. LocalTextStyle costs the module nothing: it is plain Compose.
+    val fontWeight = column.fontWeight?.invoke(item)
+        ?: LocalTextStyle.current.fontWeight
+        ?: FontWeight.Normal
     
     val primaryColor = MaterialTheme.colorScheme.primary
     
@@ -2317,9 +2326,16 @@ private fun EditableCell(
                         }
                     } else false
                 },
-            textStyle = TextStyle(
-                fontSize = (13 * gridScale).sp,
-                textAlign = textAlign
+            // MERGE onto the ambient style, never build one from scratch:
+            // BasicTextField defaults to TextStyle.Default (the HOST's font), so
+            // a freshly-built TextStyle silently dropped the app typeface and the
+            // cell editor rendered in a different face from the cell beneath it.
+            // Everything else in this grid goes through Text(), which inherits.
+            textStyle = LocalTextStyle.current.merge(
+                TextStyle(
+                    fontSize = (13 * gridScale).sp,
+                    textAlign = textAlign,
+                )
             ),
             singleLine = true,
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),

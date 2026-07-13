@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.platform.UiPlatform
@@ -88,6 +89,22 @@ data class PlatformVisualTokens(
     // scrollbars (reach the grids by injection - GridMetrics)
     val scrollbarThickness: Dp,
     val scrollbarAlwaysVisible: Boolean,
+    /**
+     * The LIGHTEST weight this platform may render body text at.
+     *
+     * Skia rasterises text without hinting or stem-darkening in the BROWSER,
+     * while the native platforms lean on the OS to thicken small stems. Identical
+     * font, identical size - and the web comes out visibly thinner. It is not a
+     * font bug (the faces carry the same usWeightClass); it is how the glyphs are
+     * rasterised, and no font file fixes it.
+     *
+     * So the web asks for one step more weight, and only where it is thin: this
+     * is a FLOOR, not an offset. Regular (400) becomes Medium (500) - a face we
+     * actually ship - while Medium and Bold are already heavy enough and stay put.
+     * An offset would have pushed Medium to 600, which we have no face for, and
+     * Compose would have resolved it up to Bold.
+     */
+    val minTextWeight: FontWeight,
 )
 
 internal fun PlatformVisualTokens.toShapes() = Shapes(
@@ -124,6 +141,7 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 2.dp, gap = 1.dp),
         motion = MotionTokens(fastMillis = 100, mediumMillis = 250, slowMillis = 400),
         scrollbarThickness = 0.dp, scrollbarAlwaysVisible = false,
+        minTextWeight = FontWeight.Normal,
     )
     // HIG-flavoured: 44pt controls, continuous-feel corners, hairlines, flat.
     UiPlatform.IOS -> PlatformVisualTokens(
@@ -141,6 +159,7 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 2.dp, gap = 1.dp),
         motion = MotionTokens(fastMillis = 120, mediumMillis = 300, slowMillis = 450),
         scrollbarThickness = 0.dp, scrollbarAlwaysVisible = false,
+        minTextWeight = FontWeight.Normal,
     )
     // AppKit-flavoured: short wide buttons, subtle corners, thick accent
     // focus ring, snappy motion, overlay scrollbars.
@@ -159,6 +178,7 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 3.dp, gap = 2.dp),
         motion = MotionTokens(fastMillis = 80, mediumMillis = 150, slowMillis = 220),
         scrollbarThickness = 8.dp, scrollbarAlwaysVisible = false,
+        minTextWeight = FontWeight.Normal,
     )
     // Fluent-flavoured: 4dp corners, 1px strokes, near-instant motion,
     // persistent scrollbar gutters.
@@ -177,6 +197,7 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 2.dp, gap = 1.dp),
         motion = MotionTokens(fastMillis = 60, mediumMillis = 120, slowMillis = 180),
         scrollbarThickness = 12.dp, scrollbarAlwaysVisible = true,
+        minTextWeight = FontWeight.Normal,
     )
     // libadwaita-flavoured: 6dp corners, 1px strokes, GTK density.
     UiPlatform.LINUX -> PlatformVisualTokens(
@@ -194,6 +215,7 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 2.dp, gap = 1.dp),
         motion = MotionTokens(fastMillis = 80, mediumMillis = 150, slowMillis = 220),
         scrollbarThickness = 12.dp, scrollbarAlwaysVisible = true,
+        minTextWeight = FontWeight.Normal,
     )
     // A good web app, not an OS imitation: roomier page padding, visible
     // scrollbars, neutral geometry.
@@ -212,5 +234,6 @@ internal fun platformVisualTokens(platform: UiPlatform): PlatformVisualTokens = 
         focusRing = FocusRingStyle(width = 2.dp, gap = 1.dp),
         motion = MotionTokens(fastMillis = 80, mediumMillis = 150, slowMillis = 220),
         scrollbarThickness = 10.dp, scrollbarAlwaysVisible = true,
+        minTextWeight = FontWeight.Medium,
     )
 }
