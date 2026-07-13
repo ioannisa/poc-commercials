@@ -172,12 +172,22 @@ private fun CommercialsThemeImpl(
     }
     val a11y = a11yOverride ?: rememberAccessibilityPreferences()
 
-    val appTypography = buildAppTypography(
-        roboto = robotoFamily(),
-        robotoMono = robotoMonoFamily(),
-        step = fontSizeStep,
-        minWeight = visual.minTextWeight,
-    )
+    // REMEMBERED: this builds ~20 TextStyles, and its result feeds a STATIC
+    // CompositionLocal - rebuilding it on every theme-scope recomposition both
+    // reallocates the lot and forces the provider to structurally compare the
+    // whole tree of styles to discover nothing changed. The font families have
+    // structural equality (their Fonts are cached by compose-resources), so
+    // these keys hit whenever the inputs are genuinely the same.
+    val roboto = robotoFamily()
+    val robotoMono = robotoMonoFamily()
+    val appTypography = remember(roboto, robotoMono, fontSizeStep, visual.minTextWeight) {
+        buildAppTypography(
+            roboto = roboto,
+            robotoMono = robotoMono,
+            step = fontSizeStep,
+            minWeight = visual.minTextWeight,
+        )
+    }
 
     // GLYPH FALLBACK. Roboto has no Hebrew - and no Chinese, and no Arabic. This
     // is what lets a face that DOES have them draw those characters, without any

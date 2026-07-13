@@ -4,9 +4,12 @@ import androidx.compose.runtime.Composable
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.reports.ui.ReportToolbarLabels
 import eu.anifantakis.commercials.reports.ui.ReportToolbarMetrics
+import androidx.compose.runtime.remember
+import eu.anifantakis.commercials.core.presentation.design_system.PlatformVisualTokens
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 
 /**
  * The bridge to the LEAF toolkits (`:reports-client`, `:core:presentation:grids`).
@@ -22,17 +25,29 @@ import eu.anifantakis.commercials.reports.ui.ReportToolbarMetrics
  * platform-token chrome; an ArchitectureTest rule now fails the build for it.
  */
 @Composable
-internal fun reportToolbarLabels() = ReportToolbarLabels(
-    preview = Strings[StringKey.REPORT_PREVIEW],
-    print = Strings[StringKey.REPORT_PRINT],
-    exportPdf = Strings[StringKey.REPORT_EXPORT_PDF],
-    notAvailable = Strings[StringKey.REPORT_NOT_AVAILABLE],
-)
+internal fun reportToolbarLabels(): ReportToolbarLabels {
+    // Remembered against the language - these are read in screen root scopes,
+    // which re-execute on every state tick.
+    val language = LocalLanguage.current
+    return remember(language) {
+        ReportToolbarLabels(
+            preview = StringKey.REPORT_PREVIEW.localized(),
+            print = StringKey.REPORT_PRINT.localized(),
+            exportPdf = StringKey.REPORT_EXPORT_PDF.localized(),
+            notAvailable = StringKey.REPORT_NOT_AVAILABLE.localized(),
+        )
+    }
+}
 
 @Composable
 internal fun reportToolbarMetrics(): ReportToolbarMetrics {
     val t = AppTheme.visualTokens
-    return ReportToolbarMetrics(
+    // The tokens are fixed for the session; one instance, not one per tick.
+    return remember(t) { reportToolbarMetricsFor(t) }
+}
+
+private fun reportToolbarMetricsFor(t: PlatformVisualTokens): ReportToolbarMetrics =
+    ReportToolbarMetrics(
         buttonHeight = t.buttonHeightDense,
         paddingHorizontal = t.buttonPaddingHorizontal,
         paddingVertical = t.buttonPaddingVertical,
@@ -42,4 +57,3 @@ internal fun reportToolbarMetrics(): ReportToolbarMetrics {
         iconSize = t.iconSmall,
         gap = UIConst.paddingSmall,
     )
-}

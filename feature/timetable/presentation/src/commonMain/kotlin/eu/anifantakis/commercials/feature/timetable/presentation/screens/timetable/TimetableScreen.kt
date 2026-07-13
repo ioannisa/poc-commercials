@@ -68,6 +68,7 @@ import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 
 /**
  * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
@@ -149,15 +150,23 @@ private fun TimetableScreen(
     val showSpotTimes = state.showSpotTimes
     val canEdit = state.canEdit
 
-    // Localized month names (Strings[] — recompose on language switch)
-    val monthNames = listOf(
-        Strings[StringKey.MONTH_JANUARY], Strings[StringKey.MONTH_FEBRUARY],
-        Strings[StringKey.MONTH_MARCH], Strings[StringKey.MONTH_APRIL],
-        Strings[StringKey.MONTH_MAY], Strings[StringKey.MONTH_JUNE],
-        Strings[StringKey.MONTH_JULY], Strings[StringKey.MONTH_AUGUST],
-        Strings[StringKey.MONTH_SEPTEMBER], Strings[StringKey.MONTH_OCTOBER],
-        Strings[StringKey.MONTH_NOVEMBER], Strings[StringKey.MONTH_DECEMBER]
-    )
+    // Localized month names. REMEMBERED against the language: this sits in the
+    // screen's root scope, which re-executes on every state tick (each finder
+    // keystroke, every busy flip) - without the remember it rebuilt 12 strings
+    // and a list on each of them, for a value that only changes on a language
+    // switch. localized() is the non-composable resolve; the language key is
+    // what re-runs it after a switch.
+    val language = LocalLanguage.current
+    val monthNames = remember(language) {
+        listOf(
+            StringKey.MONTH_JANUARY.localized(), StringKey.MONTH_FEBRUARY.localized(),
+            StringKey.MONTH_MARCH.localized(), StringKey.MONTH_APRIL.localized(),
+            StringKey.MONTH_MAY.localized(), StringKey.MONTH_JUNE.localized(),
+            StringKey.MONTH_JULY.localized(), StringKey.MONTH_AUGUST.localized(),
+            StringKey.MONTH_SEPTEMBER.localized(), StringKey.MONTH_OCTOBER.localized(),
+            StringKey.MONTH_NOVEMBER.localized(), StringKey.MONTH_DECEMBER.localized()
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -793,21 +802,30 @@ private fun TableRow(
 }
 
 
-/** Localized labels for the standalone grid toolkit (leaf takes no StringKey). */
+/**
+ * Localized labels for the standalone grid toolkit (leaf takes no StringKey).
+ * Remembered against the language: it is called from the screen's root scope,
+ * so without it every state tick rebuilt the labels and their day map.
+ */
 @Composable
-private fun schedulerLabels() = SchedulerLabels(
-    timeDay = Strings[StringKey.TIMETABLE_TIME_DAY],
-    totals = Strings[StringKey.TIMETABLE_TOTALS],
-    dayAbbreviations = mapOf(
-        DayOfWeek.MONDAY to Strings[StringKey.DAY_SHORT_MONDAY],
-        DayOfWeek.TUESDAY to Strings[StringKey.DAY_SHORT_TUESDAY],
-        DayOfWeek.WEDNESDAY to Strings[StringKey.DAY_SHORT_WEDNESDAY],
-        DayOfWeek.THURSDAY to Strings[StringKey.DAY_SHORT_THURSDAY],
-        DayOfWeek.FRIDAY to Strings[StringKey.DAY_SHORT_FRIDAY],
-        DayOfWeek.SATURDAY to Strings[StringKey.DAY_SHORT_SATURDAY],
-        DayOfWeek.SUNDAY to Strings[StringKey.DAY_SHORT_SUNDAY],
-    ),
-)
+private fun schedulerLabels(): SchedulerLabels {
+    val language = LocalLanguage.current
+    return remember(language) {
+        SchedulerLabels(
+            timeDay = StringKey.TIMETABLE_TIME_DAY.localized(),
+            totals = StringKey.TIMETABLE_TOTALS.localized(),
+            dayAbbreviations = mapOf(
+                DayOfWeek.MONDAY to StringKey.DAY_SHORT_MONDAY.localized(),
+                DayOfWeek.TUESDAY to StringKey.DAY_SHORT_TUESDAY.localized(),
+                DayOfWeek.WEDNESDAY to StringKey.DAY_SHORT_WEDNESDAY.localized(),
+                DayOfWeek.THURSDAY to StringKey.DAY_SHORT_THURSDAY.localized(),
+                DayOfWeek.FRIDAY to StringKey.DAY_SHORT_FRIDAY.localized(),
+                DayOfWeek.SATURDAY to StringKey.DAY_SHORT_SATURDAY.localized(),
+                DayOfWeek.SUNDAY to StringKey.DAY_SHORT_SUNDAY.localized(),
+            ),
+        )
+    }
+}
 
 /**
  * Localized BUTTON labels for the standalone report toolbar. The outcome
