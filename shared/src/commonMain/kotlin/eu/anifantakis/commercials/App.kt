@@ -24,6 +24,9 @@ import eu.anifantakis.commercials.core.presentation.grids.LocalGridInput
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
 import org.koin.compose.koinInject
+import eu.anifantakis.commercials.core.presentation.design_system.LocalGlyphFallback
+import eu.anifantakis.commercials.core.presentation.grids.LocalGridTextAnnotator
+import androidx.compose.runtime.remember
 
 @Composable
 fun App() {
@@ -71,11 +74,24 @@ fun App() {
                     // derived from the SAME interaction policy everything
                     // else reads (never from the OS).
                     val interaction = AppTheme.interaction
+                    // ...and its glyph fallback, for the same reason. Roboto has
+                    // no Hebrew (nor Chinese, nor Arabic), and the grids draw most
+                    // of this app's text: without this, those scripts would render
+                    // everywhere EXCEPT the screen people actually work in.
+                    val glyphFallback = LocalGlyphFallback.current
+                    // REMEMBERED. `glyphFallback::annotateOrNull` allocates a NEW
+                    // function object every pass, and LocalGridTextAnnotator is a
+                    // static local: a new value there recomposes the entire tree
+                    // beneath it. Bound method references happen to have equals on
+                    // the JVM - nothing promises that on wasm, and a window resize
+                    // recomposes this. Pin the instance and the question goes away.
+                    val annotate = remember(glyphFallback) { glyphFallback::annotateOrNull }
                     CompositionLocalProvider(
                         LocalGridInput provides GridInputConfig(
                             minScale = if (interaction.supportsTouchGestures) 1.3f else 1f,
                             handleSlop = if (interaction.supportsTouchGestures) 14.dp else 0.dp,
                         ),
+                        LocalGridTextAnnotator provides annotate,
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             NavigationRoot()

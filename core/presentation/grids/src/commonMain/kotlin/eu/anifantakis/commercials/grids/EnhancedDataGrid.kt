@@ -1283,7 +1283,7 @@ private fun <T> HeaderCell(
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
+            GridText(
                 text = text,
                 fontWeight = FontWeight.Bold,
                 fontSize = (13 * gridScale).sp,
@@ -2249,7 +2249,7 @@ private fun <T> DataCell(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
+                GridText(
                     text = column.extractor(item),
                     fontSize = (13 * gridScale).sp,
                     color = cellTextColor,
@@ -2420,7 +2420,7 @@ private fun <T> StickyFooterRow(
                             .fillMaxHeight(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
+                        GridText(
                             text = summaryLabel,
                             fontWeight = FontWeight.Bold,
                             fontSize = (14 * gridScale).sp
@@ -2458,7 +2458,7 @@ private fun <T> StickyFooterRow(
                         .fillMaxHeight(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
+                    GridText(
                         text = summaryLabel,
                         fontWeight = FontWeight.Bold,
                         fontSize = (14 * gridScale).sp
@@ -2516,7 +2516,7 @@ private fun TotalsCell(
             else -> Alignment.CenterStart
         }
     ) {
-        Text(
+        GridText(
             text = value,
             fontSize = (13 * gridScale).sp,
             fontWeight = FontWeight.Bold,

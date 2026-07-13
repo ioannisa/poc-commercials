@@ -1,26 +1,31 @@
 # Bundled fonts
 
-`roboto_hebrew_*.ttf` and `roboto_mono_hebrew_regular.ttf` are **not** upstream
-Roboto. They are Roboto with **Noto Sans Hebrew merged into them**, because
-stock Roboto ships 927 glyphs (Latin, Greek, Cyrillic) and **no Hebrew** — and
-neither Compose nor JasperReports performs glyph fallback across a font family,
-so Hebrew text rendered as empty boxes anywhere the host OS could not silently
-rescue it (i.e. in the browser).
+| file | licence |
+|---|---|
+| `roboto_{regular,medium,bold}.ttf`, `roboto_mono_regular.ttf` | Apache License 2.0 (Google) — upstream, unmodified |
+| `noto_sans_hebrew_{regular,medium,bold}.ttf` | SIL Open Font License 1.1 — `OFL-NotoSansHebrew.txt` |
 
-How they were produced:
+## Why there is a second family at all
 
-1. `NotoSansHebrew-{Regular,Medium,Bold}` instanced from the upstream variable
-   font, then scaled from its 1000-unit em to Roboto's 2048.
-2. Merged into the matching Roboto weight, Roboto first — so Roboto wins every
-   codepoint it already covers and only the Hebrew block is added.
-3. Roboto's `hhea`/`OS/2` vertical metrics copied back over the merged face, so
-   baseline and line height are unchanged and no screen reflowed.
+Roboto ships **927 glyphs**: Latin, Greek, Cyrillic. It has **no Hebrew**, no
+Arabic and no CJK. Hebrew is one of the app's UI languages, so a face that covers
+it has to be bundled.
 
-Result: 1,078 glyphs per weight, one face, identical on all five platforms.
+The Noto Sans Hebrew weights are static instances of the upstream variable font,
+chosen to line up with Roboto's Normal / Medium / Bold. They are **not merged**
+into Roboto — the app picks between the two per script run at render time
+(`core/presentation/.../design_system/FontFallback.kt`). That is what keeps a
+future Chinese face from costing Greek users a multi-megabyte download: a font is
+downloaded only because it is listed in the chain.
 
-## Licences
+## Adding a script
 
-- **Roboto** — Apache License 2.0 (Google).
-- **Noto Sans Hebrew** — SIL Open Font License 1.1, `OFL-NotoSansHebrew.txt`
-  in this directory. It declares **no Reserved Font Name**, so a merged
-  derivative is permitted; the merged files are distributed under the OFL.
+1. Drop the TTF in `core/presentation/src/commonMain/composeResources/font/`.
+2. Add one `ScriptFont` entry to `fallbackFontFamilies()`, with the codepoint
+   ranges it covers.
+3. Record its licence here.
+
+Nothing else changes — **except reports**: JasperReports does no glyph fallback,
+so a report that must print the new script also needs the face registered in
+`reportcore/.../fonts/roboto/jasperreports-fonts.xml`. `FontCoverageTest` states
+that limitation out loud.

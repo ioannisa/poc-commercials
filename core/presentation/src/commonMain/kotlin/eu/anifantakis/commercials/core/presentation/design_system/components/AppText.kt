@@ -14,6 +14,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.FallbackText
 
 /**
  * The app's semantic text roles (dealer-totem pattern): screens pick a ROLE,
@@ -135,7 +136,10 @@ fun AppText(
     overflow: TextOverflow = TextOverflow.Clip,
 ) {
     val (resolvedStyle, defaultColor) = resolveAppTextStyle(style)
-    Text(
+    // Roboto has no Hebrew (nor Chinese, nor Arabic). FallbackText hands anything
+    // it cannot draw to a face that can - and keeps Compose's plain-string fast
+    // path for everything else, which is nearly all of it. See FontFallback.kt.
+    FallbackText(
         text = text,
         style = resolvedStyle,
         modifier = modifier,

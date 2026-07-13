@@ -13,7 +13,11 @@ kotlin {
         commonMain.dependencies {
             api(projects.core.domain)
             // Res.font.* for the design system's bundled Roboto family
+            // (and the Noto faces that cover what Roboto cannot - FontFallback.kt)
             implementation(libs.compose.components.resources)
+        }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
         }
     }
 }

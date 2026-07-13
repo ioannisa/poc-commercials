@@ -337,7 +337,7 @@ fun LazySchedulerGrid(
                         .border(0.5.dp, palette.headerBorder),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
+                    GridText(
                         text = labels.timeDay,
                         fontWeight = FontWeight.Bold,
                         fontSize = (10 * s).sp
@@ -472,7 +472,7 @@ fun LazySchedulerGrid(
                             .border(0.5.dp, palette.headerBorder),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
+                        GridText(
                             text = labels.totals,
                             fontWeight = FontWeight.Bold,
                             fontSize = (10 * s).sp
@@ -552,7 +552,7 @@ private fun LazyDayHeader(
                 modifier = Modifier.fillMaxWidth().weight(0.45f).background(nameBg),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                GridText(
                     text = labels.dayAbbreviations[date.value.dayOfWeek] ?: date.value.dayOfWeek.toGreekAbbrLazy(),
                     fontSize = (11 * scale).sp,
                     fontWeight = FontWeight.Bold,
@@ -768,6 +768,17 @@ private fun GridCell(
         contentAlignment = Alignment.Center
     ) {
         if (spotCount > 0) {
+            // PLAIN Text, deliberately - NOT GridText.
+            //
+            // This is the scheduler's cell, and there are ~1,500 of them on screen.
+            // It only ever holds DIGITS: a spot count, or a duration as MM:SS. No
+            // letters, so no script can appear here that Roboto does not have, so
+            // the glyph-fallback scan would find nothing 1,500 times over.
+            //
+            // The letters in this grid live in its LABELS - the day abbreviations,
+            // the totals row, the corner - and those go through GridText. Route the
+            // cells through it too and you would pay the scan on the app's densest
+            // surface to serve text that cannot exist there.
             Text(
                 // "spots times" mode: the cell's summed durations as MM:SS
                 // (10 spots x 342s total -> 05:42), like the legacy app

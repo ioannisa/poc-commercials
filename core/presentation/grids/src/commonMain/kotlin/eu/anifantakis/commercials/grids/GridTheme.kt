@@ -7,6 +7,15 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 
 /**
  * Theme-aware grid colours. Grids draw a lot of chrome (headers, borders,
@@ -166,4 +175,57 @@ fun gridPalette(): GridPalette =
 @Composable
 fun ProvideGridPalette(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalGridPalette provides gridPalette(), content = content)
+}
+
+/**
+ * Rewrites a cell's text so every character is drawn by a face that HAS it.
+ *
+ * These grids are a standalone toolkit - they cannot see the app's design system,
+ * and they will not learn the word "font fallback". They just ask this to turn a
+ * String into an AnnotatedString and draw the result.
+ *
+ * Identity by default, so the toolkit stands alone. The app provides the real one
+ * (`LocalGlyphFallback`), which matters because the grids are where MOST of this
+ * app's text lives: leave them out and Hebrew renders everywhere except the one
+ * screen people actually work in.
+ */
+val LocalGridTextAnnotator = staticCompositionLocalOf<(String) -> AnnotatedString?> {
+    { null }
+}
+
+/**
+ * A grid cell/header, with the app's glyph fallback applied.
+ *
+ * NULL from the annotator means "nothing to do" - and then this draws the PLAIN
+ * STRING, which is Compose's cheaper text node. Wrapping every one of a
+ * 1,500-cell grid's labels in an AnnotatedString to serve the rare Hebrew one
+ * would tax the whole grid for the exception. Measured: the scan itself does not
+ * register; giving up the fast path would.
+ */
+@Composable
+internal fun GridText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+    textAlign: TextAlign? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    style: TextStyle = LocalTextStyle.current,
+) {
+    val annotated = LocalGridTextAnnotator.current(text)
+    if (annotated == null) {
+        Text(
+            text = text, modifier = modifier, color = color, fontSize = fontSize,
+            fontWeight = fontWeight, textAlign = textAlign,
+            maxLines = maxLines, overflow = overflow, style = style,
+        )
+    } else {
+        Text(
+            text = annotated, modifier = modifier, color = color, fontSize = fontSize,
+            fontWeight = fontWeight, textAlign = textAlign,
+            maxLines = maxLines, overflow = overflow, style = style,
+        )
+    }
 }

@@ -2,75 +2,72 @@ package eu.anifantakis.commercials.reports
 
 import java.awt.Font
 import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * THE BUNDLED FACES MUST COVER EVERY SCRIPT THE APP SHIPS A LANGUAGE FOR.
+ * WHAT A REPORT CAN PRINT, AND WHY IT IS NOT THE SAME AS WHAT A SCREEN CAN.
  *
- * Stock Roboto has 927 glyphs - Latin, Greek, Cyrillic, and no Hebrew. For a
- * long time nobody noticed, because desktop, Android and iOS quietly borrowed a
- * Hebrew face from the operating system. The BROWSER has no system fonts to
- * borrow, so Hebrew came out as tofu boxes there and only there.
+ * The UI has a glyph-fallback chain: a character Roboto cannot draw is handed to
+ * a face that can (core/presentation, FontFallback.kt), so the app renders Hebrew
+ * today and Chinese the day someone adds the file.
  *
- * Listing a second font in the FontFamily does NOT fix it - Compose picks one
- * font per (weight, style); a family is a selection list, not a fallback chain -
- * and JasperReports does no glyph fallback either. So the coverage has to live
- * INSIDE the file, and `roboto_hebrew_*.ttf` is Roboto with Noto Sans Hebrew
- * merged in (see core/presentation/licenses/NOTICE-fonts.md).
+ * JASPERREPORTS HAS NO SUCH THING. It picks the family named in the template and
+ * draws with it, full stop - a character the face lacks comes out as an empty box
+ * IN THE PDF, where nobody notices until a customer opens it. So a report can
+ * print exactly what its own face covers, and that is the contract this test
+ * pins down.
  *
- * This test guards that: drop stock Roboto back in and it fails, naming the
- * script that just went missing - instead of a user finding it in a browser.
- * These are the same files the Compose UI loads from composeResources.
+ * Roboto covers Latin, Greek and Cyrillic - which is the whole of a report's
+ * content: station data, message text, programme names, customer names. Fine.
+ * But if a report ever has to carry Hebrew, Arabic or Chinese, adding the font to
+ * the UI's chain WILL NOT be enough - this file has to change too, and the second
+ * test below is here to make that impossible to forget.
  */
 class FontCoverageTest {
 
     private val faces = listOf(
-        "roboto_hebrew_regular",
-        "roboto_hebrew_medium",
-        "roboto_hebrew_bold",
-        "roboto_mono_hebrew_regular",
+        "roboto_regular",
+        "roboto_medium",
+        "roboto_bold",
+        "roboto_mono_regular",
     )
 
-    /** One representative letter per script the app has a language for. */
-    private val scripts = mapOf(
-        "Latin (English/Deutsch/Italiano/Français)" to 'A',
-        "Greek (Ελληνικά - the primary language)" to 'Α',
-        "Cyrillic (Русский)" to 'А',
-        "HEBREW (עברית - the one Roboto lacks)" to 'א',
-    )
+    private fun face(name: String): Font =
+        javaClass.classLoader.getResourceAsStream("fonts/roboto/$name.ttf")
+            ?.use { Font.createFont(Font.TRUETYPE_FONT, it) }
+            ?: error("font resource missing: fonts/roboto/$name.ttf")
 
     @Test
-    fun `every bundled face covers every script the app ships`() {
-        for (face in faces) {
-            val stream = javaClass.classLoader.getResourceAsStream("fonts/roboto/$face.ttf")
-                ?: error("font resource missing: fonts/roboto/$face.ttf")
-            val font = stream.use { Font.createFont(Font.TRUETYPE_FONT, it) }
-
-            val missing = scripts.filterValues { !font.canDisplay(it) }.keys
+    fun `every report face covers every script a report actually contains`() {
+        val required = mapOf(
+            "Latin" to 'A',
+            "Greek (the reports are Greek)" to 'Α',
+            "Cyrillic" to 'А',
+        )
+        for (name in faces) {
+            val font = face(name)
+            val missing = required.filterValues { !font.canDisplay(it) }.keys
             assertTrue(
                 missing.isEmpty(),
-                "$face cannot render: ${missing.joinToString()} - has stock Roboto " +
-                    "(no Hebrew) been dropped back in? See NOTICE-fonts.md.",
+                "$name cannot render: ${missing.joinToString()} - reports in that script " +
+                    "would print empty boxes, and Jasper does no fallback to save them.",
             )
         }
     }
 
     @Test
-    fun `the merged faces keep Roboto's own metrics`() {
-        // The Hebrew was scaled to Roboto's 2048 em and Roboto's vertical metrics
-        // were copied back, so merging reflowed nothing. If a future merge skips
-        // that, every screen in the app shifts.
-        val heights = faces.map { face ->
-            javaClass.classLoader.getResourceAsStream("fonts/roboto/$face.ttf")!!
-                .use { Font.createFont(Font.TRUETYPE_FONT, it) }
-                .let { font ->
-                    java.awt.Canvas().getFontMetrics(font.deriveFont(100f)).height
-                }
-        }
-        assertEquals(
-            1, heights.take(3).toSet().size,
-            "the three proportional weights must share one line height; got $heights",
+    fun `the reports honestly do NOT cover Hebrew - and this test is the reminder`() {
+        // Not a defect: stock Roboto simply has no Hebrew, and no report needs it.
+        // This assertion exists so that the day one does, the build says so out
+        // loud instead of shipping a PDF full of boxes. When that day comes:
+        // register a Hebrew-capable face in jasperreports-fonts.xml and give the
+        // template a family that has it - the UI's fallback chain cannot help here.
+        assertFalse(
+            face("roboto_regular").canDisplay('א'),
+            "roboto_regular now HAS Hebrew - has the report font been changed? If a " +
+                "report must print Hebrew, Jasper needs its own face for it (it does " +
+                "no glyph fallback); update jasperreports-fonts.xml and this test.",
         )
     }
 }

@@ -16,6 +16,7 @@ import commercials_manager.core.presentation.generated.resources.roboto_medium
 import commercials_manager.core.presentation.generated.resources.roboto_mono_regular
 import commercials_manager.core.presentation.generated.resources.roboto_regular
 import org.jetbrains.compose.resources.Font
+import androidx.compose.runtime.remember
 
 /**
  * The user's text-size preference: five discrete steps applied to EVERY
@@ -92,53 +93,45 @@ internal fun robotoMonoFamily(): FontFamily = FontFamily(
 )
 
 /**
- * THE FALLBACK CHAIN: faces that exist only to cover what Roboto cannot.
+ * The fallback chain: faces that exist only to cover what Roboto cannot.
  *
- * Roboto ships 927 glyphs - Latin, Greek, Cyrillic - and nothing else. Desktop,
- * Android and iOS hid that by silently borrowing from the OS; the browser has no
- * system fonts to borrow, so Hebrew rendered as tofu boxes there and only there.
+ * TO ADD A SCRIPT (Chinese, Arabic, ...) - drop the TTF into
+ * composeResources/font and add ONE entry here, with the codepoints it covers.
+ * Nothing else in the app changes. See [GlyphFallback] for why this is a hand-
+ * rolled chain rather than something Compose does for us.
  *
- * TO ADD A SCRIPT (Chinese, Arabic, ...): drop the TTF into composeResources/font
- * and add ONE entry to the list below. Nothing else changes - not the typography,
- * not a single screen. That is the whole point of doing it this way.
- *
- * ── Why a separate family, and not extra Fonts inside [robotoFamily] ──
- *
- * Because that DOES NOT WORK, and it is worth knowing why before someone tries it
- * again. A FontFamily is a SELECTION list, not a fallback chain: Compose runs
- * FontMatcher over it, picks ONE font per (weight, style), and
- * `FontCache.load` hands Skia exactly one alias
- * (`FontLoadResult(typeface, listOf(font.cacheKey))`). Roboto wins every lookup at
- * a given weight, so a Hebrew face listed beside it is never even LOADED - and a
- * font that was never loaded cannot be fallen back to. Verified in a browser: the
- * tofu survived.
- *
- * ── Why preloading is what makes it work ──
- *
- * Skia's own fallback is real and per-glyph. Compose wires it up in
- * `FontCache.init`: `fonts.setDefaultFontManager(FontMgrWithFallback(fontProvider))`,
- * where `fontProvider` is a `TypefaceFontProviderWithFallback` - and every typeface
- * Compose loads is registered into it AS A FALLBACK CANDIDATE
- * (`_nRegisterTypefaceForFallback`). So the missing step was never "fallback"; it
- * was LOADING. `FontFamily.Resolver.preload()` resolves every Font in a family, so
- * calling it once on this list puts all of them in front of Skia - and from then on
- * Skia reaches for them, per glyph, whenever the requested face comes up short.
- *
- * The weights mirror Roboto's, so a bold Hebrew word stays bold.
- *
- * (Reports are a different story: JasperReports does NO glyph fallback at all, so a
- * report can only print what its own face covers - Latin, Greek, Cyrillic. Today
- * that is exactly what reports contain.)
+ * Weights mirror Roboto's, so a bold Hebrew word stays bold.
  */
+/**
+ * The Hebrew block plus its presentation forms. A top-level val: it never
+ * changes, so it must never be rebuilt inside a composition.
+ */
+private val HEBREW_RANGES = listOf('\u0590'..'\u05FF', '\uFB1D'..'\uFB4F')
+
 @Composable
-internal fun fallbackFontFamilies(): List<FontFamily> = listOf(
-    // Hebrew - Noto Sans Hebrew (SIL OFL; core/presentation/licenses/)
-    FontFamily(
+internal fun fallbackFontFamilies(): List<ScriptFont> {
+    val hebrew = FontFamily(
         Font(Res.font.noto_sans_hebrew_regular, FontWeight.Normal),
         Font(Res.font.noto_sans_hebrew_medium, FontWeight.Medium),
         Font(Res.font.noto_sans_hebrew_bold, FontWeight.Bold),
-    ),
-)
+    )
+
+    // REMEMBERED, and that is not a nicety.
+    //
+    // This list ends up inside LocalGlyphFallback, which is a
+    // staticCompositionLocalOf - and a static local that gets a NEW value
+    // recomposes its ENTIRE subtree, which here is the whole app. Hand it a
+    // freshly-built `listOf(...)` on every pass and the app would silently
+    // recompose from the root on every theme touch and every window resize.
+    // Nothing would crash; it would just be slow, for a reason nobody could see.
+    //
+    // So: one instance, for as long as the faces behind it are the same ones.
+    return remember(hebrew) {
+        listOf(ScriptFont(script = "Hebrew", ranges = HEBREW_RANGES, family = hebrew))
+        // ScriptFont("Chinese", listOf('\u4E00'..'\u9FFF'), chineseFamily),
+        // ScriptFont("Arabic",  listOf('\u0600'..'\u06FF'), arabicFamily),
+    }
+}
 
 /**
  * Builds the full [AppTypography] for one [FontSizeStep]. Sizes at MEDIUM

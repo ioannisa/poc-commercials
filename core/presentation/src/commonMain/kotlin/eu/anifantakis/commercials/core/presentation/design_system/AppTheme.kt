@@ -13,8 +13,6 @@ import eu.anifantakis.commercials.core.presentation.design_system.platform.Input
 import eu.anifantakis.commercials.core.presentation.design_system.platform.UiPlatform
 import eu.anifantakis.commercials.core.presentation.design_system.platform.detectUiPlatform
 import eu.anifantakis.commercials.core.presentation.design_system.platform.startupInputCapabilities
-import androidx.compose.ui.platform.LocalFontFamilyResolver
-import androidx.compose.runtime.LaunchedEffect
 
 /**
  * The application's Material 3 theme (named after the brand, dealer-totem
@@ -181,32 +179,14 @@ private fun CommercialsThemeImpl(
         minWeight = visual.minTextWeight,
     )
 
-    // THE STEP THAT MAKES GLYPH FALLBACK WORK.
-    //
-    // Skia falls back per glyph, but only across typefaces it has actually been
-    // handed: every font Compose LOADS is registered as a fallback candidate
-    // (TypefaceFontProviderWithFallback), and FontMgrWithFallback is wired in as
-    // the default font manager. A font nobody loads is a font Skia cannot reach.
-    //
-    // Listing the Hebrew faces inside robotoFamily() would NOT load them - a
-    // FontFamily is a selection list, Roboto wins every weight, and the loser is
-    // never touched. preload() resolves EVERY Font in a family, so one call puts
-    // the whole fallback chain in front of Skia. See fallbackFontFamilies().
-    //
-    // Cheap and idempotent: the typefaces are cached, so this is one pass at
-    // startup, not per recomposition. Text drawn in the very first frame may
-    // briefly miss a fallback glyph and then settle - the same deal as any
-    // asynchronously loaded font resource.
-    val fontResolver = LocalFontFamilyResolver.current
-    val fallbacks = fallbackFontFamilies()
-    LaunchedEffect(fontResolver, fallbacks) {
-        fallbacks.forEach { family ->
-            // A missing/corrupt fallback face must cost its script, never the app.
-            runCatching { fontResolver.preload(family) }
-        }
-    }
+    // GLYPH FALLBACK. Roboto has no Hebrew - and no Chinese, and no Arabic. This
+    // is what lets a face that DOES have them draw those characters, without any
+    // screen knowing it happened. FontFallback.kt spells out why Compose cannot
+    // be asked to do it for us on Skia, and what was tried first.
+    val glyphFallback = rememberGlyphFallback(fallbackFontFamilies())
 
     CompositionLocalProvider(
+        LocalGlyphFallback provides glyphFallback,
         LocalAppTypography provides appTypography,
         LocalFontSizeStep provides fontSizeStep,
         LocalPlatformVisualTokens provides visual,
