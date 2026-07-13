@@ -226,12 +226,20 @@ private fun CommercialDetailScreen(
                 header = StringKey.DETAIL_COL_TYPE.localized(),
                 width = 200.dp * gridScale,
                 alignment = TextAlign.Start,
-                // The legacy Break Console shows the contract line's SALES
-                // item here ('Διαφ. TV Κρήτη Σ73.002', 'Διαφημίσεις
-                // τηλεόρασης Δ Ω Ρ Α' - the item name carries the gift
-                // marker). Programme type is the fallback for spots the ERP
-                // never covered, with the marker appended for gifts.
-                extractor = { it.salesItem ?: if (it.isGift) "${it.type} ${StringKey.DETAIL_GIFT_SUFFIX.localized()}" else it.type }
+                // The contract line's SALES item ('Διαφ. TV Κρήτη Σ73.002',
+                // 'Διαφημίσεις τηλεόρασης Δ Ω Ρ Α' - the item name carries the
+                // gift marker), exactly like the legacy Break Console.
+                //
+                // When the ERP never covered the document (1.4% of airings) we
+                // show NOTHING but the gift marker. Falling back to the spot's
+                // programme here - which this column used to do - is the same
+                // category error that made the whole column wrong: a programme
+                // (ΚΛΕΨΑ) is not a product. An empty cell says "unknown item";
+                // a programme name says "this show was the item", which is a lie.
+                extractor = {
+                    it.salesItem
+                        ?: if (it.isGift) StringKey.DETAIL_GIFT_SUFFIX.localized() else ""
+                }
             ),
             ColumnDef(
                 id = "contract",

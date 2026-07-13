@@ -96,3 +96,13 @@ kotlin {
         jvmTarget.set(JvmTarget.JVM_21)
     }
 }
+
+// Runs the legacy migration with the module's full runtime classpath - the
+// documented `java -cp server.jar ...MigrationToolKt` needs a fat jar, this
+// does not:  ./gradlew :server:migrateCli --args="--dump ... --schema ..."
+tasks.register<JavaExec>("migrateCli") {
+    group = "migration"
+    description = "Runs the legacy-dump migration CLI"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("eu.anifantakis.commercials.server.migration.MigrationToolKt")
+}

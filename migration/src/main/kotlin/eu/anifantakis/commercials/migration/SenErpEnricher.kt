@@ -42,12 +42,13 @@ import java.time.LocalDate
  *     not date (same SQL as the migration's own backfill; a station migrated
  *     before the contract-dates feature never got it).
  *
- * Deliberately NOT read: `ssd.csv` (document LINES). Our contract_lines are
- * 1:1 pseudo-lines (line_no = the legacy doc number, from messages.contractNO),
- * so per-ERP-line data has nowhere to land; the doc-level totals (TDOQTYA)
- * cover the agreed-quantity need. If contract_lines are ever restructured to
- * real ERP lines, `ssd.csv` (DOCID+LINENO+qty) joined through MySQL
- * `z_commercials` (mciid -> docid+lineno) is the recipe.
+ * `ssd.csv` (document LINES) is the ERP source that MySQL `z_commercials`
+ * mirrors - and the mirror is INCOMPLETE (140 of this station's documents have
+ * no row in it). It therefore does two jobs here: per-line agreed quantities,
+ * and RECOVERING the product lines the snapshot missed, which is why the legacy
+ * console showed an item where we showed none. An earlier version of this file
+ * declared it "deliberately NOT read"; that was written when contract_lines
+ * were pseudo-lines, and it stopped being true when they became real ERP lines.
  *
  * `renewed_at` still has NO import source: the ERP represents renewal as a
  * NEW document (e.g. doc 789 -> doc 703), so it is derivable, not importable.
@@ -134,8 +135,12 @@ class SenErpEnricher(
         else log("lee.csv absent - customer identity/contact phases skipped")
         if (sld != null) enrichContracts(sld, sdt, apply, s)
         else log("sld.csv absent - contract phase skipped")
+        // BEFORE the catalog phase: the recovered lines may reference item
+        // classes no z_commercials row ever did, and they must gain their
+        // STI name/code in the same run.
+        if (ssd != null) recoverMissingContractLines(apply, s)
         if (ssd != null) enrichLineQuantities(ssd, apply, s)
-        else log("ssd.csv absent - product-line quantities skipped")
+        else log("ssd.csv absent - product lines + quantities skipped")
         if (sti != null) enrichSpotTypeCatalog(sti, legacyScratchSchema, apply, s)
         else log("sti.csv absent - spot-type catalog phase skipped")
         backfillProvisional(apply, s)
@@ -480,47 +485,59 @@ class SenErpEnricher(
     // ── phase 2b: per-spot sales items (the Break Console's Τύπος) ──────────
 
     /**
-     * Enriches the spot-type CATALOG (`spot_types`, the mirror of legacy
-     * `programtypes`): each type's `sales_item` becomes the ERP item name
-     * (STI.ITMNAME - e.g. 'Διαφ. TV Κρήτη Σ73.002', or 'Διαφημίσεις
-     * τηλεόρασης Δ Ω Ρ Α' whose name itself carries the gift marker) -
-     * exactly what the legacy Break Console shows as Τύπος. The join is
-     * direct and 1:1: legacy `messages.messageTypeID` IS the ERP item class
-     * (STI.MCIID), so `spot_types.legacy_id == STI.MCIID`.
+     * Enriches the ERP ITEM catalog (`spot_types`): each item class gets its
+     * `name` (STI.ITMNAME - e.g. 'Διαφ. TV Κρήτη Σ73.002', or 'Διαφημίσεις
+     * τηλεόρασης Δ Ω Ρ Α' whose name itself carries the gift marker) and its
+     * `item_code` (STI.CODCODE) - exactly what the legacy Break Console shows
+     * as Τύπος. The join is `spot_types.legacy_id == STI.MCIID`, and the rows
+     * were seeded from the item classes the contract lines actually reference
+     * (`z_commercials.mciid`).
      *
-     * Spots themselves are NEVER stamped - a spot's type/item is a REFERENCE
-     * (`spots.spot_type_id`), so relinking a spot to another contract or
-     * type updates every display, like the legacy model. For a station
+     * ⚠ This is NOT a mirror of legacy `programtypes`. That is the PROGRAMME
+     * catalog (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ), it lives in `programs`, and its ids are a
+     * DIFFERENT ID SPACE from MCIID. An earlier version of this doc claimed
+     * `messages.messageTypeID` IS the item class; it is not, and the resulting
+     * join sold television shows as ERP products. See LegacyTransformer
+     * .migrateSpotTypes.
+     *
+     * Spots themselves are NEVER stamped - a spot's item is a REFERENCE (its
+     * contract LINE's `spot_type_id`), so relinking a spot to another contract
+     * or line updates every display, like the legacy model. For a station
      * migrated BEFORE the catalog existed, [scratch] (the replayed dump)
-     * supplies what the migration would have written: the catalog rows from
-     * `programtypes` and each spot's `spot_type_id` from
-     * `messages.messageTypeID`.
+     * supplies what the migration would have written, seeded from
+     * `z_commercials`.
      */
     private fun enrichSpotTypeCatalog(sti: SenTable, scratch: String?, apply: Boolean, s: Summary) {
         // adoption path: a pre-catalog station rebuilds what migration now writes
         if (scratch != null && apply) {
+            // The ERP item-class catalog is seeded from the item classes the
+            // contract lines reference (z_commercials.mciid) - NOT from
+            // programtypes, which is the PROGRAMME catalog (see LegacyTransformer
+            // .migrateSpotTypes; mciid and programtypes.id are different id spaces).
             val inserted = c.createStatement().use { st ->
                 st.executeUpdate(
                     """
                     INSERT INTO $schema.spot_types(legacy_id, name)
-                    SELECT pt.id, pt.descr FROM $scratch.programtypes pt
-                    WHERE NOT EXISTS (SELECT 1 FROM $schema.spot_types x WHERE x.legacy_id = pt.id)
+                    SELECT DISTINCT z.mciid, '' FROM $scratch.z_commercials z
+                    WHERE z.mciid > 0
+                      AND NOT EXISTS (SELECT 1 FROM $schema.spot_types x WHERE x.legacy_id = z.mciid)
                     """.trimIndent()
                 )
             }
+            // messages.messageTypeID is the PROGRAMME the spot was booked into.
             val linked = c.createStatement().use { st ->
                 st.executeUpdate(
                     """
                     UPDATE $schema.spots sp
                     JOIN $scratch.messages m ON m.id = sp.legacy_id
-                    JOIN $schema.spot_types tst ON tst.legacy_id = m.messageTypeID
-                    SET sp.spot_type_id = tst.id
-                    WHERE sp.spot_type_id IS NULL
+                    JOIN $schema.programs pr ON pr.legacy_id = m.messageTypeID
+                    SET sp.booked_program_id = pr.id
+                    WHERE sp.booked_program_id IS NULL
                     """.trimIndent()
                 )
             }
             s.spotsTypeLinked = linked
-            log("spot types: $inserted catalog rows adopted from $scratch.programtypes, $linked spots linked")
+            log("spot types: $inserted item classes adopted from $scratch.z_commercials, $linked spots linked to their booked programme")
         }
 
         data class Update(val typeId: Long, val item: String, val code: String?)
@@ -533,14 +550,14 @@ class SenErpEnricher(
         val updates = ArrayList<Update>()
         c.createStatement().use { st ->
             st.executeQuery(
-                "SELECT id, legacy_id, sales_item, item_code FROM $schema.spot_types WHERE legacy_id IS NOT NULL"
+                "SELECT id, legacy_id, name, item_code FROM $schema.spot_types WHERE legacy_id IS NOT NULL"
             ).use { rs ->
                 while (rs.next()) {
                     val row = byMci[rs.getLong("legacy_id").toString()] ?: continue
                     val item = sti.value(row, "ITMNAME").replace(Regex("\\s+"), " ").trim()
                     val code = sti.value(row, "CODCODE").takeIf { it.isNotBlank() }
                     if (item.isEmpty()) continue
-                    if (item == rs.getString("sales_item") && code == rs.getString("item_code")) continue
+                    if (item == rs.getString("name") && code == rs.getString("item_code")) continue
                     updates += Update(rs.getLong("id"), item, code)
                 }
             }
@@ -548,7 +565,7 @@ class SenErpEnricher(
         s.spotTypesEnriched = updates.size
 
         if (apply && updates.isNotEmpty()) {
-            c.prepareStatement("UPDATE $schema.spot_types SET sales_item = ?, item_code = ? WHERE id = ?").use { ps ->
+            c.prepareStatement("UPDATE $schema.spot_types SET name = ?, item_code = ? WHERE id = ?").use { ps ->
                 for (u in updates) {
                     ps.setString(1, u.item)
                     ps.setString(2, u.code)
@@ -656,6 +673,138 @@ class SenErpEnricher(
                 "period, ${s.contractsGiftFixed} a corrected gift flag " +
                 "(${s.contractsNoErpDates} in the ERP without dates, ${s.contractsNotInSld} not in the export)" +
                 if (apply) "" else "  [DRY RUN]"
+        )
+    }
+
+    // ── phase 3a: product lines the z_commercials snapshot never carried ─────
+
+    /**
+     * `z_commercials` is the owner's Oracle VIEW over the ERP document lines,
+     * and it is INCOMPLETE: 140 of this station's documents have no row in it,
+     * so the migration gave them a synthetic line (line_no 1000) with an
+     * honest NULL item. The legacy Break Console still showed their item -
+     * because it queried the live ERP, not the snapshot.
+     *
+     * `ssd.csv` IS that live source (it is what z_commercials mirrors), and it
+     * covers 139 of the 140. So recover the real lines from it:
+     *
+     *  1. seed any item class the recovered lines reference but the catalog
+     *     lacks (the STI phase, which runs next, gives it name + code);
+     *  2. insert the real (document, lineno) lines;
+     *  3. re-point each AIRING at the line it actually charges to - the
+     *     verbatim `schedule` copy still carries docID+lineno, so this is the
+     *     same hard key the transformer used, not a guess;
+     *  4. re-point each SPOT's default line at the one its own airings charge
+     *     to most often (single-line documents resolve directly);
+     *  5. drop the synthetic lines nothing references any more.
+     *
+     * Idempotent: every step is a NOT EXISTS insert or a targeted re-point, so
+     * re-running the enricher changes nothing.
+     */
+    private fun recoverMissingContractLines(apply: Boolean, s: Summary) {
+        // Which contracts are still stuck on a synthetic line?
+        val stuck = c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT COUNT(DISTINCT ct.id) FROM $schema.contracts ct
+                JOIN $schema.contract_lines cl ON cl.contract_id = ct.id AND cl.line_no >= 1000
+                JOIN $schema.sen_ssd ssd ON ssd.DOCID = ct.legacy_docid
+                """.trimIndent()
+            ).use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+        if (stuck == 0) {
+            log("  product lines: no document is missing its ERP lines")
+            return
+        }
+        if (!apply) {
+            log("  product lines: would recover real lines for $stuck documents from ssd  [DRY RUN]")
+            return
+        }
+
+        // 1. item classes the recovered lines need but the catalog lacks
+        val newTypes = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $schema.spot_types(legacy_id, name)
+                SELECT DISTINCT ssd.MCIID, ''
+                FROM $schema.sen_ssd ssd
+                WHERE ssd.MCIID > 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM $schema.spot_types sty WHERE sty.legacy_id = ssd.MCIID
+                  )
+                """.trimIndent()
+            )
+        }
+
+        // 2. the real lines
+        val added = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $schema.contract_lines(contract_id, line_no, spot_type_id)
+                SELECT DISTINCT ct.id, ssd.LINENO, sty.id
+                FROM $schema.sen_ssd ssd
+                JOIN $schema.contracts ct  ON ct.legacy_docid = ssd.DOCID
+                LEFT JOIN $schema.spot_types sty ON sty.legacy_id = ssd.MCIID
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM $schema.contract_lines cl
+                    WHERE cl.contract_id = ct.id AND cl.line_no = ssd.LINENO
+                )
+                """.trimIndent()
+            )
+        }
+
+        // 3. the airing's ACTUAL charge - same hard key the transformer used
+        val airings = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $schema.placements p
+                JOIN $schema.schedule sch      ON sch.id = p.legacy_id
+                JOIN $schema.contracts ct      ON ct.legacy_docid = sch.docID
+                JOIN $schema.contract_lines cl ON cl.contract_id = ct.id AND cl.line_no = sch.lineno
+                SET p.contract_line_id = cl.id
+                WHERE p.contract_line_id IS NULL
+                """.trimIndent()
+            )
+        }
+
+        // 4. each spot's default line: the one its own airings charge to most
+        val spots = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $schema.spots sp
+                JOIN $schema.contract_lines old ON old.id = sp.contract_line_id
+                JOIN (
+                    SELECT p.spot_id, p.contract_line_id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY p.spot_id
+                               ORDER BY COUNT(*) DESC, p.contract_line_id
+                           ) AS rn
+                    FROM $schema.placements p
+                    JOIN $schema.contract_lines cl ON cl.id = p.contract_line_id
+                    WHERE cl.line_no < 1000
+                    GROUP BY p.spot_id, p.contract_line_id
+                ) modal ON modal.spot_id = sp.id AND modal.rn = 1
+                SET sp.contract_line_id = modal.contract_line_id
+                WHERE old.line_no >= 1000
+                """.trimIndent()
+            )
+        }
+
+        // 5. synthetic lines nothing references any more
+        val dropped = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                DELETE cl FROM $schema.contract_lines cl
+                WHERE cl.line_no >= 1000
+                  AND NOT EXISTS (SELECT 1 FROM $schema.spots sp      WHERE sp.contract_line_id = cl.id)
+                  AND NOT EXISTS (SELECT 1 FROM $schema.placements p  WHERE p.contract_line_id  = cl.id)
+                """.trimIndent()
+            )
+        }
+        log(
+            "  product lines: recovered $added real lines for $stuck documents the z_commercials " +
+                "snapshot missed (+$newTypes new item classes); re-pointed $airings airings and " +
+                "$spots spots; dropped $dropped synthetic lines"
         )
     }
 

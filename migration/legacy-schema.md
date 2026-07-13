@@ -141,7 +141,8 @@ contracts/documents (docid, docno, dotid, lines) ──┤   docref             
 | `schedule.showOrder` | `commercials.position` | |
 | `messages.descr/duration` | `commercials.message/duration_seconds` | we inline; they reference catalog |
 | `messages.cusID` + ERP name | `commercials.client_code/client_name` | our client_code ≈ their cusID/traid |
-| `programtypes.descr` | `commercials.type` | |
+| `z_commercials.mciid` → STI item | `commercials.sales_item` (Break Console «Τύπος») | what is SOLD |
+| `programtypes.descr` | `commercials.type` | what AIRS — the booked programme, NOT the item |
 | `sld.isGift` via doc | `commercials.contract` ("ΔΩΡΑ") | |
 | `zones`/`programtypes.color` | `break_slots.zone`/`zone_color_argb` | |
 | `usr` | central `users` + grants | ours is strictly better |
@@ -218,11 +219,12 @@ legacy table first and mirror it.
 
 | Legacy MySQL            | Ours              | Notes |
 |-------------------------|-------------------|-------|
-| `messages`              | `spots`           | 1:1. `messageTypeID` → `spot_type_id` (REFERENCE, never frozen text); `contractID`+`contractNO` → `contract_line_id`; `cusID` → `customer_id` (end client on triangular). |
+| `messages`              | `spots`           | 1:1. `messageTypeID` → `booked_program` (the PROGRAMME the spot was bought into — see the ID-SPACE warning below) + `booked_program_id` → `programs`; `contractID` → `contract_line_id` (resolved, not guessed); `cusID` → `customer_id` (end client on triangular). A spot's ERP ITEM is NOT on the message — it lives on its contract line. |
 | `schedule`              | `placements`      | 1:1. showDate/showTime/showOrder → break_id+position (`break_slots` materializes the time grid the legacy app derived). |
-| `programtypes`          | `spot_types` + `programs` | The legacy catalog is the ERP MCI class list (messages.messageTypeID AND schedule.programID both point at it). `spot_types.sales_item` = the ERP item name (STI, 1:1 by MCIID) — the SEN gap-fill. ⚠ TWO mirrors of one legacy table: candidate for merging into ONE catalog. |
+| `programtypes`          | `programs`        | The PROGRAMME catalog (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ, MAD ZONE…): what airs, plus its colour. `messages.messageTypeID` AND `schedule.programID` both point here. It is **NOT** an ERP item catalog. |
+| `z_commercials.mciid` (+ SEN `sti`) | `spot_types` | The ERP ITEM catalog (Διαφ. TV Αθήνα 73.000, Σ73.002 Κρήτη, ΔΩΡΑ…) — what is SOLD. `legacy_id` = MCIID, `item_code` = STI.CODCODE, `name` = STI.ITMNAME. It has NO legacy MySQL table of its own; the dump exposes it only as the `mciid` FK on the doc lines. |
 | `docref`                | `contracts`       | docid → legacy_docid, docno → number, dotid → doc_type, traid → customer_id. SEN fills periods/qty/gift. |
-| `z_commercials`         | ⚠ (contract_lines) | z_commercials IS the contract-PRODUCTS table (doc lines, mciid = item class — 1:1 with SSD lines). Our `contract_lines` is a pseudo-mirror (one line per contract keyed by the doc NUMBER from messages.contractNO). Deviation to fix: contract_lines should mirror z_commercials (contract, lineno, spot_type_id) and a spot's product = (contract, spot_type) at query time — needs re-migration. |
+| `z_commercials`         | `contract_lines`  | The contract-PRODUCTS table (the owner's Oracle view over the ERP SSD doc lines): one row per (docid, lineno), each selling one item class. docid→contract_id, lineno→line_no, **mciid→spot_type_id**. |
 | `sld`                   | `contracts.is_gift` | Absorbed (dotid → gift); SDT completes the 21 doc types in use. |
 | `cus`                   | `customers` contact fields | Absorbed; customers themselves are the SEN gap-fill (legacy had NO customer names). |
 | `calendar_excluded_docs`| `contracts.exclude_from_reports` + `erp_excluded_docs` | Absorbed + holding table. |
@@ -239,9 +241,31 @@ legacy table first and mirror it.
 
 ### Column-level correspondence (verified 2026-07-09, v2)
 
-- `messages` → `spots`: id→legacy_id, messageTypeID→spot_type_id (catalog ref),
-  contractID→(contract via product line), contractNO→(the DOC number - superseded
-  by the real line resolution), cusID→customer_id (end client on triangular),
+> ### ⚠ ID-SPACE WARNING: `messageTypeID` is NOT `mciid`
+>
+> They are small integers that look alike and they are **different ID spaces**.
+> Joining one to the other's catalog compiles, runs, and returns confident
+> nonsense — which is exactly what shipped until 2026-07-13.
+>
+> | | lives on | points at | is |
+> |---|---|---|---|
+> | `messages.messageTypeID` | the spot | `programtypes` | the **PROGRAMME** it was bought into (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ) |
+> | `z_commercials.mciid` | the contract's doc LINE | the ERP item catalog (SEN `sti`) | the **ITEM SOLD** (Διαφ. TV Αθήνα 73.000) |
+>
+> Evidence they cannot be the same key: **55% of `mciid` values have no
+> `programtypes` row at all**, and the ones that collide pair a news bulletin
+> with a telephone, and MAD ZONE with a gift item. The tell was visible from the
+> product side too — an ERP item class must look like `73.xxx`, never `ΚΛΕΨΑ`.
+>
+> A spot therefore reaches its item through its CONTRACT LINE, never directly:
+> `placement → contract_line → spot_type`. The programme rides along separately
+> on `spots.booked_program`.
+
+- `messages` → `spots`: id→legacy_id, **messageTypeID→booked_program (text) +
+  booked_program_id→programs** (the booked PROGRAMME — see the warning above; it
+  is emphatically not the ERP item), contractID→(contract, then the line is
+  RESOLVED: single-line docs directly, multi-line docs from the line the spot's
+  own airings actually charge to), cusID→customer_id (end client on triangular),
   forcePosition→force_position (NULL for -1), hidden, descr→description,
   duration→duration_seconds, memo. Dropped deliberately: lastaction (audit ts).
 - `schedule` → `placements`: id→legacy_id, messageID→spot_id, **docID+lineno→
@@ -252,10 +276,15 @@ legacy table first and mirror it.
   played, hideSchedule→hidden. Dropped: lastaction, timeOfEntrance.
 - `z_commercials` → `contract_lines`: docid→contract_id, lineno→line_no,
   mciid→spot_type_id; docnumber/traid are redundant (live on the contract).
-  Fallback lines for uncovered (doc, type) pairs use line_no = 1000 + type id.
-- `programtypes` → `spot_types` (id→legacy_id, descr→name; + SEN sales_item/
-  item_code) and `programs` (colour/visible view for placements.program_id) -
-  the dual mirror is the one REMAINING soft deviation, scheduled for merge.
+  Documents the view never carried get ONE synthetic line (line_no = 1000) with
+  an HONEST NULL item - a wrong item is worse than a missing one.
+- `z_commercials.mciid` → `spot_types` (legacy_id = MCIID; SEN `sti` fills
+  name = ITMNAME and item_code = CODCODE, 1:1 by item class). The ERP item
+  catalog has no legacy MySQL table - the dump exposes it only as this FK.
+- `programtypes` → `programs` (id→legacy_id, descr→name, colour/visible) - the
+  PROGRAMME catalog, feeding both `placements.program_id` and the spot's
+  `booked_program`. The old dual `spot_types` mirror is GONE: the two catalogs
+  were never the same thing, and pretending they were is what caused the bug.
 - `docref` → `contracts`: docid→legacy_docid, docno→number, dotid→doc_type,
   traid→customer_id, targetleeid/pelatislee→triangular resolution.
 - `emailhistory` → `email_log`: cusID→customer_code (ERP TRACODEs after

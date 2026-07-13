@@ -188,18 +188,30 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 )
                 s.executeUpdate(
                     """
-                    -- The spot-type CATALOG - mirror of legacy `programtypes`,
-                    -- which IS the ERP's item-class list (MCI): messages carry
-                    -- messageTypeID, and the ERP item (STI) is 1:1 with the
-                    -- class. `name` is the legacy descr; `sales_item` is the
-                    -- ERP item name the SEN import fills (e.g. 'Διαφ. TV Κρήτη
-                    -- Σ73.002', 'Διαφημίσεις τηλεόρασης Δ Ω Ρ Α' - the gift
-                    -- marker is part of the name). NULL until that import runs.
+                    -- The ERP ITEM-CLASS catalog, keyed by the ERP's MCIID.
+                    --
+                    -- CORRECTED 2026-07-13: this used to mirror legacy
+                    -- `programtypes` - which is the PROGRAMME catalog (ΚΛΕΨΑ,
+                    -- ΞΕΝΗ ΤΑΙΝΙΑ, ΠΑΠΑΔΑΚΗΣ ΧΡΙΣΤΟΦΟΡΟΣ: shows, with presenter
+                    -- names). `z_commercials.mciid` lives in a DIFFERENT id
+                    -- space (the ERP item classes), so joining it to
+                    -- programtypes.id was a false join on coincidental small
+                    -- integers: 55% of mciids had no programtypes row at all,
+                    -- and the rest paired a show with an unrelated item
+                    -- ("ΟΙΚΟΝΟΜΙΚΟ ΔΕΛΤΙΟ" -> "Τηλέφωνο").
+                    --
+                    -- The item NAME only exists in the ERP (SEN `sti.csv`), so
+                    -- a dump-only migration seeds the ids and the SEN enricher
+                    -- fills name/item_code (verified 102/102 mciids resolve).
                     CREATE TABLE IF NOT EXISTS spot_types (
                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        -- the ERP item class id (STI.MCIID == z_commercials.mciid)
                         legacy_id BIGINT NULL,
-                        name VARCHAR(128) NOT NULL,
-                        sales_item VARCHAR(160) NULL,
+                        -- STI.ITMNAME, e.g. 'Διαφ. TV Κρήτη Σ73.002'; the gift
+                        -- marker ('Δ Ω Ρ Α') is part of the name. '' until the
+                        -- SEN import runs.
+                        name VARCHAR(160) NOT NULL DEFAULT '',
+                        -- STI.CODCODE, e.g. 'Σ101'
                         item_code VARCHAR(32) NULL,
                         -- Galaxy linkage: ITEM.GXID. The 73.xxx item codes bridge the
                         -- two catalogs (Galaxy inherited the legacy sales items).
@@ -211,19 +223,22 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 )
                 s.executeUpdate(
                     """
-                    CREATE TABLE IF NOT EXISTS spots (
+CREATE TABLE IF NOT EXISTS spots (
                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
                         legacy_id BIGINT NULL,
                         customer_id BIGINT NOT NULL,
                         contract_line_id BIGINT NULL,
                         description VARCHAR(255) NOT NULL,
                         duration_seconds INT NOT NULL,
-                        spot_type VARCHAR(64) NOT NULL DEFAULT '',
-                        -- REFERENCE to the spot-type catalog (legacy
-                        -- messages.messageTypeID) - a spot's type/item is a
-                        -- lookup, never frozen text: relink the spot and every
-                        -- display follows (mirrors the legacy MySQL model).
-                        spot_type_id BIGINT NULL,
+                        -- The PROGRAMME the spot was BOOKED into (legacy
+                        -- messages.messageTypeID -> programtypes). CORRECTED
+                        -- 2026-07-13: this was called `spot_type` and mistaken
+                        -- for an ERP item class. It is a show ("ΚΛΕΨΑ", "ΞΕΝΗ
+                        -- ΤΑΙΝΙΑ"). The spot's ERP ITEM comes from its contract
+                        -- LINE (contract_lines.spot_type_id -> spot_types), and
+                        -- the airing's own line wins over the spot's default.
+                        booked_program VARCHAR(128) NOT NULL DEFAULT '',
+                        booked_program_id BIGINT NULL,
                         flow VARCHAR(32) NOT NULL DEFAULT '',
                         hidden BOOLEAN NOT NULL DEFAULT FALSE,
                         force_position INT NULL,
@@ -371,10 +386,16 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             ensureIndex(c, "contract_lines", "uq_lines_galaxy", "galaxy_id", unique = true)
             ensureColumn(c, "spot_types", "galaxy_id", "VARCHAR(36) NULL")
             ensureIndex(c, "spot_types", "uq_spot_types_galaxy", "galaxy_id", unique = true)
-            // The spot-type catalog reference (see the CREATE TABLE notes) -
-            // schemas from before the catalog gain the column; the SEN
-            // enrichment backfills it from the legacy messageTypeID.
-            ensureColumn(c, "spots", "spot_type_id", "BIGINT NULL")
+            // The BOOKED PROGRAMME (see the CREATE TABLE notes). Schemas built
+            // before 2026-07-13 carried this as `spot_type` + a `spot_type_id`
+            // pointing into what was then wrongly believed to be an item
+            // catalog; they gain the honest columns here, empty until they are
+            // re-migrated. The dead `spots.spot_type_id` is deliberately NOT
+            // ensured any more - a spot's product is its contract LINE's, and
+            // leaving a plausible-looking column on the table is how the join
+            // gets rebuilt by accident.
+            ensureColumn(c, "spots", "booked_program", "VARCHAR(128) NOT NULL DEFAULT ''")
+            ensureColumn(c, "spots", "booked_program_id", "BIGINT NULL")
             // Product lines + per-airing charge (see the CREATE TABLE notes).
             ensureColumn(c, "contract_lines", "spot_type_id", "BIGINT NULL")
             ensureColumn(c, "placements", "contract_line_id", "BIGINT NULL")
@@ -550,7 +571,7 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
 
             c.prepareStatement(
                 """
-                INSERT INTO spots(customer_id, contract_line_id, description, duration_seconds, spot_type, flow)
+                INSERT INTO spots(customer_id, contract_line_id, description, duration_seconds, booked_program, flow)
                 VALUES(?,?,?,?,?,?)
                 """.trimIndent()
             ).use { ps ->
@@ -1055,7 +1076,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         c.prepareStatement(
             """
             SELECT p.id, p.spot_id, p.position, p.duration_seconds,
-                   s.description, s.spot_type, s.flow, sty.sales_item,
+                   s.description, s.booked_program AS spot_type, s.flow,
+                   sty.name AS sales_item,
                    cu.code AS client_code, cu.name AS client_name,
                    ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                    pay.code AS payer_code, pay.name AS payer_name,
@@ -1063,11 +1085,14 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             FROM placements p
             JOIN spots s      ON s.id = p.spot_id
             JOIN customers cu ON cu.id = s.customer_id
-            LEFT JOIN spot_types sty    ON sty.id = s.spot_type_id
             -- the airing's ACTUAL charge (legacy schedule.docID+lineno) wins;
             -- the spot's own line is only its current default
             LEFT JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
             LEFT JOIN contracts ct      ON ct.id = cl.contract_id
+            -- The ERP item comes from THAT SAME line - the charge and the item
+            -- it charges for must never disagree. (It used to hang off the
+            -- SPOT's own type, which was the booked programme, not an item.)
+            LEFT JOIN spot_types sty    ON sty.id = cl.spot_type_id
             LEFT JOIN customers pay     ON pay.id = ct.customer_id
             LEFT JOIN programs pr       ON pr.id = p.program_id
             WHERE p.id = ?
@@ -1244,7 +1269,8 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
             c.prepareStatement(
                 """
                 SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, p.duration_seconds,
-                       s.description, s.spot_type, s.flow, sty.sales_item,
+                       s.description, s.booked_program AS spot_type, s.flow,
+                       sty.name AS sales_item,
                        cu.code AS client_code, cu.name AS client_name,
                        ct.number AS contract_number, ct.is_gift, ct.exclude_from_reports,
                        pay.code AS payer_code, pay.name AS payer_name,
@@ -1252,11 +1278,12 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
                 FROM placements p
                 JOIN spots s      ON s.id = p.spot_id
                 JOIN customers cu ON cu.id = s.customer_id
-                LEFT JOIN spot_types sty    ON sty.id = s.spot_type_id
                 -- the airing's ACTUAL charge (legacy schedule.docID+lineno) wins;
                 -- the spot's own line is only its current default
                 LEFT JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
                 LEFT JOIN contracts ct      ON ct.id = cl.contract_id
+                -- The ERP item comes from THAT SAME line (see placementRow).
+                LEFT JOIN spot_types sty    ON sty.id = cl.spot_type_id
                 LEFT JOIN customers pay     ON pay.id = ct.customer_id
                 LEFT JOIN programs pr       ON pr.id = p.program_id
                 WHERE p.show_date >= ? AND p.show_date < ?

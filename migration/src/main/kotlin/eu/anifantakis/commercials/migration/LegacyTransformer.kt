@@ -83,7 +83,7 @@ class LegacyTransformer(
 
         // The type catalog MUST precede the product lines: lines carry
         // spot_type_id (z.mciid) and spots resolve their default line by type.
-        log("Migrating the spot-type catalog (legacy programtypes = the ERP item classes)...")
+        log("Migrating the ERP item catalog (the item classes the contract lines reference)...")
         val spotTypes = migrateSpotTypes()
         log("  $spotTypes spot types (the SEN import adds each type's ERP sales item)")
 
@@ -96,6 +96,10 @@ class LegacyTransformer(
 
         log("Migrating placements (this is the big one)...")
         val placements = migratePlacements()
+
+        log("Backfilling each spot's DEFAULT product line from its own airings...")
+        val defaultLines = backfillSpotDefaultLines()
+        log("  $defaultLines spots got a default line (multi-line documents)")
 
         log("Backfilling provisional contract period dates from placements (until the ERP import)...")
         val provisionalContracts = backfillProvisionalContractDates()
@@ -547,15 +551,20 @@ class LegacyTransformer(
         val fallback = c.createStatement().use { st ->
             st.executeUpdate(
                 """
+                -- Fallback for documents the z_commercials view never carried:
+                -- ONE synthetic line per contract, with an UNKNOWN item class.
+                -- CORRECTED 2026-07-13: this used to key off messages.messageTypeID
+                -- and stamp it as the line's spot_type_id - but messageTypeID is
+                -- the booked PROGRAMME, not an ERP item class, so it invented
+                -- product lines selling shows. Better an honest NULL item than a
+                -- confident wrong one.
                 INSERT INTO $t.contract_lines(contract_id, line_no, spot_type_id)
-                SELECT DISTINCT tc.id, 1000 + m.messageTypeID, tst.id
+                SELECT DISTINCT tc.id, 1000, NULL
                 FROM $s.messages m
                 JOIN $t.contracts tc ON tc.legacy_docid = m.contractID
-                LEFT JOIN $t.spot_types tst ON tst.legacy_id = m.messageTypeID
                 WHERE m.forTV = $forTv AND m.contractID > 0
                   AND NOT EXISTS (
-                      SELECT 1 FROM $t.contract_lines cl
-                      WHERE cl.contract_id = tc.id AND cl.spot_type_id = tst.id
+                      SELECT 1 FROM $t.contract_lines cl WHERE cl.contract_id = tc.id
                   )
                 """.trimIndent()
             )
@@ -593,22 +602,6 @@ class LegacyTransformer(
 
     // ──────────────────────────────────────────────────── spots/placements ──
 
-    /**
-     * The spot belongs to its END CLIENT ("My Advert Company has a contract
-     * FOR the customer Unilever, FOR WHOM the spot is scheduled"). Legacy
-     * `messages.cusID` is the PAYER (== docref.traid 99.9%), so on
-     * triangular docs the customer is resolved through `targetleeid`
-     * instead; the payer stays reachable via the contract
-     * (contracts.customer_id = traid).
-     */
-    /**
-     * The spot-type CATALOG: legacy `programtypes` is the ERP's item-class
-     * list (MCI - `messages.messageTypeID` points here, and its `sen` index
-     * is named after the ERP). Kept as a REFERENCE table, exactly like the
-     * legacy model: a spot's type/item is a lookup, never frozen text. The
-     * SEN import later fills each type's `sales_item` from the ERP item
-     * catalog (STI is 1:1 with the class).
-     */
     /**
      * THE FAITHFUL UNION LAYER (owner directive): the station schema CONTAINS
      * the legacy MySQL tables as VERBATIM copies - exact table names, exact
@@ -659,42 +652,113 @@ class LegacyTransformer(
         )
     }
 
+    /**
+     * The ERP ITEM-CLASS catalog, seeded from the item classes the contract
+     * lines actually reference (`z_commercials.mciid`).
+     *
+     * CORRECTED 2026-07-13: this used to mirror `programtypes` - the PROGRAMME
+     * catalog (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ, ΠΑΠΑΔΑΚΗΣ ΧΡΙΣΤΟΦΟΡΟΣ). `mciid` lives in the
+     * ERP's own id space, so joining it to `programtypes.id` matched on
+     * coincidental small integers: 55% of mciids had no programtypes row, and
+     * the rest paired a show with an unrelated item. The item NAME exists only
+     * in the ERP export (SEN `sti.csv`), so the dump seeds the IDS and
+     * [SenErpEnricher] fills name/item_code - verified 102/102 mciids resolve
+     * against STI.
+     */
     private fun migrateSpotTypes(): Int {
-        if (!tableExists("programtypes")) return 0
+        if (!tableExists("z_commercials")) return 0
         return c.createStatement().use { st ->
             st.executeUpdate(
                 """
                 INSERT INTO $t.spot_types(legacy_id, name)
-                SELECT id, descr FROM $s.programtypes
+                SELECT DISTINCT z.mciid, ''
+                FROM $s.z_commercials z
+                WHERE z.mciid > 0
                 """.trimIndent()
             )
         }
     }
 
+    /**
+     * The spot belongs to its END CLIENT ("My Advert Company has a contract
+     * FOR the customer Unilever, FOR WHOM the spot is scheduled"). Legacy
+     * `messages.cusID` is the PAYER (== docref.traid 99.9%), so on triangular
+     * docs the customer is resolved through `targetleeid` instead; the payer
+     * stays reachable via the contract (contracts.customer_id = traid).
+     *
+     * `messageTypeID` becomes the spot's BOOKED PROGRAMME (`booked_program` +
+     * `booked_program_id`), NOT its product - it points at `programtypes`, a
+     * different id space from the ERP item class. The product is the contract
+     * LINE's, resolved here for single-line documents and observed from the
+     * spot's own airings for multi-line ones ([backfillSpotDefaultLines]).
+     */
     private fun migrateSpots(): Int =
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
                 INSERT INTO $t.spots(legacy_id, customer_id, contract_line_id, description,
-                                     duration_seconds, spot_type, spot_type_id, flow, hidden, force_position, memo)
+                                     duration_seconds, booked_program, booked_program_id, flow,
+                                     hidden, force_position, memo)
                 SELECT m.id, COALESCE(tend.id, tcu.id), tl.id, m.descr, m.duration,
-                       COALESCE(pt.descr, ''), tst.id, 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
+                       COALESCE(pt.descr, ''), tpr.id, 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
                 FROM $s.messages m
                 JOIN $t.customers tcu ON tcu.legacy_id = GREATEST(m.cusID, 0)
                 LEFT JOIN $s.docref d ON d.docid = m.contractID
                                      AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                 LEFT JOIN $t.customers tend ON tend.legacy_lee_id = d.targetleeid
                 LEFT JOIN $t.contracts tct ON tct.legacy_docid = m.contractID
+                -- messageTypeID names the PROGRAMME the spot was booked into
+                -- (it is NOT an ERP item class - see migrateSpotTypes)
                 LEFT JOIN $s.programtypes pt ON pt.id = m.messageTypeID
-                LEFT JOIN $t.spot_types tst ON tst.legacy_id = m.messageTypeID
-                -- the message's CURRENT default product: its contract's line
-                -- selling the message's item class (real line first, fallback after)
+                LEFT JOIN $t.programs tpr ON tpr.legacy_id = m.messageTypeID
+                -- Default product line. The message carries no line number, so
+                -- it is only unambiguous when the document sells ONE item class
+                -- (68% of docs). Multi-line docs are backfilled AFTER placements
+                -- from the spot's own airings (see backfillSpotDefaultLines) -
+                -- the airing's docID+lineno is the only real per-charge truth.
                 LEFT JOIN $t.contract_lines tl ON tl.id = (
                     SELECT cl.id FROM $t.contract_lines cl
-                    WHERE cl.contract_id = tct.id AND cl.spot_type_id = tst.id
-                    ORDER BY cl.line_no LIMIT 1
+                    WHERE cl.contract_id = tct.id
+                      AND (SELECT COUNT(*) FROM $t.contract_lines cl2
+                           WHERE cl2.contract_id = tct.id) = 1
+                    LIMIT 1
                 )
                 WHERE m.forTV = $forTv
+                """.trimIndent()
+            )
+        }
+
+    /**
+     * A spot's DEFAULT product line, for the airings that carry no docID+lineno
+     * of their own (15% of placements fall back to it).
+     *
+     * The legacy message has no line number, so on a multi-line document the
+     * default cannot be derived from the message alone. It CAN be observed: take
+     * the line the spot's own airings actually charge to, most often. That is
+     * evidence, not a guess - and it runs after placements for exactly that
+     * reason. Single-line documents were already resolved in [migrateSpots].
+     *
+     * (CORRECTED 2026-07-13: the old resolution matched the contract's line whose
+     * spot_type_id equalled the spot's - both sides came from the false
+     * messageTypeID/mciid conflation, so it linked by a meaningless key.)
+     */
+    private fun backfillSpotDefaultLines(): Int =
+        c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $t.spots sp
+                JOIN (
+                    SELECT p.spot_id, p.contract_line_id,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY p.spot_id
+                               ORDER BY COUNT(*) DESC, p.contract_line_id
+                           ) AS rn
+                    FROM $t.placements p
+                    WHERE p.contract_line_id IS NOT NULL
+                    GROUP BY p.spot_id, p.contract_line_id
+                ) modal ON modal.spot_id = sp.id AND modal.rn = 1
+                SET sp.contract_line_id = modal.contract_line_id
+                WHERE sp.contract_line_id IS NULL
                 """.trimIndent()
             )
         }

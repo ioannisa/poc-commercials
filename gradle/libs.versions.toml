@@ -136,7 +136,7 @@ mysql-connector-j = { module = "com.mysql:mysql-connector-j", version.ref = "mys
 # Connection pooling (server-only)
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
 
-# YAML for kotlinx-serialization (server-only: stations.yaml)
+# YAML for kotlinx-serialization (server-only: server.yaml)
 kaml = { module = "com.charleskorn.kaml:kaml", version.ref = "kaml" }
 
 # Model Context Protocol - official Kotlin SDK (server side; brings ktor-server-sse
