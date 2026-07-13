@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- JasperReports 7.x format - Program Flow Report -->
+<!--
+  Program Flow Report (JasperReports 7.x).
+
+  ONE BREAK = ONE PROGRAMME. The break's time and programme are a GROUP HEADING,
+  printed once on the left, not a pair of columns repeated on all 19 rows - the
+  old layout said "03:00 / Ειδήσεις" nineteen times per break, which is what
+  ProgramFlowReportOld.jrxml still does (kept for reference, never rendered).
+
+  That buys the two things the rows actually need: a wide message column, and a
+  genuinely empty Παρατηρήσεις column - which is blank BY DESIGN, for handwriting
+  on the printed page.
+
+  Fonts: Roboto throughout, via the fonts/roboto extension. NEVER textAdjust=
+  "ScaleFont" - it shrinks the font of a too-long message and the rows come out
+  at different sizes. StretchHeight wraps instead; ProgramFlowLayoutTest fails
+  the build if either rule is broken.
+-->
 <jasperReport name="ProgramFlowReport"
               pageWidth="595"
               pageHeight="842"
@@ -23,7 +39,9 @@
     <parameter name="LOGO_PATH" class="java.lang.String" forPrompting="false"/>
 
     <!-- Fields: the data contract of this report. Row values arrive as JSON
-         and are coerced to these classes by the generic ReportEngine. -->
+         and are coerced to these classes by the generic ReportEngine.
+         `timeSlot` and `program` are per-row in the data but constant within a
+         break - the group heading is where they are printed. -->
     <field name="timeSlot" class="java.lang.String"/>
     <field name="message" class="java.lang.String"/>
     <field name="duration" class="java.lang.String"/>
@@ -32,107 +50,161 @@
     <field name="groupTotalDuration" class="java.lang.String"/>
     <field name="groupSpotCount" class="java.lang.Integer"/>
 
-    <!-- Group by time slot for subtotals -->
+    <!-- One group per break: heading (time + programme + column headers),
+         then its rows, then its own totals. -->
     <group name="TimeSlotGroup">
         <expression><![CDATA[$F{timeSlot}]]></expression>
         <groupHeader>
-            <band height="2">
-                <element kind="line" x="0" y="0" width="555" height="1" uuid="b1b2c3d4-e5f6-7890-abcd-ef1234567891">
+            <band height="56">
+                <!-- The break time - anchors the block. -->
+                <element kind="textField" x="0" y="11" width="42" height="22" forecolor="#E07000"
+                         hTextAlign="Left" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="14.0" bold="true"
+                         uuid="b1000000-0000-4000-8000-000000000001">
+                    <expression><![CDATA[$F{timeSlot}]]></expression>
+                </element>
+
+                <!-- The programme, ONCE, on its OWN FULL-WIDTH LINE beside the time.
+                     It used to be stacked UNDER the time in a 95pt gutter, and that
+                     was the whole problem: 77% of programme names (370 of 513) do
+                     not fit a gutter that narrow - the longest is 62 chars - so they
+                     wrapped, the heading band grew, and the column headers and their
+                     rule were dragged apart by exactly the extra lines. No anchoring
+                     trick fixes that; the programme and the headers were competing
+                     for the same vertical space. Given 470pt they never compete: 62
+                     chars is one line, always. -->
+                <element kind="textField" textAdjust="StretchHeight" x="48" y="11" width="507" height="22"
+                         vTextAlign="Middle" fontName="Roboto" fontSize="12.0" bold="true"
+                         uuid="b1000000-0000-4000-8000-000000000002">
+                    <expression><![CDATA[$F{program}]]></expression>
+                </element>
+
+                <!-- Column headers + their rule. Both still hug the BOTTOM of the
+                     band, so if a programme ever did wrap they stay together and the
+                     spots still start right beneath the rule. -->
+                <element kind="staticText" positionType="FixRelativeToBottom"
+                         x="48" y="36" width="307" height="16" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="10.0"
+                         uuid="b1000000-0000-4000-8000-000000000003">
+                    <text><![CDATA[Μήνυμα]]></text>
+                </element>
+                <element kind="staticText" positionType="FixRelativeToBottom"
+                         x="360" y="36" width="60" height="16"
+                         hTextAlign="Center" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="10.0"
+                         uuid="b1000000-0000-4000-8000-000000000004">
+                    <text><![CDATA[Διάρκεια]]></text>
+                </element>
+                <element kind="staticText" positionType="FixRelativeToBottom"
+                         x="430" y="36" width="125" height="16" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="10.0"
+                         uuid="b1000000-0000-4000-8000-000000000005">
+                    <text><![CDATA[Παρατηρήσεις]]></text>
+                </element>
+                <element kind="line" positionType="FixRelativeToBottom"
+                         x="48" y="53" width="507" height="1"
+                         uuid="b1000000-0000-4000-8000-000000000006">
                     <pen lineWidth="1.0" lineColor="#000000"/>
                 </element>
             </band>
         </groupHeader>
         <groupFooter>
-            <band height="20">
-                <element kind="line" x="0" y="0" width="555" height="1" uuid="c1b2c3d4-e5f6-7890-abcd-ef1234567892">
-                    <pen lineWidth="0.5" lineColor="#666666"/>
-                </element>
-                <element kind="staticText" x="200" y="2" width="100" height="16" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" bold="true" uuid="d1b2c3d4-e5f6-7890-abcd-ef1234567893">
+            <band height="32">
+                <element kind="staticText" x="240" y="2" width="112" height="16"
+                         hTextAlign="Right" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="9.0" bold="true"
+                         uuid="c1000000-0000-4000-8000-000000000001">
                     <text><![CDATA[Σύνολα Χρόνου]]></text>
                 </element>
-                <element kind="textField" x="300" y="2" width="50" height="16" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" bold="true" uuid="e1b2c3d4-e5f6-7890-abcd-ef1234567894">
+                <element kind="textField" x="360" y="2" width="60" height="16"
+                         hTextAlign="Center" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="9.0" bold="true"
+                         uuid="c1000000-0000-4000-8000-000000000002">
                     <expression><![CDATA[$F{groupTotalDuration}]]></expression>
                 </element>
-                <element kind="staticText" x="380" y="2" width="40" height="16" hTextAlign="Right" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" bold="true" uuid="f1b2c3d4-e5f6-7890-abcd-ef1234567895">
+                <element kind="staticText" x="430" y="2" width="45" height="16"
+                         hTextAlign="Right" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="9.0" bold="true"
+                         uuid="c1000000-0000-4000-8000-000000000003">
                     <text><![CDATA[Spots]]></text>
                 </element>
-                <element kind="textField" x="425" y="2" width="30" height="16" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" bold="true" uuid="01b2c3d4-e5f6-7890-abcd-ef1234567896">
+                <element kind="textField" x="480" y="2" width="40" height="16"
+                         hTextAlign="Center" vTextAlign="Middle"
+                         fontName="Roboto" fontSize="9.0" bold="true"
+                         uuid="c1000000-0000-4000-8000-000000000004">
                     <expression><![CDATA[$F{groupSpotCount}]]></expression>
+                </element>
+                <!-- closes the break -->
+                <element kind="line" x="0" y="29" width="555" height="1"
+                         uuid="c1000000-0000-4000-8000-000000000005">
+                    <pen lineWidth="0.5" lineColor="#666666"/>
                 </element>
             </band>
         </groupFooter>
     </group>
 
-    <!-- Report Title/Header -->
-    <title height="80">
+    <!-- Page banner. Column headers live in the group heading, not here. -->
+    <title height="60">
         <!-- Logo image (left) - rendered from the LOGO_PATH parameter when provided -->
-        <element kind="image" x="0" y="5" width="100" height="40" scaleImage="RetainShape" hImageAlign="Left" onErrorType="Blank" uuid="12b2c3d4-e5f6-7890-abcd-ef1234567890">
+        <element kind="image" x="0" y="5" width="100" height="40" scaleImage="RetainShape"
+                 hImageAlign="Left" onErrorType="Blank"
+                 uuid="12b2c3d4-e5f6-7890-abcd-ef1234567890">
             <printWhenExpression><![CDATA[$P{LOGO_PATH} != null && !$P{LOGO_PATH}.trim().isEmpty()]]></printWhenExpression>
             <expression><![CDATA[$P{LOGO_PATH}]]></expression>
         </element>
         <!-- Logo placeholder text, shown only when no LOGO_PATH is configured -->
-        <element kind="staticText" x="0" y="5" width="100" height="30" forecolor="#E07000" vTextAlign="Middle" fontName="Roboto" fontSize="16.0" bold="true" uuid="11b2c3d4-e5f6-7890-abcd-ef1234567897">
+        <element kind="staticText" x="0" y="8" width="100" height="30" forecolor="#E07000"
+                 vTextAlign="Middle" fontName="Roboto" fontSize="16.0" bold="true"
+                 uuid="11b2c3d4-e5f6-7890-abcd-ef1234567897">
             <printWhenExpression><![CDATA[$P{LOGO_PATH} == null || $P{LOGO_PATH}.trim().isEmpty()]]></printWhenExpression>
             <text><![CDATA[LOGO]]></text>
         </element>
 
-        <!-- Empty Time Badge (center) -->
-        <element kind="rectangle" x="180" y="5" width="130" height="20" backcolor="#FFFACD" uuid="21b2c3d4-e5f6-7890-abcd-ef1234567898">
+        <!-- Empty Time badge (centre) -->
+        <element kind="rectangle" x="180" y="8" width="130" height="20" backcolor="#FFFACD"
+                 uuid="21b2c3d4-e5f6-7890-abcd-ef1234567898">
             <pen lineWidth="1.0" lineColor="#DAA520"/>
         </element>
-        <element kind="textField" x="185" y="7" width="120" height="16" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="8.0" bold="true" uuid="31b2c3d4-e5f6-7890-abcd-ef1234567899">
+        <element kind="textField" x="185" y="10" width="120" height="16"
+                 hTextAlign="Center" vTextAlign="Middle"
+                 fontName="Roboto" fontSize="8.0" bold="true"
+                 uuid="31b2c3d4-e5f6-7890-abcd-ef1234567899">
             <expression><![CDATA[$P{EMPTY_TIME}]]></expression>
         </element>
 
-        <!-- Report Title (right) -->
-        <element kind="textField" x="350" y="5" width="205" height="20" hTextAlign="Right" vTextAlign="Middle" fontName="Roboto" fontSize="14.0" bold="true" uuid="41b2c3d4-e5f6-7890-abcd-ef123456789a">
+        <!-- Title + date (right) -->
+        <element kind="textField" x="350" y="5" width="205" height="20"
+                 hTextAlign="Right" vTextAlign="Middle"
+                 fontName="Roboto" fontSize="14.0" bold="true"
+                 uuid="41b2c3d4-e5f6-7890-abcd-ef123456789a">
             <expression><![CDATA[$P{REPORT_TITLE}]]></expression>
         </element>
-
-        <!-- Report Date (underlined) -->
-        <element kind="textField" x="350" y="28" width="205" height="18" hTextAlign="Right" vTextAlign="Middle" fontName="Roboto" fontSize="10.0" underline="true" uuid="51b2c3d4-e5f6-7890-abcd-ef123456789b">
+        <element kind="textField" x="350" y="28" width="205" height="18"
+                 hTextAlign="Right" vTextAlign="Middle"
+                 fontName="Roboto" fontSize="10.0" underline="true"
+                 uuid="51b2c3d4-e5f6-7890-abcd-ef123456789b">
             <expression><![CDATA[$P{REPORT_DATE}]]></expression>
-        </element>
-
-        <!-- Column Headers -->
-        <element kind="staticText" x="0" y="55" width="260" height="20" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" uuid="61b2c3d4-e5f6-7890-abcd-ef123456789c">
-            <text><![CDATA[Μήνυμα]]></text>
-        </element>
-        <element kind="staticText" x="260" y="55" width="45" height="20" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" uuid="71b2c3d4-e5f6-7890-abcd-ef123456789d">
-            <text><![CDATA[Ώρα]]></text>
-        </element>
-        <element kind="staticText" x="305" y="55" width="50" height="20" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" uuid="81b2c3d4-e5f6-7890-abcd-ef123456789e">
-            <text><![CDATA[Διάρκεια]]></text>
-        </element>
-        <element kind="staticText" x="355" y="55" width="105" height="20" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" uuid="91b2c3d4-e5f6-7890-abcd-ef123456789f">
-            <text><![CDATA[Πρόγραμμα]]></text>
-        </element>
-        <element kind="staticText" x="460" y="55" width="95" height="20" vTextAlign="Middle" fontName="Roboto" fontSize="9.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567900">
-            <text><![CDATA[Παρατηρήσεις]]></text>
         </element>
     </title>
 
-    <!-- Detail Band (each row) -->
+    <!-- One spot. Time and programme are NOT here - they are the group heading. -->
     <detail>
-        <band height="14">
-            <!-- Message -->
-            <element kind="textField" textAdjust="StretchHeight" x="0" y="0" width="260" height="13" vTextAlign="Middle" fontName="Roboto" fontSize="7.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567901">
+        <band height="16">
+            <element kind="textField" textAdjust="StretchHeight" x="48" y="0" width="307" height="14"
+                     vTextAlign="Middle" fontName="Roboto" fontSize="8.0"
+                     uuid="d1000000-0000-4000-8000-000000000001">
                 <expression><![CDATA[$F{message}]]></expression>
             </element>
-            <!-- Time (bold, colored) -->
-            <element kind="textField" x="260" y="0" width="45" height="13" forecolor="#E07000" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="8.0" bold="true" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567902">
-                <expression><![CDATA[$F{timeSlot}]]></expression>
-            </element>
-            <!-- Duration -->
-            <element kind="textField" x="305" y="0" width="50" height="13" hTextAlign="Center" vTextAlign="Middle" fontName="Roboto" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567903">
+            <element kind="textField" x="360" y="0" width="60" height="14"
+                     hTextAlign="Center" vTextAlign="Middle"
+                     fontName="Roboto" fontSize="8.0"
+                     uuid="d1000000-0000-4000-8000-000000000002">
                 <expression><![CDATA[$F{duration}]]></expression>
             </element>
-            <!-- Program -->
-            <element kind="textField" textAdjust="StretchHeight" x="355" y="0" width="105" height="13" vTextAlign="Middle" fontName="Roboto" fontSize="7.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567904">
-                <expression><![CDATA[$F{program}]]></expression>
-            </element>
-            <!-- Notes -->
-            <element kind="textField" textAdjust="StretchHeight" x="460" y="0" width="95" height="13" vTextAlign="Middle" fontName="Roboto" fontSize="7.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567905">
+            <!-- Παρατηρήσεις: blank by design - white space for handwriting -->
+            <element kind="textField" textAdjust="StretchHeight" x="430" y="0" width="125" height="14"
+                     vTextAlign="Middle" fontName="Roboto" fontSize="8.0"
+                     uuid="d1000000-0000-4000-8000-000000000003">
                 <expression><![CDATA[$F{notes}]]></expression>
             </element>
         </band>
@@ -140,13 +212,19 @@
 
     <!-- Page Footer -->
     <pageFooter height="20">
-        <element kind="textField" x="0" y="5" width="200" height="12" vTextAlign="Middle" fontName="Roboto" fontSize="7.0" italic="true" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567906">
+        <element kind="textField" x="0" y="5" width="200" height="12" vTextAlign="Middle"
+                 fontName="Roboto" fontSize="7.0" italic="true"
+                 uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567906">
             <expression><![CDATA["Generated: " + new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm").format(new java.util.Date())]]></expression>
         </element>
-        <element kind="textField" x="450" y="5" width="60" height="12" hTextAlign="Right" vTextAlign="Middle" fontName="Roboto" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567907">
+        <element kind="textField" x="450" y="5" width="60" height="12"
+                 hTextAlign="Right" vTextAlign="Middle" fontName="Roboto" fontSize="8.0"
+                 uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567907">
             <expression><![CDATA["Page " + $V{PAGE_NUMBER}]]></expression>
         </element>
-        <element kind="textField" evaluationTime="Report" x="510" y="5" width="45" height="12" vTextAlign="Middle" fontName="Roboto" fontSize="8.0" uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567908">
+        <element kind="textField" evaluationTime="Report" x="510" y="5" width="45" height="12"
+                 vTextAlign="Middle" fontName="Roboto" fontSize="8.0"
+                 uuid="a1b2c3d4-e5f6-7890-abcd-ef1234567908">
             <expression><![CDATA[" of " + $V{PAGE_NUMBER}]]></expression>
         </element>
     </pageFooter>
