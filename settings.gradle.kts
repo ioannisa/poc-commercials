@@ -30,6 +30,7 @@ dependencyResolutionManagement {
         maven {
             url = uri("https://jaspersoft.jfrog.io/jaspersoft/third-party-ce-artifacts/")
         }
+        mavenLocal()
     }
 }
 
