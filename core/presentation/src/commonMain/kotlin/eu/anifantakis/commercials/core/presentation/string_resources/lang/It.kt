@@ -24,6 +24,7 @@ internal class It : LanguageStrings {
         StringKey.AUTH_INVALID_CREDENTIALS -> "Nome utente o password non validi"
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Nessuna emittente assegnata a questo account"
         StringKey.AUTH_NOT_LOGGED_IN -> "Accesso non effettuato"
+        StringKey.AUTH_SESSION_NOT_PERSISTED -> "Accesso riuscito, ma la sessione non può essere salvata in modo sicuro e verresti disconnesso subito. Questa pagina deve essere servita tramite HTTPS (o da localhost)."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Impossibile raggiungere il server"
 
         // ── Preferences ──────────────────────────────────────────────────

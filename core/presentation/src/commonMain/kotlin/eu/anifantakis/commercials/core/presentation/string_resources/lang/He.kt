@@ -29,6 +29,7 @@ internal class He : LanguageStrings {
         StringKey.AUTH_INVALID_CREDENTIALS -> "שם משתמש או סיסמה שגויים"
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "לא הוקצו תחנות לחשבון זה"
         StringKey.AUTH_NOT_LOGGED_IN -> "לא מחובר"
+        StringKey.AUTH_SESSION_NOT_PERSISTED -> "ההתחברות הצליחה, אך לא ניתן היה לשמור את ההפעלה באופן מאובטח, ולכן הייתם מנותקים מיד. יש להגיש דף זה דרך HTTPS (או מ-localhost)."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "לא ניתן להתחבר לשרת"
 
         // ── Preferences ──────────────────────────────────────────────────

@@ -42,11 +42,19 @@ data class StoredSession(
 // index - the annotation tells the checker to trust it exists at runtime.
 class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
 
+    private companion object {
+        const val SESSION_KEY = "session_v2"
+    }
+
     // Encrypted at rest by default (KSafe). Explicit versioned key: the
     // session shape changed with multi-tenancy (per-station access list), and
     // a v1 blob under the old key must not be decoded into the new class -
     // returning users just log in once more.
-    private var stored by ksafe(StoredSession(), key = "session_v2")
+    //
+    // The delegate is kept for READS and for the non-critical writes (station
+    // switch, logout). The critical write - login - goes through the awaited
+    // `store()` below, under this SAME key. They must never drift apart.
+    private var stored by ksafe(StoredSession(), key = SESSION_KEY)
 
     /**
      * Bumped on every login/logout/station switch. A StateFlow, so both the
@@ -84,14 +92,85 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
     /** Customer scoping code ON THE SELECTED STATION (null unless customer viewer). */
     val clientCode: String? get() = selectedStation?.clientCode
 
-    fun store(token: String, displayName: String, isAdmin: Boolean, stations: List<StationAccess>) {
-        stored = StoredSession(
+    /**
+     * Encrypted storage is BROKEN here: a session written now would be rolled
+     * straight back out again. The preflight that lets us refuse a login BEFORE
+     * asking for a password, rather than after.
+     *
+     * Today this means one thing - a browser page that is not a secure context
+     * (plain HTTP from anything but localhost), where the browser withholds
+     * `crypto.subtle` outright and every encrypted write throws.
+     *
+     * ── The question this asks, and the one it does NOT ──
+     *
+     * `isEncryptionOperational` answers only "will an encrypted write succeed?".
+     * It is deliberately NOT `effectiveLevel != intendedLevel`, which asks the
+     * different question "is this as strong as I hoped?" - and legitimately
+     * answers "no" where everything works fine:
+     *
+     *   - a JVM desktop with no OS keyring (headless Linux, or an opt-out)
+     *     reports SANDBOX_PROTECTED -> SOFTWARE and encrypts perfectly well;
+     *   - the iOS Simulator without a Keychain entitlement reports
+     *     HARDWARE_BACKED -> SOFTWARE and encrypts perfectly well.
+     *
+     * Gate on strength and you refuse to log in on every Simulator run and on any
+     * Linux box without gnome-keyring. Gate on operability and you refuse only
+     * where the write would actually be lost.
+     *
+     * The list of non-operational conditions lives inside KSafe, so a future one
+     * arrives here for free - which is why this reads the flag instead of
+     * matching a note string by hand.
+     */
+    val encryptionUnavailable: Boolean
+        get() = !ksafe.protectionInfo.isEncryptionOperational
+
+    /**
+     * Persists the session and AWAITS the write. Throws if it could not be
+     * written - the caller must not enter an authenticated state.
+     *
+     * ── Why this one write is awaited and the others are not ──
+     *
+     * The `stored` delegate's setter is `putDirectRaw`: it hands the value to a
+     * background write channel with no completion handle, so an encryption
+     * failure is delivered to NOBODY. It is only logged. There is no error flow,
+     * no callback, and the batch runs inside a `runCatching`, so not even a
+     * global uncaught handler sees it.
+     *
+     * That is exactly what happened on a page served over plain HTTP: the browser
+     * withholds `crypto.subtle` outside a secure context, every encrypted write
+     * fails, KSafe ROLLS THE VALUE BACK (it is evicted from the cache, not left
+     * stale) - and the app carried on into the authenticated screens with a
+     * session that had already evaporated. The next API call 401s, the session
+     * clears, and the user is bounced to Login with no explanation. A silent loop.
+     *
+     * `put()` is the only path that surfaces it: it passes a completion Deferred
+     * and awaits it, so the failure is thrown into this coroutine. Login is the
+     * one write where a silent failure is unacceptable, so login is the one write
+     * that waits. Station switches and logout keep the fire-and-forget delegate.
+     *
+     * DO NOT "verify" this by reading the value back. A failed write can still
+     * read back as present through a read-write Compose holder, whose write-echo
+     * guard waits for a disk emission that never comes. The exception is the only
+     * honest signal.
+     */
+    suspend fun store(token: String, displayName: String, isAdmin: Boolean, stations: List<StationAccess>) {
+        val session = StoredSession(
             token = token,
             displayName = displayName,
             isAdmin = isAdmin,
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: ""
         )
+        // Refuse here too, not only at the caller's preflight: a session written
+        // where encryption cannot run is a session that is already gone, and no
+        // future caller should be able to route around that by forgetting to ask.
+        check(!encryptionUnavailable) {
+            "Encrypted storage is not operational (${ksafe.protectionInfo.custody}) - " +
+                "the session would not persist."
+        }
+        // Same key and same (default, Encrypted) mode as the delegate, so the
+        // delegate's reads see this write - it is the same KSafe core and cache.
+        ksafe.put(SESSION_KEY, session)
         _revision.value++
     }
 

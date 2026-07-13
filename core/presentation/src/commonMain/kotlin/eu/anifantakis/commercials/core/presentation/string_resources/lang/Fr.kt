@@ -24,6 +24,7 @@ internal class Fr : LanguageStrings {
         StringKey.AUTH_INVALID_CREDENTIALS -> "Nom d'utilisateur ou mot de passe invalide"
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Aucune chaîne n'est attribuée à ce compte"
         StringKey.AUTH_NOT_LOGGED_IN -> "Non connecté"
+        StringKey.AUTH_SESSION_NOT_PERSISTED -> "Connexion réussie, mais la session n'a pas pu être enregistrée de manière sécurisée : vous seriez immédiatement déconnecté. Cette page doit être servie en HTTPS (ou depuis localhost)."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Impossible de joindre le serveur"
 
         // ── Preferences ──────────────────────────────────────────────────

@@ -29,6 +29,7 @@ enum class StringKey(val json: String = "") {
     AUTH_INVALID_CREDENTIALS,
     AUTH_NO_STATIONS_ASSIGNED,
     AUTH_NOT_LOGGED_IN,
+    AUTH_SESSION_NOT_PERSISTED,
     AUTH_NETWORK_UNREACHABLE,
 
     // ── Preferences ──────────────────────────────────────────────────────

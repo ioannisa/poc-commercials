@@ -24,6 +24,7 @@ internal class El : LanguageStrings {
         StringKey.AUTH_INVALID_CREDENTIALS -> "Λάθος όνομα χρήστη ή κωδικός"
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Δεν έχουν ανατεθεί σταθμοί σε αυτόν τον λογαριασμό"
         StringKey.AUTH_NOT_LOGGED_IN -> "Δεν έχετε συνδεθεί"
+        StringKey.AUTH_SESSION_NOT_PERSISTED -> "Η σύνδεση έγινε, αλλά η συνεδρία δεν μπόρεσε να αποθηκευτεί με ασφάλεια, οπότε θα αποσυνδεόσασταν αμέσως. Η σελίδα πρέπει να σερβίρεται μέσω HTTPS (ή από localhost)."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Δεν ήταν δυνατή η σύνδεση με τον server"
 
         // ── Preferences ──────────────────────────────────────────────────

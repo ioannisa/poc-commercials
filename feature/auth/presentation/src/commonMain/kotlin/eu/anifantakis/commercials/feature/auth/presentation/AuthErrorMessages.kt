@@ -13,6 +13,8 @@ fun AuthError.toUiText(): UiText = when (this) {
     AuthError.InvalidCredentials -> UiText.Res(StringKey.AUTH_INVALID_CREDENTIALS)
     AuthError.NoStationsAssigned -> UiText.Res(StringKey.AUTH_NO_STATIONS_ASSIGNED)
     AuthError.NotLoggedIn -> UiText.Res(StringKey.AUTH_NOT_LOGGED_IN)
+    // Terminal: retrying cannot conjure WebCrypto. The message names the fix.
+    AuthError.SessionNotPersisted -> UiText.Res(StringKey.AUTH_SESSION_NOT_PERSISTED)
     is AuthError.Server -> UiText.Dynamic(message)
     is AuthError.Network -> UiText.Res(StringKey.AUTH_NETWORK_UNREACHABLE)
 }
