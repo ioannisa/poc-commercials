@@ -46,6 +46,7 @@ val timetableModule = module {
             prefs = get(),
             session = get(),
             reportService = get(),
+            logoCache = get(),
         )
     }
     viewModel { params ->
@@ -55,6 +56,7 @@ val timetableModule = module {
             common = params.get(),
             session = get(),
             reportService = get(),
+            logoCache = get(),
         )
     }
 }

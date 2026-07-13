@@ -50,7 +50,7 @@ fun Application.configureRouting() {
             emailRoutes(registry)
 
             // Report routes
-            reportRoutes()
+            reportRoutes(registry)
 
             // Schedule / commercials data (station-scoped, DB-backed)
             scheduleRoutes(registry)

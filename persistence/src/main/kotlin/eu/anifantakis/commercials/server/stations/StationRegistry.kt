@@ -50,6 +50,18 @@ data class StationConfig(
     val username: String,
     val password: String,
     val maxPoolSize: Int? = null,
+    /**
+     * Absolute path to this station's logo image, printed on its reports.
+     * Absent (or unreadable) means NO logo: the template prints a plain "LOGO"
+     * placeholder rather than failing, so a bad path costs a logo, not a report.
+     *
+     * It is a path on the machine that RENDERS, and reports render in two
+     * places: in-process on desktop, and on the server for every other client.
+     * The server injects this value itself and IGNORES whatever a client sends
+     * (see reportRoutes) - a client-chosen path would be a file-read primitive
+     * on the server. The desktop reads it straight from the session.
+     */
+    val logo: String? = null,
     /** Overrides the file-wide smtp block for this station's customer emails. */
     val smtp: SmtpConfig? = null,
 )

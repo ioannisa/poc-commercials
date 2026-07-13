@@ -32,7 +32,8 @@ import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calcula
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportConfig
+import eu.anifantakis.commercials.reports.StationLogoCache
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportConfig
 import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.reports.print
 import eu.anifantakis.commercials.reports.toReportPayload
@@ -176,6 +177,7 @@ class TimetableViewModel(
     private val prefs: TimetablePreferences,
     private val session: UserSession,
     private val reportService: ReportService,
+    private val logoCache: StationLogoCache,
 ) : BaseGlobalViewModel() {
 
     private val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -330,7 +332,7 @@ class TimetableViewModel(
         val s = _state.value
         viewModelScope.launch {
             val data = ReportDataFactory.createProgramFlowData(date, s.breaks, s.cells)
-            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
+            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(logoCache.reportConfig()))
         }
     }
 
@@ -346,7 +348,7 @@ class TimetableViewModel(
                 commercials = commercials,
                 programName = cell.programName,
             )
-            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(ReportConfig()))
+            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(logoCache.reportConfig()))
         }
     }
 
@@ -360,16 +362,19 @@ class TimetableViewModel(
         val s = _state.value
         if (s.reportBusy) return
 
-        val payloads = ReportDataFactory
+        val data = ReportDataFactory
             .createMonthProgramFlowData(s.year, s.month, s.breaks, s.cells)
-            .map { it.toReportPayload(ReportConfig()) }
-        if (payloads.isEmpty()) {
+        if (data.isEmpty()) {
             showSnackbar(StringKey.REPORT_NO_SPOTS)
             return
         }
 
         viewModelScope.launch {
             _state.update { it.copy(reportBusy = true) }
+            // ONE lookup for the whole month, not one per day: the logo is the
+            // station's, and on desktop resolving it can mean a round trip.
+            val config = logoCache.reportConfig()
+            val payloads = data.map { it.toReportPayload(config) }
             try {
                 when (val result = action(payloads)) {
                     // The engine's own text is authoritative - never translated.
@@ -394,9 +399,10 @@ class TimetableViewModel(
         val s = _state.value
         val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
         viewModelScope.launch {
+            val config = logoCache.reportConfig()
             val payloads = ReportDataFactory
                 .createMonthProgramFlowData(s.year, s.month, listOf(slot), s.cells)
-                .map { it.toReportPayload(ReportConfig()) }
+                .map { it.toReportPayload(config) }
             if (payloads.isNotEmpty()) reportService.print(payloads)
         }
     }

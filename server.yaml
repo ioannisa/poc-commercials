@@ -96,6 +96,7 @@ stations:
 
   - id: my-sample
     name: "My Sample"
+    logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_v4?useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123

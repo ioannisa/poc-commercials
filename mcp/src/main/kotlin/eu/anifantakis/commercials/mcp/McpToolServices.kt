@@ -125,6 +125,9 @@ class McpToolServices(
     /** The station's SMTP settings (its own override, else the file-wide default). */
     fun smtpFor(stationId: String): SmtpConfig? = directory.smtp(stationId)
 
+    /** This station's report logo (server.yaml); null when it has none. */
+    fun logoFor(stationId: String): String? = directory.logo(stationId)
+
     /** Display name for a station id. */
     fun stationName(stationId: String): String = directory.name(stationId) ?: stationId
 

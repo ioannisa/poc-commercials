@@ -55,7 +55,7 @@ object GenerateDayReportTool : McpTool {
             if (spots.isEmpty()) null else slot.label to spots
         }
 
-        val request = DayReportAssembler.buildDayReport(date, occupied)
+        val request = DayReportAssembler.buildDayReport(date, occupied, services.logoFor(a.string("station")))
         if (request.rows.isEmpty()) {
             throw McpToolException("No spots on $date - nothing to print.")
         }

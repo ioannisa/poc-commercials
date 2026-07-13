@@ -22,7 +22,7 @@ data class StationAccessDto(
     val id: String,
     val name: String,
     val role: String,
-    val clientCode: String? = null
+    val clientCode: String? = null,
 )
 
 @Serializable

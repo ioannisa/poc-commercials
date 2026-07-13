@@ -18,7 +18,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.reports.ReportDataFactory
 import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.models.ReportConfig
+import eu.anifantakis.commercials.reports.StationLogoCache
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportConfig
 import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
@@ -105,6 +106,7 @@ class CommercialDetailViewModel(
     private val common: TimetableCommon,
     private val session: UserSession,
     private val reportService: ReportService,
+    private val logoCache: StationLogoCache,
 ) : BaseGlobalViewModel() {
 
     private val key = SchedulerKey(breakId, date)
@@ -179,11 +181,10 @@ class CommercialDetailViewModel(
             showSnackbar(StringKey.REPORT_NO_SPOTS)
             return
         }
-        val payloads = listOf(data.toReportPayload(ReportConfig()))
-
         viewModelScope.launch {
             reportBusy.value = true
             try {
+                val payloads = listOf(data.toReportPayload(logoCache.reportConfig()))
                 when (val result = action(payloads)) {
                     // The engine's own text is authoritative - never translated.
                     is ReportResult.Success -> showSnackbar(

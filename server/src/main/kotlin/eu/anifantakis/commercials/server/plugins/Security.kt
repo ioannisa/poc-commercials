@@ -46,6 +46,28 @@ fun ApplicationCall.authUser(): AuthUser =
 data class StationAccess(val db: StationDb, val grant: StationGrant)
 
 /**
+ * The `station` query parameter, checked against the caller's grants but WITHOUT
+ * opening that station's DB pool - for endpoints that need to know *whether the
+ * caller may act for this station*, not to query it (the report logo is one:
+ * spinning up a connection pool to serve a PNG would be absurd).
+ *
+ * Same failures as [stationAccessOrRespond]: 400 when absent, 403 when ungranted.
+ * Responds and returns null in both cases.
+ */
+suspend fun ApplicationCall.grantedStationIdOrRespond(): String? {
+    val stationId = request.queryParameters["station"]
+    if (stationId.isNullOrBlank()) {
+        respond(HttpStatusCode.BadRequest, mapOf("error" to "Query parameter 'station' is required"))
+        return null
+    }
+    if (authUser().grantFor(stationId) == null) {
+        respond(HttpStatusCode.Forbidden, mapOf("error" to "No access to station '$stationId'"))
+        return null
+    }
+    return stationId
+}
+
+/**
  * Resolves the `station` query parameter against the caller's grants and the
  * hosted stations. Responds and returns null on failure:
  * - 400 when the parameter is missing

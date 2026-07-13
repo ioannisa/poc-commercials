@@ -77,10 +77,12 @@ internal class FakeStationDirectory(
     private val sources: Map<String, StationDataSource> = emptyMap(),
     private val names: Map<String, String> = emptyMap(),
     private val smtps: Map<String, SmtpConfig> = emptyMap(),
+    private val logos: Map<String, String> = emptyMap(),
 ) : StationDirectory {
     override val ids: List<String> get() = sources.keys.toList()
     override fun name(stationId: String): String? = names[stationId]
     override fun smtp(stationId: String): SmtpConfig? = smtps[stationId]
+    override fun logo(stationId: String): String? = logos[stationId]
     override fun dataSource(stationId: String): StationDataSource? = sources[stationId]
 }
 

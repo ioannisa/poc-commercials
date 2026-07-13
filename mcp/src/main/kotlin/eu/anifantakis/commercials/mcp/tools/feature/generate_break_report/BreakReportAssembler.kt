@@ -28,6 +28,8 @@ object BreakReportAssembler {
         date: LocalDate,
         breakLabel: String,
         commercials: List<CommercialRow>,
+        /** This station's logo (server.yaml); null prints the placeholder. */
+        logoPath: String? = null,
     ): ReportRequest {
         // calendar_excluded_docs contracts air but stay off printed reports.
         val printable = commercials.filter { !it.excludeFromReports }
@@ -37,7 +39,7 @@ object BreakReportAssembler {
             title = ProgramFlow.TITLE,
             reportDate = ProgramFlow.formatGreekDate(date.toKotlinLocalDate()),
             emptyTime = ProgramFlow.emptyTime(0),
-            logoPath = null,
+            logoPath = logoPath,
         )
 
         // ONE break airs inside ONE programme (the slot's, not each spot's).

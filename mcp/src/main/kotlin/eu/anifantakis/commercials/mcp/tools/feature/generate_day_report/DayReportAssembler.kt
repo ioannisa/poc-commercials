@@ -31,12 +31,14 @@ object DayReportAssembler {
     fun buildDayReport(
         date: LocalDate,
         breaks: List<Pair<String, List<CommercialRow>>>,
+        /** This station's logo (server.yaml); null prints the placeholder. */
+        logoPath: String? = null,
     ): ReportRequest {
         val parameters: JsonObject = ProgramFlow.params(
             title = ProgramFlow.TITLE,
             reportDate = ProgramFlow.formatGreekDate(date.toKotlinLocalDate()),
             emptyTime = ProgramFlow.emptyTime(0),
-            logoPath = null,
+            logoPath = logoPath,
         )
 
         val rows: List<JsonObject> = buildList {

@@ -47,7 +47,7 @@ object GenerateBreakReportTool : McpTool {
             throw McpToolException("No spots in break '$time' on $date - nothing to print.")
         }
 
-        val request = BreakReportAssembler.buildBreakReport(date, time, spots)
+        val request = BreakReportAssembler.buildBreakReport(date, time, spots, services.logoFor(a.string("station")))
         val pdf = services.generatePdf(request)
         val saved = services.saveReport(request.fileName ?: "program-flow.pdf", pdf)
 

@@ -42,6 +42,8 @@ interface StationDirectory {
     val ids: List<String>
     fun name(stationId: String): String?
     fun smtp(stationId: String): SmtpConfig?
+    /** Report logo path from server.yaml; null when the station has none. */
+    fun logo(stationId: String): String?
     /** Null when the station is not hosted. Opening its pool is lazy and blocking. */
     fun dataSource(stationId: String): StationDataSource?
 }
