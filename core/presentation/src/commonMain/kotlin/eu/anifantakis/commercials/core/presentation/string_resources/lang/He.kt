@@ -30,6 +30,8 @@ internal class He : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "לא הוקצו תחנות לחשבון זה"
         StringKey.AUTH_NOT_LOGGED_IN -> "לא מחובר"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "ההתחברות הצליחה, אך לא ניתן היה לשמור את ההפעלה באופן מאובטח, ולכן הייתם מנותקים מיד. יש להגיש דף זה דרך HTTPS (או מ-localhost)."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "האפליקציה כבר פועלת"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "‏Commercials Manager כבר פתוח במחשב זה.\nיש להשתמש בחלון הפעיל."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "לא ניתן להתחבר לשרת"
 
         // ── Preferences ──────────────────────────────────────────────────

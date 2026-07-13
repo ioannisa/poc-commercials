@@ -25,6 +25,8 @@ internal class It : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Nessuna emittente assegnata a questo account"
         StringKey.AUTH_NOT_LOGGED_IN -> "Accesso non effettuato"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "Accesso riuscito, ma la sessione non può essere salvata in modo sicuro e verresti disconnesso subito. Questa pagina deve essere servita tramite HTTPS (o da localhost)."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "Già in esecuzione"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "Commercials Manager è già aperto su questo computer.\nUtilizzare la finestra già in esecuzione."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Impossibile raggiungere il server"
 
         // ── Preferences ──────────────────────────────────────────────────

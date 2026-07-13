@@ -21,7 +21,13 @@ dependencies {
     implementation(libs.filekit.dialogs)
     // Window-geometry persistence (Plain mode - x/y/w/h are not secrets)
     implementation(libs.ksafe)
+
+    // SingleInstanceTest forks real JVMs - a single-instance guard cannot be
+    // proven inside one process (see the test's KDoc).
+    testImplementation(kotlin("test"))
 }
+
+tasks.withType<Test>().configureEach { useJUnitPlatform() }
 
 // Run the desktop app from the repo root so ./config.properties resolves to
 // the shared dev config file. Compose Desktop registers the `run` task lazily,

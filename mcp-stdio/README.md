@@ -16,6 +16,45 @@ MCP at `/mcp` (SSE, under bearer auth) — see `server/.../plugins/Mcp.kt`.
 # launcher: mcp-stdio/build/install/mcp-stdio/bin/mcp-stdio
 ```
 
+### …and then RESTART THE CLIENT. The build alone changes nothing.
+
+The MCP client (Claude Code, Claude Desktop, …) spawns this launcher **once, when
+its session starts**, and keeps that process for the whole session. Rebuilding
+while it is running does not touch it: the tools keep answering from the code
+that was on disk when the session began.
+
+That failure is silent, and it is worse than it sounds:
+
+- `./gradlew clean` deletes `build/install/`, but the **running JVM keeps going**
+  from the deleted-but-still-open jars (POSIX keeps an unlinked file alive while a
+  process holds it open). No error, no warning - it simply serves old code.
+- The process read `server.yaml` at ITS start, so it also stays pinned to whatever
+  **schema** that file named back then, even after you point the file elsewhere.
+
+Both bit us on 2026-07-13: a stdio process from a session two days earlier was
+still answering, out of jars that no longer existed, against a schema that had
+since been replaced - so `spots_in_break` cheerfully returned the pre-fix values
+and looked exactly like three fresh bugs in the MCP tools.
+
+**To actually pick up a change:**
+
+```bash
+./gradlew :mcp-stdio:installDist
+pkill -f 'mcp-stdio/build/install'     # kill any process left from an old session
+# then restart the MCP client so it spawns a fresh one
+```
+
+Sanity check before you go bug-hunting - if this start time predates your change,
+you are talking to a ghost:
+
+```bash
+ps -eo pid,lstart,command | grep '[m]cp-stdio/build/install'
+```
+
+Note that the module has **no data code of its own**: every read goes through
+`:persistence` (`StationDb`), which is why a fix there fixes the MCP too - and why
+a stale process here shows *data* bugs that exist nowhere in the source.
+
 ## Configuration (environment)
 
 | Variable | Required | Meaning |

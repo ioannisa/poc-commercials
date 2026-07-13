@@ -25,6 +25,8 @@ internal class De : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Diesem Konto sind keine Sender zugewiesen"
         StringKey.AUTH_NOT_LOGGED_IN -> "Nicht angemeldet"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "Anmeldung erfolgreich, aber die Sitzung konnte nicht sicher gespeichert werden – Sie würden sofort wieder abgemeldet. Diese Seite muss über HTTPS (oder von localhost) ausgeliefert werden."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "Bereits geöffnet"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "Commercials Manager ist auf diesem Computer bereits geöffnet.\nBitte verwenden Sie das laufende Fenster."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Server konnte nicht erreicht werden"
 
         // ── Preferences ──────────────────────────────────────────────────

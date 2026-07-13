@@ -371,8 +371,9 @@ class AuthDb(
     }
 
     /**
-     * Creates a new non-expiring token for the user. Only its SHA-256 is
-     * stored; the returned RAW token exists nowhere but the client.
+     * Creates a new token for the user, with the window the `session:` policy
+     * calls for (NULL under a no-expiry policy). Only its SHA-256 is stored;
+     * the returned RAW token exists nowhere but the client.
      */
     fun createToken(userId: Long): String {
         val token = randomBytes(32).toHex()
@@ -442,6 +443,32 @@ class AuthDb(
             }
 
             toAuthUser(c, row)
+        }
+    }
+
+    /**
+     * Seconds of life left in [token], or null when it never lapses (no-expiry
+     * policy, or a NULL window). The client's keep-alive uses this to pick its
+     * heartbeat interval instead of hard-coding one that a `session:` edit
+     * would silently invalidate.
+     *
+     * Returns null for an unknown or already-lapsed token too - the caller only
+     * ever reaches this AFTER the bearer auth accepted the token, so those
+     * cases are unreachable here, and a null reads correctly as "nothing to
+     * keep alive" either way.
+     */
+    fun tokenExpiresInSeconds(token: String): Long? {
+        if (!expiryEnabled || token.isBlank()) return null
+        return db.connection().use { c ->
+            c.prepareStatement(
+                "SELECT TIMESTAMPDIFF(SECOND, NOW(), expires_at) FROM auth_tokens " +
+                    "WHERE token_hash = ? AND expires_at IS NOT NULL"
+            ).use { ps ->
+                ps.setString(1, tokenHash(token))
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) rs.getLong(1).takeIf { !rs.wasNull() && it > 0 } else null
+                }
+            }
         }
     }
 

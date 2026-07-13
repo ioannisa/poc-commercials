@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.core.data.party_search.data_source.RemoteParty
 import eu.anifantakis.commercials.core.data.preferences.KSafeAppLanguageStore
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.session.SessionKeepAlive
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePartySearchDataSource
@@ -43,6 +44,10 @@ val coreModule = module {
     // authenticated + station-stamped for the app API, plain for login/recovery
     single { ApiHttpClient(session = get<AuthSession>()) }
     single { PlainJsonHttpClient() }
+
+    // Rotates the token at launch and beats while the app is open, so a session
+    // can only lapse while the app is CLOSED. Driven from App.kt.
+    single { SessionKeepAlive(session = get<AuthSession>(), api = get()) }
 
     // Master-data party search (used by timetable finder + schedule email)
     singleOf(::RemotePartySearchDataSourceImpl).bind<RemotePartySearchDataSource>()

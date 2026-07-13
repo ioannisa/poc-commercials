@@ -25,6 +25,8 @@ internal class En : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "No stations are assigned to this account"
         StringKey.AUTH_NOT_LOGGED_IN -> "Not logged in"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "Signed in, but the session could not be saved securely, so you would be signed out again immediately. This page must be served over HTTPS (or from localhost)."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "Already running"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "Commercials Manager is already open on this computer.\nPlease use the window that is already running."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Could not reach the server"
 
         // ── Preferences ──────────────────────────────────────────────────

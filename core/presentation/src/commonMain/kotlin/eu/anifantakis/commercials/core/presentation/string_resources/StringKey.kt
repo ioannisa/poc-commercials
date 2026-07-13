@@ -30,6 +30,11 @@ enum class StringKey(val json: String = "") {
     AUTH_NO_STATIONS_ASSIGNED,
     AUTH_NOT_LOGGED_IN,
     AUTH_SESSION_NOT_PERSISTED,
+
+    // Shown by a SECOND desktop instance as it refuses to start. Resolved outside
+    // Compose (LocalizationManager.getString) - see desktopApp SingleInstance.
+    DESKTOP_ALREADY_RUNNING_TITLE,
+    DESKTOP_ALREADY_RUNNING_MESSAGE,
     AUTH_NETWORK_UNREACHABLE,
 
     // ── Preferences ──────────────────────────────────────────────────────

@@ -27,6 +27,10 @@ import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.design_system.LocalGlyphFallback
 import eu.anifantakis.commercials.core.presentation.grids.LocalGridTextAnnotator
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.session.SessionKeepAlive
 
 @Composable
 fun App() {
@@ -38,6 +42,22 @@ fun App() {
     val languageStore = koinInject<AppLanguageStore>()
     LaunchedEffect(Unit) {
         LocalizationManager.setLanguage(LocalizationManager.resolveStartup(languageStore.languageCode))
+    }
+
+    // THE SESSION'S PULSE. A token's window is slid forward by USE, so an app left
+    // open and idle would age out and die on screen. This rotates it at launch and
+    // beats while we run, so a session can only lapse while the app is CLOSED -
+    // which is the one moment a re-login costs nobody any work. See SessionKeepAlive.
+    //
+    // Keyed on logged-in-ness, NOT on the revision: a station switch bumps the
+    // revision too, and restarting the pulse there would rotate the token on every
+    // switch for nothing.
+    val session = koinInject<AuthSession>()
+    val keepAlive = koinInject<SessionKeepAlive>()
+    val revision by session.revision.collectAsState()
+    val loggedIn = remember(revision) { session.isLoggedIn }
+    LaunchedEffect(loggedIn) {
+        if (loggedIn) keepAlive.run()
     }
 
     WithTextPrefetch {

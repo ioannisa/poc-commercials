@@ -28,8 +28,27 @@ data class StoredSession(
 
 /**
  * The app-wide auth state: an encrypted, persisted [StoredSession] (survives
- * restarts - tokens never expire, so a returning user goes straight in) plus
- * an observable revision so UI and ViewModels react to login/logout/station switches.
+ * restarts, so a returning user goes straight in) plus an observable revision so
+ * UI and ViewModels react to login/logout/station switches.
+ *
+ * ── ONE credential, renewed - not an access/refresh pair ──
+ *
+ * The token has a lifetime (server.yaml `session:` - 90 days, sliding, by default)
+ * and it is renewed, but there is no second secret and there must not be one.
+ * [SessionKeepAlive] rotates this token at launch and beats while the app runs, so
+ * a session can only lapse while the app is CLOSED. A LAPSED token cannot be
+ * renewed - which is exactly what keeps the lifetime meaningful.
+ *
+ * The access/refresh pair exists to rescue STATELESS tokens: a JWT cannot be
+ * revoked, so it must be made to die fast, so a second long-lived token is needed
+ * to avoid re-prompting. Ours is a row in `auth_tokens` - revocation is a DELETE
+ * and the very next request 401s. There is no damage window to bound, so there is
+ * nothing for a short-lived access token to buy, and a second secret would only
+ * add another thing that can fail to persist (see `store()` below for how badly the
+ * first one already can) plus the rotation race that is the pattern's classic bug.
+ *
+ * Expiry policy belongs to the server; the client holds one credential, keeps it
+ * warm, and reacts to 401 (`ApiHttpClient` -> `clear()` -> Login).
  *
  * Role and customer scoping are PER STATION: [role]/[clientCode] always
  * reflect the currently [selectedStation], so switching stations can turn an
@@ -40,7 +59,7 @@ data class StoredSession(
 // KSafe is @Provided: it comes from the expect/actual factory (createKSafe),
 // registered with a classic-DSL definition the compile-time checker can't
 // index - the annotation tells the checker to trust it exists at runtime.
-class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
+class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCredentialStore {
 
     private companion object {
         const val SESSION_KEY = "session_v2"
@@ -73,7 +92,7 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession {
         ksafe.platformAwaitReady()
     }
 
-    val isLoggedIn: Boolean get() = stored.token.isNotEmpty()
+    override val isLoggedIn: Boolean get() = stored.token.isNotEmpty()
     val token: String? get() = stored.token.ifEmpty { null }
     override val displayName: String get() = stored.displayName
     override val isAdmin: Boolean get() = stored.isAdmin

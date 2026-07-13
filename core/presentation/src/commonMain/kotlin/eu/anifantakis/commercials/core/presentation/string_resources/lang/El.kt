@@ -25,6 +25,8 @@ internal class El : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Δεν έχουν ανατεθεί σταθμοί σε αυτόν τον λογαριασμό"
         StringKey.AUTH_NOT_LOGGED_IN -> "Δεν έχετε συνδεθεί"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "Η σύνδεση έγινε, αλλά η συνεδρία δεν μπόρεσε να αποθηκευτεί με ασφάλεια, οπότε θα αποσυνδεόσασταν αμέσως. Η σελίδα πρέπει να σερβίρεται μέσω HTTPS (ή από localhost)."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "Η εφαρμογή εκτελείται ήδη"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "Το Commercials Manager είναι ήδη ανοιχτό σε αυτόν τον υπολογιστή.\nΧρησιμοποιήστε το παράθυρο που εκτελείται."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Δεν ήταν δυνατή η σύνδεση με τον server"
 
         // ── Preferences ──────────────────────────────────────────────────

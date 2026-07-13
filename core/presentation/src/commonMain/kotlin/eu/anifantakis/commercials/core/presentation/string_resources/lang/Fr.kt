@@ -25,6 +25,8 @@ internal class Fr : LanguageStrings {
         StringKey.AUTH_NO_STATIONS_ASSIGNED -> "Aucune chaîne n'est attribuée à ce compte"
         StringKey.AUTH_NOT_LOGGED_IN -> "Non connecté"
         StringKey.AUTH_SESSION_NOT_PERSISTED -> "Connexion réussie, mais la session n'a pas pu être enregistrée de manière sécurisée : vous seriez immédiatement déconnecté. Cette page doit être servie en HTTPS (ou depuis localhost)."
+        StringKey.DESKTOP_ALREADY_RUNNING_TITLE -> "Déjà en cours d'exécution"
+        StringKey.DESKTOP_ALREADY_RUNNING_MESSAGE -> "Commercials Manager est déjà ouvert sur cet ordinateur.\nVeuillez utiliser la fenêtre déjà ouverte."
         StringKey.AUTH_NETWORK_UNREACHABLE -> "Impossible de joindre le serveur"
 
         // ── Preferences ──────────────────────────────────────────────────

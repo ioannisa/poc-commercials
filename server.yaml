@@ -67,7 +67,7 @@ superAdmin:
 
 session:
   expiration: true   # false = bearer tokens never expire (until logout / password change)
-  days: 90           # token lifetime in days when expiration is enabled
+  days: 3            # token lifetime in days when expiration is enabled
   sliding: true      # true = window slides forward on use (idle timeout); false = fixed from login
 
 central:
