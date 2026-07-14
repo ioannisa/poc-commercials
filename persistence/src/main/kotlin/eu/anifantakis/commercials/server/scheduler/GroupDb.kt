@@ -355,6 +355,24 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     -- key (spot_id is leftmost), so it replaces the narrow index
                     -- InnoDB would otherwise create rather than adding to it.
                     KEY idx_placements_spot_cover (spot_id, hidden, show_date),
+                    -- COVERING, for the MONTH GRID - the hottest read in the app.
+                    --
+                    -- `uq_placement_slot` already finds the month's airings, but it
+                    -- carries only (station, date, time, position): the grid also
+                    -- needs each airing's spot, its hidden flag and its programme,
+                    -- and InnoDB had to open the actual row to read those - roughly
+                    -- 12,000 random primary-key lookups for one month. Putting the
+                    -- three columns IN the index answers the query from the index
+                    -- alone: the placements scan drops 19ms -> 2.3ms, the endpoint
+                    -- 45ms -> 34ms.
+                    --
+                    -- It is not free, and the trade was made deliberately: +234 MB
+                    -- on the biggest table in the schema, and one more 7-column
+                    -- index to maintain on every write - `position` is in it, so a
+                    -- reorder rewrites it too, and a 4.1M-row migration feels it
+                    -- most. Measured on a warm buffer pool; on a cold one the
+                    -- lookups it removes cost far more, which is what tipped it.
+                    KEY idx_placements_grid (station_id, show_date, hidden, show_time, position, spot_id, program_id),
                     CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
                     CONSTRAINT fk_placements_station FOREIGN KEY (station_id) REFERENCES stations(id),
                     CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
@@ -465,6 +483,11 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         // The party/finder family reaches airings by spot_id and needs `hidden`
         // and `show_date` off them: this makes that index-only.
         ensureIndex(c, "placements", "idx_placements_spot_cover", "spot_id, hidden, show_date")
+        // The MONTH GRID, index-only (see the CREATE TABLE note for the trade).
+        ensureIndex(
+            c, "placements", "idx_placements_grid",
+            "station_id, show_date, hidden, show_time, position, spot_id, program_id"
+        )
         // Retired: an index on show_date ALONE. Every query that filters by date
         // filters by station too, so the unique key already serves them; dropping
         // it regressed nothing and freed ~100 MB on the biggest table.

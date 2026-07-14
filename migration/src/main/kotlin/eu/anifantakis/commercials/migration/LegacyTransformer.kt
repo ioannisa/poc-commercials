@@ -41,6 +41,9 @@ class LegacyTransformer(
     private val s = "`$scratchSchema`"
     private val t = "`$targetSchema`"
 
+    /** The bare name - `information_schema` lookups cannot take the backticked form. */
+    private val targetSchemaName = targetSchema
+
     /**
      * The scratch-resident (forTV -> station_id) dictionary. JOINing it does two
      * jobs at once: it SCOPES the query to the mapped flows (an unmapped flow
@@ -134,8 +137,21 @@ class LegacyTransformer(
         log("Migrating spot catalog (triangular spots land on their END client)...")
         val spots = migrateSpots()
 
+        // BULK-LOAD SHAPE: the read indexes come OFF before the big insert and go
+        // back on after. Building an index ONCE over finished rows is far cheaper
+        // than maintaining it across 4.1M inserts - measured on the real dump:
+        // 77.5s with every index live, 60.0s this way (-23%).
+        log("Dropping the read-only indexes on placements for the bulk load...")
+        dropBulkLoadIndexes()
+
         log("Migrating placements (this is the big one)...")
         val placements = migratePlacements()
+
+        // legacy_id goes back IMMEDIATELY: the SEN enricher re-points every airing
+        // to its charge with `WHERE sch.id = p.legacy_id`, and without the index
+        // that join is 4.1M x 4.1M. (2.6s to build - do not defer it.)
+        log("Rebuilding the legacy_id index (the enricher joins airings on it)...")
+        rebuildLegacyIndex()
 
         // The breaks are not migrated - they EMERGE. This is a report, not a
         // build step: it counts the distinct times the airings just landed on,
@@ -160,6 +176,13 @@ class LegacyTransformer(
 
         log("Migrating airtime price zones (full price history)...")
         val (zones, zoneFillers) = migrateZones()
+
+        // LAST. Nothing in the migration reads it - it exists for the app's month
+        // grid - so it is built once, over finished rows, at the very end. It is
+        // also the widest index on the biggest table, so it is the one that costs
+        // most to carry through a bulk load.
+        log("Rebuilding the month-grid index (app read path; nothing here uses it)...")
+        rebuildGridIndex()
 
         writeMeta()
 
@@ -374,6 +397,74 @@ class LegacyTransformer(
      * collapsed seconds, so two airings 30 seconds apart became one break. The
      * straight copy in migratePlacements cannot.)
      */
+    /**
+     * The indexes on `placements` that NOTHING in the migration reads, taken off
+     * before the 4.1M-row insert and rebuilt afterwards.
+     *
+     * Building an index ONCE over finished rows is far cheaper than maintaining it
+     * across four million inserts. Measured on the real dump:
+     *   all indexes live .............. 77.5s
+     *   dropped, then rebuilt ......... 51.5s + 2.6s + 5.9s = 60.0s  (-23%)
+     *
+     * Only these TWO can go. `uq_placement_slot`, `idx_placements_spot_cover` and
+     * `fk_placements_program` each BACK a foreign key (station_id, spot_id,
+     * program_id), and MySQL refuses to drop an index a constraint depends on.
+     * Dropping the constraints as well would shave another ~13s, but it would
+     * switch off referential checking for the entire load - not a trade worth
+     * making for 13 seconds.
+     *
+     * Idempotent, so a re-run or a schema that never had them just skips.
+     */
+    private fun dropBulkLoadIndexes() {
+        dropIndexIfExists("placements", "idx_placements_grid")
+        dropIndexIfExists("placements", "idx_placements_legacy")
+    }
+
+    /**
+     * legacy_id goes back IMMEDIATELY after the insert, not at the end: the SEN
+     * enricher re-points every airing to its real charge with
+     * `WHERE sch.id = p.legacy_id`, and without this index that join is 4.1M x
+     * 4.1M. It costs 2.6s to build - never defer it.
+     */
+    private fun rebuildLegacyIndex() {
+        createIndexIfMissing("placements", "idx_placements_legacy", "legacy_id")
+    }
+
+    /**
+     * The month-grid index, built LAST. Nothing in the migration reads it (it
+     * exists for the app's grid), and it is the widest index on the biggest table
+     * - so it is exactly the one you do not want to carry through a bulk load.
+     */
+    private fun rebuildGridIndex() {
+        createIndexIfMissing(
+            "placements",
+            "idx_placements_grid",
+            "station_id, show_date, hidden, show_time, position, spot_id, program_id",
+        )
+    }
+
+    private fun indexExists(table: String, index: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.statistics
+            WHERE table_schema = ? AND table_name = ? AND index_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, targetSchemaName); ps.setString(2, table); ps.setString(3, index)
+            ps.executeQuery().use { it.next() }
+        }
+
+    private fun dropIndexIfExists(table: String, index: String) {
+        if (!indexExists(table, index)) return
+        c.createStatement().use { it.executeUpdate("ALTER TABLE $t.$table DROP INDEX $index") }
+    }
+
+    private fun createIndexIfMissing(table: String, index: String, columns: String) {
+        if (indexExists(table, index)) return
+        c.createStatement().use { it.executeUpdate("CREATE INDEX $index ON $t.$table($columns)") }
+    }
+
     private fun countBreakTimes(): Int =
         c.createStatement().use { st ->
             st.executeQuery(
