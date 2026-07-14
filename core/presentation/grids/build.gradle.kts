@@ -75,13 +75,17 @@ kotlin {
             api(libs.kotlinx.datetime)
             api(libs.kotlinx.collections.immutable)
 
-            // The @Preview annotation and renderer for the IDE.
+            // The @Preview ANNOTATION - multiplatform, so it may live in commonMain.
             api(libs.compose.uiToolingPreview)
-            implementation(libs.compose.uiTooling)
         }
         jvmMain.dependencies {
             // Desktop scrollbar APIs (VerticalScrollbar, rememberScrollbarAdapter)
             implementation(compose.desktop.currentOs)
+
+            // The preview RENDERER (ComposeViewAdapter). Never commonMain: ui-tooling
+            // publishes android + desktop variants ONLY, so declaring it there fails
+            // resolution for wasmJs/js/iOS and takes the web app down with it.
+            implementation(libs.compose.uiTooling)
         }
         // iosMain comes from the default hierarchy template
     }

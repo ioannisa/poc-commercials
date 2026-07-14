@@ -34,11 +34,6 @@ kotlin {
             // annotated with a type this module hands it.
             api(catalog.findLibrary("compose-uiToolingPreview").get())
 
-            // The renderer engine for the IDE's Compose Preview.
-            // ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter
-            // is thrown when this is missing.
-            implementation(catalog.findLibrary("compose-uiTooling").get())
-
             implementation(catalog.findLibrary("material-icons-extended").get())
             implementation(catalog.findLibrary("androidx-lifecycle-viewmodelCompose").get())
             implementation(catalog.findLibrary("androidx-lifecycle-runtimeCompose").get())
@@ -50,6 +45,21 @@ kotlin {
             api(catalog.findLibrary("jetbrains-lifecycle-viewmodel-navigation3").get())
             implementation(catalog.findLibrary("koin-compose").get())
             implementation(catalog.findLibrary("koin-compose-viewmodel").get())
+        }
+
+        // The RENDERER behind the IDE's preview pane (without it the pane dies with
+        // ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter).
+        //
+        // It belongs HERE and not in commonMain: `ui-tooling` publishes android and
+        // desktop variants ONLY, so declaring it in commonMain fails resolution for
+        // wasmJs, js and iOS - i.e. it takes the WEB app down, which is half the
+        // product. The @Preview ANNOTATION is the multiplatform half and stays in
+        // commonMain above; the renderer is a JVM-side tool and never ships to web.
+        jvmMain.dependencies {
+            implementation(catalog.findLibrary("compose-uiTooling").get())
+        }
+        androidMain.dependencies {
+            implementation(catalog.findLibrary("compose-uiTooling").get())
         }
     }
 }
