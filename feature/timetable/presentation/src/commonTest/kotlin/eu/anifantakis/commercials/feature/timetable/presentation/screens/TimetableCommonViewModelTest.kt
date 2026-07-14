@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -17,6 +18,7 @@ import kotlin.test.assertTrue
  * through the [TimetableCommon] state it produces. Fakes stand in for both
  * domain repositories (mandatory in KMP - testing.md).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class TimetableCommonViewModelTest : TimetableTestBase() {
 
     private val schedule = FakeScheduleRepository()
