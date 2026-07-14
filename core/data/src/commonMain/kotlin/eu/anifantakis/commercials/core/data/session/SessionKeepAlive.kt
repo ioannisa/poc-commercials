@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.domain.auth.SessionRefresher
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import kotlinx.coroutines.delay
@@ -77,7 +78,18 @@ interface SessionCredentialStore {
 class SessionKeepAlive(
     private val session: SessionCredentialStore,
     private val api: ApiHttpClient,
-) {
+) : SessionRefresher {
+
+    /**
+     * An OUT-OF-BAND knock, for when something already knows the answer changed -
+     * a migration that hosted a new group, say. Same request the heartbeat makes,
+     * simply not waiting for the next beat: with a three-day token that beat is
+     * six hours away, which is why a fresh station used to need an app restart to
+     * appear (a restart knocks immediately).
+     */
+    override suspend fun refresh() {
+        knock()
+    }
 
     private companion object {
         /**

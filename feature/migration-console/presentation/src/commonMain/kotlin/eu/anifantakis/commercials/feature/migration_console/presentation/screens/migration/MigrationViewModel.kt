@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
+import eu.anifantakis.commercials.core.domain.auth.SessionRefresher
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
@@ -140,8 +141,11 @@ sealed interface MigrationIntent {
  * customers and contracts the dump has only one copy of.
  */
 @Stable
+private const val DONE = "DONE"
+
 class MigrationViewModel(
     private val repository: MigrationRepository,
+    private val sessionRefresher: SessionRefresher,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(MigrationState())
@@ -214,12 +218,30 @@ class MigrationViewModel(
         viewModelScope.launch {
             while (isActive) {
                 when (val result = repository.status()) {
-                    is DataResult.Success -> _state.update { it.copy(status = result.data) }
+                    is DataResult.Success -> {
+                        val wasDone = _state.value.status.state == DONE
+                        _state.update { it.copy(status = result.data) }
+                        // The EDGE, not the state: this poll runs twice a second while
+                        // a migration is DONE on screen, and re-syncing the session on
+                        // every tick would be a request a second for nothing.
+                        if (!wasDone && result.data.state == DONE) onMigrationFinished()
+                    }
                     is DataResult.Failure -> Unit   // transient poll miss; keep the last status
                 }
                 delay(if (_state.value.running) 700 else 2000)
             }
         }
+    }
+
+    /**
+     * The migration hosted its group LIVE (the server needs no restart), but the
+     * client's station list is only re-read on a keep-alive beat - and with a
+     * three-day token that beat is six hours out. So the new station sat there,
+     * reachable by the API and missing from the dropdown, until the app was
+     * restarted (a restart beats immediately). Here we KNOW it just changed.
+     */
+    private fun onMigrationFinished() {
+        viewModelScope.launch { sessionRefresher.refresh() }
     }
 
     private fun start() {

@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.migration_console.presentation.screens.migration
 
+import eu.anifantakis.commercials.core.domain.auth.SessionRefresher
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
@@ -11,6 +12,7 @@ import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStar
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -34,6 +36,7 @@ import kotlin.test.assertTrue
  * [status] never returns - the poll coroutine parks harmlessly (viewModelScope,
  * not the test scope), leaving the intent-driven paths under test.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class MigrationViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -86,6 +89,75 @@ class MigrationViewModelTest {
         }
     }
 
+    /**
+     * A repository whose `status()` hands back a SCRIPT, then parks forever - so the
+     * polling loop can be walked through a real phase transition instead of being
+     * held at its first call.
+     */
+    private class ScriptedStatusRepository(
+        private val script: MutableList<String>,
+    ) : MigrationRepository {
+        private val parked = CompletableDeferred<DataResult<MigrationStatus, RemoteError>>()
+
+        override suspend fun status(): DataResult<MigrationStatus, RemoteError> =
+            if (script.isEmpty()) parked.await()
+            else DataResult.Success(MigrationStatus(state = script.removeAt(0)))
+
+        override suspend fun start(request: MigrationStart) = parked.await()
+        override suspend fun chooseMapping(mapping: MigrationMapping) = parked.await()
+        override suspend fun reset() = parked.await()
+        override suspend fun browse(path: String?): DataResult<BrowseListing, RemoteError> =
+            DataResult.Success(BrowseListing(path = "/"))
+    }
+
+    private class FakeRefresher : SessionRefresher {
+        var calls = 0
+        override suspend fun refresh() { calls++ }
+    }
+
+    private fun viewModel(
+        repository: MigrationRepository = FakeMigrationRepository(),
+        refresher: SessionRefresher = SessionRefresher {},
+    ) = MigrationViewModel(repository, refresher)
+
+    /**
+     * THE REASON A FRESH STATION USED TO NEED AN APP RESTART.
+     *
+     * The server hosts a migrated group live, and the keep-alive knock now carries
+     * the station list home - but that knock is paced by the TOKEN's lifetime, so on
+     * a three-day session the next one is six hours out. Finishing a migration and
+     * pressing Back left the dropdown exactly as stale as before; only a restart
+     * (which knocks at once) showed the new station.
+     */
+    @Test
+    fun finishingAMigrationResyncsTheSessionAtOnce() = runTest(testDispatcher) {
+        val refresher = FakeRefresher()
+        val repo = ScriptedStatusRepository(mutableListOf("REPLAYING", "DONE"))
+
+        val vm = viewModel(repo, refresher)
+        vm.state                 // subscribe: starts the polling loop
+        advanceUntilIdle()
+
+        assertEquals(1, refresher.calls, "the client must re-read its stations the moment the group is hosted")
+    }
+
+    /**
+     * The poll keeps running at 2s while DONE sits on screen. Re-syncing on the
+     * STATE rather than the EDGE would fire a session request every tick, forever -
+     * a busy loop dressed up as a fix.
+     */
+    @Test
+    fun aMigrationLeftOnDoneDoesNotResyncRepeatedly() = runTest(testDispatcher) {
+        val refresher = FakeRefresher()
+        val repo = ScriptedStatusRepository(mutableListOf("REPLAYING", "DONE", "DONE", "DONE", "DONE"))
+
+        val vm = viewModel(repo, refresher)
+        vm.state
+        advanceUntilIdle()
+
+        assertEquals(1, refresher.calls, "once per transition INTO done, not once per poll")
+    }
+
     /** A complete step-1 form: dump, credentials, and a NEW target group. */
     private fun fillSource(vm: MigrationViewModel) {
         vm.onAction(MigrationIntent.DumpPathChanged("/srv/dump.sql"))
@@ -103,7 +175,7 @@ class MigrationViewModelTest {
 
     @Test
     fun formFieldIntentsUpdateState() = runTest(testDispatcher) {
-        val vm = MigrationViewModel(FakeMigrationRepository())
+        val vm = viewModel(FakeMigrationRepository())
 
         vm.onAction(MigrationIntent.DumpPathChanged("/srv/dump.sql"))
         vm.onAction(MigrationIntent.SchemaChanged("legacy"))
@@ -114,7 +186,7 @@ class MigrationViewModelTest {
 
     @Test
     fun portChangedKeepsOnlyDigits() = runTest(testDispatcher) {
-        val vm = MigrationViewModel(FakeMigrationRepository())
+        val vm = viewModel(FakeMigrationRepository())
 
         vm.onAction(MigrationIntent.PortChanged("3a3b06"))
 
@@ -124,7 +196,7 @@ class MigrationViewModelTest {
     @Test
     fun startWithIncompleteFormIsANoOp() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         vm.onAction(MigrationIntent.Start)   // dumpPath/username/schema blank
         advanceUntilIdle()
@@ -135,7 +207,7 @@ class MigrationViewModelTest {
     @Test
     fun startWithValidFormSendsTheTrimmedRequestAndAdoptsTheStatus() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
         fillSource(vm)
         vm.onAction(MigrationIntent.PortChanged("3307"))
 
@@ -151,7 +223,7 @@ class MigrationViewModelTest {
     @Test
     fun startCarriesTheSenFolderWhenGiven() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
         fillSource(vm)
         vm.onAction(MigrationIntent.SenDirChanged("  /backups/SEN  "))
 
@@ -164,7 +236,7 @@ class MigrationViewModelTest {
     @Test
     fun startFailureSurfacesTheServerMessageAsFormError() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository(startResult = DataResult.Failure(RemoteError.Server("bad dump")))
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
         fillSource(vm)
 
         vm.onAction(MigrationIntent.Start)
@@ -176,7 +248,7 @@ class MigrationViewModelTest {
     @Test
     fun bothFlowsMapToStationsOfTheGroupInOneRun() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         // The whole point of the group model: the dump's TV and radio flows are
         // ONE company's, so they migrate together and share its customers and
@@ -196,7 +268,7 @@ class MigrationViewModelTest {
     @Test
     fun aFlowWithoutAStationIdIsSkippedRatherThanMigrated() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         mapFlow(vm, forTv = 1, id = "crete-tv", name = "Crete TV")
         // The radio flow is left blank on purpose - the operator does not want it.
@@ -210,7 +282,7 @@ class MigrationViewModelTest {
 
     @Test
     fun twoFlowsCannotShareOneStationId() = runTest(testDispatcher) {
-        val vm = MigrationViewModel(FakeMigrationRepository())
+        val vm = viewModel(FakeMigrationRepository())
 
         mapFlow(vm, forTv = 1, id = "same-id", name = "TV")
         mapFlow(vm, forTv = 0, id = "same-id", name = "Radio")
@@ -221,7 +293,7 @@ class MigrationViewModelTest {
     @Test
     fun mappingWithNoFlowAtAllIsANoOp() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         vm.onAction(MigrationIntent.ChooseMapping)
         advanceUntilIdle()
@@ -232,7 +304,7 @@ class MigrationViewModelTest {
     @Test
     fun resetClearsTheFlowMappingAndAdoptsTheStatus() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
         mapFlow(vm, forTv = 1, id = "crete-tv", name = "Crete TV")
 
         vm.onAction(MigrationIntent.Reset)
@@ -245,7 +317,7 @@ class MigrationViewModelTest {
     @Test
     fun anExistingGroupNeedsNoSchemaOfItsOwn() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
         vm.onAction(MigrationIntent.DumpPathChanged("/srv/dump.sql"))
         vm.onAction(MigrationIntent.UsernameChanged("root"))
 
@@ -262,7 +334,7 @@ class MigrationViewModelTest {
     @Test
     fun openBrowserListsRootThenPickingADumpClosesItAndSetsThePath() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         vm.onAction(MigrationIntent.OpenBrowser())
         advanceUntilIdle()
@@ -280,7 +352,7 @@ class MigrationViewModelTest {
     @Test
     fun senFolderModePicksTheCurrentFolderAndClosesTheBrowser() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
-        val vm = MigrationViewModel(repo)
+        val vm = viewModel(repo)
 
         vm.onAction(MigrationIntent.OpenBrowser(forSenDir = true))
         advanceUntilIdle()
