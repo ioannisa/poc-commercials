@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.GroupConfig
 import eu.anifantakis.commercials.server.stations.StationConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
+import org.slf4j.LoggerFactory
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
@@ -124,6 +125,8 @@ class MigrationService(private val registry: StationRegistry) {
         val mappings: List<FlowMapping>,
         val addToYaml: Boolean,
     )
+
+    private val migrationLog = LoggerFactory.getLogger("LegacyMigration")
 
     @Volatile private var state = State.IDLE
     private val logLines = Collections.synchronizedList(mutableListOf<String>())
@@ -285,6 +288,15 @@ class MigrationService(private val registry: StationRegistry) {
 
                 connect(req).use { c ->
                     val scratch = scratchSchema(req)
+                    // A DEFAULT DATABASE, even though every statement below names
+                    // its schema. MySQL requires one for a multi-table DELETE and
+                    // refuses with a bare "No database selected" otherwise - and
+                    // this connection is brand new (the replay ran on another one),
+                    // so it had none. The CLI never hit it only because it reuses
+                    // the replay's connection, which the replayer leaves `USE`d.
+                    // Belt and braces: the one offending statement was also rewritten
+                    // (SenErpEnricher, "synthetic lines nothing references any more").
+                    c.catalog = schema
                     summary = LegacyTransformer(c, scratch, schema, stationByFlow) { log("  $it") }.run()
                     req.senDirPath?.let { senDir ->
                         // ONCE per group: everything it fills (customers, contract
@@ -349,6 +361,11 @@ class MigrationService(private val registry: StationRegistry) {
     private fun fail(e: Exception) {
         error = e.message ?: e.toString()
         log("FAILED: $error")
+        // The message ALONE is close to useless on a migration: "No database
+        // selected" tells you nothing about WHICH of a hundred statements said it.
+        // The trace went nowhere before - not even to the server log - so a failure
+        // could only be diagnosed by re-running the whole thing and guessing.
+        migrationLog.error("Legacy migration FAILED", e)
         state = State.FAILED
     }
 

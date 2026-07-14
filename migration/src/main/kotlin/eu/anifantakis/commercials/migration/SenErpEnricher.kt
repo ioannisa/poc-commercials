@@ -798,10 +798,23 @@ class SenErpEnricher(
         }
 
         // 5. synthetic lines nothing references any more
+        //
+        // SINGLE-table DELETE (`DELETE FROM t alias`), NOT the multi-table form
+        // (`DELETE alias FROM t alias`). They look interchangeable here - the
+        // statement touches one table either way - but MySQL demands a DEFAULT
+        // DATABASE for the multi-table form EVEN WHEN every table is fully
+        // qualified, and fails with a bare "No database selected". Verified:
+        // multi-table DELETE is the ONLY shape that does this; multi-table UPDATE,
+        // INSERT..SELECT and joined SELECTs are all fine without one.
+        //
+        // It went unnoticed because the CLI happens to reuse the connection the
+        // dump replay ran on, and the replayer leaves a `USE <scratch>` on it. The
+        // in-app migration opens its own connection, has no default database, and
+        // died right here - after 8 minutes of successful work.
         val dropped = c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                DELETE cl FROM $schema.contract_lines cl
+                DELETE FROM $schema.contract_lines cl
                 WHERE cl.line_no >= 1000
                   AND NOT EXISTS (SELECT 1 FROM $schema.spots sp      WHERE sp.contract_line_id = cl.id)
                   AND NOT EXISTS (SELECT 1 FROM $schema.placements p  WHERE p.contract_line_id  = cl.id)
