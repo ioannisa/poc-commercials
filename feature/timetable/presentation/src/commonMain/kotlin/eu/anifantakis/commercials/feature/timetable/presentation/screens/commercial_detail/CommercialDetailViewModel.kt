@@ -112,10 +112,16 @@ class CommercialDetailViewModel(
 
     private val key = SchedulerKey(time, date)
 
-    // No break load here. The rows arrive WITH the month (a break is a time a
-    // spot aired at, so they are the month's, not the station's), and this screen
-    // is only reachable from a loaded cell - so the month it needs is already in
-    // the shared store. It used to call an idempotent, station-wide loadBreaks().
+    // No break load here: the rows arrive WITH the month (a break is a time a
+    // spot aired at), and this screen is only reachable from a loaded cell.
+    //
+    // The AIRINGS are a different matter - the grid deliberately does not carry
+    // them (it draws counts, and a month's worth cost 7.79 MB). So the console
+    // asks for its own cell's, and only its own. Idempotent: the store skips the
+    // fetch if they are already there.
+    init {
+        common.loadCommercials(time, date)
+    }
 
     /** The screen's state is DERIVED from the shared store, so the transient
      *  report-busy flag lives beside it and is combined in - never a second

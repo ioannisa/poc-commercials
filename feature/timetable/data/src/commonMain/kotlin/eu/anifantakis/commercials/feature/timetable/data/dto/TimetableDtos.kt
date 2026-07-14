@@ -27,6 +27,11 @@ internal data class CommercialDto(
     val flow: String,
 )
 
+/**
+ * One box of the grid: AGGREGATES ONLY. It carries no airings - the box draws a
+ * count and a duration, and shipping 13,009 airings to paint 1,295 boxes cost
+ * 7.79 MB. They arrive from [CommercialsDto], on demand.
+ */
 @Serializable
 internal data class CellDto(
     /** "HH:mm" - the break this cell belongs to. */
@@ -37,7 +42,6 @@ internal data class CellDto(
     val zoneColorArgb: Int,
     /** The programme airing at this slot (first placement's), when it has one. */
     val programName: String? = null,
-    val commercials: List<CommercialDto>,
 )
 
 @Serializable
@@ -45,6 +49,21 @@ internal data class ScheduleDto(
     val year: Int,
     val month: Int,
     val cells: List<CellDto>,
+)
+
+/** The airings of one cell - only ever fetched for a break that is opened or printed. */
+@Serializable
+internal data class CellCommercialsDto(
+    val time: String,
+    val date: String,
+    val commercials: List<CommercialDto>,
+)
+
+@Serializable
+internal data class CommercialsDto(
+    val year: Int,
+    val month: Int,
+    val cells: List<CellCommercialsDto>,
 )
 
 @Serializable

@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.timetable.data.mappers
 
 import eu.anifantakis.commercials.feature.timetable.data.dto.BreakSlotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CellDto
+import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialsDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
@@ -32,8 +33,16 @@ internal fun CellDto.toDomain(): ScheduleCell = ScheduleCell(
     totalDurationSeconds = totalDurationSeconds,
     zoneColorArgb = zoneColorArgb,
     programName = programName,
-    commercials = commercials.sortedBy { it.position }.map { it.toDomain() },
+    // The grid does not carry airings - see CellDto. They are merged in later
+    // for the one cell that gets opened, or fetched straight for a report.
+    commercials = emptyList(),
 )
+
+internal fun CommercialsDto.toDomain(): Map<Pair<LocalTime, LocalDate>, List<PlacedCommercial>> =
+    cells.associate { c ->
+        (LocalTime.parse(c.time) to LocalDate.parse(c.date)) to
+            c.commercials.sortedBy { it.position }.map { it.toDomain() }
+    }
 
 internal fun ScheduleDto.toDomain(): MonthSchedule = MonthSchedule(
     year = year, month = month, cells = cells.map { it.toDomain() },

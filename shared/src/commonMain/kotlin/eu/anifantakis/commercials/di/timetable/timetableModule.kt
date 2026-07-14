@@ -42,6 +42,7 @@ val timetableModule = module {
         TimetableViewModel(
             finderRepository = get(),
             partySearch = get(),
+            scheduleRepository = get(),
             common = params.get(),
             prefs = get(),
             session = get(),

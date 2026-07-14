@@ -3,7 +3,6 @@ package eu.anifantakis.commercials.server.routes
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
-import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.GridViewMode
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
 import eu.anifantakis.commercials.server.scheduler.formatHhMm
@@ -51,6 +50,13 @@ data class CommercialDto(
     val flow: String
 )
 
+/**
+ * One box of the grid. Aggregates ONLY - no airings.
+ *
+ * The box shows a spot count and a duration; it never read the airings it used to
+ * be shipped with (13,009 of them, 7.79 MB, for 1,295 boxes). They come from
+ * [CellCommercialsDto] now, on demand.
+ */
 @Serializable
 data class CellDto(
     /** "HH:mm" - the break this cell belongs to. */
@@ -61,7 +67,6 @@ data class CellDto(
     val zoneColorArgb: Int,
     /** The programme airing at this slot (first placement's), when it has one. */
     val programName: String? = null,
-    val commercials: List<CommercialDto>
 )
 
 @Serializable
@@ -69,6 +74,21 @@ data class ScheduleDto(
     val year: Int,
     val month: Int,
     val cells: List<CellDto>
+)
+
+/** The airings of ONE cell - fetched only when a break is opened or printed. */
+@Serializable
+data class CellCommercialsDto(
+    val time: String,
+    val date: String,
+    val commercials: List<CommercialDto>,
+)
+
+@Serializable
+data class CommercialsDto(
+    val year: Int,
+    val month: Int,
+    val cells: List<CellCommercialsDto>,
 )
 
 @Serializable
@@ -166,6 +186,15 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             call.respond(breaks)
         }
 
+        /**
+         * THE MONTH GRID. Aggregates only - a spot count and a total duration per
+         * cell, which is exactly what a little box draws.
+         *
+         * It does NOT carry the airings. Serving them here meant 13,009 rows and
+         * 7.79 MB of JSON to paint 1,295 boxes on the busiest month; the boxes
+         * never read a single one. Whoever actually wants an airing asks for it:
+         * `/schedule/commercials` below.
+         */
         get("/schedule") {
             val year = call.request.queryParameters["year"]?.toIntOrNull()
             val month = call.request.queryParameters["month"]?.toIntOrNull()
@@ -176,39 +205,75 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
 
             val access = call.stationAccessOrRespond(registry) ?: return@get
 
-            // JDBC is blocking - keep it off Ktor's request threads
-            val (cells, commercialsByKey) = withContext(Dispatchers.IO) {
-                access.db.ensureMonthSeeded(year, month)
-                access.db.loadMonth(year, month)
-            }
-
-            // CUSTOMER_VIEWER data scoping: they only ever receive their own
-            // commercials on this station. Cell aggregates (spot count,
-            // duration) are recomputed from the filtered list, and cells with
-            // none of their spots are omitted entirely - the client renders
-            // the filtered world as-is, so reports built from it are scoped too.
+            // CUSTOMER_VIEWER scoping goes INTO the aggregate: with no airings
+            // coming back there is nothing left to filter in Kotlin, and a
+            // customer must never be shown everybody's counts.
             val grant = access.grant
             val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
 
-            val dtos = cells.mapNotNull { cell ->
-                var coms = commercialsByKey[cell.time to cell.date].orEmpty()
-                var spotCount = cell.spotCount
-                var totalDuration = cell.totalDurationSeconds
+            // JDBC is blocking - keep it off Ktor's request threads
+            val cells = withContext(Dispatchers.IO) {
+                access.db.ensureMonthSeeded(year, month)
+                access.db.loadMonthCells(year, month, onlyClientCode)
+            }
 
-                if (onlyClientCode != null) {
-                    coms = coms.filter { it.clientCode == onlyClientCode }
-                    if (coms.isEmpty()) return@mapNotNull null
-                    spotCount = coms.size
-                    totalDuration = coms.sumOf(CommercialRow::durationSeconds)
-                }
-
+            val dtos = cells.map { cell ->
                 CellDto(
                     time = formatHhMm(cell.time),
                     date = cell.date.toString(),
-                    spotCount = spotCount,
-                    totalDurationSeconds = totalDuration,
+                    spotCount = cell.spotCount,
+                    totalDurationSeconds = cell.totalDurationSeconds,
                     zoneColorArgb = cell.zoneColorArgb,
                     programName = cell.programName,
+                )
+            }
+
+            call.respond(ScheduleDto(year = year, month = month, cells = dtos))
+        }
+
+        /**
+         * THE AIRINGS, for a slice of the month - and only when something needs
+         * them: opening a break (`date` + `time`), printing a day (`date`),
+         * printing one break across the month (`time`), printing the whole month
+         * (neither).
+         *
+         * Same customer scoping as the grid.
+         */
+        get("/schedule/commercials") {
+            val year = call.request.queryParameters["year"]?.toIntOrNull()
+            val month = call.request.queryParameters["month"]?.toIntOrNull()
+            if (year == null || month == null || month !in 1..12) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "year and month (1..12) required"))
+                return@get
+            }
+            val dateParam = call.request.queryParameters["date"]
+            val date = if (dateParam == null) null else runCatching { LocalDate.parse(dateParam) }.getOrNull()
+            if (dateParam != null && date == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
+                return@get
+            }
+            val timeParam = call.request.queryParameters["time"]
+            val time = if (timeParam == null) null else parseHhMmOrNull(timeParam)
+            if (timeParam != null && time == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
+                return@get
+            }
+
+            val access = call.stationAccessOrRespond(registry) ?: return@get
+            val grant = access.grant
+            val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
+
+            val byKey = withContext(Dispatchers.IO) {
+                access.db.ensureMonthSeeded(year, month)
+                access.db.loadCommercials(year, month, date, time)
+            }
+
+            val cells = byKey.mapNotNull { (key, rows) ->
+                val coms = if (onlyClientCode == null) rows else rows.filter { it.clientCode == onlyClientCode }
+                if (coms.isEmpty()) return@mapNotNull null
+                CellCommercialsDto(
+                    time = formatHhMm(key.first),
+                    date = key.second.toString(),
                     commercials = coms.map {
                         CommercialDto(
                             id = it.id,
@@ -227,8 +292,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                     }
                 )
             }
-
-            call.respond(ScheduleDto(year = year, month = month, cells = dtos))
+            call.respond(CommercialsDto(year = year, month = month, cells = cells))
         }
 
         // ── spot finder (the legacy "Εύρεση" Details Console) ───────────

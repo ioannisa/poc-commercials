@@ -3,8 +3,11 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.timeta
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.CommercialsQuery
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_CLOCK
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeFinderRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
@@ -51,17 +54,32 @@ class TimetableViewModelTest : TimetableTestBase() {
     private val common = FakeTimetableCommon()
     private val reports = FakeReportService()
 
-    // No ScheduleRepository: the breaks and the cells both come from `common`.
+    /**
+     * The grid still takes nothing from a ScheduleRepository - its rows and its
+     * cells come from `common`. The REPORTS do: the cells they print carry no
+     * airings (the grid draws counts), so each fetches the slice it is about to
+     * print. That is the only reason this fake is here.
+     */
+    private val schedule = FakeScheduleRepository()
+
     private fun vm(
         prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
         session: FakeUserSession = FakeUserSession(),
         reportService: FakeReportService = reports,
         logoCache: StationLogoCache = FakeStationLogoCache(),
-    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reportService, logoCache)
+    ) = TimetableViewModel(finder, partySearch, schedule, common, prefs, session, reportService, logoCache, TEST_CLOCK)
 
-    /** A month with one spot in the 10:00 break - enough to build a payload. */
+    /**
+     * A month with one spot in the 10:00 break - enough to build a payload.
+     *
+     * "One spot" is now split across two places, exactly as production splits it:
+     * the grid's cell says A spot airs there (spotCount = 1, no airing), and the
+     * REPOSITORY holds which one. A report that does not go and fetch it prints
+     * nothing - which is what the report tests below would then catch.
+     */
     private fun aMonthWithOneSpot(): TimetableCommonState {
-        val (k, data) = cell(commercials = listOf(placed(10))).toUi()
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10))
+        val (k, data) = cell(spots = listOf(placed(10))).toUi()
         return TimetableCommonState(
             breaks = persistentListOf(BreakSlot(time = TEST_TIME, label = "10:00")),
             cells = persistentMapOf(k to data),
@@ -94,7 +112,7 @@ class TimetableViewModelTest : TimetableTestBase() {
     @Test
     fun mergesCommonStateCellsIntoScreenState() = runTest(testDispatcher) {
         val vm = vm()
-        val (k, data) = cell(commercials = listOf(placed(10), placed(11))).toUi()
+        val (k, data) = cell(spots = listOf(placed(10), placed(11))).toUi()
 
         common.emit(TimetableCommonState(cells = persistentMapOf(k to data)))
         advanceUntilIdle()
@@ -204,7 +222,7 @@ class TimetableViewModelTest : TimetableTestBase() {
     @Test
     fun dailyTotalsAreDerivedFromTheSharedCells() = runTest(testDispatcher) {
         val vm = vm()
-        val (k, data) = cell(commercials = listOf(placed(10), placed(11))).toUi()
+        val (k, data) = cell(spots = listOf(placed(10), placed(11))).toUi()
 
         common.emit(TimetableCommonState(cells = persistentMapOf(k to data)))
         advanceUntilIdle()
@@ -219,7 +237,33 @@ class TimetableViewModelTest : TimetableTestBase() {
     @Test
     fun printBreakAssemblesThePayloadAndUsesTheReportService() = runTest(testDispatcher) {
         val vm = vm()
-        val (k, data) = cell(commercials = listOf(placed(10))).toUi()
+        common.emit(aMonthWithOneSpot())
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.PrintBreak(time = TEST_TIME, date = TEST_DATE))
+        advanceUntilIdle()
+
+        assertEquals(1, reports.printed.size, "printing is the ViewModel's side effect, not the composable's")
+        assertEquals(
+            listOf(CommercialsQuery(vm.state.year, vm.state.month, TEST_DATE, TEST_TIME)),
+            schedule.commercialLoads,
+            "a break report fetches exactly its own cell's airings",
+        )
+    }
+
+    /**
+     * The whole point of the split, guarded: the grid's cells carry an aggregate
+     * and NOTHING else, so a report that read them would print an empty page. It
+     * must go and fetch the airings for the slice it is about to print - here, a
+     * day - and it must ask for THAT day, not for the month.
+     */
+    @Test
+    fun printDayFetchesItsSlicesAiringsInsteadOfReadingThemOffTheGrid() = runTest(testDispatcher) {
+        val vm = vm()
+        // The grid as it really is: 10:00 has one spot in it, and the cell does
+        // not know which spot. Only the repository does.
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10))
+        val (k, data) = cell(spots = listOf(placed(10))).toUi()
         common.emit(
             TimetableCommonState(
                 breaks = persistentListOf(BreakSlot(time = TEST_TIME, label = "10:00")),
@@ -227,11 +271,18 @@ class TimetableViewModelTest : TimetableTestBase() {
             )
         )
         advanceUntilIdle()
+        assertTrue(vm.state.cells[key]?.commercials?.isEmpty() == true, "the grid holds no airings to read")
 
-        vm.onAction(TimetableIntent.PrintBreak(time = TEST_TIME, date = TEST_DATE))
+        vm.onAction(TimetableIntent.PrintDay(date = TEST_DATE))
         advanceUntilIdle()
 
-        assertEquals(1, reports.printed.size, "printing is the ViewModel's side effect, not the composable's")
+        assertEquals(
+            listOf(CommercialsQuery(vm.state.year, vm.state.month, TEST_DATE, null)),
+            schedule.commercialLoads,
+            "the day report asks for the DAY's airings - one slice, not the month's 13,009",
+        )
+        assertEquals(1, reports.printed.size, "and prints them - a payload it could not have built from the grid")
+        assertTrue(reports.printed.single().isNotEmpty())
     }
 
     @Test
@@ -246,6 +297,7 @@ class TimetableViewModelTest : TimetableTestBase() {
         advanceUntilIdle()
 
         assertTrue(reports.printed.isEmpty(), "no break, no payload - and no crash")
+        assertEquals(0, schedule.commercialsFetches, "and no airings are fetched for a break that does not exist")
     }
 
     // ── the report toolbar's three actions (the toolbar itself is stateless) ──

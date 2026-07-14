@@ -31,7 +31,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
 
     @Test
     fun loadMonthPopulatesCells() = runTest(testDispatcher) {
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10), placed(11)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10), placed(11)))))
         val vm = vm()
 
         vm.loadMonth(2026, 7)
@@ -43,6 +43,92 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
     }
 
     /**
+     * The month is an AGGREGATE: a count, a duration and a colour per cell. The
+     * airings are NOT in it - shipping the month's 13,009 of them to draw 1,295
+     * boxes cost 7.79 MB, and the grid never reads one. Whoever needs them (the
+     * Break Console, a report) fetches its own slice.
+     */
+    @Test
+    fun loadMonthCarriesTheCountsButNotTheAirings() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10), placed(11)))))
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10), placed(11))
+        val vm = vm()
+
+        vm.loadMonth(2026, 7)
+        advanceUntilIdle()
+
+        assertEquals(2, vm.commonState.value.cells[key]?.spotCount, "the cell knows HOW MANY spots air in it")
+        assertTrue(
+            vm.commonState.value.cells[key]?.commercials?.isEmpty() == true,
+            "but not WHICH - the month grid does not carry airings, however many the server holds",
+        )
+        assertEquals(0, schedule.commercialsFetches, "and loading a month must not go and fetch them either")
+    }
+
+    /** The Break Console's fetch: ONE cell's airings, merged into that cell. */
+    @Test
+    fun loadCommercialsMergesOneCellsAiringsIntoTheStore() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10), placed(11)))))
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10), placed(11))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+
+        vm.loadCommercials(TEST_TIME, TEST_DATE)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(10L, 11L),
+            vm.commonState.value.cells[key]?.commercials?.map { it.id },
+            "the cell's airings arrive on demand and merge into the cell it already had",
+        )
+        assertEquals(2, vm.commonState.value.cells[key]?.spotCount, "the aggregate the grid draws is untouched")
+        assertEquals(
+            listOf(CommercialsQuery(2026, 7, TEST_DATE, TEST_TIME)),
+            schedule.commercialLoads,
+            "and it asks for THAT ONE CELL - not the day, not the month",
+        )
+    }
+
+    /** Idempotent: a cell that already holds its airings is never fetched twice. */
+    @Test
+    fun loadCommercialsDoesNotRefetchACellThatAlreadyHasThem() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+
+        vm.loadCommercials(TEST_TIME, TEST_DATE); advanceUntilIdle()
+        vm.loadCommercials(TEST_TIME, TEST_DATE); advanceUntilIdle()
+
+        assertEquals(
+            1,
+            schedule.commercialsFetches,
+            "re-opening the same break (or paging back to it) must not go to the network again",
+        )
+        assertEquals(listOf(10L), vm.commonState.value.cells[key]?.commercials?.map { it.id })
+    }
+
+    /**
+     * The other way a cell comes to hold airings: 'a' just added one. Opening the
+     * console on it must not fetch a list the store already has - and would
+     * overwrite the optimistic add with.
+     */
+    @Test
+    fun loadCommercialsSkipsACellASessionAddJustFilled() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = emptyList())))
+        placements.nextAdded = placed(id = 100)
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        vm.add(spotId = 5, time = TEST_TIME, date = TEST_DATE); advanceUntilIdle()
+
+        vm.loadCommercials(TEST_TIME, TEST_DATE)
+        advanceUntilIdle()
+
+        assertEquals(0, schedule.commercialsFetches, "the cell already holds what we just put in it")
+        assertEquals(listOf(100L), vm.commonState.value.cells[key]?.commercials?.map { it.id })
+    }
+
+    /**
      * Was `loadBreaksFetchesOnceHoweverManyScreensAsk` - the station-wide cache.
      * There is no loadBreaks to call twice any more: the rows arrive WITH the
      * month, in one verb, because they are the same fact (a break is a time a spot
@@ -51,7 +137,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
     @Test
     fun loadMonthLoadsTheRowsAndTheCellsTogether() = runTest(testDispatcher) {
         schedule.breaksResult = DataResult.Success(listOf(breakSlot(10), breakSlot(12)))
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
         val vm = vm()
 
         vm.loadMonth(2026, 7)
@@ -76,7 +162,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
     @Test
     fun navigatingToAnotherMonthReloadsTheRows() = runTest(testDispatcher) {
         schedule.breaksResult = DataResult.Success(listOf(breakSlot(10)))
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
         val vm = vm()
         vm.loadMonth(2026, 7)
         advanceUntilIdle()
@@ -116,7 +202,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
      */
     @Test
     fun setViewModeReloadsTheRowsButNotTheMonth() = runTest(testDispatcher) {
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
@@ -148,7 +234,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
 
     @Test
     fun addIncrementsCellAndMarksItModified() = runTest(testDispatcher) {
-        schedule.monthResult = DataResult.Success(month(cell(commercials = emptyList())))
+        schedule.monthResult = DataResult.Success(month(cell(spots = emptyList())))
         placements.nextAdded = placed(id = 100, durationSeconds = 45)
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
@@ -167,7 +253,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
     @Test
     fun removeLastIsNoOpWhenNothingWasAddedThisSession() = runTest(testDispatcher) {
         // A cell full of server-loaded placements (not session-added) must not be touchable by 'r'.
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
@@ -180,7 +266,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
 
     @Test
     fun addThenRemoveLastRestoresTheCellAndClearsMarkers() = runTest(testDispatcher) {
-        schedule.monthResult = DataResult.Success(month(cell(commercials = emptyList())))
+        schedule.monthResult = DataResult.Success(month(cell(spots = emptyList())))
         placements.nextAdded = placed(id = 100, durationSeconds = 30)
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
@@ -195,11 +281,19 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         assertEquals(0, state.addedCounts[key])
     }
 
+    /**
+     * A reorder happens in the Break Console, so the cell holds its airings by
+     * then - and it holds them because the console FETCHED them (they no longer
+     * ride in on the month). Hence the loadCommercials in the arrange block: it
+     * is not scaffolding, it is how a cell comes to have a list to reorder.
+     */
     @Test
     fun reorderWithStaleIdsLeavesTheCellUnchanged() = runTest(testDispatcher) {
-        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10), placed(11)))))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10), placed(11)))))
+        schedule.stock(TEST_TIME, TEST_DATE, placed(10), placed(11))
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
+        vm.loadCommercials(TEST_TIME, TEST_DATE); advanceUntilIdle()
 
         // Only one id for a two-placement cell: the client's view is stale.
         vm.reorder(time = TEST_TIME, date = TEST_DATE, orderedIds = listOf(10L))

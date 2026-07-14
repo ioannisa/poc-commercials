@@ -83,6 +83,28 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         logoCache = logoCache,
     )
 
+    /**
+     * The Break Console FETCHES its cell's airings when it opens.
+     *
+     * It has to: the month grid stopped shipping them (13,009 airings, 7.79 MB,
+     * to draw 1,295 boxes), so the console can no longer assume the store already
+     * holds its list. It asks the shared owner for ITS OWN cell - the (time, date)
+     * navigation handed it, and no other.
+     */
+    @Test
+    fun openingTheConsoleFetchesItsOwnCellsAirings() = runTest(testDispatcher) {
+        val common = FakeTimetableCommon()
+
+        vm(common, time = LocalTime(14, 30))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(LocalTime(14, 30) to TEST_DATE),
+            common.commercialLoads,
+            "on open: one cell's airings, its own - never the month's",
+        )
+    }
+
     @Test
     fun observesItsCellsCommercialsFromCommonState() = runTest(testDispatcher) {
         val common = FakeTimetableCommon()

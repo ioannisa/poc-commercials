@@ -12,6 +12,7 @@ import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ReorderPlacementsRequest
+import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialsDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ScheduleDto
 import eu.anifantakis.commercials.feature.timetable.data.mappers.toDomain
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFinderDataSource
@@ -45,6 +46,19 @@ class RemoteScheduleDataSourceImpl(private val api: ApiHttpClient) : RemoteSched
     override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
         api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month)
             .map { it.toDomain() }
+
+    override suspend fun getCommercials(
+        year: Int,
+        month: Int,
+        date: LocalDate?,
+        time: LocalTime?,
+    ): DataResult<Map<Pair<LocalTime, LocalDate>, List<PlacedCommercial>>, DataError.Network> =
+        api.get<CommercialsDto>(
+            "/api/schedule/commercials",
+            "year" to year, "month" to month,
+            "date" to date?.toString(),
+            "time" to time?.hhMm(),
+        ).map { it.toDomain() }
 }
 
 class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePlacementsDataSource {

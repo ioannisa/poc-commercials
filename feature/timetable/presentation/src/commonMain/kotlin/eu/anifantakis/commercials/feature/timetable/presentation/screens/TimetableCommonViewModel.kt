@@ -51,6 +51,9 @@ class TimetableCommonViewModel(
     override fun setViewMode(mode: GridViewMode) =
         dispatch(TimetableCommonIntent.SetViewMode(mode))
 
+    override fun loadCommercials(time: LocalTime, date: LocalDate) =
+        dispatch(TimetableCommonIntent.LoadCommercials(time, date))
+
     override fun add(spotId: Long, time: LocalTime, date: LocalDate) =
         dispatch(TimetableCommonIntent.Add(spotId, time, date))
 
@@ -96,6 +99,30 @@ class TimetableCommonViewModel(
                 val year = st.year
                 val month = st.month
                 if (year != null && month != null) loadRows(year, month, intent.mode)
+            }
+
+            is TimetableCommonIntent.LoadCommercials -> {
+                val st = commonState.value
+                val year = st.year
+                val month = st.month
+                if (year == null || month == null) return
+                val key = SchedulerKey(intent.time, intent.date)
+                // Already have them (the cell was opened before, or a placement
+                // was just added into it) - do not re-fetch.
+                if (st.cells[key]?.commercials?.isNotEmpty() == true) return
+
+                when (val result = scheduleRepository.getCommercials(year, month, intent.date, intent.time)) {
+                    is DataResult.Success -> updateCommonState { s ->
+                        val coms = result.data[intent.time to intent.date].orEmpty()
+                        val cur = s.cells[key] ?: return@updateCommonState s
+                        s.copy(
+                            cells = (s.cells + (key to cur.copy(
+                                commercials = coms.map { it.toUi() }.toImmutableList()
+                            ))).toImmutableMap()
+                        )
+                    }
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
+                }
             }
 
             is TimetableCommonIntent.Add -> {

@@ -48,6 +48,15 @@ interface TimetableCommon {
      */
     fun setViewMode(mode: GridViewMode)
 
+    /**
+     * Loads ONE cell's airings and merges them into the store.
+     *
+     * The month grid does not carry airings (it draws counts and durations), so
+     * whoever needs them asks. The Break Console does, on open - one cell, not
+     * 13,009 of them.
+     */
+    fun loadCommercials(time: LocalTime, date: LocalDate)
+
     /** Persists a placement of [spotId] into the (time, date) cell, then applies it. */
     fun add(spotId: Long, time: LocalTime, date: LocalDate)
 
@@ -95,6 +104,7 @@ sealed interface TimetableCommonIntent {
     data object Clear : TimetableCommonIntent
     data class LoadMonth(val year: Int, val month: Int) : TimetableCommonIntent
     data class SetViewMode(val mode: GridViewMode) : TimetableCommonIntent
+    data class LoadCommercials(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data class Add(val spotId: Long, val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data class RemoveLast(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data class Reorder(val time: LocalTime, val date: LocalDate, val orderedIds: List<Long>) : TimetableCommonIntent

@@ -37,6 +37,14 @@ class ScheduleRepositoryImpl(
 
     override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
         remoteDataSource.getMonth(year, month)
+
+    override suspend fun getCommercials(
+        year: Int,
+        month: Int,
+        date: LocalDate?,
+        time: LocalTime?,
+    ): DataResult<Map<Pair<LocalTime, LocalDate>, List<PlacedCommercial>>, DataError.Network> =
+        remoteDataSource.getCommercials(year, month, date, time)
 }
 
 class PlacementsRepositoryImpl(

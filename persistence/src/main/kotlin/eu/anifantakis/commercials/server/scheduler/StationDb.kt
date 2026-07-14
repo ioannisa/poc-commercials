@@ -1091,23 +1091,144 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
     }
 
     /**
-     * The month's grid, DERIVED from the normalized write model: one joined
-     * query over placements ⋈ spots ⋈ customers ⋈ contracts, then per-cell
-     * aggregates (spot count, total duration) and colours computed here.
+     * THE MONTH GRID - the little boxes, and nothing else.
      *
-     * A cell is keyed by (TIME, date) - the airing's own `show_time`. Grouping
-     * the rows by it IS the break: the query does not visit a break table,
-     * because there is not one.
+     * A box shows a spot COUNT and a total DURATION, so that is all this fetches:
+     * one aggregated row per (time, date), computed in the database. It does NOT
+     * carry the airings themselves.
+     *
+     * That distinction is the whole performance story of this screen. The grid
+     * used to be served by [loadMonth], which returns every airing in full -
+     * 13,009 rows and 7.79 MB of JSON for a busy month, to draw 1,295 boxes. This
+     * returns 1,295 rows, needs 2 joins instead of 7, and measured 53ms against
+     * 98ms. The airings are fetched only when something actually wants them:
+     * opening a break, or printing (see [loadCommercials]).
+     *
+     * [onlyClientCode] is the CUSTOMER_VIEWER scope, and it must be applied HERE,
+     * inside the aggregate. The route used to filter the airings in Kotlin and
+     * recompute the counts from what survived; with no airings to filter, a
+     * customer would otherwise be shown everybody's numbers.
      */
-    fun loadMonth(year: Int, month: Int): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> {
+    fun loadMonthCells(year: Int, month: Int, onlyClientCode: String? = null): List<CellRow> {
+        val (start, end) = monthRange(year, month)
+        // The cell's programme is the FIRST placement's that has one - the same
+        // rule loadMonth applies by walking the airings in position order and
+        // taking the first non-null. Ordering the nulls last reproduces it exactly.
+        // JOIN form throughout, NOT comma form. This statement is MIXED (it needs
+        // a LEFT JOIN for the programme, which a cell may not have), and in MySQL
+        // the comma binds LOOSER than JOIN - so an ON clause cannot see a
+        // comma-joined table and the query dies with "Unknown column 'p.program_id'
+        // in 'on clause'". Half-converting a mixed statement is the one thing the
+        // comma/WHERE style must not do.
+        val customerJoin =
+            if (onlyClientCode != null) "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?" else ""
+        val cells = mutableListOf<CellRow>()
+        connection().use { c ->
+            c.prepareStatement(
+                """
+                SELECT x.show_time, x.show_date, COUNT(*) AS spot_count,
+                       SUM(x.duration_seconds) AS total_secs,
+                       MAX(CASE WHEN x.rn_color = 1 THEN x.color_argb END) AS program_color,
+                       MAX(CASE WHEN x.rn_name  = 1 THEN x.program_name END) AS program_name
+                FROM (
+                    SELECT p.show_time, p.show_date, s.duration_seconds,
+                           pr.color_argb, pr.name AS program_name,
+                           -- TWO row numbers, not one, and this is not a nicety:
+                           -- the colour and the name are chosen INDEPENDENTLY -
+                           -- "the first airing that has a colour" and "the first
+                           -- that has a name". A programme can carry a name and NO
+                           -- colour (four cells at 20:30 in Dec 2005 do exactly
+                           -- that), and taking both from the same lead row silently
+                           -- painted those cells with the zone fallback instead of
+                           -- the colour a later airing's programme supplies.
+                           ROW_NUMBER() OVER (
+                               PARTITION BY p.show_date, p.show_time
+                               ORDER BY (pr.color_argb IS NULL), p.position
+                           ) AS rn_color,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY p.show_date, p.show_time
+                               ORDER BY (pr.name IS NULL), p.position
+                           ) AS rn_name
+                    FROM placements p
+                    JOIN spots s ON s.id = p.spot_id
+                    $customerJoin
+                    LEFT JOIN programs pr ON pr.id = p.program_id
+                    WHERE p.station_id = ?
+                      AND p.show_date >= ? AND p.show_date < ?
+                      AND p.hidden = FALSE AND s.hidden = FALSE
+                ) x
+                GROUP BY x.show_date, x.show_time
+                """.trimIndent()
+            ).use { ps ->
+                // ORDER MATTERS: the customer's `?` sits in the JOIN, which comes
+                // BEFORE the WHERE - bind it first or the station id lands on it.
+                var i = 1
+                if (onlyClientCode != null) ps.setString(i++, onlyClientCode)
+                ps.setString(i++, stationId)
+                ps.setDate(i++, java.sql.Date.valueOf(start))
+                ps.setDate(i, java.sql.Date.valueOf(end))
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        val time = rs.getTime("show_time").toLocalTime()
+                        val date = rs.getDate("show_date").toLocalDate()
+                        val spotCount = rs.getInt("spot_count")
+                        val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
+                        val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
+                        cells += CellRow(
+                            time = time,
+                            date = date,
+                            spotCount = spotCount,
+                            totalDurationSeconds = rs.getInt("total_secs"),
+                            // Identical rule to loadMonth: the programme's colour
+                            // wins; the zone/weekend/density rules are the fallback.
+                            zoneColorArgb = programColor ?: cellColorArgb(
+                                zone = zoneOf(time.hour),
+                                isWeekend = isWeekend,
+                                spotCount = spotCount,
+                            ),
+                            programName = rs.getString("program_name"),
+                            commercials = emptyList(),
+                        )
+                    }
+                }
+            }
+        }
+        return cells
+    }
+
+    /**
+     * The month's grid WITH every airing in it - the heavy read.
+     *
+     * Kept for the consumers that genuinely need the airings across a whole month
+     * (the schedule email, the MCP tools, the printed reports). The GRID must not
+     * use it: see [loadMonthCells]. The cells it returns are [loadMonthCells]'s,
+     * so the two can never disagree about a count or a colour.
+     */
+    fun loadMonth(year: Int, month: Int): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> =
+        loadMonthCells(year, month) to loadCommercials(year, month)
+
+    /**
+     * The airings themselves, for a slice of the month: the whole month (both
+     * [date] and [time] null), one day ([date]), one break across the month
+     * ([time]), or a single cell (both).
+     *
+     * One query serves all four because they are the same question at different
+     * resolutions - which is also every place the client actually needs an airing:
+     * opening a break, printing a day, printing a break's month, printing a month.
+     */
+    fun loadCommercials(
+        year: Int,
+        month: Int,
+        date: LocalDate? = null,
+        time: LocalTime? = null,
+    ): Map<Pair<LocalTime, LocalDate>, List<CommercialRow>> {
         val (start, end) = monthRange(year, month)
 
         val commercialsByKey = linkedMapOf<Pair<LocalTime, LocalDate>, MutableList<CommercialRow>>()
-        // Programme identity per cell (legacy `programtypes` semantics): the
-        // break belongs to the programme airing at that slot, so the first
-        // placement's programme name AND colour are the cell's.
-        val programColorByKey = mutableMapOf<Pair<LocalTime, LocalDate>, Int>()
-        val programNameByKey = mutableMapOf<Pair<LocalTime, LocalDate>, String>()
+        // The slice. Narrowing to a day or a single break is what keeps the Break
+        // Console and the day report from paying for a whole month of airings.
+        val dateFilter = if (date != null) "AND p.show_date = ?" else ""
+        val timeFilter = if (time != null) "AND p.show_time = ?" else ""
 
         connection().use { c ->
             c.prepareStatement(
@@ -1133,25 +1254,25 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 WHERE p.station_id = ?
                   AND p.show_date >= ? AND p.show_date < ?
                   AND p.hidden = FALSE AND s.hidden = FALSE
+                  $dateFilter
+                  $timeFilter
                 ORDER BY p.show_time, p.show_date, p.position
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, stationId)
-                ps.setDate(2, java.sql.Date.valueOf(start)); ps.setDate(3, java.sql.Date.valueOf(end))
+                var i = 1
+                ps.setString(i++, stationId)
+                ps.setDate(i++, java.sql.Date.valueOf(start))
+                ps.setDate(i++, java.sql.Date.valueOf(end))
+                if (date != null) ps.setDate(i++, java.sql.Date.valueOf(date))
+                if (time != null) ps.setTime(i, java.sql.Time.valueOf(time))
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
-                        val time = rs.getTime("show_time").toLocalTime()
-                        val date = rs.getDate("show_date").toLocalDate()
+                        val rowTime = rs.getTime("show_time").toLocalTime()
+                        val rowDate = rs.getDate("show_date").toLocalDate()
                         val isGift = rs.getBoolean("is_gift")
                         val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
                         val programName = rs.getString("program_name")
-                        if (programColor != null) {
-                            programColorByKey.putIfAbsent(time to date, programColor)
-                        }
-                        if (programName != null) {
-                            programNameByKey.putIfAbsent(time to date, programName)
-                        }
-                        val list = commercialsByKey.getOrPut(time to date) { mutableListOf() }
+                        val list = commercialsByKey.getOrPut(rowTime to rowDate) { mutableListOf() }
                         list += CommercialRow(
                             id = rs.getLong("id"),
                             spotId = rs.getLong("spot_id"),
@@ -1176,30 +1297,10 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             }
         }
 
-        val cells = commercialsByKey.map { (key, commercials) ->
-            val (time, date) = key
-            val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
-            CellRow(
-                time = time,
-                date = date,
-                spotCount = commercials.size,
-                totalDurationSeconds = commercials.sumOf { it.durationSeconds },
-                // The PROGRAMME's colour wins (operator-assigned identity,
-                // migrated from the legacy app); the zone/weekend/density
-                // rules are the demo fallback for placements without one.
-                // The zone is a function of the hour - no lookup (it used to be
-                // read off the break row, which had computed it the same way).
-                zoneColorArgb = programColorByKey[key] ?: cellColorArgb(
-                    zone = zoneOf(time.hour),
-                    isWeekend = isWeekend,
-                    spotCount = commercials.size
-                ),
-                programName = programNameByKey[key],
-                commercials = emptyList()
-            )
-        }
-
-        return cells to commercialsByKey
+        // The cells are NOT rebuilt here. They are [loadMonthCells]'s job, and
+        // having a second place compute a spot count or pick a cell's colour is
+        // exactly how the grid and the reports would start disagreeing.
+        return commercialsByKey
     }
 
     /**
