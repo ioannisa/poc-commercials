@@ -31,11 +31,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /** A neighbouring OCCUPIED break of the same day - the Προηγούμενο/Επόμενο target. */
 @Immutable
 data class BreakRef(
-    val breakId: Long,
+    val time: LocalTime,
     val label: String,
     val spotCount: Int,
 )
@@ -101,7 +102,7 @@ sealed interface CommercialDetailIntent {
  */
 @Stable
 class CommercialDetailViewModel(
-    private val breakId: Long,
+    private val time: LocalTime,
     private val date: LocalDate,
     private val common: TimetableCommon,
     private val session: UserSession,
@@ -109,13 +110,12 @@ class CommercialDetailViewModel(
     private val logoCache: StationLogoCache,
 ) : BaseGlobalViewModel() {
 
-    private val key = SchedulerKey(breakId, date)
+    private val key = SchedulerKey(time, date)
 
-    init {
-        // Idempotent: the grid has almost certainly loaded them already, but the
-        // screen states its own need rather than assuming the caller's order.
-        common.loadBreaks()
-    }
+    // No break load here. The rows arrive WITH the month (a break is a time a
+    // spot aired at, so they are the month's, not the station's), and this screen
+    // is only reachable from a loaded cell - so the month it needs is already in
+    // the shared store. It used to call an idempotent, station-wide loadBreaks().
 
     /** The screen's state is DERIVED from the shared store, so the transient
      *  report-busy flag lives beside it and is combined in - never a second
@@ -158,7 +158,7 @@ class CommercialDetailViewModel(
         if (from == to || from !in current.indices || to !in current.indices) return
 
         val reordered = current.toMutableList().apply { add(to, removeAt(from)) }
-        common.reorder(breakId, date, reordered.map { it.id })
+        common.reorder(time, date, reordered.map { it.id })
     }
 
     /**
@@ -207,7 +207,7 @@ class CommercialDetailViewModel(
     /**
      * Everything this screen shows, derived from the shared state alone: the
      * cell's commercials + programme, the header stats, this break's own label
-     * and the day's paging chain. Only [breakId] and [date] came in from
+     * and the day's paging chain. Only [time] and [date] came in from
      * navigation - the rest is PULLED, never pushed.
      */
     private fun buildState(commonState: TimetableCommonState): CommercialDetailState {
@@ -215,13 +215,16 @@ class CommercialDetailViewModel(
 
         // The day's paging chain: occupied breaks in air order, plus the one
         // being viewed (so an emptied break still knows its neighbours).
+        // The empty rows an hourly/half-hourly view prints are NOT breaks, so
+        // they drop out here - the chain still pages through the day's occupied
+        // breaks only, as the legacy console did.
         val day = commonState.breaks
             .sortedBy { it.time.hour * 60 + it.time.minute }
             .mapNotNull { slot ->
-                val spots = cells[SchedulerKey(slot.id, date)]?.spotCount ?: 0
-                if (spots > 0 || slot.id == breakId) BreakRef(slot.id, slot.label, spots) else null
+                val spots = cells[SchedulerKey(slot.time, date)]?.spotCount ?: 0
+                if (spots > 0 || slot.time == time) BreakRef(slot.time, slot.label, spots) else null
             }
-        val at = day.indexOfFirst { it.breakId == breakId }
+        val at = day.indexOfFirst { it.time == time }
 
         val cell = cells[key]
         val commercials = cell?.commercials ?: persistentListOf()

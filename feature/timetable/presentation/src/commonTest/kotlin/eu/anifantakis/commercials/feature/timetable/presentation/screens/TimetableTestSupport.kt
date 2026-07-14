@@ -21,6 +21,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
 import org.koin.dsl.module
@@ -70,6 +72,9 @@ abstract class TimetableTestBase {
 
 val TEST_DATE: LocalDate = LocalDate(2026, 7, 1)
 
+/** The break most fixtures air in. A break IS a time - there is no id to give it. */
+val TEST_TIME: LocalTime = LocalTime(10, 0)
+
 fun placed(
     id: Long,
     durationSeconds: Int = 30,
@@ -87,11 +92,11 @@ fun placed(
 )
 
 fun cell(
-    breakId: Long = 1L,
+    time: LocalTime = TEST_TIME,
     date: LocalDate = TEST_DATE,
     commercials: List<PlacedCommercial> = emptyList(),
 ): ScheduleCell = ScheduleCell(
-    breakId = breakId,
+    time = time,
     date = date,
     spotCount = commercials.size,
     totalDurationSeconds = commercials.sumOf { it.durationSeconds },
@@ -102,12 +107,9 @@ fun cell(
 fun month(vararg cells: ScheduleCell): MonthSchedule =
     MonthSchedule(year = 2026, month = 7, cells = cells.toList())
 
-/** One row of the station's airtime grid, as the repository returns it. */
-fun breakSlot(id: Long, hour: Int, minute: Int = 0): BreakSlotInfo = BreakSlotInfo(
-    id = id,
-    hour = hour,
-    minute = minute,
-    label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}",
+/** One ROW of the month's grid, as the repository returns it. */
+fun breakSlot(hour: Int, minute: Int = 0): BreakSlotInfo = BreakSlotInfo(
+    time = LocalTime(hour, minute),
     zone = "DEFAULT",
     zoneColorArgb = 0,
 )
@@ -117,13 +119,21 @@ fun breakSlot(id: Long, hour: Int, minute: Int = 0): BreakSlotInfo = BreakSlotIn
 class FakeScheduleRepository : ScheduleRepository {
     var monthResult: DataResult<MonthSchedule, DataError.Network> = DataResult.Success(month())
 
-    /** The station's airtime grid. Counted: it must be fetched ONCE. */
+    /**
+     * The MONTH's rows. Recorded in full, because both arguments are now
+     * load-bearing: the rows a month has depend on what aired in it, and the
+     * mode decides how much empty scaffold is drawn around them.
+     */
     var breaksResult: DataResult<List<BreakSlotInfo>, DataError.Network> = DataResult.Success(emptyList())
-    var breaksFetches = 0
-        private set
+    val breakLoads = mutableListOf<Triple<Int, Int, GridViewMode>>()
+    val breaksFetches: Int get() = breakLoads.size
 
-    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> {
-        breaksFetches++
+    override suspend fun getBreaks(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<List<BreakSlotInfo>, DataError.Network> {
+        breakLoads += Triple(year, month, mode)
         return breaksResult
     }
 
@@ -139,11 +149,11 @@ class FakePlacementsRepository : PlacementsRepository {
     var reorderResult: EmptyDataResult<DataError.Network> = DataResult.Success(Unit)
 
     val removedIds = mutableListOf<Long>()
-    val reorders = mutableListOf<Triple<Long, LocalDate, List<Long>>>()
+    val reorders = mutableListOf<Triple<LocalTime, LocalDate, List<Long>>>()
 
     override suspend fun add(
         spotId: Long,
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
     ): DataResult<PlacedCommercial, DataError.Network> = addResult ?: DataResult.Success(nextAdded)
 
@@ -153,11 +163,11 @@ class FakePlacementsRepository : PlacementsRepository {
     }
 
     override suspend fun reorder(
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
         orderedIds: List<Long>,
     ): EmptyDataResult<DataError.Network> {
-        reorders += Triple(breakId, date, orderedIds)
+        reorders += Triple(time, date, orderedIds)
         return reorderResult
     }
 }
@@ -188,18 +198,19 @@ class FakeTimetableCommon : TimetableCommon {
     fun emit(state: TimetableCommonState) { _commonState.value = state }
 
     var clears = 0
-    var breakLoads = 0
+    /** ONE verb now loads the month's cells AND its rows - there is no loadBreaks. */
     val loads = mutableListOf<Pair<Int, Int>>()
-    val adds = mutableListOf<Triple<Long, Long, LocalDate>>()
-    val removes = mutableListOf<Pair<Long, LocalDate>>()
-    val reorders = mutableListOf<Triple<Long, LocalDate, List<Long>>>()
+    val viewModes = mutableListOf<GridViewMode>()
+    val adds = mutableListOf<Triple<Long, LocalTime, LocalDate>>()
+    val removes = mutableListOf<Pair<LocalTime, LocalDate>>()
+    val reorders = mutableListOf<Triple<LocalTime, LocalDate, List<Long>>>()
 
     override fun clear() { clears++ }
-    override fun loadBreaks() { breakLoads++ }
     override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
-    override fun add(spotId: Long, breakId: Long, date: LocalDate) { adds += Triple(spotId, breakId, date) }
-    override fun removeLast(breakId: Long, date: LocalDate) { removes += (breakId to date) }
-    override fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(breakId, date, orderedIds) }
+    override fun setViewMode(mode: GridViewMode) { viewModes += mode }
+    override fun add(spotId: Long, time: LocalTime, date: LocalDate) { adds += Triple(spotId, time, date) }
+    override fun removeLast(time: LocalTime, date: LocalDate) { removes += (time to date) }
+    override fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(time, date, orderedIds) }
 }
 
 /**

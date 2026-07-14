@@ -12,10 +12,12 @@ import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePla
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /*
  * Organizers only: every wire call lives in the Remote*DataSource impls
@@ -27,8 +29,11 @@ class ScheduleRepositoryImpl(
     private val remoteDataSource: RemoteScheduleDataSource,
 ) : ScheduleRepository {
 
-    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> =
-        remoteDataSource.getBreaks()
+    override suspend fun getBreaks(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<List<BreakSlotInfo>, DataError.Network> = remoteDataSource.getBreaks(year, month, mode)
 
     override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
         remoteDataSource.getMonth(year, month)
@@ -40,18 +45,18 @@ class PlacementsRepositoryImpl(
 
     override suspend fun add(
         spotId: Long,
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
-    ): DataResult<PlacedCommercial, DataError.Network> = remoteDataSource.add(spotId, breakId, date)
+    ): DataResult<PlacedCommercial, DataError.Network> = remoteDataSource.add(spotId, time, date)
 
     override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> =
         remoteDataSource.remove(placementId)
 
     override suspend fun reorder(
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
         orderedIds: List<Long>,
-    ): EmptyDataResult<DataError.Network> = remoteDataSource.reorder(breakId, date, orderedIds)
+    ): EmptyDataResult<DataError.Network> = remoteDataSource.reorder(time, date, orderedIds)
 }
 
 class FinderRepositoryImpl(

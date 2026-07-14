@@ -533,12 +533,12 @@ class SenErpEnricher(
             val linked = c.createStatement().use { st ->
                 st.executeUpdate(
                     """
-                    UPDATE $schema.spots sp
-                    JOIN $scratch.messages m ON m.id = sp.legacy_id
-                    JOIN $schema.programs pr ON pr.legacy_id = m.messageTypeID
-                                            AND pr.station_id = sp.station_id
+                    UPDATE $schema.spots sp, $scratch.messages m, $schema.programs pr
                     SET sp.booked_program_id = pr.id
-                    WHERE sp.booked_program_id IS NULL
+                    WHERE m.id = sp.legacy_id
+                      AND pr.legacy_id = m.messageTypeID
+                      AND pr.station_id = sp.station_id
+                      AND sp.booked_program_id IS NULL
                     """.trimIndent()
                 )
             }
@@ -712,9 +712,9 @@ class SenErpEnricher(
         val stuck = c.createStatement().use { st ->
             st.executeQuery(
                 """
-                SELECT COUNT(DISTINCT ct.id) FROM $schema.contracts ct
-                JOIN $schema.contract_lines cl ON cl.contract_id = ct.id AND cl.line_no >= 1000
-                JOIN $schema.sen_ssd ssd ON ssd.DOCID = ct.legacy_docid
+                SELECT COUNT(DISTINCT ct.id) FROM $schema.contracts ct, $schema.contract_lines cl, $schema.sen_ssd ssd
+                WHERE cl.contract_id = ct.id AND cl.line_no >= 1000
+                  AND ssd.DOCID = ct.legacy_docid
                 """.trimIndent()
             ).use { rs -> if (rs.next()) rs.getInt(1) else 0 }
         }
@@ -763,12 +763,12 @@ class SenErpEnricher(
         val airings = c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                UPDATE $schema.placements p
-                JOIN $schema.schedule sch      ON sch.id = p.legacy_id
-                JOIN $schema.contracts ct      ON ct.legacy_docid = sch.docID
-                JOIN $schema.contract_lines cl ON cl.contract_id = ct.id AND cl.line_no = sch.lineno
+                UPDATE $schema.placements p, $schema.schedule sch, $schema.contracts ct, $schema.contract_lines cl
                 SET p.contract_line_id = cl.id
-                WHERE p.contract_line_id IS NULL
+                WHERE sch.id = p.legacy_id
+                  AND ct.legacy_docid = sch.docID
+                  AND cl.contract_id = ct.id AND cl.line_no = sch.lineno
+                  AND p.contract_line_id IS NULL
                 """.trimIndent()
             )
         }
@@ -777,21 +777,22 @@ class SenErpEnricher(
         val spots = c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                UPDATE $schema.spots sp
-                JOIN $schema.contract_lines old ON old.id = sp.contract_line_id
-                JOIN (
+                UPDATE $schema.spots sp, $schema.contract_lines old,
+                       (
                     SELECT p.spot_id, p.contract_line_id,
                            ROW_NUMBER() OVER (
                                PARTITION BY p.spot_id
                                ORDER BY COUNT(*) DESC, p.contract_line_id
                            ) AS rn
-                    FROM $schema.placements p
-                    JOIN $schema.contract_lines cl ON cl.id = p.contract_line_id
-                    WHERE cl.line_no < 1000
+                    FROM $schema.placements p, $schema.contract_lines cl
+                    WHERE cl.id = p.contract_line_id
+                      AND cl.line_no < 1000
                     GROUP BY p.spot_id, p.contract_line_id
-                ) modal ON modal.spot_id = sp.id AND modal.rn = 1
+                ) modal
                 SET sp.contract_line_id = modal.contract_line_id
-                WHERE old.line_no >= 1000
+                WHERE old.id = sp.contract_line_id
+                  AND modal.spot_id = sp.id AND modal.rn = 1
+                  AND old.line_no >= 1000
                 """.trimIndent()
             )
         }
@@ -840,9 +841,9 @@ class SenErpEnricher(
             st.executeQuery(
                 """
                 SELECT cl.id, cl.line_no, cl.desired_qty, ct.legacy_docid
-                FROM $schema.contract_lines cl
-                JOIN $schema.contracts ct ON ct.id = cl.contract_id
-                WHERE ct.legacy_docid IS NOT NULL AND cl.line_no < 1000
+                FROM $schema.contract_lines cl, $schema.contracts ct
+                WHERE ct.id = cl.contract_id
+                  AND ct.legacy_docid IS NOT NULL AND cl.line_no < 1000
                 """.trimIndent()
             ).use { rs ->
                 while (rs.next()) {
@@ -887,17 +888,18 @@ class SenErpEnricher(
     private fun backfillProvisional(apply: Boolean, s: Summary) {
         val sql =
             """
-            UPDATE $schema.contracts ct
-            JOIN (
+            UPDATE $schema.contracts ct,
+                   (
                 SELECT cl.contract_id AS cid, MIN(p.show_date) AS mn, MAX(p.show_date) AS mx
-                FROM $schema.placements p
-                JOIN $schema.spots sp ON sp.id = p.spot_id
-                JOIN $schema.contract_lines cl ON cl.id = sp.contract_line_id
-                WHERE p.hidden = FALSE
+                FROM $schema.placements p, $schema.spots sp, $schema.contract_lines cl
+                WHERE sp.id = p.spot_id
+                  AND cl.id = sp.contract_line_id
+                  AND p.hidden = FALSE
                 GROUP BY cl.contract_id
-            ) agg ON agg.cid = ct.id
+            ) agg
             SET ct.start_date = agg.mn, ct.end_date = agg.mx, ct.dates_provisional = TRUE
-            WHERE ct.start_date IS NULL
+            WHERE agg.cid = ct.id
+              AND ct.start_date IS NULL
             """.trimIndent()
         s.contractsBackfilled = if (apply) {
             c.createStatement().use { it.executeUpdate(sql) }
@@ -906,11 +908,11 @@ class SenErpEnricher(
                 st.executeQuery(
                     """
                     SELECT COUNT(DISTINCT cl.contract_id)
-                    FROM $schema.contracts ct
-                    JOIN $schema.contract_lines cl ON cl.contract_id = ct.id
-                    JOIN $schema.spots sp ON sp.contract_line_id = cl.id
-                    JOIN $schema.placements p ON p.spot_id = sp.id AND p.hidden = FALSE
-                    WHERE ct.start_date IS NULL
+                    FROM $schema.contracts ct, $schema.contract_lines cl, $schema.spots sp, $schema.placements p
+                    WHERE cl.contract_id = ct.id
+                      AND sp.contract_line_id = cl.id
+                      AND p.spot_id = sp.id AND p.hidden = FALSE
+                      AND ct.start_date IS NULL
                     """.trimIndent()
                 ).use { rs -> rs.next(); rs.getInt(1) }
             }

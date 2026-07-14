@@ -67,8 +67,10 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportT
 import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.number
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
 /**
  * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
@@ -81,14 +83,14 @@ import eu.anifantakis.commercials.core.presentation.string_resources.LocalLangua
 @Composable
 fun TimetableScreenRoot(
     viewModel: TimetableViewModel,
-    onOpenDetail: (breakId: Long, date: LocalDate) -> Unit,
+    onOpenDetail: (time: LocalTime, date: LocalDate) -> Unit,
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
 ) {
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
-            is TimetableEffect.OpenDetail -> onOpenDetail(effect.breakId, effect.date)
+            is TimetableEffect.OpenDetail -> onOpenDetail(effect.time, effect.date)
         }
     }
 
@@ -268,7 +270,7 @@ private fun TimetableScreen(
                 // Double click or Enter key - navigate to detail screen
                 onIntent(
                     TimetableIntent.OpenCell(
-                        breakId = breakSlot.id,
+                        time = breakSlot.time,
                         date = date,
                         spotCount = data?.spotCount ?: 0,
                     )
@@ -278,15 +280,15 @@ private fun TimetableScreen(
             // selected spot -> nothing happens. 'r' removes the most recent
             // placement this session added in the cell.
             onAddSpot = if (!canEdit) null else { breakSlot, date ->
-                onIntent(TimetableIntent.AddSpotAt(breakSlot.id, date))
+                onIntent(TimetableIntent.AddSpotAt(breakSlot.time, date))
             },
             onDeleteSpot = if (!canEdit) null else { breakSlot, date ->
-                onIntent(TimetableIntent.RemoveLastAt(breakSlot.id, date))
+                onIntent(TimetableIntent.RemoveLastAt(breakSlot.time, date))
             },
             dailyTotals = state.dailyTotals,
             contextMenuItems = { breakSlot, date, data ->
                 val spotCount = data?.spotCount ?: 0
-                val key = SchedulerKey(breakSlot.id, date)
+                val key = SchedulerKey(breakSlot.time, date)
 
                 buildList {
                     // Open/View details
@@ -298,7 +300,7 @@ private fun TimetableScreen(
                     ) {
                         onIntent(
                             TimetableIntent.OpenCell(
-                                breakId = breakSlot.id,
+                                time = breakSlot.time,
                                 date = date,
                                 spotCount = spotCount,
                             )
@@ -320,7 +322,7 @@ private fun TimetableScreen(
                         icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
                         enabled = spotCount > 0
                     ) {
-                        onIntent(TimetableIntent.PrintBreak(breakSlot.id, date))
+                        onIntent(TimetableIntent.PrintBreak(breakSlot.time, date))
                     })
 
                     // Legacy popup option: cells show spot counts or the
@@ -357,7 +359,7 @@ private fun TimetableScreen(
                                     shortcut = "A",
                                     enabled = finder.selectedSpot != null
                                 ) {
-                                    onIntent(TimetableIntent.AddSpotAt(breakSlot.id, date))
+                                    onIntent(TimetableIntent.AddSpotAt(breakSlot.time, date))
                                 },
                                 ContextMenuEntry.Item(
                                     label = StringKey.TIMETABLE_MENU_REMOVE_LAST.localized(),
@@ -365,7 +367,7 @@ private fun TimetableScreen(
                                     shortcut = "R",
                                     enabled = (state.addedCounts[key] ?: 0) > 0
                                 ) {
-                                    onIntent(TimetableIntent.RemoveLastAt(breakSlot.id, date))
+                                    onIntent(TimetableIntent.RemoveLastAt(breakSlot.time, date))
                                 }
                             )
                         ))
@@ -391,7 +393,7 @@ private fun TimetableScreen(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK_MONTH.localized().withArgs(listOf(label)),
                         icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) }
                     ) {
-                        onIntent(TimetableIntent.PrintBreakMonth(breakSlot.id))
+                        onIntent(TimetableIntent.PrintBreakMonth(breakSlot.time))
                     }
                 )
             }
@@ -501,6 +503,31 @@ private fun KeyboardEnabledHeader(
                     icon = AppIcons.arrowForward,
                     onClick = { onIntent(TimetableIntent.NextMonth) },
                 )
+
+                Spacer(modifier = Modifier.width(UIConst.paddingRegular))
+
+                // "Προβολή κάθε: 1 Ώρα / Μισή Ώρα / Διάλειμμα" - the legacy
+                // console's radio group. It chooses how much EMPTY scaffold is
+                // drawn; the real breaks (the times spots actually aired) are in
+                // every view, so no choice here can hide one.
+                AppText(Strings[StringKey.TIMETABLE_VIEW_EVERY], AppTextStyle.TINY)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AppRadioRow(
+                        selected = state.viewMode == GridViewMode.HOURLY,
+                        onClick = { onIntent(TimetableIntent.ViewModeChanged(GridViewMode.HOURLY)) },
+                        label = Strings[StringKey.TIMETABLE_VIEW_HOURLY],
+                    )
+                    AppRadioRow(
+                        selected = state.viewMode == GridViewMode.HALF_HOURLY,
+                        onClick = { onIntent(TimetableIntent.ViewModeChanged(GridViewMode.HALF_HOURLY)) },
+                        label = Strings[StringKey.TIMETABLE_VIEW_HALF_HOURLY],
+                    )
+                    AppRadioRow(
+                        selected = state.viewMode == GridViewMode.CONDENSED,
+                        onClick = { onIntent(TimetableIntent.ViewModeChanged(GridViewMode.CONDENSED)) },
+                        label = Strings[StringKey.TIMETABLE_VIEW_BREAK],
+                    )
+                }
 
                 Spacer(modifier = Modifier.weight(1f))
 

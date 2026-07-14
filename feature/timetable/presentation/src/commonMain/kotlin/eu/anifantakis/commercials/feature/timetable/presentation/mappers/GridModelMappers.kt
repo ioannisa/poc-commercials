@@ -12,7 +12,6 @@ import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.datetime.LocalTime
 
 /*
  * Domain -> grids UI models. The grid engine (:grids) is Compose-bound, so
@@ -20,8 +19,7 @@ import kotlinx.datetime.LocalTime
  */
 
 fun BreakSlotInfo.toUi(): BreakSlot = BreakSlot(
-    id = id,
-    time = LocalTime(hour, minute),
+    time = time,
     label = label,
     zone = BreakZone.valueOf(zone),
     zoneColor = Color(zoneColorArgb.toLong() and 0xFFFFFFFFL),
@@ -42,7 +40,7 @@ fun PlacedCommercial.toUi(): CommercialItem = CommercialItem(
 )
 
 fun ScheduleCell.toUi(): Pair<SchedulerKey, SchedulerCellData> =
-    SchedulerKey(breakId, date) to SchedulerCellData(
+    SchedulerKey(time, date) to SchedulerCellData(
         spotCount = spotCount,
         totalDurationSeconds = totalDurationSeconds,
         zoneColor = Color(zoneColorArgb.toLong() and 0xFFFFFFFFL),

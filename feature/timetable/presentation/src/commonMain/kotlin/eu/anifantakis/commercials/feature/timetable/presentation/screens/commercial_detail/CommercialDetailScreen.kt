@@ -32,6 +32,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import kotlinx.datetime.LocalTime
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +62,7 @@ import kotlinx.datetime.DayOfWeek
 fun CommercialDetailScreenRoot(
     viewModel: CommercialDetailViewModel,
     onBack: () -> Unit,
-    onNavigateToBreak: (breakId: Long) -> Unit,
+    onNavigateToBreak: (time: LocalTime) -> Unit,
 ) {
     CommercialDetailScreen(
         state = viewModel.state,
@@ -70,7 +71,7 @@ fun CommercialDetailScreenRoot(
             when (navIntent) {
                 CommercialDetailScreenNavIntent.OnBack -> onBack()
                 is CommercialDetailScreenNavIntent.OnGoToBreak ->
-                    onNavigateToBreak(navIntent.target.breakId)
+                    onNavigateToBreak(navIntent.target.time)
             }
         },
     )

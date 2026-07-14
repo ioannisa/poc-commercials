@@ -24,11 +24,19 @@ import java.sql.Connection
  *   half.
  *
  *   STATION-scoped (carry `station_id` ≙ legacy `forTV`):
- *       break_slots, spots, programs, flow_comments, print_audit, station_meta
- *   exactly the tables the legacy schema carried `forTV` on.
+ *       spots, programs, placements, flow_comments, print_audit, station_meta
  *
- *   placements deliberately have NO station_id: the station rides on their
- *   break (and their spot), just as legacy `schedule` carried no forTV.
+ *   A BREAK IS NOT AN ENTITY. There is no `break_slots` table: a break is what
+ *   `GROUP BY show_date, show_time` returns, exactly as the legacy app did it -
+ *   its `schedule` rows carry a plain showDate/showTime and nothing points at a
+ *   break. That is the flexible model: an operator schedules a spot AT A TIME
+ *   and the break comes into existence; nobody has to create 23:55 first.
+ *
+ *   `placements` therefore carries `station_id` of its own, which legacy did NOT
+ *   need: it kept ONE DATABASE PER OUTLET, so its `schedule` was already a single
+ *   station's. We put a whole group in one schema, so the airing must say which
+ *   station it belongs to - and the row's identity (station, date, time, position)
+ *   depends on it.
  *
  * The grid the client renders is a READ model DERIVED at query time from
  * placements ⋈ spots ⋈ customers ⋈ contracts - aggregates and cell colours are
@@ -79,9 +87,10 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         connection().use { c ->
             dropLegacyDemoTables(c)
             createTables(c)
-            upgradeFromPerStationSchema(c)
-            ensureColumns(c)
             syncStations(c)
+            upgradeFromPerStationSchema(c)
+            upgradeToEmergentBreaks(c)
+            ensureColumns(c)
         }
     }
 
@@ -105,23 +114,6 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                 CREATE TABLE IF NOT EXISTS group_meta (
                     meta_key VARCHAR(64) PRIMARY KEY,
                     meta_value VARCHAR(255) NOT NULL
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                """.trimIndent()
-            )
-            // STATION-scoped. The id is AUTO_INCREMENT (it used to be a
-            // computed 1..96, which would collide the moment two stations
-            // shared a database); a break is identified by its (station, time).
-            s.executeUpdate(
-                """
-                CREATE TABLE IF NOT EXISTS break_slots (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    station_id VARCHAR(64) NOT NULL,
-                    hour_of_day TINYINT NOT NULL,
-                    minute_of_hour TINYINT NOT NULL,
-                    label VARCHAR(8) NOT NULL,
-                    zone VARCHAR(16) NOT NULL,
-                    UNIQUE KEY uq_break_station_slot (station_id, hour_of_day, minute_of_hour),
-                    CONSTRAINT fk_breaks_station FOREIGN KEY (station_id) REFERENCES stations(id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
             )
@@ -314,17 +306,30 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
             )
-            // ≙ legacy `schedule`, which carried NO forTV: an airing's station is
-            // its break's (and its spot's). Keeping it that way avoids a redundant
-            // column on the biggest table in the schema (millions of rows).
+            // ≙ legacy `schedule`: an airing AT A TIME. `show_time` mirrors its
+            // `showTime` column, and there is nothing else - no break_id, because
+            // there is no break table. The break EMERGES from the group by.
+            //
+            // `station_id` is the one column legacy did not have, and it is not a
+            // denormalization: legacy kept one database per outlet, so its
+            // schedule was implicitly single-station. A group's stations share
+            // this schema, so without it the 11:00 break of the TV channel and of
+            // the radio station would be the same break.
+            //
+            // The unique key IS the airing's identity - (station, date, time,
+            // position) - and it makes concurrent adds to the same break collide
+            // in the database rather than silently interleave (see addPlacement).
+            // It also serves the grid's read path: `station_id, show_date` is its
+            // leftmost prefix, and `show_time` follows for the GROUP BY.
             s.executeUpdate(
                 """
                 CREATE TABLE IF NOT EXISTS placements (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     legacy_id BIGINT NULL,
+                    station_id VARCHAR(64) NOT NULL,
                     spot_id BIGINT NOT NULL,
-                    break_id BIGINT NOT NULL,
                     show_date DATE NOT NULL,
+                    show_time TIME NOT NULL,
                     position INT NOT NULL,
                     duration_seconds INT NOT NULL,
                     -- The ACTUAL charge of this airing (≙ legacy schedule.docID +
@@ -335,11 +340,10 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     program_id BIGINT NULL,
                     played BOOLEAN NOT NULL DEFAULT FALSE,
                     hidden BOOLEAN NOT NULL DEFAULT FALSE,
-                    -- Still station-safe: break_id is unique per station.
-                    UNIQUE KEY uq_placement_slot (break_id, show_date, position),
+                    UNIQUE KEY uq_placement_slot (station_id, show_date, show_time, position),
                     KEY idx_placements_legacy (legacy_id),
                     CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
-                    CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES break_slots(id),
+                    CONSTRAINT fk_placements_station FOREIGN KEY (station_id) REFERENCES stations(id),
                     CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
@@ -432,8 +436,9 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
      * already have every column from [createTables] and skip all of these.
      */
     private fun ensureColumns(c: Connection) {
-        // show_date is not the leftmost column of the placement unique key, so
-        // month-range scans need their own index.
+        // Station-scoped month scans ride the unique key (station_id, show_date,
+        // show_time, position) - which is also what the grid's GROUP BY on
+        // show_time reads. This one is for the few scans that span every station.
         ensureIndex(c, "placements", "idx_placements_date", "show_date")
         ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
         ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
@@ -528,21 +533,12 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         // NULL ("belongs to the group"), which is how they read.
         ensureColumn(c, "email_log", "station_id", "VARCHAR(64) NULL")
 
-        // break_slots.id was a computed 1..n; the database assigns it now.
-        // `placements.break_id` REFERENCES it, and MySQL refuses to modify a
-        // column an FK points at - so the FK comes off and goes straight back on.
+        // break_slots is deliberately NOT repaired here (it used to have its id
+        // converted to AUTO_INCREMENT and its unique key rebuilt): the very next
+        // bootstrap step drops the table. All this pass owes it is `station_id`,
+        // stamped above - upgradeToEmergentBreaks reads it to backfill the
+        // airings' station before the catalog goes.
         c.createStatement().use { s ->
-            if (!isAutoIncrement(c, "break_slots", "id")) {
-                val fk = foreignKeyOn(c, "placements", "break_id")
-                if (fk != null) s.executeUpdate("ALTER TABLE placements DROP FOREIGN KEY `$fk`")
-                s.executeUpdate("ALTER TABLE break_slots MODIFY id BIGINT NOT NULL AUTO_INCREMENT")
-                if (fk != null) {
-                    s.executeUpdate(
-                        "ALTER TABLE placements ADD CONSTRAINT `$fk` FOREIGN KEY (break_id) REFERENCES break_slots(id)"
-                    )
-                }
-            }
-            ensureIndex(c, "break_slots", "uq_break_station_slot", "station_id, hour_of_day, minute_of_hour", unique = true)
             ensureIndex(c, "spots", "idx_spots_station", "station_id")
             ensureIndex(c, "programs", "uq_programs_station_legacy", "station_id, legacy_id", unique = true)
 
@@ -554,6 +550,73 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
             if (tableExists(c, "station_meta") && !isInPrimaryKey(c, "station_meta", "station_id")) {
                 s.executeUpdate("ALTER TABLE station_meta DROP PRIMARY KEY, ADD PRIMARY KEY (station_id, meta_key)")
             }
+        }
+    }
+
+    /**
+     * Retires the `break_slots` catalog, in place, for a schema an older build
+     * wrote. Idempotent: the tell is `placements.break_id` still existing.
+     *
+     * The catalog was never anything but a materialized GROUP BY - the migration
+     * built it as `SELECT DISTINCT station, HOUR(showTime), MINUTE(showTime)` and
+     * then joined every airing straight back to it to recover the id it had just
+     * discarded. So the backfill is exact and needs no source dump: the break's
+     * (hour, minute) IS the airing's time.
+     *
+     * ORDER IS LOAD-BEARING, in BOTH directions, and the two constraints pull
+     * opposite ways:
+     *
+     *  - the FOREIGN KEY on break_id must go FIRST. `uq_placement_slot` is
+     *    (break_id, show_date, position), so break_id is its leftmost column and
+     *    it is the index InnoDB uses to enforce that FK. Dropping it while the FK
+     *    stands fails outright: "Cannot drop index 'uq_placement_slot': needed in
+     *    a foreign key constraint".
+     *  - the INDEX must still go BEFORE THE COLUMN. Drop break_id first and MySQL
+     *    silently rewrites the index to (show_date, position) - which is not
+     *    unique across a group's stations - and the ALTER dies on duplicate keys.
+     *
+     * So: foreign key, then index, then column.
+     */
+    private fun upgradeToEmergentBreaks(c: Connection) {
+        if (!columnExists(c, "placements", "break_id")) return
+
+        // Defaults only so the NOT NULL columns can land on existing rows; every
+        // row is stamped by the backfill below, and a break_id is NOT NULL, so
+        // none can be missed.
+        ensureColumn(c, "placements", "station_id", "VARCHAR(64) NOT NULL DEFAULT ''")
+        ensureColumn(c, "placements", "show_time", "TIME NOT NULL DEFAULT '00:00:00'")
+        c.createStatement().use { s ->
+            // Only the rows still unstamped: this walks millions of airings, and a
+            // half-finished upgrade (the ALTERs below are not one transaction)
+            // must resume rather than redo it.
+            s.executeUpdate(
+                """
+                UPDATE placements p, break_slots b
+                   SET p.station_id = b.station_id,
+                       p.show_time  = MAKETIME(b.hour_of_day, b.minute_of_hour, 0)
+                 WHERE b.id = p.break_id
+                   AND p.station_id = ''
+                """.trimIndent()
+            )
+            foreignKeyOn(c, "placements", "break_id")?.let { fk ->
+                s.executeUpdate("ALTER TABLE placements DROP FOREIGN KEY `$fk`")
+            }
+            dropIndexIfExists(c, "placements", "uq_placement_slot")
+            s.executeUpdate("ALTER TABLE placements DROP COLUMN break_id")
+            // The unique key before the FK: MySQL needs an index on the
+            // referencing column, and this one already leads with it - otherwise
+            // it would silently invent a second, redundant one.
+            ensureIndex(
+                c, "placements", "uq_placement_slot",
+                "station_id, show_date, show_time, position", unique = true
+            )
+            if (foreignKeyOn(c, "placements", "station_id") == null) {
+                s.executeUpdate(
+                    "ALTER TABLE placements ADD CONSTRAINT fk_placements_station " +
+                        "FOREIGN KEY (station_id) REFERENCES stations(id)"
+                )
+            }
+            s.executeUpdate("DROP TABLE break_slots")
         }
     }
 
@@ -601,6 +664,22 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         }
     }
 
+    private fun dropIndexIfExists(c: Connection, table: String, indexName: String) {
+        val exists = c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, indexName)
+            ps.executeQuery().use { it.next() }
+        }
+        if (exists) {
+            c.createStatement().use { it.executeUpdate("ALTER TABLE $table DROP INDEX $indexName") }
+        }
+    }
+
     private fun columnExists(c: Connection, table: String, column: String): Boolean =
         c.prepareStatement(
             """
@@ -622,19 +701,6 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, table)
-            ps.executeQuery().use { it.next() }
-        }
-
-    private fun isAutoIncrement(c: Connection, table: String, column: String): Boolean =
-        c.prepareStatement(
-            """
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
-              AND extra LIKE '%auto_increment%'
-            LIMIT 1
-            """.trimIndent()
-        ).use { ps ->
-            ps.setString(1, table); ps.setString(2, column)
             ps.executeQuery().use { it.next() }
         }
 

@@ -8,6 +8,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -30,6 +31,7 @@ import kotlin.test.assertTrue
  * onto state and the one-shot [LoginEffect.LoggedIn]. A fake repo over the
  * domain contract - no engine, no session.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class LoginViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()

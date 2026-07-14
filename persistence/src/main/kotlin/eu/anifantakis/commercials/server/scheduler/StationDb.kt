@@ -6,6 +6,7 @@ import java.sql.SQLException
 import java.sql.Statement
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * ONE STATION'S VIEW over its group's database ([GroupDb]).
@@ -19,10 +20,15 @@ import java.time.LocalDate
  * this station" was true BY CONSTRUCTION - a caller with a grant on the radio
  * station physically could not reach the TV station's rows. Sharing a database
  * removes that guarantee, and several methods here take a raw id straight from
- * the client ([addPlacement], [reorderPlacements], [deletePlacement],
- * [emailLogBody], [contractLineSpots]). Every one of them must re-derive the
- * station in SQL. Skipping the check does not throw - it silently drops a radio
- * spot into a TV break.
+ * the client ([addPlacement], [deletePlacement], [emailLogBody],
+ * [contractLineSpots]). Every one of them must re-derive the station in SQL.
+ * Skipping the check does not throw - it silently drops a radio spot into a TV
+ * break.
+ *
+ * A BREAK is no longer among those ids: it is a TIME, and the station is stamped
+ * on the airing from [stationId] here rather than taken from the client. Both
+ * stations own an 11:00 break and they are different breaks - which the
+ * `station_id` on every placement statement below is what keeps apart.
  *
  * The exceptions are the GROUP-scoped tables, where sharing IS the feature:
  * [customerByCode] and [searchParties] deliberately see the whole group, so the
@@ -76,9 +82,11 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 ps.executeUpdate()
             }
 
+            // No breaks are seeded: there is nothing to seed. A break is what a
+            // GROUP BY on the airing time returns, so a demo station's breaks
+            // appear when ensureMonthSeeded invents its airings.
             if (seedDemo && isDemoSeedEnabled(c)) {
                 seedGroupCatalogIfEmpty(c)
-                seedBreaksIfEmpty(c)
                 seedStationSpotsIfEmpty(c)
             }
         }
@@ -91,36 +99,6 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             ps.setString(1, stationId)
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) == "true" else true }
         }
-
-    private fun seedBreaksIfEmpty(c: Connection) {
-        val count = c.prepareStatement("SELECT COUNT(*) FROM break_slots WHERE station_id = ?").use { ps ->
-            ps.setString(1, stationId)
-            ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
-        }
-        if (count > 0) return
-        c.autoCommit = false
-        try {
-            // No explicit id: break ids are per-station now, so the DB assigns them.
-            c.prepareStatement(
-                "INSERT INTO break_slots(station_id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
-            ).use { ps ->
-                for (b in generateBreaks()) {
-                    ps.setString(1, stationId)
-                    ps.setInt(2, b.hour)
-                    ps.setInt(3, b.minute)
-                    ps.setString(4, b.label)
-                    ps.setString(5, b.zone.name)
-                    ps.addBatch()
-                }
-                ps.executeBatch()
-            }
-            c.commit()
-        } catch (e: Exception) {
-            c.rollback(); throw e
-        } finally {
-            c.autoCommit = true
-        }
-    }
 
     /**
      * The GROUP's demo catalog: customers (with ΑΦΜ) and one gift contract each,
@@ -207,9 +185,9 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         val lineIdByCustomer = c.prepareStatement(
             """
             SELECT ct.customer_id, cl.id
-            FROM contract_lines cl
-            JOIN contracts ct ON ct.id = cl.contract_id
-            WHERE cl.line_no = ? AND ct.number LIKE 'DEMO-%'
+            FROM contract_lines cl, contracts ct
+            WHERE ct.id = cl.contract_id
+              AND cl.line_no = ? AND ct.number LIKE 'DEMO-%'
             """.trimIndent()
         ).use { ps ->
             ps.setInt(1, lineNo)
@@ -261,9 +239,9 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             c.prepareStatement(
                 """
                 SELECT COUNT(*), MIN(p.show_date), MAX(p.show_date)
-                FROM placements p
-                JOIN spots s ON s.id = p.spot_id
-                WHERE s.station_id = ?
+                FROM placements p, spots s
+                WHERE s.id = p.spot_id
+                  AND s.station_id = ?
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, stationId)
@@ -481,10 +459,10 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                        TRIM(BOTH ', ' FROM CONCAT_WS(', ', cu.address_street,
                             NULLIF(TRIM(CONCAT_WS(' ', cu.address_zip, cu.address_city)), ''))) AS address,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placement_count
-                FROM customers cu
-                ${partyJoin(byTrader, stationScoped = false)}
-                JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
-                WHERE (cu.name LIKE ? OR cu.code LIKE ?)
+                FROM customers cu${partyFrom(byTrader)}, placements p
+                WHERE ${partyWhere(byTrader, stationScoped = false)}
+                  AND p.spot_id = s.id AND p.hidden = FALSE
+                  AND (cu.name LIKE ? OR cu.code LIKE ?)
                 GROUP BY cu.id, cu.code, cu.name, cu.email, cu.vat_number, cu.phone,
                          cu.address_street, cu.address_zip, cu.address_city
                 ORDER BY placement_count DESC, cu.name
@@ -525,10 +503,10 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             c.prepareStatement(
                 """
                 SELECT YEAR(p.show_date) AS y, MONTH(p.show_date) AS m, COUNT(*) AS cnt
-                FROM customers cu
-                ${partyJoin(byTrader, stationScoped = true)}
-                JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
-                WHERE cu.code = ?
+                FROM customers cu${partyFrom(byTrader)}, placements p
+                WHERE ${partyWhere(byTrader, stationScoped = true)}
+                  AND p.spot_id = s.id AND p.hidden = FALSE
+                  AND cu.code = ?
                 GROUP BY y, m
                 ORDER BY y DESC, m DESC
                 """.trimIndent()
@@ -758,19 +736,25 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
     }
 
     /**
-     * Appends [spotId] at the END of the (break, date) cell - next free
-     * position, duration copied from the spot (like the legacy add). The
-     * (break_id, show_date, position) unique key turns concurrent adds into
-     * a retry with the next position. Returns the new placement as the same
-     * row shape the month grid serves, or null if the spot or the break does
-     * not exist ON THIS STATION.
+     * Appends [spotId] at the END of the (time, date) cell - next free position,
+     * duration copied from the spot (like the legacy add). The (station_id,
+     * show_date, show_time, position) unique key turns concurrent adds into a
+     * retry with the next position. Returns the new placement as the same row
+     * shape the month grid serves, or null if the spot does not exist ON THIS
+     * STATION.
      *
-     * BOTH ids are re-checked against the station. They arrive from the client,
-     * and the group's stations share a database: without the checks, a caller
-     * granted only the radio station could air a radio spot in a TV break, and
-     * MySQL would happily accept it (the foreign keys are satisfied).
+     * NOTHING has to exist at [time] first. The break is not looked up, because
+     * there is no break to look up - airing a spot at 23:55 IS what brings the
+     * 23:55 break into being (the legacy console's "Πρόσθεση νέου διαλείμματος -
+     * Ώρα:" box did exactly this). That is the flexibility the break catalog cost
+     * us: it could only ever accept a time some airing had already used.
+     *
+     * The SPOT is still re-checked against the station - it arrives from the
+     * client and the group's stations share a database. The break used to be
+     * re-checked too, and that check is not lost: the station is now stamped on
+     * the airing from [stationId] here, not taken from the client at all.
      */
-    fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? {
+    fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? {
         connection().use { c ->
             val duration = c.prepareStatement(
                 "SELECT duration_seconds FROM spots WHERE id = ? AND hidden = FALSE AND station_id = ?"
@@ -779,36 +763,33 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 ps.setString(2, stationId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else return null }
             }
-            val breakIsOurs = c.prepareStatement(
-                "SELECT 1 FROM break_slots WHERE id = ? AND station_id = ?"
-            ).use { ps ->
-                ps.setLong(1, breakId)
-                ps.setString(2, stationId)
-                ps.executeQuery().use { it.next() }
-            }
-            if (!breakIsOurs) return null
 
             repeat(3) {
                 val nextPos = c.prepareStatement(
-                    "SELECT COALESCE(MAX(position) + 1, 0) FROM placements WHERE break_id = ? AND show_date = ?"
+                    """
+                    SELECT COALESCE(MAX(position) + 1, 0) FROM placements
+                    WHERE station_id = ? AND show_date = ? AND show_time = ?
+                    """.trimIndent()
                 ).use { ps ->
-                    ps.setLong(1, breakId)
+                    ps.setString(1, stationId)
                     ps.setDate(2, java.sql.Date.valueOf(date))
+                    ps.setTime(3, java.sql.Time.valueOf(time))
                     ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
                 }
                 try {
                     val id = c.prepareStatement(
                         """
-                        INSERT INTO placements(spot_id, break_id, show_date, position, duration_seconds)
-                        VALUES(?,?,?,?,?)
+                        INSERT INTO placements(station_id, spot_id, show_date, show_time, position, duration_seconds)
+                        VALUES(?,?,?,?,?,?)
                         """.trimIndent(),
                         Statement.RETURN_GENERATED_KEYS
                     ).use { ps ->
-                        ps.setLong(1, spotId)
-                        ps.setLong(2, breakId)
+                        ps.setString(1, stationId)
+                        ps.setLong(2, spotId)
                         ps.setDate(3, java.sql.Date.valueOf(date))
-                        ps.setInt(4, nextPos)
-                        ps.setInt(5, duration)
+                        ps.setTime(4, java.sql.Time.valueOf(time))
+                        ps.setInt(5, nextPos)
+                        ps.setInt(6, duration)
                         ps.executeUpdate()
                         ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
                     }
@@ -818,7 +799,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                     // someone else took the position - recompute and retry
                 }
             }
-            throw SQLException("Could not allocate a position in break $breakId / $date after 3 attempts")
+            throw SQLException("Could not allocate a position in the $time break / $date after 3 attempts")
         }
     }
 
@@ -880,41 +861,44 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * Rewrites a cell's ordering: [orderedIds] must be a permutation of the
      * cell's CURRENT placement ids (returns false otherwise - the client's
      * view was stale). New positions are the list indexes. Positions collide
-     * mid-renumber under the (break, date, position) unique key, so all rows
-     * are first bumped far away, in one transaction.
+     * mid-renumber under the (station, date, time, position) unique key, so all
+     * rows are first bumped far away, in one transaction.
      *
-     * The break is re-checked against the station first: it is a client-supplied
-     * id into a database this station shares with its siblings.
+     * The cell is addressed by its TIME, and every statement carries this
+     * station's filter - so a caller granted only the radio station cannot reach
+     * the TV station's 11:00 cell, even though both exist and share a database.
+     * (The break used to be re-checked as a client-supplied id; the station is
+     * simply never taken from the client now.)
      */
-    fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean =
+    fun reorderPlacements(time: LocalTime, date: LocalDate, orderedIds: List<Long>): Boolean =
         connection().use { c ->
-            val breakIsOurs = c.prepareStatement(
-                "SELECT 1 FROM break_slots WHERE id = ? AND station_id = ?"
-            ).use { ps ->
-                ps.setLong(1, breakId)
-                ps.setString(2, stationId)
-                ps.executeQuery().use { it.next() }
-            }
-            if (!breakIsOurs) return false
-
             val current = c.prepareStatement(
-                "SELECT id FROM placements WHERE break_id = ? AND show_date = ?"
+                """
+                SELECT id FROM placements
+                WHERE station_id = ? AND show_date = ? AND show_time = ?
+                """.trimIndent()
             ).use { ps ->
-                ps.setLong(1, breakId)
+                ps.setString(1, stationId)
                 ps.setDate(2, java.sql.Date.valueOf(date))
+                ps.setTime(3, java.sql.Time.valueOf(time))
                 ps.executeQuery().use { rs ->
                     buildSet { while (rs.next()) add(rs.getLong(1)) }
                 }
             }
+            if (current.isEmpty()) return false
             if (orderedIds.size != current.size || orderedIds.toSet() != current) return false
 
             c.autoCommit = false
             try {
                 c.prepareStatement(
-                    "UPDATE placements SET position = position + 100000 WHERE break_id = ? AND show_date = ?"
+                    """
+                    UPDATE placements SET position = position + 100000
+                    WHERE station_id = ? AND show_date = ? AND show_time = ?
+                    """.trimIndent()
                 ).use { ps ->
-                    ps.setLong(1, breakId)
+                    ps.setString(1, stationId)
                     ps.setDate(2, java.sql.Date.valueOf(date))
+                    ps.setTime(3, java.sql.Time.valueOf(time))
                     ps.executeUpdate()
                 }
                 c.prepareStatement("UPDATE placements SET position = ? WHERE id = ?").use { ps ->
@@ -935,18 +919,16 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
     /**
-     * True if the placement existed ON THIS STATION and is gone now. The join is
-     * the authorization: a placement id belonging to a sibling station simply
-     * does not match, so the delete is a no-op rather than a cross-station wipe.
+     * True if the placement existed ON THIS STATION and is gone now. The
+     * station_id filter is the authorization: a placement id belonging to a
+     * sibling station simply does not match, so the delete is a no-op rather than
+     * a cross-station wipe. (It used to need a join through `spots` to establish
+     * that; the airing now says which station it aired on.)
      */
     fun deletePlacement(placementId: Long): Boolean =
         connection().use { c ->
             c.prepareStatement(
-                """
-                DELETE p FROM placements p
-                JOIN spots s ON s.id = p.spot_id
-                WHERE p.id = ? AND s.station_id = ?
-                """.trimIndent()
+                "DELETE FROM placements WHERE id = ? AND station_id = ?"
             ).use { ps ->
                 ps.setLong(1, placementId)
                 ps.setString(2, stationId)
@@ -955,20 +937,28 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
     /**
-     * The `customers cu` -> `spots s` join path for the two party kinds.
+     * The `customers cu` -> `spots s` join path for the two party kinds, as a
+     * matching FROM/WHERE pair: [partyFrom] extends the caller's FROM list,
+     * [partyWhere] carries the predicates that pair with it and must open the
+     * caller's WHERE (its optional station parameter is then bound first).
+     *
      * [stationScoped] adds this station's filter to the spot - and takes a bound
      * parameter, which must be the FIRST one the caller sets.
      */
-    private fun partyJoin(byTrader: Boolean, stationScoped: Boolean): String {
+    private fun partyFrom(byTrader: Boolean): String =
+        if (byTrader) ", contracts ct, contract_lines cl, spots s"
+        else ", spots s"
+
+    private fun partyWhere(byTrader: Boolean, stationScoped: Boolean): String {
         val stationFilter = if (stationScoped) "AND s.station_id = ?" else ""
         return if (byTrader)
             """
-            JOIN contracts ct       ON ct.customer_id = cu.id
-            JOIN contract_lines cl  ON cl.contract_id = ct.id
-            JOIN spots s            ON s.contract_line_id = cl.id AND s.hidden = FALSE $stationFilter
+            ct.customer_id = cu.id
+              AND cl.contract_id = ct.id
+              AND s.contract_line_id = cl.id AND s.hidden = FALSE $stationFilter
             """.trimIndent()
         else
-            "JOIN spots s ON s.customer_id = cu.id AND s.hidden = FALSE $stationFilter"
+            "s.customer_id = cu.id AND s.hidden = FALSE $stationFilter"
     }
 
     /** `%query%` with LIKE wildcards neutralized (MySQL's default escape is `\`). */
@@ -995,31 +985,73 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
     /**
-     * This station's breaks. Ordered by TIME, not by id: ids are assigned by the
-     * database now (they used to be a computed 1..96, which happened to be in
-     * time order and would silently stop being so).
+     * THE BREAKS - and this query is the whole definition of one. A break is a
+     * time at which this station aired something, so the breaks of a period are
+     * the DISTINCT times its airings landed on, and nothing more. There is no
+     * catalog to read, to seed, or to keep in step with the data.
+     *
+     * They are per PERIOD, not per station-forever, which is what makes the
+     * model flexible in the direction the operator cares about: a time used once
+     * in 2003 does not haunt the 2026 grid, and an operator can put a spot at any
+     * time at all without anyone having created that break first.
+     *
+     * Hidden airings and hidden spots are excluded, so a break cannot appear with
+     * nothing visible in it - the same filter [loadMonth] applies to the cells.
      */
-    fun loadBreaks(): List<BreakSlotRow> =
+    fun breakTimes(date: LocalDate): List<BreakTimeRow> =
+        breakTimesIn(date, date.plusDays(1))
+
+    fun breakTimes(year: Int, month: Int): List<BreakTimeRow> {
+        val (start, end) = monthRange(year, month)
+        return breakTimesIn(start, end)
+    }
+
+    /**
+     * The month grid's ROWS, in the caller's view mode: the scaffold this station
+     * draws empty rows for, unioned with the month's real breaks. See [gridRows] -
+     * the whole rule is there, and it is a pure function; this only supplies the
+     * two inputs it cannot know (what aired, and where this station's day starts).
+     */
+    fun gridRows(year: Int, month: Int, mode: GridViewMode): List<BreakTimeRow> =
+        gridRows(
+            breakTimes = breakTimes(year, month).map { it.time },
+            mode = mode,
+            emptyRowsFrom = emptyRowsFrom,
+        )
+
+    /**
+     * Where this station's printed grid starts (server.yaml). A malformed value
+     * is a configuration error worth failing loudly on, not silently rounding to
+     * midnight - it would print fourteen blank night rows and look like a bug in
+     * the grid.
+     */
+    private val emptyRowsFrom: LocalTime by lazy {
+        runCatching { LocalTime.parse(station.emptyRowsFrom) }.getOrElse {
+            throw IllegalArgumentException(
+                "Station '${station.id}': emptyRowsFrom='${station.emptyRowsFrom}' is not a valid HH:mm time."
+            )
+        }
+    }
+
+    private fun breakTimesIn(start: LocalDate, endExclusive: LocalDate): List<BreakTimeRow> =
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT id, hour_of_day, minute_of_hour, label, zone
-                FROM break_slots WHERE station_id = ?
-                ORDER BY hour_of_day, minute_of_hour
+                SELECT DISTINCT p.show_time
+                  FROM placements p, spots s
+                 WHERE s.id = p.spot_id
+                   AND p.station_id = ?
+                   AND p.show_date >= ? AND p.show_date < ?
+                   AND p.hidden = FALSE AND s.hidden = FALSE
+                 ORDER BY p.show_time
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, stationId)
+                ps.setDate(2, java.sql.Date.valueOf(start))
+                ps.setDate(3, java.sql.Date.valueOf(endExclusive))
                 ps.executeQuery().use { rs ->
-                    val out = mutableListOf<BreakSlotRow>()
-                    while (rs.next()) {
-                        out += BreakSlotRow(
-                            id = rs.getLong(1),
-                            hour = rs.getInt(2),
-                            minute = rs.getInt(3),
-                            label = rs.getString(4),
-                            zone = BreakZone.valueOf(rs.getString(5))
-                        )
-                    }
+                    val out = mutableListOf<BreakTimeRow>()
+                    while (rs.next()) out += BreakTimeRow(rs.getTime(1).toLocalTime())
                     out
                 }
             }
@@ -1035,10 +1067,9 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         val (start, end) = monthRange(year, month)
         return c.prepareStatement(
             """
-            SELECT 1 FROM placements p
-            JOIN spots s ON s.id = p.spot_id
-            WHERE s.station_id = ? AND p.show_date >= ? AND p.show_date < ?
-            LIMIT 1
+            SELECT 1 FROM placements
+             WHERE station_id = ? AND show_date >= ? AND show_date < ?
+             LIMIT 1
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, stationId)
@@ -1051,24 +1082,25 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * The month's grid, DERIVED from the normalized write model: one joined
      * query over placements ⋈ spots ⋈ customers ⋈ contracts, then per-cell
      * aggregates (spot count, total duration) and colours computed here.
-     * Returns the same shapes the API always served - the client is unaware
-     * of the schema evolution.
+     *
+     * A cell is keyed by (TIME, date) - the airing's own `show_time`. Grouping
+     * the rows by it IS the break: the query does not visit a break table,
+     * because there is not one.
      */
-    fun loadMonth(year: Int, month: Int): Pair<List<CellRow>, Map<Pair<Long, LocalDate>, List<CommercialRow>>> {
+    fun loadMonth(year: Int, month: Int): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> {
         val (start, end) = monthRange(year, month)
-        val zoneByBreak = loadBreaks().associate { it.id to it.zone }
 
-        val commercialsByKey = linkedMapOf<Pair<Long, LocalDate>, MutableList<CommercialRow>>()
+        val commercialsByKey = linkedMapOf<Pair<LocalTime, LocalDate>, MutableList<CommercialRow>>()
         // Programme identity per cell (legacy `programtypes` semantics): the
         // break belongs to the programme airing at that slot, so the first
         // placement's programme name AND colour are the cell's.
-        val programColorByKey = mutableMapOf<Pair<Long, LocalDate>, Int>()
-        val programNameByKey = mutableMapOf<Pair<Long, LocalDate>, String>()
+        val programColorByKey = mutableMapOf<Pair<LocalTime, LocalDate>, Int>()
+        val programNameByKey = mutableMapOf<Pair<LocalTime, LocalDate>, String>()
 
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT p.id, p.spot_id, p.break_id, p.show_date, p.position, s.duration_seconds,
+                SELECT p.id, p.spot_id, p.show_time, p.show_date, p.position, s.duration_seconds,
                        s.description, s.booked_program AS spot_type, s.flow,
                        sty.name AS sales_item,
                        cu.code AS client_code, cu.name AS client_name,
@@ -1086,28 +1118,28 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 LEFT JOIN spot_types sty    ON sty.id = cl.spot_type_id
                 LEFT JOIN customers pay     ON pay.id = ct.customer_id
                 LEFT JOIN programs pr       ON pr.id = p.program_id
-                WHERE s.station_id = ?
+                WHERE p.station_id = ?
                   AND p.show_date >= ? AND p.show_date < ?
                   AND p.hidden = FALSE AND s.hidden = FALSE
-                ORDER BY p.break_id, p.show_date, p.position
+                ORDER BY p.show_time, p.show_date, p.position
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, stationId)
                 ps.setDate(2, java.sql.Date.valueOf(start)); ps.setDate(3, java.sql.Date.valueOf(end))
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
-                        val breakId = rs.getLong("break_id")
+                        val time = rs.getTime("show_time").toLocalTime()
                         val date = rs.getDate("show_date").toLocalDate()
                         val isGift = rs.getBoolean("is_gift")
                         val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
                         val programName = rs.getString("program_name")
                         if (programColor != null) {
-                            programColorByKey.putIfAbsent(breakId to date, programColor)
+                            programColorByKey.putIfAbsent(time to date, programColor)
                         }
                         if (programName != null) {
-                            programNameByKey.putIfAbsent(breakId to date, programName)
+                            programNameByKey.putIfAbsent(time to date, programName)
                         }
-                        val list = commercialsByKey.getOrPut(breakId to date) { mutableListOf() }
+                        val list = commercialsByKey.getOrPut(time to date) { mutableListOf() }
                         list += CommercialRow(
                             id = rs.getLong("id"),
                             spotId = rs.getLong("spot_id"),
@@ -1133,18 +1165,20 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
         val cells = commercialsByKey.map { (key, commercials) ->
-            val (breakId, date) = key
+            val (time, date) = key
             val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
             CellRow(
-                breakId = breakId,
+                time = time,
                 date = date,
                 spotCount = commercials.size,
                 totalDurationSeconds = commercials.sumOf { it.durationSeconds },
                 // The PROGRAMME's colour wins (operator-assigned identity,
                 // migrated from the legacy app); the zone/weekend/density
                 // rules are the demo fallback for placements without one.
+                // The zone is a function of the hour - no lookup (it used to be
+                // read off the break row, which had computed it the same way).
                 zoneColorArgb = programColorByKey[key] ?: cellColorArgb(
-                    zone = zoneByBreak[breakId] ?: BreakZone.DEFAULT,
+                    zone = zoneOf(time.hour),
                     isWeekend = isWeekend,
                     spotCount = commercials.size
                 ),
@@ -1166,9 +1200,13 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * serialization point). Since generation is deterministic (RNG seeded
      * from station + year/month over a deterministic catalog), both requests
      * would generate identical rows; if a concurrent insert already committed
-     * first, this request's INSERT hits the (break_id, show_date, position)
-     * unique key and we treat that as "already seeded by someone else". This
-     * is also correct across multiple server instances.
+     * first, this request's INSERT hits the (station_id, show_date, show_time,
+     * position) unique key and we treat that as "already seeded by someone
+     * else". This is also correct across multiple server instances.
+     *
+     * A demo station's breaks are not seeded - they APPEAR, because the invented
+     * airings land on [demoBreakTimes] and a break is nothing but a time some
+     * airing landed on.
      */
     fun ensureMonthSeeded(year: Int, month: Int) {
         connection().use { c ->
@@ -1177,7 +1215,6 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             if (!isDemoSeedEnabled(c)) return
             if (monthHasPlacements(c, year, month)) return
 
-            val breaks = loadBreaks()
             val spots = c.prepareStatement(
                 "SELECT id, duration_seconds FROM spots WHERE station_id = ? ORDER BY id"
             ).use { ps ->
@@ -1189,7 +1226,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 }
             }
             val generated = generateMonthPlacements(
-                breaks, spots, year, month, stationSeed = stationId.hashCode()
+                demoBreakTimes(), spots, year, month, stationSeed = stationId.hashCode()
             )
             if (generated.isEmpty()) return
 
@@ -1197,16 +1234,17 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             try {
                 c.prepareStatement(
                     """
-                    INSERT INTO placements(spot_id, break_id, show_date, position, duration_seconds)
-                    VALUES(?,?,?,?,?)
+                    INSERT INTO placements(station_id, spot_id, show_date, show_time, position, duration_seconds)
+                    VALUES(?,?,?,?,?,?)
                     """.trimIndent()
                 ).use { ps ->
                     for (p in generated) {
-                        ps.setLong(1, p.spotId)
-                        ps.setLong(2, p.breakId)
+                        ps.setString(1, stationId)
+                        ps.setLong(2, p.spotId)
                         ps.setDate(3, java.sql.Date.valueOf(p.date))
-                        ps.setInt(4, p.position)
-                        ps.setInt(5, p.durationSeconds)
+                        ps.setTime(4, java.sql.Time.valueOf(p.time))
+                        ps.setInt(5, p.position)
+                        ps.setInt(6, p.durationSeconds)
                         ps.addBatch()
                     }
                     ps.executeBatch()

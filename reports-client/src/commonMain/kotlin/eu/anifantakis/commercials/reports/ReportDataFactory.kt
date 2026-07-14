@@ -37,12 +37,12 @@ object ReportDataFactory {
 
         // Group commercials by time slot
         val breaksWithData = breaks.filter { breakSlot ->
-            val key = SchedulerKey(breakSlot.id, date)
+            val key = SchedulerKey(breakSlot.time, date)
             (cellData[key]?.spotCount ?: 0) > 0
         }
 
         breaksWithData.forEach { breakSlot ->
-            val key = SchedulerKey(breakSlot.id, date)
+            val key = SchedulerKey(breakSlot.time, date)
             val data = cellData[key] ?: SchedulerCellData()
             // calendar_excluded_docs contracts air but stay off printed reports
             val commercials = data.commercials.filter { !it.excludeFromReports }

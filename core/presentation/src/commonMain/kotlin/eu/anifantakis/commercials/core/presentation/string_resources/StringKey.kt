@@ -87,6 +87,14 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_MENU_PRINT_BREAK_MONTH,
     TIMETABLE_MENU_SHOW_COUNTS,
     TIMETABLE_MENU_SHOW_TIMES,
+
+    // "Προβολή κάθε" - which rows the grid draws (the legacy console's radio group).
+    // A break is a time a spot aired at, so these only decide how much EMPTY
+    // scaffold is drawn around the real breaks; none of them can hide one.
+    TIMETABLE_VIEW_EVERY,
+    TIMETABLE_VIEW_HOURLY,
+    TIMETABLE_VIEW_HALF_HOURLY,
+    TIMETABLE_VIEW_BREAK,
     TIMETABLE_MENU_EDIT,
     TIMETABLE_MENU_REMOVE_LAST,
     TIMETABLE_ADD_SPOT_NAMED,

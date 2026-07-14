@@ -1,11 +1,10 @@
 package eu.anifantakis.commercials.scheduleemail
 
-import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
-import eu.anifantakis.commercials.server.scheduler.BreakZone
 import eu.anifantakis.commercials.server.scheduler.CellRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import java.time.LocalDate
+import java.time.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -22,7 +21,7 @@ import kotlin.test.assertTrue
  */
 class ScheduleEmailAssembleTest {
 
-    private val break2000 = BreakSlotRow(id = 1, hour = 20, minute = 0, label = "20:00", zone = BreakZone.PRIME)
+    private val break2000 = LocalTime.of(20, 0)
     private val day1 = LocalDate.of(2026, 7, 1)
     private val day2 = LocalDate.of(2026, 7, 2)
 
@@ -48,14 +47,13 @@ class ScheduleEmailAssembleTest {
             "AAA" to StationDb.CustomerContact("ΠΕΛΑΤΗΣ Α", "a@example.gr"),
             "BBB" to StationDb.CustomerContact("ΠΡΑΚΤΟΡΕΙΟ Β", "b@example.gr"),
         ),
-        breaks = listOf(break2000),
         cells = listOf(
-            CellRow(breakId = 1, date = day1, spotCount = 1, totalDurationSeconds = 30, zoneColorArgb = 0xFF00FF, commercials = emptyList()),
-            CellRow(breakId = 1, date = day2, spotCount = 2, totalDurationSeconds = 60, zoneColorArgb = 0xFF00FF, commercials = emptyList()),
+            CellRow(time = break2000, date = day1, spotCount = 1, totalDurationSeconds = 30, zoneColorArgb = 0xFF00FF, commercials = emptyList()),
+            CellRow(time = break2000, date = day2, spotCount = 2, totalDurationSeconds = 60, zoneColorArgb = 0xFF00FF, commercials = emptyList()),
         ),
         commercialsByKey = mapOf(
-            (1L to day1) to listOf(spot(10, "SPOT A")),
-            (1L to day2) to listOf(spot(10, "SPOT A"), spot(11, "SPOT B")),
+            (break2000 to day1) to listOf(spot(10, "SPOT A")),
+            (break2000 to day2) to listOf(spot(10, "SPOT A"), spot(11, "SPOT B")),
         ),
     )
 
@@ -77,7 +75,6 @@ class ScheduleEmailAssembleTest {
     fun `a party with no airings that month yields no email`() {
         val empty = FakeScheduleEmailSource(
             customers = mapOf("AAA" to StationDb.CustomerContact("ΠΕΛΑΤΗΣ Α", null)),
-            breaks = listOf(break2000),
         )
         assertNull(
             ScheduleEmailAssembler.assemble(empty, "Crete TV", 2026, 7, "AAA", false, emptySet(), null)

@@ -6,6 +6,7 @@ import androidx.savedstate.serialization.encodeToSavedState
 import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
 import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
+import kotlinx.datetime.LocalTime
 import kotlinx.serialization.PolymorphicSerializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,10 +33,16 @@ class NavStepConfigTest {
         assertEquals(TimetableStepNavType.Grid, roundTrip(TimetableStepNavType.Grid))
     }
 
+    /**
+     * The cell's identity is now a TIME, not a break id - so the round trip has a
+     * kotlinx.datetime [LocalTime] to carry, which the savedstate machinery must
+     * serialize as happily as it did the Long. An off-the-hour time on purpose:
+     * a break is whatever minute a spot aired at.
+     */
     @Test
     fun dataClassRouteWithArgumentsSurvivesTheRoundTrip() {
         val route = TimetableStepNavType.CommercialDetail(
-            breakId = 7,
+            time = LocalTime(17, 30),
             date = TEST_DATE,
         )
         assertEquals(route, roundTrip(route))

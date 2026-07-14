@@ -46,7 +46,7 @@ object ReorderPlacementsTool : McpTool {
             val date = parseIsoDate(a.string("date"))
             val time = a.string("time").trim()
             val orderedIds = a.longList("orderedPlacementIds")
-            val breakId = services.resolveBreak(access, time).id
+            val breakTime = services.parseBreakTime(time)
 
             if (!a.bool("confirm", false)) {
                 return@runTool dryRun("reorder_placements", buildJsonObject {
@@ -54,7 +54,7 @@ object ReorderPlacementsTool : McpTool {
                     put("break", time); put("count", orderedIds.size)
                 })
             }
-            val ok = access.data.reorderPlacements(breakId, date, orderedIds)
+            val ok = access.data.reorderPlacements(breakTime, date, orderedIds)
             if (!ok) {
                 throw McpToolException(
                     "Order rejected: orderedPlacementIds must be exactly the cell's current placement ids " +

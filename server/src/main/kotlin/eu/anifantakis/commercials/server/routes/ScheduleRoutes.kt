@@ -4,7 +4,9 @@ import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
+import eu.anifantakis.commercials.server.scheduler.GridViewMode
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
+import eu.anifantakis.commercials.server.scheduler.formatHhMm
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.request.*
@@ -15,12 +17,18 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
+/**
+ * A ROW of the grid. Its identity is its TIME - there is no break id, because
+ * there is no break table: a break is a time something aired at (see GroupDb).
+ *
+ * A row may be EMPTY (the hourly/half-hourly scaffold prints 08:00 whether or
+ * not anything airs there), which is exactly why the id had to go: an empty row
+ * has no break to have one.
+ */
 @Serializable
 data class BreakSlotDto(
-    val id: Long,
-    val hour: Int,
-    val minute: Int,
-    val label: String,
+    /** "HH:mm" - the row's identity, and the break's. */
+    val time: String,
     val zone: String,
     val zoneColorArgb: Int
 )
@@ -45,7 +53,8 @@ data class CommercialDto(
 
 @Serializable
 data class CellDto(
-    val breakId: Long,
+    /** "HH:mm" - the break this cell belongs to. */
+    val time: String,
     val date: String, // ISO yyyy-MM-dd
     val spotCount: Int,
     val totalDurationSeconds: Int,
@@ -87,14 +96,20 @@ data class FinderSpotDto(
 @Serializable
 data class AddPlacementRequest(
     val spotId: Long,
-    val breakId: Long,
+    /**
+     * "HH:mm". It need not be a time anything has aired at: putting a spot at
+     * 23:55 is how the 23:55 break comes into being (the legacy console's
+     * "Πρόσθεση νέου διαλείμματος - Ώρα:" box did just this).
+     */
+    val time: String,
     /** ISO yyyy-MM-dd */
     val date: String,
 )
 
 @Serializable
 data class ReorderPlacementsRequest(
-    val breakId: Long,
+    /** "HH:mm" - the break whose spots are being reordered. */
+    val time: String,
     /** ISO yyyy-MM-dd */
     val date: String,
     /** The cell's placement ids in the new display order. */
@@ -108,16 +123,42 @@ data class ReorderPlacementsRequest(
  */
 fun Route.scheduleRoutes(registry: StationRegistry) {
     route("/api") {
+        /**
+         * The grid's ROWS for a month, in the requested view.
+         *
+         * It takes a period now, and a view, because a break is not standing
+         * configuration to be listed - it is a time something aired at, so
+         * "this station's breaks" is only a question with a month attached.
+         * The scaffold (the empty 08:00 row an hourly view still prints) is
+         * resolved here rather than on the client: its rule, the zone colours,
+         * and the station's `emptyRowsFrom` all live server-side, and splitting
+         * them would put the same `when(hour)` in two codebases again.
+         */
         get("/breaks") {
+            val year = call.request.queryParameters["year"]?.toIntOrNull()
+            val month = call.request.queryParameters["month"]?.toIntOrNull()
+            if (year == null || month == null || month !in 1..12) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "year and month (1..12) required"))
+                return@get
+            }
+            val modeParam = call.request.queryParameters["mode"] ?: GridViewMode.CONDENSED.name
+            val mode = runCatching { GridViewMode.valueOf(modeParam) }.getOrNull()
+            if (mode == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("error" to "mode must be one of ${GridViewMode.entries.joinToString { it.name }}")
+                )
+                return@get
+            }
             val access = call.stationAccessOrRespond(registry) ?: return@get
 
             // JDBC is blocking - keep it off Ktor's request threads
-            val breaks = withContext(Dispatchers.IO) { access.db.loadBreaks() }.map {
+            val breaks = withContext(Dispatchers.IO) {
+                access.db.ensureMonthSeeded(year, month)
+                access.db.gridRows(year, month, mode)
+            }.map {
                 BreakSlotDto(
-                    id = it.id,
-                    hour = it.hour,
-                    minute = it.minute,
-                    label = it.label,
+                    time = it.label,
                     zone = it.zone.name,
                     zoneColorArgb = breakZoneColorArgb(it.zone)
                 )
@@ -150,7 +191,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
 
             val dtos = cells.mapNotNull { cell ->
-                var coms = commercialsByKey[cell.breakId to cell.date].orEmpty()
+                var coms = commercialsByKey[cell.time to cell.date].orEmpty()
                 var spotCount = cell.spotCount
                 var totalDuration = cell.totalDurationSeconds
 
@@ -162,7 +203,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 }
 
                 CellDto(
-                    breakId = cell.breakId,
+                    time = formatHhMm(cell.time),
                     date = cell.date.toString(),
                     spotCount = spotCount,
                     totalDurationSeconds = totalDuration,
@@ -240,9 +281,12 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
 
         // ── placement editing (the grid's 'a'/'r' keys) ─────────────────
 
-        // Appends the spot at the end of the (break, date) cell; responds
+        // Appends the spot at the end of the (time, date) cell; responds
         // with the new placement in the same shape the month grid serves -
         // CommercialDto.id IS the placement id the client passes to DELETE.
+        //
+        // The time need not already have a break: airing a spot there IS what
+        // creates one, so this is also the "add a new break" endpoint.
         post("/schedule/placements") {
             val access = call.editorAccessOrRespond(registry) ?: return@post
             val req = call.receive<AddPlacementRequest>()
@@ -251,7 +295,12 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
                 return@post
             }
-            val row = withContext(Dispatchers.IO) { access.db.addPlacement(req.spotId, req.breakId, date) }
+            val time = parseHhMmOrNull(req.time)
+            if (time == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
+                return@post
+            }
+            val row = withContext(Dispatchers.IO) { access.db.addPlacement(req.spotId, time, date) }
             if (row == null) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown spot ${req.spotId} on this station"))
                 return@post
@@ -282,8 +331,13 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
                 return@put
             }
+            val time = parseHhMmOrNull(req.time)
+            if (time == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
+                return@put
+            }
             val ok = withContext(Dispatchers.IO) {
-                access.db.reorderPlacements(req.breakId, date, req.orderedIds)
+                access.db.reorderPlacements(time, date, req.orderedIds)
             }
             if (ok) call.respond(HttpStatusCode.NoContent)
             else call.respond(
@@ -304,6 +358,17 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No placement $id"))
         }
     }
+}
+
+/**
+ * "HH:mm" -> the break's time, or null if malformed. Seconds are rejected rather
+ * than truncated: the client addresses a break by the exact label it was given,
+ * and a 12:20:30 that silently became 12:20 would move the operator's spot.
+ */
+private fun parseHhMmOrNull(value: String): java.time.LocalTime? {
+    val m = Regex("""^(\d{1,2}):(\d{2})$""").matchEntire(value.trim()) ?: return null
+    val (h, min) = m.destructured
+    return runCatching { java.time.LocalTime.of(h.toInt(), min.toInt()) }.getOrNull()
 }
 
 /** Editing the schedule is staff work - NORMAL_USER on the station required. */

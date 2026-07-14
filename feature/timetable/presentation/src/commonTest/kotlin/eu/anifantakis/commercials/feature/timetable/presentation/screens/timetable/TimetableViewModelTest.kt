@@ -10,7 +10,9 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUse
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_TIME
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.cell
@@ -61,12 +63,12 @@ class TimetableViewModelTest : TimetableTestBase() {
     private fun aMonthWithOneSpot(): TimetableCommonState {
         val (k, data) = cell(commercials = listOf(placed(10))).toUi()
         return TimetableCommonState(
-            breaks = persistentListOf(BreakSlot(id = 1L, time = LocalTime(10, 0), label = "10:00")),
+            breaks = persistentListOf(BreakSlot(time = TEST_TIME, label = "10:00")),
             cells = persistentMapOf(k to data),
         )
     }
 
-    private val key = SchedulerKey(1L, TEST_DATE)
+    private val key = SchedulerKey(TEST_TIME, TEST_DATE)
 
     private fun station(id: String, name: String) =
         StationAccess(id = id, name = name, role = AppRole.NORMAL_USER.name)
@@ -100,30 +102,54 @@ class TimetableViewModelTest : TimetableTestBase() {
         assertEquals(2, vm.state.cells[key]?.spotCount, "the grid renders straight from the shared cells")
     }
 
+    /**
+     * Was `asksTheCommonContractForTheBreaksInsteadOfFetchingThemItself`, which
+     * counted a separate `loadBreaks` call. There is only ONE verb now - the rows
+     * and the cells arrive together - so the point it was making (the screen owns
+     * no ScheduleRepository; it asks the shared owner) rests on that single load.
+     */
     @Test
-    fun asksTheCommonContractForTheBreaksInsteadOfFetchingThemItself() = runTest(testDispatcher) {
+    fun asksTheCommonContractForTheMonthInsteadOfFetchingItItself() = runTest(testDispatcher) {
         val vm = vm()
         advanceUntilIdle()   // let onStart { loadAll() } settle
 
-        assertEquals(1, common.breakLoads, "the station's grid is requested through the shared owner")
         assertEquals(
             listOf(vm.state.year to vm.state.month),
             common.loads,
-            "and the current month's cells are loaded through it too",
+            "the month's rows AND cells are loaded through the shared owner, in one call",
         )
     }
 
+    /**
+     * Was `monthNavigationKeepsTheStationsBreaks`. The rows are the MONTH's now,
+     * not the station's, so "keeps them" is exactly what must NOT happen: the one
+     * load per month carries them. What survives is the rest of the session -
+     * navigating still must not clear().
+     */
     @Test
-    fun monthNavigationKeepsTheStationsBreaks() = runTest(testDispatcher) {
+    fun monthNavigationReloadsThroughTheCommonContractWithoutClearing() = runTest(testDispatcher) {
         val vm = vm()
         advanceUntilIdle()
 
         vm.onAction(TimetableIntent.NextMonth)
         advanceUntilIdle()
 
-        assertEquals(0, common.clears, "changing month must not wipe the station's breaks")
-        assertEquals(1, common.breakLoads, "nor re-fetch them")
-        assertEquals(2, common.loads.size, "it just loads the new month's cells")
+        assertEquals(0, common.clears, "changing month is not a station switch - nothing is wiped")
+        assertEquals(2, common.loads.size, "it loads the new month: its rows and its cells")
+        assertEquals(vm.state.year to vm.state.month, common.loads.last(), "the month it navigated to")
+    }
+
+    @Test
+    fun viewModeChangedDelegatesToTheCommonContract() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        val loadsBefore = common.loads.size
+
+        vm.onAction(TimetableIntent.ViewModeChanged(GridViewMode.HOURLY))
+        advanceUntilIdle()
+
+        assertEquals(listOf(GridViewMode.HOURLY), common.viewModes, "'Προβολή κάθε' goes up to the shared owner")
+        assertEquals(loadsBefore, common.loads.size, "only the rows change - the month is not re-fetched")
     }
 
     @Test
@@ -172,7 +198,7 @@ class TimetableViewModelTest : TimetableTestBase() {
         advanceUntilIdle()
 
         assertEquals(1, common.clears, "the revision bridge lives in the ViewModel, not a LaunchedEffect")
-        assertEquals(2, common.breakLoads, "the new session refetches the station's grid")
+        assertEquals(2, common.loads.size, "the new session reloads the month - its rows and its cells")
     }
 
     @Test
@@ -196,13 +222,13 @@ class TimetableViewModelTest : TimetableTestBase() {
         val (k, data) = cell(commercials = listOf(placed(10))).toUi()
         common.emit(
             TimetableCommonState(
-                breaks = persistentListOf(BreakSlot(id = 1L, time = LocalTime(10, 0), label = "10:00")),
+                breaks = persistentListOf(BreakSlot(time = TEST_TIME, label = "10:00")),
                 cells = persistentMapOf(k to data),
             )
         )
         advanceUntilIdle()
 
-        vm.onAction(TimetableIntent.PrintBreak(breakId = 1L, date = TEST_DATE))
+        vm.onAction(TimetableIntent.PrintBreak(time = TEST_TIME, date = TEST_DATE))
         advanceUntilIdle()
 
         assertEquals(1, reports.printed.size, "printing is the ViewModel's side effect, not the composable's")
@@ -213,8 +239,10 @@ class TimetableViewModelTest : TimetableTestBase() {
         val vm = vm()
         advanceUntilIdle()
 
-        vm.onAction(TimetableIntent.PrintBreak(breakId = 99L, date = TEST_DATE))
-        vm.onAction(TimetableIntent.PrintBreakMonth(breakId = 99L))
+        // 23:55 is no row of this month - nothing aired there.
+        val unknown = LocalTime(23, 55)
+        vm.onAction(TimetableIntent.PrintBreak(time = unknown, date = TEST_DATE))
+        vm.onAction(TimetableIntent.PrintBreakMonth(time = unknown))
         advanceUntilIdle()
 
         assertTrue(reports.printed.isEmpty(), "no break, no payload - and no crash")
@@ -298,7 +326,7 @@ class TimetableViewModelTest : TimetableTestBase() {
         advanceUntilIdle()   // let loadAll settle
 
         // No FinderSpotSelected first -> 'a' must be a no-op.
-        vm.onAction(TimetableIntent.AddSpotAt(breakId = 1, date = TEST_DATE))
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
 
         assertTrue(common.adds.isEmpty(), "'a' does nothing until a spot is armed via Εύρεση")
     }
@@ -308,10 +336,10 @@ class TimetableViewModelTest : TimetableTestBase() {
         val vm = vm()
         vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
 
-        vm.onAction(TimetableIntent.AddSpotAt(breakId = 1, date = TEST_DATE))
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
 
         assertEquals(
-            listOf(Triple(42L, 1L, TEST_DATE)),
+            listOf(Triple(42L, TEST_TIME, TEST_DATE)),
             common.adds,
             "the armed spot's id is delegated up to common.add - the screen never persists itself",
         )
@@ -321,9 +349,9 @@ class TimetableViewModelTest : TimetableTestBase() {
     fun removeLastAtDelegatesToTheCommonContract() = runTest(testDispatcher) {
         val vm = vm()
 
-        vm.onAction(TimetableIntent.RemoveLastAt(breakId = 1, date = TEST_DATE))
+        vm.onAction(TimetableIntent.RemoveLastAt(time = TEST_TIME, date = TEST_DATE))
 
-        assertEquals(listOf(1L to TEST_DATE), common.removes)
+        assertEquals(listOf(TEST_TIME to TEST_DATE), common.removes)
         assertTrue(common.adds.isEmpty())
     }
 }

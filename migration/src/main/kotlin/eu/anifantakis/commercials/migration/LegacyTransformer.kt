@@ -50,6 +50,18 @@ class LegacyTransformer(
      */
     private val flowJoin = "JOIN $s.flow_station fs ON fs.forTV = m.forTV"
 
+    /**
+     * The SAME dictionary lookup as [flowJoin], spelled in the comma/WHERE style
+     * the inner-join-only statements here use: [flowFrom] extends the FROM list,
+     * [flowWhere] carries the predicate that pairs with it. Both fragments exist
+     * because both spellings are needed - a statement that also has a LEFT JOIN
+     * (migrateContracts, migrateSpots, migratePlacements) must stay in JOIN form
+     * and keeps using [flowJoin]: the comma binds looser than JOIN, so an ON
+     * clause could no longer see a comma-joined table.
+     */
+    private val flowFrom = ", $s.flow_station fs"
+    private val flowWhere = "fs.forTV = m.forTV"
+
     data class Summary(
         val breaks: Int,
         val customers: Int,
@@ -100,9 +112,6 @@ class LegacyTransformer(
         log("Copying the legacy MySQL tables VERBATIM (faithful union layer)...")
         copyLegacyTables()
 
-        log("Building break grid from real airing times...")
-        val breaks = migrateBreaks()
-
         log("Migrating programmes (with their operator-assigned colours)...")
         val programs = migratePrograms()
 
@@ -127,6 +136,12 @@ class LegacyTransformer(
 
         log("Migrating placements (this is the big one)...")
         val placements = migratePlacements()
+
+        // The breaks are not migrated - they EMERGE. This is a report, not a
+        // build step: it counts the distinct times the airings just landed on,
+        // which is precisely what the grid will group them into.
+        val breaks = countBreakTimes()
+        log("  $breaks distinct break times emerged from the airings")
 
         log("Backfilling each spot's DEFAULT product line from its own airings...")
         val defaultLines = backfillSpotDefaultLines()
@@ -167,10 +182,10 @@ class LegacyTransformer(
         )
         val zeroDate = countOne(
             """
-            SELECT COUNT(*) FROM $s.schedule sch
-            JOIN $s.messages m ON m.id = sch.messageID
-            $flowJoin
-            WHERE sch.showDate < '1900-01-01'
+            SELECT COUNT(*) FROM $s.schedule sch, $s.messages m$flowFrom
+            WHERE m.id = sch.messageID
+              AND $flowWhere
+              AND sch.showDate < '1900-01-01'
             """.trimIndent()
         )
         val otherFlow = dumpTotal - orphaned - placements - zeroDate
@@ -231,9 +246,9 @@ class LegacyTransformer(
                 """
                 SELECT fs.station_id, fs.forTV,
                        (SELECT COUNT(*) FROM $t.spots sp WHERE sp.station_id = fs.station_id),
-                       (SELECT COUNT(*) FROM $t.placements p
-                          JOIN $t.spots sp2 ON sp2.id = p.spot_id
-                        WHERE sp2.station_id = fs.station_id)
+                       (SELECT COUNT(*) FROM $t.placements p, $t.spots sp2
+                        WHERE sp2.id = p.spot_id
+                          AND sp2.station_id = fs.station_id)
                 FROM $s.flow_station fs
                 ORDER BY fs.forTV DESC
                 """.trimIndent()
@@ -276,7 +291,8 @@ class LegacyTransformer(
                 SELECT COUNT(DISTINCT d.docid) FROM $s.docref d
                 WHERE d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                   AND EXISTS (
-                      SELECT 1 FROM $s.messages m $flowJoin WHERE m.contractID = d.docid
+                      SELECT 1 FROM $s.messages m$flowFrom
+                      WHERE $flowWhere AND m.contractID = d.docid
                   )
                 """.trimIndent()
             ).use { rs -> rs.next(); rs.getInt(1) }
@@ -309,8 +325,8 @@ class LegacyTransformer(
                 st.executeQuery(
                     """
                     SELECT fs.station_id, pt.id, pt.descr, pt.color, pt.visible
-                    FROM $s.programtypes pt
-                    JOIN $s.flow_station fs ON fs.forTV = pt.forTV
+                    FROM $s.programtypes pt, $s.flow_station fs
+                    WHERE fs.forTV = pt.forTV
                     """.trimIndent()
                 ).use { rs ->
                     while (rs.next()) {
@@ -347,53 +363,23 @@ class LegacyTransformer(
     // ─────────────────────────────────────────────────────────── breaks ──
 
     /**
-     * Each station's REAL break grid: every distinct HH:MM at which the legacy
-     * schedule ever aired something FOR THAT FLOW (seconds are collapsed - two
-     * placements at 11:00:07 and 11:00:41 belong to the same break). Zone derived
-     * from the hour with the same rules the demo grid uses.
+     * There is NO migrateBreaks(). A break is not an entity to be built - it is
+     * what `GROUP BY station_id, show_date, show_time` returns over the airings,
+     * exactly as the legacy app did it. This only REPORTS how many distinct break
+     * times the migrated airings landed on, for the migration summary.
      *
-     * The grids genuinely differ per station - a radio station breaks at times a
-     * TV channel never does - so they are built per flow, and the ids are left to
-     * the database (they used to be a computed 1..n, which would now collide
-     * between the group's stations).
+     * (What this replaced: a step that INSERTed one `break_slots` row per DISTINCT
+     * (station, HOUR, MINUTE) and then had migratePlacements join every airing
+     * straight back to it - a round trip whose only product was an id. It also
+     * collapsed seconds, so two airings 30 seconds apart became one break. The
+     * straight copy in migratePlacements cannot.)
      */
-    private fun migrateBreaks(): Int {
-        data class Slot(val stationId: String, val hour: Int, val minute: Int)
-
-        val slots = mutableListOf<Slot>()
+    private fun countBreakTimes(): Int =
         c.createStatement().use { st ->
             st.executeQuery(
-                """
-                SELECT DISTINCT fs.station_id, HOUR(sch.showTime) h, MINUTE(sch.showTime) mi
-                FROM $s.schedule sch
-                JOIN $s.messages m ON m.id = sch.messageID
-                $flowJoin
-                WHERE sch.showDate >= '1900-01-01'
-                ORDER BY fs.station_id, h, mi
-                """.trimIndent()
-            ).use { rs -> while (rs.next()) slots += Slot(rs.getString(1), rs.getInt(2), rs.getInt(3)) }
+                "SELECT COUNT(*) FROM (SELECT DISTINCT station_id, show_time FROM $t.placements) bt"
+            ).use { rs -> rs.next(); rs.getInt(1) }
         }
-        c.prepareStatement(
-            "INSERT INTO $t.break_slots(station_id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
-        ).use { ps ->
-            for (slot in slots) {
-                val zone = when (slot.hour) {
-                    in 20..23 -> "PRIME"
-                    in 10..14 -> "STANDARD"
-                    in 18..19 -> "SPECIAL"
-                    else -> "DEFAULT"
-                }
-                ps.setString(1, slot.stationId)
-                ps.setInt(2, slot.hour)
-                ps.setInt(3, slot.minute)
-                ps.setString(4, "%02d:%02d".format(slot.hour, slot.minute))
-                ps.setString(5, zone)
-                ps.addBatch()
-            }
-            ps.executeBatch()
-        }
-        return slots.size
-    }
 
     // ─────────────────────────────────────────────────────── customers ──
 
@@ -411,14 +397,14 @@ class LegacyTransformer(
         val ids = sortedSetOf<Long>()
         c.createStatement().use { st ->
             st.executeQuery(
-                "SELECT DISTINCT m.cusID FROM $s.messages m $flowJoin"
+                "SELECT DISTINCT m.cusID FROM $s.messages m$flowFrom WHERE $flowWhere"
             ).use { rs -> while (rs.next()) ids += maxOf(rs.getLong(1), 0L) }
             st.executeQuery(
                 """
-                SELECT DISTINCT d.traid FROM $s.docref d
-                JOIN $s.messages m ON m.contractID = d.docid
-                $flowJoin
-                WHERE d.traid > 0
+                SELECT DISTINCT d.traid FROM $s.docref d, $s.messages m$flowFrom
+                WHERE m.contractID = d.docid
+                  AND $flowWhere
+                  AND d.traid > 0
                 """.trimIndent()
             ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
             // END CLIENTS of triangular docs whose lee resolves to a tra id -
@@ -426,11 +412,11 @@ class LegacyTransformer(
             // directly.
             st.executeQuery(
                 """
-                SELECT DISTINCT map.traid FROM $s.docref d
-                JOIN $s.lee_tra_map map ON map.lee = d.targetleeid
-                JOIN $s.messages m ON m.contractID = d.docid
-                $flowJoin
-                WHERE d.targetleeid <> d.pelatislee
+                SELECT DISTINCT map.traid FROM $s.docref d, $s.lee_tra_map map, $s.messages m$flowFrom
+                WHERE map.lee = d.targetleeid
+                  AND m.contractID = d.docid
+                  AND $flowWhere
+                  AND d.targetleeid <> d.pelatislee
                 """.trimIndent()
             ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
         }
@@ -525,10 +511,10 @@ class LegacyTransformer(
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                UPDATE $t.customers tc
-                JOIN (SELECT traid, MIN(lee) AS lee FROM $s.lee_tra_map GROUP BY traid) m
-                  ON m.traid = tc.legacy_id
+                UPDATE $t.customers tc,
+                       (SELECT traid, MIN(lee) AS lee FROM $s.lee_tra_map GROUP BY traid) m
                 SET tc.legacy_lee_id = m.lee
+                WHERE m.traid = tc.legacy_id
                 """.trimIndent()
             )
         }
@@ -539,10 +525,10 @@ class LegacyTransformer(
         val unresolvedLees = c.createStatement().use { st ->
             st.executeQuery(
                 """
-                SELECT DISTINCT d.targetleeid FROM $s.docref d
-                JOIN $s.messages m ON m.contractID = d.docid
-                $flowJoin
-                WHERE d.targetleeid <> d.pelatislee AND d.targetleeid > 0
+                SELECT DISTINCT d.targetleeid FROM $s.docref d, $s.messages m$flowFrom
+                WHERE m.contractID = d.docid
+                  AND $flowWhere
+                  AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                   AND NOT EXISTS (SELECT 1 FROM $s.lee_tra_map map WHERE map.lee = d.targetleeid)
                 ORDER BY d.targetleeid
                 """.trimIndent()
@@ -687,10 +673,10 @@ class LegacyTransformer(
                 -- confident wrong one.
                 INSERT INTO $t.contract_lines(contract_id, line_no, spot_type_id)
                 SELECT DISTINCT tc.id, 1000, NULL
-                FROM $s.messages m
-                $flowJoin
-                JOIN $t.contracts tc ON tc.legacy_docid = m.contractID
-                WHERE m.contractID > 0
+                FROM $s.messages m$flowFrom, $t.contracts tc
+                WHERE $flowWhere
+                  AND tc.legacy_docid = m.contractID
+                  AND m.contractID > 0
                   AND NOT EXISTS (
                       SELECT 1 FROM $t.contract_lines cl WHERE cl.contract_id = tc.id
                   )
@@ -714,16 +700,17 @@ class LegacyTransformer(
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                UPDATE $t.contracts ct
-                JOIN (
+                UPDATE $t.contracts ct,
+                       (
                     SELECT cl.contract_id AS cid, MIN(p.show_date) AS mn, MAX(p.show_date) AS mx
-                    FROM $t.placements p
-                    JOIN $t.spots s ON s.id = p.spot_id
-                    JOIN $t.contract_lines cl ON cl.id = s.contract_line_id
-                    WHERE p.hidden = FALSE
+                    FROM $t.placements p, $t.spots s, $t.contract_lines cl
+                    WHERE s.id = p.spot_id
+                      AND cl.id = s.contract_line_id
+                      AND p.hidden = FALSE
                     GROUP BY cl.contract_id
-                ) agg ON agg.cid = ct.id
+                ) agg
                 SET ct.start_date = agg.mn, ct.end_date = agg.mx, ct.dates_provisional = TRUE
+                WHERE agg.cid = ct.id
                 """.trimIndent()
             )
         }
@@ -882,8 +869,8 @@ class LegacyTransformer(
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                UPDATE $t.spots sp
-                JOIN (
+                UPDATE $t.spots sp,
+                       (
                     SELECT p.spot_id, p.contract_line_id,
                            ROW_NUMBER() OVER (
                                PARTITION BY p.spot_id
@@ -892,47 +879,53 @@ class LegacyTransformer(
                     FROM $t.placements p
                     WHERE p.contract_line_id IS NOT NULL
                     GROUP BY p.spot_id, p.contract_line_id
-                ) modal ON modal.spot_id = sp.id AND modal.rn = 1
+                ) modal
                 SET sp.contract_line_id = modal.contract_line_id
-                WHERE sp.contract_line_id IS NULL
+                WHERE modal.spot_id = sp.id AND modal.rn = 1
+                  AND sp.contract_line_id IS NULL
                 """.trimIndent()
             )
         }
 
     /**
-     * The airings. The spot decides the station (legacy `schedule` carries no
-     * forTV of its own), and EVERY station-scoped join below must agree with it:
+     * The airings - a STRAIGHT COPY of legacy `schedule`: showDate -> show_date,
+     * showTime -> show_time, showOrder -> position. Nothing is looked up, because
+     * there is no break to look up: a break is what a GROUP BY on show_time
+     * returns. (This step used to build a `break_slots` catalog from the DISTINCT
+     * times and then join every airing straight back to it to recover an id it had
+     * just thrown away.)
      *
-     *  - the BREAK join matches on time AND station. Matching on time alone was
-     *    fine when a schema held one station; in a group schema both stations own
-     *    an 11:00 break, so it would attach each airing to BOTH and silently
-     *    double every placement in the database.
-     *  - the ROW_NUMBER partition includes the station, or the two stations'
-     *    airings interleave and their positions inside a break come out wrong.
-     *  - the PROGRAMME join matches the station too (programme ids restart per
-     *    flow - see migratePrograms).
+     * The spot decides the station (legacy `schedule` carries no forTV of its own),
+     * and it is stamped onto the airing: a group's stations share this schema, so
+     * without it the TV channel's 11:00 break and the radio station's would be one
+     * break. Every station-scoped join must agree with that station:
+     *
+     *  - the ROW_NUMBER partition includes it, or the two stations' airings
+     *    interleave and their positions inside a break come out wrong.
+     *  - the PROGRAMME join matches it too (programme ids restart per flow - see
+     *    migratePrograms).
      *
      * The contract-line join stays group-scoped on purpose: that is the airing's
      * actual charge, and the contract is the group's.
+     *
+     * Partitioning on the full `showTime` (not HOUR+MINUTE, as the break-catalog
+     * join did) is also strictly more faithful: it can no longer fold two airings
+     * a few seconds apart into one break.
      */
     private fun migratePlacements(): Int =
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT INTO $t.placements(legacy_id, spot_id, break_id, show_date, position,
+                INSERT INTO $t.placements(legacy_id, station_id, spot_id, show_date, show_time, position,
                                           duration_seconds, contract_line_id, program_id, played, hidden)
-                SELECT sch.id, ts.id, tb.id, sch.showDate,
+                SELECT sch.id, ts.station_id, ts.id, sch.showDate, sch.showTime,
                        ROW_NUMBER() OVER (
-                           PARTITION BY ts.station_id, sch.showDate,
-                                        HOUR(sch.showTime), MINUTE(sch.showTime)
+                           PARTITION BY ts.station_id, sch.showDate, sch.showTime
                            ORDER BY sch.showOrder, sch.id
                        ) - 1,
                        sch.durationSecs, pcl.id, tp.id, sch.played, sch.hideSchedule
                 FROM $s.schedule sch
                 JOIN $t.spots ts ON ts.legacy_id = sch.messageID
-                JOIN $t.break_slots tb ON tb.station_id = ts.station_id
-                                      AND tb.hour_of_day = HOUR(sch.showTime)
-                                      AND tb.minute_of_hour = MINUTE(sch.showTime)
                 -- the airing's ACTUAL charge: schedule.docID + lineno name the
                 -- product line directly (NULL falls back to the spot's default)
                 LEFT JOIN $t.contracts pct ON pct.legacy_docid = sch.docID
@@ -958,9 +951,9 @@ class LegacyTransformer(
                 """
                 INSERT IGNORE INTO $t.flow_comments(station_id, show_date, comments)
                 SELECT fs.station_id, rc.startDate, rc.comments
-                FROM $s.roh_comments rc
-                JOIN $s.flow_station fs ON fs.forTV = rc.forTV
-                WHERE rc.comments <> '' AND rc.startDate >= '1900-01-01'
+                FROM $s.roh_comments rc, $s.flow_station fs
+                WHERE fs.forTV = rc.forTV
+                  AND rc.comments <> '' AND rc.startDate >= '1900-01-01'
                 """.trimIndent()
             )
         }
@@ -973,9 +966,9 @@ class LegacyTransformer(
                 """
                 INSERT INTO $t.print_audit(station_id, printed_date, username, created_at)
                 SELECT fs.station_id, rp.printedDate, rp.username, rp.mystamp
-                FROM $s.roh_print_history rp
-                JOIN $s.flow_station fs ON fs.forTV = rp.forTV
-                WHERE rp.printedDate >= '1900-01-01'
+                FROM $s.roh_print_history rp, $s.flow_station fs
+                WHERE fs.forTV = rp.forTV
+                  AND rp.printedDate >= '1900-01-01'
                 """.trimIndent()
             )
         }

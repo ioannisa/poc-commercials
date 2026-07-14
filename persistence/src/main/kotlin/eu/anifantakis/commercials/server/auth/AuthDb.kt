@@ -417,8 +417,9 @@ class AuthDb(
             val row = c.prepareStatement(
                 """
                 SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt
-                FROM auth_tokens t JOIN users u ON u.id = t.user_id
-                WHERE t.token_hash = ?$expiryClause
+                FROM auth_tokens t, users u
+                WHERE u.id = t.user_id
+                  AND t.token_hash = ?$expiryClause
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, hash)

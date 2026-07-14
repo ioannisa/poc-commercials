@@ -7,8 +7,10 @@ import eu.anifantakis.commercials.mailer.ScheduleEmailData
 import eu.anifantakis.commercials.mailer.SmtpSettings
 import eu.anifantakis.commercials.mailer.SpotSection
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
+import eu.anifantakis.commercials.server.scheduler.formatHhMm
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
 
 /**
@@ -41,14 +43,13 @@ object ScheduleEmailAssembler {
         val customer = source.customerByCode(clientCode) ?: return null
 
         val (cells, commercialsByKey) = source.loadMonth(year, month)
-        val colorByKey = cells.associate { (it.breakId to it.date) to it.zoneColorArgb }
-        val breaks = source.loadBreaks()
+        val colorByKey = cells.associate { (it.time to it.date) to it.zoneColorArgb }
         val days = YearMonth.of(year, month).lengthOfMonth()
 
         fun isMine(row: CommercialRow): Boolean =
             if (byTrader) row.payerCode == clientCode else row.clientCode == clientCode
 
-        fun rowsFor(spotId: Long): Map<Pair<Long, LocalDate>, List<CommercialRow>> =
+        fun rowsFor(spotId: Long): Map<Pair<LocalTime, LocalDate>, List<CommercialRow>> =
             commercialsByKey.mapValues { (_, list) ->
                 list.filter { isMine(it) && it.spotId == spotId }
             }.filterValues { it.isNotEmpty() }
@@ -67,12 +68,15 @@ object ScheduleEmailAssembler {
 
         val sections = chosenSpots.map { (spotId, description) ->
             val mine = rowsFor(spotId)
-            val usedBreaks = breaks.filter { b -> mine.keys.any { it.first == b.id } }
-            val rows = usedBreaks.map { b ->
+            // The breaks this spot actually aired in - which its own cells already
+            // name, since a break IS the time on the key. (This used to read the
+            // station's whole break catalog and filter it down to the same set.)
+            val usedBreaks = mine.keys.map { it.first }.distinct().sorted()
+            val rows = usedBreaks.map { time ->
                 EmailGridRow(
-                    label = b.label,
+                    label = formatHhMm(time),
                     cells = (1..days).map { day ->
-                        val key = b.id to LocalDate.of(year, month, day)
+                        val key = time to LocalDate.of(year, month, day)
                         mine[key]?.let { EmailCell(count = it.size, colorArgb = colorByKey[key]) }
                     }
                 )

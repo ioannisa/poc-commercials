@@ -27,6 +27,19 @@
 # dropdown. A station carries no connection details of its own - it IS a
 # station_id inside its group's database.
 #
+# emptyRowsFrom (OPTIONAL, "HH:mm", default "00:00"): from this time on, the
+#          hourly / half-hourly views print their grid rows even when EMPTY.
+#          Before it, only times that actually HAVE a break appear.
+#
+#          Breaks are not configured anywhere - a break is simply a time a spot
+#          aired at, and the grid groups the airings by it. So the only thing
+#          left to decide is where to draw the empty scaffold, and that is a
+#          property of the station's day: Crete TV starts at 07:00, so its grid
+#          shows 00:05, 00:30 … 04:00 (the real breaks of the previous night)
+#          and then jumps to a printed 07:00, 07:30, 08:00 … even where nothing
+#          airs. Without it, an operator pages through fourteen blank night rows
+#          to reach the working day. It NEVER hides a break.
+#
 # Connection pools: each GROUP database gets its own HikariCP pool, shared by
 # every station in it. The optional file-wide `maxPoolSize` sets the default
 # ceiling for central and every group; `maxPoolSize` on any single block
@@ -97,9 +110,11 @@ groups:
       - id: crete-tv
         name: "Crete TV"
         logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
+        emptyRowsFrom: "07:00"
       - id: radio-984
         name: "Radio 984"
         logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
+        emptyRowsFrom: "07:00"
 
   # Demo group with a single station - seeded, no migration needed.
   - id: channel4-group

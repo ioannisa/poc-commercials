@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.mcp.inputSchema
 import eu.anifantakis.commercials.mcp.parseIsoDate
 import eu.anifantakis.commercials.mcp.prop
 import eu.anifantakis.commercials.mcp.runToolBlocks
+import eu.anifantakis.commercials.server.scheduler.formatHhMm
 import eu.anifantakis.commercials.mcp.tools.McpTool
 import eu.anifantakis.commercials.mcp.tools.ToolContext
 import io.modelcontextprotocol.kotlin.sdk.types.BlobResourceContents
@@ -45,15 +46,20 @@ object GenerateDayReportTool : McpTool {
         val access = services.resolveStation(ctx.caller, a.stringOrNull("station"))
         val date = parseIsoDate(a.string("date"))
 
-        // Load the grid + the month's cell map ONCE, then walk breaks in air order.
-        val slots = access.data.loadBreaks().sortedBy { it.hour * 60 + it.minute }
+        // ONE read: the month's cell map. Its keys ARE the day's breaks (a break
+        // is the time an airing landed on), so they are walked straight, in air
+        // order - no break catalog to load and index against.
         val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
         val scoped = services.isCustomerScoped(access.grant)
-        val occupied = slots.mapNotNull { slot ->
-            var spots = byKey[slot.id to date].orEmpty()
-            if (scoped) spots = spots.filter { it.clientCode == access.grant.clientCode }
-            if (spots.isEmpty()) null else slot.label to spots
-        }
+        val occupied = byKey.keys.filter { it.second == date }
+            .map { it.first }
+            .distinct()
+            .sorted()
+            .mapNotNull { time ->
+                var spots = byKey[time to date].orEmpty()
+                if (scoped) spots = spots.filter { it.clientCode == access.grant.clientCode }
+                if (spots.isEmpty()) null else formatHhMm(time) to spots
+            }
 
         val request = DayReportAssembler.buildDayReport(date, occupied, services.logoFor(a.string("station")))
         if (request.rows.isEmpty()) {

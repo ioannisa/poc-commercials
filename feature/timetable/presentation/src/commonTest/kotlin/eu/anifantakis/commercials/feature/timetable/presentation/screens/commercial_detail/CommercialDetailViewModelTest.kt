@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.commer
 
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_TIME
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
@@ -43,11 +44,10 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class CommercialDetailViewModelTest : TimetableTestBase() {
 
-    private val key = SchedulerKey(1L, TEST_DATE)
+    private val key = SchedulerKey(TEST_TIME, TEST_DATE)
 
-    /** A break as the SHARED state carries it (the grid's UI model). */
-    private fun slot(id: Long, hour: Int, minute: Int = 0) = BreakSlot(
-        id = id,
+    /** A break as the SHARED state carries it (the grid's UI model). It IS a time. */
+    private fun slot(hour: Int, minute: Int = 0) = BreakSlot(
         time = LocalTime(hour, minute),
         label = "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}",
     )
@@ -70,12 +70,12 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
 
     private fun vm(
         common: FakeTimetableCommon,
-        breakId: Long = 1,
+        time: LocalTime = TEST_TIME,
         role: AppRole = AppRole.NORMAL_USER,
         reportService: ReportService = FakeReportService(),
         logoCache: StationLogoCache = FakeStationLogoCache(),
     ) = CommercialDetailViewModel(
-        breakId = breakId,
+        time = time,
         date = TEST_DATE,
         common = common,
         session = FakeUserSession(role),
@@ -135,7 +135,7 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         vm.onAction(CommercialDetailIntent.MoveRow(from = 2, to = 0))
 
         assertEquals(
-            listOf(Triple(1L, TEST_DATE, listOf(12L, 10L, 11L))),
+            listOf(Triple(TEST_TIME, TEST_DATE, listOf(12L, 10L, 11L))),
             common.reorders,
             "the screen must delegate reorder up - never mutate shared state itself",
         )
@@ -219,23 +219,24 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         val common = FakeTimetableCommon()
         val vm = vm(common)
 
-        // grid: 08:00(#5, occupied) 10:00(#1, THIS) 12:00(#7, EMPTY) 14:00(#9, occupied)
+        // grid: 08:00 (occupied) 10:00 (THIS) 12:00 (EMPTY row) 14:00 (occupied),
+        // deliberately out of air order to prove the sort.
         common.emit(
             TimetableCommonState(
-                breaks = persistentListOf(slot(9, 14), slot(1, 10), slot(5, 8), slot(7, 12)),
+                breaks = persistentListOf(slot(14), slot(10), slot(8), slot(12)),
                 cells = persistentMapOf(
-                    SchedulerKey(5L, TEST_DATE) to cell(50),
+                    SchedulerKey(LocalTime(8, 0), TEST_DATE) to cell(50),
                     key to cell(10, 11),
-                    SchedulerKey(9L, TEST_DATE) to cell(90),
+                    SchedulerKey(LocalTime(14, 0), TEST_DATE) to cell(90),
                 )
             )
         )
         advanceUntilIdle()
 
         assertEquals("10:00", vm.state.breakLabel, "its own label is PULLED from the shared breaks")
-        assertEquals(5L, vm.state.previousBreak?.breakId, "previous = the earlier occupied break")
+        assertEquals(LocalTime(8, 0), vm.state.previousBreak?.time, "previous = the earlier occupied break")
         assertEquals("08:00", vm.state.previousBreak?.label)
-        assertEquals(9L, vm.state.nextBreak?.breakId, "the EMPTY 12:00 break is skipped")
+        assertEquals(LocalTime(14, 0), vm.state.nextBreak?.time, "the EMPTY 12:00 row is skipped")
         assertEquals("14:00", vm.state.nextBreak?.label)
     }
 
@@ -246,16 +247,16 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
 
         common.emit(
             TimetableCommonState(
-                breaks = persistentListOf(slot(1, 10), slot(9, 14)),
+                breaks = persistentListOf(slot(10), slot(14)),
                 cells = persistentMapOf(
                     key to cell(10),
-                    SchedulerKey(9L, TEST_DATE) to cell(90),
+                    SchedulerKey(LocalTime(14, 0), TEST_DATE) to cell(90),
                 )
             )
         )
         advanceUntilIdle()
 
         assertNull(vm.state.previousBreak, "first occupied break of the day has no previous")
-        assertEquals(9L, vm.state.nextBreak?.breakId)
+        assertEquals(LocalTime(14, 0), vm.state.nextBreak?.time)
     }
 }

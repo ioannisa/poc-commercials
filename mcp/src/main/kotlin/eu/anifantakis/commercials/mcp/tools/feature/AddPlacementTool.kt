@@ -39,7 +39,7 @@ object AddPlacementTool : McpTool {
             val date = parseIsoDate(a.string("date"))
             val time = a.string("time").trim()
             val spotId = a.long("spotId")
-            val breakId = services.resolveBreak(access, time).id
+            val breakTime = services.parseBreakTime(time)
 
             if (!a.bool("confirm", false)) {
                 return@runTool dryRun("add_placement", buildJsonObject {
@@ -47,7 +47,7 @@ object AddPlacementTool : McpTool {
                     put("break", time); put("spotId", spotId)
                 })
             }
-            val row = access.data.addPlacement(spotId, breakId, date)
+            val row = access.data.addPlacement(spotId, breakTime, date)
                 ?: throw McpToolException("Spot $spotId not found (or hidden) on this station.")
             services.audit(
                 caller,

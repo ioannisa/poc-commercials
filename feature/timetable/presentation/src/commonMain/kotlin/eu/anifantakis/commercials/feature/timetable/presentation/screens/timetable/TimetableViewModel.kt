@@ -57,10 +57,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
 /** The Εύρεση console's state - part of the timetable (one workflow). */
 @Immutable
@@ -84,7 +86,10 @@ data class FinderUiState(
 data class TimetableState(
     val year: Int,
     val month: Int,
+    /** The grid's rows: the month's real breaks + this view's empty scaffold. */
     val breaks: ImmutableList<BreakSlot> = persistentListOf(),
+    /** "Προβολή κάθε" - which rows are drawn when empty. */
+    val viewMode: GridViewMode = GridViewMode.CONDENSED,
     val cells: ImmutableMap<SchedulerKey, SchedulerCellData> = persistentMapOf(),
     /** The Σύνολα footer - derived from [cells], never in a composable. */
     val dailyTotals: ImmutableMap<StableDate, DailyStats> = persistentMapOf(),
@@ -123,9 +128,12 @@ sealed interface TimetableIntent {
 
     data class SelectionChanged(val row: Int, val column: Int) : TimetableIntent
     data object ToggleShowTimes : TimetableIntent
+
+    /** "Προβολή κάθε": reloads the month's ROWS (the cells are unaffected). */
+    data class ViewModeChanged(val mode: GridViewMode) : TimetableIntent
     /** [spotCount] only decides WHETHER the cell opens; it never travels on. */
     data class OpenCell(
-        val breakId: Long,
+        val time: LocalTime,
         val date: LocalDate,
         val spotCount: Int,
     ) : TimetableIntent
@@ -133,16 +141,16 @@ sealed interface TimetableIntent {
     // Printing: the popup gives the cell/row/column it was opened on; the
     // ViewModel owns the payload assembly and the report service.
     data class PrintDay(val date: LocalDate) : TimetableIntent
-    data class PrintBreak(val breakId: Long, val date: LocalDate) : TimetableIntent
-    data class PrintBreakMonth(val breakId: Long) : TimetableIntent
+    data class PrintBreak(val time: LocalTime, val date: LocalDate) : TimetableIntent
+    data class PrintBreakMonth(val time: LocalTime) : TimetableIntent
 
     // The report toolbar: the WHOLE visible month, three ways.
     data object PreviewMonth : TimetableIntent
     data object PrintMonth : TimetableIntent
     data object ExportMonthPdf : TimetableIntent
 
-    data class AddSpotAt(val breakId: Long, val date: LocalDate) : TimetableIntent
-    data class RemoveLastAt(val breakId: Long, val date: LocalDate) : TimetableIntent
+    data class AddSpotAt(val time: LocalTime, val date: LocalDate) : TimetableIntent
+    data class RemoveLastAt(val time: LocalTime, val date: LocalDate) : TimetableIntent
 
     data object OpenFinder : TimetableIntent
     data object CloseFinder : TimetableIntent
@@ -159,7 +167,7 @@ sealed interface TimetableEffect {
      * The cell IDENTITY, nothing more: the detail ViewModel pulls the label,
      * the commercials and the paging chain from the shared state itself.
      */
-    data class OpenDetail(val breakId: Long, val date: LocalDate) : TimetableEffect
+    data class OpenDetail(val time: LocalTime, val date: LocalDate) : TimetableEffect
 }
 
 /**
@@ -201,14 +209,15 @@ class TimetableViewModel(
     private var searchJob: Job? = null
 
     init {
-        // The common ViewModel is the single truth for the station's breaks and
-        // the month's cells; mirror it into this screen's state so the grid
-        // renders straight from TimetableState.
+        // The common ViewModel is the single truth for the month's rows and
+        // cells; mirror it into this screen's state so the grid renders straight
+        // from TimetableState.
         viewModelScope.launch {
             common.commonState.collect { cs ->
                 _state.update {
                     it.copy(
                         breaks = cs.breaks,
+                        viewMode = cs.viewMode,
                         cells = cs.cells,
                         dailyTotals = calculateDailyTotals(cs.cells).toImmutableMap(),
                         modifiedCells = cs.modifiedCells,
@@ -250,8 +259,8 @@ class TimetableViewModel(
             is TimetableIntent.SelectStation -> session.selectStation(intent.stationId)
 
             is TimetableIntent.PrintDay -> printDay(intent.date)
-            is TimetableIntent.PrintBreak -> printBreak(intent.breakId, intent.date)
-            is TimetableIntent.PrintBreakMonth -> printBreakMonth(intent.breakId)
+            is TimetableIntent.PrintBreak -> printBreak(intent.time, intent.date)
+            is TimetableIntent.PrintBreakMonth -> printBreakMonth(intent.time)
 
             TimetableIntent.PreviewMonth -> runMonthReport { reportService.preview(it) }
             TimetableIntent.PrintMonth -> runMonthReport { reportService.print(it) }
@@ -264,6 +273,8 @@ class TimetableViewModel(
             is TimetableIntent.SelectionChanged ->
                 _state.update { it.copy(selectedRow = intent.row, selectedColumn = intent.column) }
 
+            is TimetableIntent.ViewModeChanged -> common.setViewMode(intent.mode)
+
             TimetableIntent.ToggleShowTimes -> {
                 val newValue = !_state.value.showSpotTimes
                 prefs.showSpotTimes = newValue
@@ -272,12 +283,12 @@ class TimetableViewModel(
 
             is TimetableIntent.OpenCell -> viewModelScope.launch {
                 if (intent.spotCount > 0) {
-                    eventChannel.send(TimetableEffect.OpenDetail(intent.breakId, intent.date))
+                    eventChannel.send(TimetableEffect.OpenDetail(intent.time, intent.date))
                 }
             }
 
-            is TimetableIntent.AddSpotAt -> addSpotAt(intent.breakId, intent.date)
-            is TimetableIntent.RemoveLastAt -> common.removeLast(intent.breakId, intent.date)
+            is TimetableIntent.AddSpotAt -> addSpotAt(intent.time, intent.date)
+            is TimetableIntent.RemoveLastAt -> common.removeLast(intent.time, intent.date)
 
             TimetableIntent.OpenFinder -> _state.update { it.copy(showFinder = true) }
             TimetableIntent.CloseFinder -> _state.update { it.copy(showFinder = false) }
@@ -306,8 +317,10 @@ class TimetableViewModel(
 
     // ── data loading ────────────────────────────────────────────────────
 
+    // One call: the month's cells AND its rows. A break is a time a spot aired
+    // at, so the rows are the month's - there is no station-wide grid to fetch
+    // separately (loadBreaks() is gone).
     private fun loadAll() {
-        common.loadBreaks()
         common.loadMonth(_state.value.year, _state.value.month)
     }
 
@@ -336,10 +349,10 @@ class TimetableViewModel(
         }
     }
 
-    private fun printBreak(breakId: Long, date: LocalDate) {
+    private fun printBreak(time: LocalTime, date: LocalDate) {
         val s = _state.value
-        val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
-        val cell = s.cells[SchedulerKey(breakId, date)] ?: return
+        val slot = s.breaks.firstOrNull { it.time == time } ?: return
+        val cell = s.cells[SchedulerKey(time, date)] ?: return
         val commercials = cell.commercials
         viewModelScope.launch {
             val data = ReportDataFactory.createBreakProgramFlowData(
@@ -395,9 +408,9 @@ class TimetableViewModel(
         }
     }
 
-    private fun printBreakMonth(breakId: Long) {
+    private fun printBreakMonth(time: LocalTime) {
         val s = _state.value
-        val slot = s.breaks.firstOrNull { it.id == breakId } ?: return
+        val slot = s.breaks.firstOrNull { it.time == time } ?: return
         viewModelScope.launch {
             val config = logoCache.reportConfig()
             val payloads = ReportDataFactory
@@ -413,17 +426,18 @@ class TimetableViewModel(
         var month = s.month + delta
         if (month == 0) { month = 12; year-- }
         if (month == 13) { month = 1; year++ }
-        // No clear() here: loadMonth blanks the month's own cells and keeps the
-        // station's breaks, so the grid does not lose its rows between months.
+        // No clear() here: loadMonth reloads the month's cells AND its rows. The
+        // rows genuinely change with the month - a quiet month breaks at fewer
+        // times than a busy one - so they are not carried across.
         _state.update { it.copy(year = year, month = month) }
         common.loadMonth(year, month)
     }
 
     // ── placement editing ('a' / 'r') - delegated to the common VM ──────
 
-    private fun addSpotAt(breakId: Long, date: LocalDate) {
+    private fun addSpotAt(time: LocalTime, date: LocalDate) {
         val spot = _state.value.finder.selectedSpot ?: return   // 'a' is armed by the finder
-        common.add(spot.spotId, breakId, date)
+        common.add(spot.spotId, time, date)
     }
 
     // ── finder (Εύρεση console) ─────────────────────────────────────────

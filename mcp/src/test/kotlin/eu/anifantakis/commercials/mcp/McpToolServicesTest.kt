@@ -1,9 +1,8 @@
 package eu.anifantakis.commercials.mcp
 
 import eu.anifantakis.commercials.server.auth.UserRole
-import eu.anifantakis.commercials.server.scheduler.BreakZone
-import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import java.time.LocalDate
+import java.time.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -16,13 +15,12 @@ import kotlin.test.assertTrue
  */
 class McpToolServicesTest {
 
-    private val break1730 = BreakSlotRow(id = 7, hour = 17, minute = 30, label = "17:30", zone = BreakZone.PRIME)
+    private val break1730 = LocalTime.of(17, 30)
     private val date = LocalDate.of(2026, 7, 3)
 
     /** crete-tv: one break at 17:30 holding a spot of AAA and a spot of BBB. */
     private fun creteTv() = FakeStationDataSource(
-        breaks = listOf(break1730),
-        byKey = mapOf((7L to date) to listOf(commercial("AAA", "SPOT A"), commercial("BBB", "SPOT B", spotId = 2))),
+        byKey = mapOf((break1730 to date) to listOf(commercial("AAA", "SPOT A"), commercial("BBB", "SPOT B", spotId = 2))),
     )
 
     private fun directory(vararg extraIds: String) = FakeStationDirectory(
@@ -96,21 +94,33 @@ class McpToolServicesTest {
         svc.requireStaff(grant("crete-tv", UserRole.NORMAL_USER))
     }
 
-    // ── break resolution + the CUSTOMER_VIEWER row filter (a security rule) ──
+    // ── break parsing + the CUSTOMER_VIEWER row filter (a security rule) ─────
 
     @Test
-    fun `resolveBreak finds the slot by its HH mm label`() {
+    fun `parseBreakTime reads the HH mm label as a time`() {
+        assertEquals(break1730, services(directory()).parseBreakTime("17:30"))
+    }
+
+    /**
+     * Was "resolveBreak rejects an unknown label". There is no catalog to be
+     * absent FROM any more - a break IS a time - so every well-formed label names
+     * a legal break (an unused one is merely empty, below) and the only thing left
+     * to reject is a MALFORMED one.
+     */
+    @Test
+    fun `parseBreakTime rejects a malformed label`() {
         val svc = services(directory())
-        val access = svc.resolveStation(caller(grant("crete-tv")), "crete-tv")
-        assertEquals(7L, svc.resolveBreak(access, "17:30").id)
+        assertTrue(assertFailsWith<McpToolException> { svc.parseBreakTime("18:0") }.message!!.contains("HH:mm"))
+        assertTrue(assertFailsWith<McpToolException> { svc.parseBreakTime("25:00") }.message!!.contains("hour 00-23"))
+        assertFailsWith<McpToolException> { svc.parseBreakTime("6pm") }
     }
 
     @Test
-    fun `resolveBreak rejects an unknown label`() {
+    fun `a time nothing aired at is an EMPTY break, not an error`() {
         val svc = services(directory())
         val access = svc.resolveStation(caller(grant("crete-tv")), "crete-tv")
-        val e = assertFailsWith<McpToolException> { svc.resolveBreak(access, "18:07") }
-        assertTrue(e.message!!.contains("No break labelled"))
+        // 17:30 is the only break of the day; 18:07 used to be "no such break".
+        assertTrue(svc.breakSpots(access, date, "18:07").isEmpty())
     }
 
     @Test

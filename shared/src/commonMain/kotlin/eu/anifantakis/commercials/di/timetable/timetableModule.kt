@@ -51,7 +51,7 @@ val timetableModule = module {
     }
     viewModel { params ->
         CommercialDetailViewModel(
-            breakId = params.get(),
+            time = params.get(),
             date = params.get(),
             common = params.get(),
             session = get(),

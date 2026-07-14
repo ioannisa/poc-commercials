@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -12,6 +13,7 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /**
  * The timetable flow's shared CONTRACT (kmp-developer `<Feature>Common`):
@@ -25,41 +27,59 @@ interface TimetableCommon {
 
     val commonState: StateFlow<TimetableCommonState>
 
-    /** Fresh slate: login or station switch (the breaks belong to a station). */
+    /** Fresh slate: login or station switch. */
     fun clear()
 
     /**
-     * Loads the station's airtime grid ONCE. Idempotent: callers that need the
-     * breaks (the grid's rows, the detail's break label and its Προηγούμενο/
-     * Επόμενο chain) may each ask, and only the first ask hits the network.
+     * Loads the month: its CELLS and its ROWS, together.
+     *
+     * They are loaded together because they are the same fact. A break is a time
+     * a spot aired at, so the rows a month has depend on what aired IN that
+     * month - they are not a station-wide grid that outlives it. (This used to be
+     * two calls, with the breaks fetched once and cached for the session.)
      */
-    fun loadBreaks()
-
-    /** Loads the month's cells (blanks the old ones first, keeps the breaks). */
     fun loadMonth(year: Int, month: Int)
 
-    /** Persists a placement of [spotId] into the cell, then applies it. */
-    fun add(spotId: Long, breakId: Long, date: LocalDate)
+    /**
+     * Switches the view ("Προβολή κάθε: 1 Ώρα / Μισή Ώρα / Διάλειμμα") and
+     * reloads the current month's rows. Only the ROWS change - the cells are the
+     * same airings either way; the view decides how much empty scaffold is drawn
+     * around them.
+     */
+    fun setViewMode(mode: GridViewMode)
+
+    /** Persists a placement of [spotId] into the (time, date) cell, then applies it. */
+    fun add(spotId: Long, time: LocalTime, date: LocalDate)
 
     /**
      * Removes the most recent placement THIS SESSION added in the cell
      * ('r' removes only our own adds); no-op when there is none.
      */
-    fun removeLast(breakId: Long, date: LocalDate)
+    fun removeLast(time: LocalTime, date: LocalDate)
 
     /** Optimistic reorder + persist (the server 409s on stale ids). */
-    fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>)
+    fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>)
 }
 
 /** Flow-wide state - the `Common` infix is mandatory (ownership is visible). */
 @Immutable
 data class TimetableCommonState(
     /**
-     * The station's airtime grid, in air order. STATION-scoped (the cells
-     * below are MONTH-scoped), so it survives month navigation and is fetched
-     * once - both the grid and the Break Console read it from here.
+     * The grid's ROWS, in air order: the month's real breaks plus whatever empty
+     * scaffold [viewMode] prints around them.
+     *
+     * MONTH-scoped, like the cells - which is the correction at the heart of
+     * this: they used to be cached station-wide, on the belief that an airtime
+     * grid was a property of the station. It is not. A break exists where a spot
+     * aired, so a quiet month has fewer rows than a busy one, and 23:55 becomes a
+     * row the moment somebody puts a spot there.
      */
     val breaks: ImmutableList<BreakSlot> = persistentListOf(),
+    /** Which rows are drawn when empty. Survives month navigation - it is the operator's choice. */
+    val viewMode: GridViewMode = GridViewMode.CONDENSED,
+    /** The month on screen - what [TimetableCommon.setViewMode] reloads the rows for. */
+    val year: Int? = null,
+    val month: Int? = null,
     val cells: ImmutableMap<SchedulerKey, SchedulerCellData> = persistentMapOf(),
     /** Cells this session touched - the classic black marker. */
     val modifiedCells: ImmutableSet<SchedulerKey> = persistentSetOf(),
@@ -73,9 +93,9 @@ data class TimetableCommonState(
  */
 sealed interface TimetableCommonIntent {
     data object Clear : TimetableCommonIntent
-    data object LoadBreaks : TimetableCommonIntent
     data class LoadMonth(val year: Int, val month: Int) : TimetableCommonIntent
-    data class Add(val spotId: Long, val breakId: Long, val date: LocalDate) : TimetableCommonIntent
-    data class RemoveLast(val breakId: Long, val date: LocalDate) : TimetableCommonIntent
-    data class Reorder(val breakId: Long, val date: LocalDate, val orderedIds: List<Long>) : TimetableCommonIntent
+    data class SetViewMode(val mode: GridViewMode) : TimetableCommonIntent
+    data class Add(val spotId: Long, val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
+    data class RemoveLast(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
+    data class Reorder(val time: LocalTime, val date: LocalDate, val orderedIds: List<Long>) : TimetableCommonIntent
 }

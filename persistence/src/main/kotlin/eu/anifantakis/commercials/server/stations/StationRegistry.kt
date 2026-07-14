@@ -96,6 +96,21 @@ data class StationConfig(
      * on the server. The desktop reads it straight from the session.
      */
     val logo: String? = null,
+    /**
+     * From this time of day on, the hourly / half-hourly views print their grid
+     * rows even when EMPTY; before it, only times that actually have a break
+     * appear. `"HH:mm"`, default `"00:00"` (a full 24-hour grid).
+     *
+     * This is the "Προβολή κάθε: 1 Ώρα / Μισή Ώρα" behaviour of the original app,
+     * and it exists because a station's night is nearly empty: Crete TV starts at
+     * 07:00, so its grid runs 00:05, 00:30 … 04:00 (real breaks, the tail of the
+     * previous night) and then jumps to a printed 07:00, 07:30, 08:00 … even
+     * though nothing airs there. Without it the operator would page through
+     * fourteen blank night rows to reach the working day.
+     *
+     * A break is never hidden by this: it only decides where EMPTY rows are drawn.
+     */
+    val emptyRowsFrom: String = "00:00",
     /** Overrides the group's (and the file's) smtp block for this station. */
     val smtp: SmtpConfig? = null,
 )

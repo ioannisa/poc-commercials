@@ -4,10 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 internal data class BreakSlotDto(
-    val id: Long,
-    val hour: Int,
-    val minute: Int,
-    val label: String,
+    /** "HH:mm" - the row's identity. There is no break id; a break is its time. */
+    val time: String,
     val zone: String,
     val zoneColorArgb: Int,
 )
@@ -31,7 +29,8 @@ internal data class CommercialDto(
 
 @Serializable
 internal data class CellDto(
-    val breakId: Long,
+    /** "HH:mm" - the break this cell belongs to. */
+    val time: String,
     val date: String, // ISO yyyy-MM-dd
     val spotCount: Int,
     val totalDurationSeconds: Int,
@@ -70,8 +69,9 @@ internal data class FinderSpotDto(
     val totalSeconds: Long = 0,
 )
 
+/** [time] is "HH:mm" and need NOT already have a break - putting a spot there creates it. */
 @Serializable
-internal data class AddPlacementRequest(val spotId: Long, val breakId: Long, val date: String)
+internal data class AddPlacementRequest(val spotId: Long, val time: String, val date: String)
 
 @Serializable
-internal data class ReorderPlacementsRequest(val breakId: Long, val date: String, val orderedIds: List<Long>)
+internal data class ReorderPlacementsRequest(val time: String, val date: String, val orderedIds: List<Long>)

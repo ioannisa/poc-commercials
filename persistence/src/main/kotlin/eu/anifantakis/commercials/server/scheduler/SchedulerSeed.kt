@@ -1,38 +1,49 @@
 package eu.anifantakis.commercials.server.scheduler
 
 import java.time.LocalDate
+import java.time.LocalTime
 
 enum class BreakZone { PRIME, STANDARD, SPECIAL, DEFAULT }
 
-data class BreakSlotRow(
-    val id: Long,
-    val hour: Int,
-    val minute: Int,
-    val label: String,
-    val zone: BreakZone
-)
-
 /**
- * A break to be CREATED - it has no id yet.
+ * A BREAK - which is not a stored entity but whatever a GROUP BY on the airing
+ * time returns (see GroupDb). It IS a time, and carries nothing else: its label
+ * and its zone are FUNCTIONS of that time, computed here so that exactly one
+ * place in the codebase decides them.
  *
- * Break ids used to be computed by the seeder (1..96, identical in every
- * station's own schema). Now that a group's stations share one database the
- * database assigns them, so the seed describes the slot and reads the id back.
+ * There used to be a `break_slots` row with a stored `label` ("00:05" - the time
+ * restated) and a stored `zone` (a hardcoded `when` on the hour, written out
+ * twice: once by the demo seeder and once by the migrator, free to drift apart).
+ * Neither held any information the time did not already have.
  */
-data class BreakTemplate(
-    val hour: Int,
-    val minute: Int,
-    val label: String,
-    val zone: BreakZone
-)
+data class BreakTimeRow(val time: LocalTime) {
+    val hour: Int get() = time.hour
+    val minute: Int get() = time.minute
+    val label: String get() = formatHhMm(time)
+    val zone: BreakZone get() = zoneOf(time.hour)
+}
+
+fun formatHhMm(time: LocalTime): String =
+    "${time.hour.toString().padStart(2, '0')}:${time.minute.toString().padStart(2, '0')}"
+
+/** The zone rule. ONE definition - the migrator no longer keeps a copy. */
+fun zoneOf(hour: Int): BreakZone = when (hour) {
+    in 20..23 -> BreakZone.PRIME
+    in 10..14 -> BreakZone.STANDARD
+    in 18..19 -> BreakZone.SPECIAL
+    else -> BreakZone.DEFAULT
+}
 
 /**
  * READ-MODEL row shapes returned by StationDb.loadMonth - the grid the client
  * renders. Since the normalized-schema evolution these are DERIVED from
  * placements ⋈ spots ⋈ customers ⋈ contracts, not stored.
+ *
+ * A cell is keyed by (time, date) - the break's time, because that is all a
+ * break is.
  */
 data class CellRow(
-    val breakId: Long,
+    val time: LocalTime,
     val date: LocalDate,
     val spotCount: Int,
     val totalDurationSeconds: Int,
@@ -117,28 +128,53 @@ fun cellColorArgb(zone: BreakZone, isWeekend: Boolean, spotCount: Int): Int = wh
     else -> COLOR_WHITE
 }
 
-private fun formatTime(hour: Int, minute: Int): String =
-    "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+/**
+ * The times a DEMO station's invented airings land on (a real station's come
+ * from its data). This is not a break catalog - nothing is stored - it is the
+ * generator's choice of when to pretend spots aired, so a demo group has a
+ * plausible-looking grid.
+ */
+fun demoBreakTimes(): List<LocalTime> =
+    (0..23).flatMap { hour -> listOf(0, 15, 30, 45).map { LocalTime.of(hour, it) } }
 
-fun generateBreaks(): List<BreakTemplate> {
-    val out = mutableListOf<BreakTemplate>()
-    for (hour in 0..23) {
-        for (minute in listOf(0, 15, 30, 45)) {
-            val zone = when {
-                hour in 20..23 -> BreakZone.PRIME
-                hour in 10..14 -> BreakZone.STANDARD
-                hour in 18..19 -> BreakZone.SPECIAL
-                else -> BreakZone.DEFAULT
-            }
-            out += BreakTemplate(
-                hour = hour,
-                minute = minute,
-                label = formatTime(hour, minute),
-                zone = zone
-            )
-        }
-    }
-    return out
+// ──────────────────────────────── the grid's rows ───────────────────────────
+
+/** ≙ the legacy console's "Προβολή κάθε: 1 Ώρα / Μισή Ώρα / Διάλειμμα". */
+enum class GridViewMode { CONDENSED, HALF_HOURLY, HOURLY }
+
+/**
+ * THE ROWS OF THE GRID = a fixed SCAFFOLD ∪ the period's REAL breaks.
+ *
+ * This is the whole of what the `break_slots` table used to be for, and it is a
+ * pure function of (what aired, which view, where the day starts) - which is why
+ * it needed no table:
+ *
+ *  - CONDENSED ("Διάλειμμα") - no scaffold. Only rows that a break produced.
+ *  - HOURLY ("1 Ώρα")        - the 24 :00 rows, drawn even when empty.
+ *  - HALF_HOURLY ("Μισή Ώρα")- the 48 :00/:30 rows, drawn even when empty.
+ *
+ * A real break OFF the scaffold keeps its own row, in time order - so a 12:20
+ * break lands between 12:00 and 13:00 rather than being rounded into either.
+ * And [emptyRowsFrom] holds the scaffold back until the broadcast day starts, so
+ * the empty small hours are not printed while the real 00:05 break still is.
+ *
+ * The screenshot this reproduces (Crete TV, Δεκέμβριος 2025, "Μισή Ώρα",
+ * emptyRowsFrom 07:00) reads: 00:05, 00:30, 01:00, 01:30, 01:45 … 04:00, then
+ * 07:00, 07:30, 08:00 (empty, scaffold), 09:00 … - with 04:30-06:30 absent
+ * entirely, being neither a break nor inside the scaffold.
+ */
+fun gridRows(
+    breakTimes: List<LocalTime>,
+    mode: GridViewMode,
+    emptyRowsFrom: LocalTime,
+): List<BreakTimeRow> {
+    val scaffold = when (mode) {
+        GridViewMode.CONDENSED -> emptyList()
+        GridViewMode.HOURLY -> (0..23).map { LocalTime.of(it, 0) }
+        GridViewMode.HALF_HOURLY -> (0..23).flatMap { listOf(LocalTime.of(it, 0), LocalTime.of(it, 30)) }
+    }.filter { !it.isBefore(emptyRowsFrom) }
+
+    return (scaffold + breakTimes).distinct().sorted().map { BreakTimeRow(it) }
 }
 
 // ────────────────────────────── demo catalog ────────────────────────────────
@@ -202,8 +238,8 @@ data class SpotRef(val id: Long, val durationSeconds: Int)
 /** A generated placement, ready to insert (write model, ≙ legacy `schedule`). */
 data class PlacementSeed(
     val spotId: Long,
-    val breakId: Long,
     val date: LocalDate,
+    val time: LocalTime,
     val position: Int,
     val durationSeconds: Int,
 )
@@ -215,7 +251,7 @@ data class PlacementSeed(
  * (see StationDb.ensureMonthSeeded).
  */
 fun generateMonthPlacements(
-    breaks: List<BreakSlotRow>,
+    breakTimes: List<LocalTime>,
     spots: List<SpotRef>,
     year: Int,
     month: Int,
@@ -226,15 +262,15 @@ fun generateMonthPlacements(
     val out = mutableListOf<PlacementSeed>()
     for (day in 1..daysInMonth(year, month)) {
         val date = LocalDate.of(year, month, day)
-        for (b in breaks) {
+        for (time in breakTimes) {
             if (random.nextFloat() > 0.35f) continue
             val spotCount = random.nextInt(1, 16)
             for (position in 0 until spotCount) {
                 val spot = spots[random.nextInt(spots.size)]
                 out += PlacementSeed(
                     spotId = spot.id,
-                    breakId = b.id,
                     date = date,
+                    time = time,
                     position = position,
                     durationSeconds = spot.durationSeconds,
                 )

@@ -13,9 +13,10 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 internal fun BreakSlotDto.toDomain(): BreakSlotInfo = BreakSlotInfo(
-    id = id, hour = hour, minute = minute, label = label, zone = zone, zoneColorArgb = zoneColorArgb,
+    time = LocalTime.parse(time), zone = zone, zoneColorArgb = zoneColorArgb,
 )
 
 internal fun CommercialDto.toDomain(): PlacedCommercial = PlacedCommercial(
@@ -25,7 +26,7 @@ internal fun CommercialDto.toDomain(): PlacedCommercial = PlacedCommercial(
 )
 
 internal fun CellDto.toDomain(): ScheduleCell = ScheduleCell(
-    breakId = breakId,
+    time = LocalTime.parse(time),
     date = LocalDate.parse(date),
     spotCount = spotCount,
     totalDurationSeconds = totalDurationSeconds,

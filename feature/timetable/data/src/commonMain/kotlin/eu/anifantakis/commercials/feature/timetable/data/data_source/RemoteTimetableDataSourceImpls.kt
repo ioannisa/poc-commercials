@@ -18,11 +18,13 @@ import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFin
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePlacementsDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /*
  * Base URL, bearer token and the station parameter all come from
@@ -31,9 +33,14 @@ import kotlinx.datetime.LocalDate
 
 class RemoteScheduleDataSourceImpl(private val api: ApiHttpClient) : RemoteScheduleDataSource {
 
-    override suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network> =
-        api.get<List<BreakSlotDto>>("/api/breaks")
-            .map { list -> list.map { it.toDomain() } }
+    override suspend fun getBreaks(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<List<BreakSlotInfo>, DataError.Network> =
+        api.get<List<BreakSlotDto>>(
+            "/api/breaks", "year" to year, "month" to month, "mode" to mode.name,
+        ).map { list -> list.map { it.toDomain() } }
 
     override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
         api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month)
@@ -44,25 +51,25 @@ class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePla
 
     override suspend fun add(
         spotId: Long,
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
     ): DataResult<PlacedCommercial, DataError.Network> =
         api.post<AddPlacementRequest, CommercialDto>(
             "/api/schedule/placements",
-            AddPlacementRequest(spotId, breakId, date.toString()),
+            AddPlacementRequest(spotId, time.hhMm(), date.toString()),
         ).map { it.toDomain() }
 
     override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> =
         api.deleteEmpty("/api/schedule/placements/$placementId")
 
     override suspend fun reorder(
-        breakId: Long,
+        time: LocalTime,
         date: LocalDate,
         orderedIds: List<Long>,
     ): EmptyDataResult<DataError.Network> =
         api.putEmpty(
             "/api/schedule/placements/order",
-            ReorderPlacementsRequest(breakId, date.toString(), orderedIds),
+            ReorderPlacementsRequest(time.hhMm(), date.toString(), orderedIds),
         )
 }
 
@@ -82,3 +89,11 @@ class RemoteFinderDataSourceImpl(private val api: ApiHttpClient) : RemoteFinderD
         api.get<List<FinderSpotDto>>("/api/finder/spots", "lineId" to lineId)
             .map { list -> list.map { it.toDomain() } }
 }
+
+/**
+ * The wire form of a break's time. `LocalTime.toString()` would emit seconds
+ * when they are non-zero ("12:20:00" vs "12:20"), and the server's HH:mm parser
+ * rejects that - so the format is pinned here rather than left to the default.
+ */
+private fun LocalTime.hhMm(): String =
+    "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"

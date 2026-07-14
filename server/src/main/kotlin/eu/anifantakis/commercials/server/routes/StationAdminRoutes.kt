@@ -248,16 +248,11 @@ private fun purgeStationRows(c: Connection, stationId: String): Long {
             total += ps.executeUpdate()
         }
     }
-    // Airings first - they reference spots, breaks and programmes.
-    exec(
-        """
-        DELETE p FROM placements p
-        JOIN spots s ON s.id = p.spot_id
-        WHERE s.station_id = ?
-        """.trimIndent()
-    )
+    // Airings first - they reference spots and programmes. (There is no break
+    // table to purge: a break is a time on the airing, so deleting the airings
+    // deletes the breaks.)
+    exec("DELETE FROM placements WHERE station_id = ?")
     exec("DELETE FROM spots WHERE station_id = ?")
-    exec("DELETE FROM break_slots WHERE station_id = ?")
     exec("DELETE FROM programs WHERE station_id = ?")
     exec("DELETE FROM flow_comments WHERE station_id = ?")
     exec("DELETE FROM print_audit WHERE station_id = ?")

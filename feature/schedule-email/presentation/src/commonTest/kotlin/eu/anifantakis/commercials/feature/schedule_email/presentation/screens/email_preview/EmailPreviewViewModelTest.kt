@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.feature.schedule_email.domain.EmailError
 import eu.anifantakis.commercials.feature.schedule_email.presentation.FakeScheduleEmailRepository
 import eu.anifantakis.commercials.feature.schedule_email.presentation.ScheduleEmailTestBase
 import eu.anifantakis.commercials.feature.schedule_email.presentation.previewRequest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -18,6 +19,7 @@ import kotlin.test.assertFalse
  * send, emitting [EmailPreviewEffect.Sent] on success. Fake repo over the
  * domain contract.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class EmailPreviewViewModelTest : ScheduleEmailTestBase() {
 
     private val request = previewRequest()

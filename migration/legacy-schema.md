@@ -138,14 +138,14 @@ contracts/documents (docid, docno, dotid, lines) ──┤   docref             
 | one DB | **one GROUP schema** | 1 legacy DB → 1 group database |
 | `forTV` (0/1) | **`station_id`** on the station-scoped tables | the group's stations; both flows migrate in ONE run |
 | `schedule` row | `commercials` row (+ aggregated `scheduler_cells`) | ours is denormalized snapshot; theirs normalized log |
-| `schedule.showDate/showTime` | `scheduler_cells.cell_date` + `break_slots` | breaks = distinct showTimes |
+| `schedule.showDate/showTime` | `placements.show_date` + `show_time` | **a break IS the time** — it is not stored, it is `GROUP BY show_time` |
 | `schedule.showOrder` | `commercials.position` | |
 | `messages.descr/duration` | `commercials.message/duration_seconds` | we inline; they reference catalog |
 | `messages.cusID` + ERP name | `commercials.client_code/client_name` | our client_code ≈ their cusID/traid |
 | `z_commercials.mciid` → STI item | `commercials.sales_item` (Break Console «Τύπος») | what is SOLD |
 | `programtypes.descr` | `commercials.type` | what AIRS — the booked programme, NOT the item |
 | `sld.isGift` via doc | `commercials.contract` ("ΔΩΡΑ") | |
-| `zones`/`programtypes.color` | `break_slots.zone`/`zone_color_argb` | |
+| `zones`/`programtypes.color` | computed zone + `programs.color_argb` | the zone is a function of the hour; nothing stores it |
 | `usr` | central `users` + grants | ours is strictly better |
 | `roh_print_history` | (we print, don't audit) | easy add later |
 
@@ -203,8 +203,10 @@ is self-sufficient. Per station schema:
   by `forTV` into two separate schemas, which duplicated every customer and split those
   contracts in half. Two traps this exposed, both silent:
   - the placements→breaks join matched on TIME ONLY; in a shared database both stations
-    own an 11:00 break, so it fans out and **doubles every placement**. It must also
-    match `station_id`.
+    own an 11:00 break, so it fanned out and **doubled every placement**. There is no
+    such join any more (see `placements` below), but the hazard survives it: both
+    stations' 11:00 breaks are still different breaks, which is why the airing carries
+    `station_id` and every statement filters on it.
   - `programtypes.id` **repeats per flow** (programme 5 exists on the TV *and* the radio
     side, meaning different shows), so every join to `programs` must match the station
     too — on `legacy_id` alone it paints TV spots with the radio station's shows.
@@ -232,7 +234,7 @@ legacy table first and mirror it.
 | Legacy MySQL            | Ours              | Notes |
 |-------------------------|-------------------|-------|
 | `messages`              | `spots`           | 1:1. `messageTypeID` → `booked_program` (the PROGRAMME the spot was bought into — see the ID-SPACE warning below) + `booked_program_id` → `programs`; `contractID` → `contract_line_id` (resolved, not guessed); `cusID` → `customer_id` (end client on triangular). A spot's ERP ITEM is NOT on the message — it lives on its contract line. |
-| `schedule`              | `placements`      | 1:1. showDate/showTime/showOrder → break_id+position (`break_slots` materializes the time grid the legacy app derived). |
+| `schedule`              | `placements`      | 1:1 and VERBATIM: showDate→show_date, showTime→**show_time**, showOrder→position. **There is no `break_slots` table and no break_id.** A break is not an entity — it is what `GROUP BY station_id, show_date, show_time` returns, exactly as the legacy app did it. |
 | `programtypes`          | `programs`        | The PROGRAMME catalog (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ, MAD ZONE…): what airs, plus its colour. `messages.messageTypeID` AND `schedule.programID` both point here. It is **NOT** an ERP item catalog. |
 | `z_commercials.mciid` (+ SEN `sti`) | `spot_types` | The ERP ITEM catalog (Διαφ. TV Αθήνα 73.000, Σ73.002 Κρήτη, ΔΩΡΑ…) — what is SOLD. `legacy_id` = MCIID, `item_code` = STI.CODCODE, `name` = STI.ITMNAME. It has NO legacy MySQL table of its own; the dump exposes it only as the `mciid` FK on the doc lines. |
 | `docref`                | `contracts`       | docid → legacy_docid, docno → number, dotid → doc_type, traid → customer_id. SEN fills periods/qty/gift. |
@@ -283,9 +285,28 @@ legacy table first and mirror it.
 - `schedule` → `placements`: id→legacy_id, messageID→spot_id, **docID+lineno→
   contract_line_id (the airing's ACTUAL charge - the same spot airs under
   different contracts/products; verified populated on 100% of sampled rows)**,
-  programID→program_id, showDate→show_date, showTime→break_id (via the
-  materialized grid), showOrder→position (renumbered per cell), durationSecs,
-  played, hideSchedule→hidden. Dropped: lastaction, timeOfEntrance.
+  programID→program_id, showDate→show_date, **showTime→show_time** (a straight
+  copy — NOT a lookup into a break table; there isn't one), showOrder→position
+  (renumbered per cell), durationSecs, played, hideSchedule→hidden. Plus
+  `station_id`, the one column legacy did not need: it kept one DATABASE PER
+  OUTLET, so its `schedule` was implicitly single-station, while a group's
+  stations share our schema. Dropped: lastaction, timeOfEntrance.
+
+  **THE BREAK IS NOT AN ENTITY.** The migration used to build a `break_slots`
+  row per DISTINCT (station, HOUR, MINUTE) and then join every airing straight
+  back to it to recover the id it had just discarded — a round trip whose only
+  product was that id. The table held nothing the time did not: its `label` was
+  the time restated ("00:05") and its `zone` a hardcoded `when` on the hour,
+  written out twice (seeder + migrator) and free to drift. It also *cost* us the
+  legacy app's flexibility, which is the real point: there, an operator types a
+  time ("Πρόσθεση νέου διαλείμματος — Ώρα: 23:55") and the break exists, because
+  a break was only ever a `GROUP BY` on `showTime`. A catalog can only accept a
+  time some airing has already used. Resist re-adding it.
+
+  The grid's ROWS are a separate question, and a presentational one: a fixed
+  SCAFFOLD (24 hourly rows / 48 half-hourly / none) UNIONED with the period's
+  real breaks, off-grid ones slotted in time order. See `gridRows` in
+  SchedulerSeed.kt and the station's `emptyRowsFrom` in server.yaml.
 - `z_commercials` → `contract_lines`: docid→contract_id, lineno→line_no,
   mciid→spot_type_id; docnumber/traid are redundant (live on the contract).
   Documents the view never carried get ONE synthetic line (line_no = 1000) with

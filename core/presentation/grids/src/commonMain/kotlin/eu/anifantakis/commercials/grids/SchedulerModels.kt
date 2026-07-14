@@ -27,20 +27,26 @@ data class DailyStats(
 )
 
 /**
- * Key for scheduler cells to ensure stability
+ * Key for scheduler cells to ensure stability.
+ *
+ * A cell is (TIME, date). There is no break id: a break is not a stored entity,
+ * it is the time a spot aired at (the server groups the airings by it).
  */
 @Immutable
 data class SchedulerKey(
-    val breakId: Long,
+    val time: LocalTime,
     val date: LocalDate
 )
 
 /**
- * Represents a break slot in the scheduler (a time slot for commercials)
+ * A ROW of the scheduler - a break, which is to say a TIME.
+ *
+ * The row may be EMPTY: the hourly / half-hourly views print 08:00 whether or
+ * not anything airs there. That is why it has no id - there would be no break
+ * for an empty row to take one from.
  */
 @Immutable
 data class BreakSlot(
-    val id: Long,
     val time: LocalTime,
     val label: String = "",
     val zoneColor: Color = Color.White,
@@ -109,15 +115,6 @@ const val FLOW_ROH: String = "ΡΟΗ"
 // ============================================================================
 // DISPLAY MODE ENUMS
 // ============================================================================
-
-/**
- * Display mode for the scheduler grid - controls which break rows are visible
- */
-enum class SchedulerDisplayMode {
-    CONDENSED,      // Only show breaks that have spots
-    HALF_HOURLY,    // Show :00 and :30 breaks plus any with spots
-    HOURLY          // Show :00 breaks plus any with spots
-}
 
 /**
  * Cell display mode - what to show in each cell

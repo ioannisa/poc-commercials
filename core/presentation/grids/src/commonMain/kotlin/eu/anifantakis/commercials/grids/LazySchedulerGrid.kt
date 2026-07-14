@@ -150,23 +150,13 @@ fun LazySchedulerGrid(
         (1..daysInMonth).map { day -> LocalDate(year, month, day) }
     }
 
-    // Filter breaks to only show those with data (condensed mode)
-    // Single O(cells) pass to collect break ids with spots, then O(breaks) filter
-    val visibleBreaks = remember(breaks, cellData, year, month) {
-        val breakIdsWithSpots = buildSet {
-            for ((key, data) in cellData) {
-                if (data.spotCount > 0 &&
-                    key.date.year == year &&
-                    key.date.month.ordinal + 1 == month
-                ) {
-                    add(key.breakId)
-                }
-            }
-        }
-        breaks.filter { it.id in breakIdsWithSpots }.ifEmpty {
-            breaks.take(20)
-        }
-    }
+    // The rows are exactly what the caller passed. The grid used to filter these
+    // down to breaks that had spots (a hardcoded "condensed" view, with a
+    // `.take(20)` fallback when the month was empty) - but which rows to draw is
+    // the VIEW MODE's decision, and the server already resolved it: the month's
+    // real breaks unioned with the empty scaffold that mode prints. Filtering
+    // again here would delete the empty 08:00 row an hourly view exists to show.
+    val visibleBreaks = breaks
 
     // Scroll states - use rememberSaveable to survive configuration changes
     // Optimization: Use cached state with prefetch buffer (500.dp) to reduce jank
@@ -229,7 +219,7 @@ fun LazySchedulerGrid(
                 val breakSlot = visibleBreaks.getOrNull(selectedRow)
                 val date = allDays.getOrNull(selectedColumn)
                 if (breakSlot != null && date != null) {
-                    val data = cellData[SchedulerKey(breakSlot.id, date)]
+                    val data = cellData[SchedulerKey(breakSlot.time, date)]
                     onCellDoubleClick?.invoke(breakSlot, date, data)
                 }
                 true
@@ -379,7 +369,9 @@ fun LazySchedulerGrid(
             ) {
                 itemsIndexed(
                     items = visibleBreaks,
-                    key = { _, breakSlot -> "row_${breakSlot.id}" }
+                    // The TIME is the row's identity (a break has no id) - and it
+                    // is unique among the rows, which are distinct times in order.
+                    key = { _, breakSlot -> "row_${breakSlot.time}" }
                 ) { rowIndex, breakSlot ->
                     val isRowSelected = rowIndex == selectedRow
 
@@ -417,7 +409,7 @@ fun LazySchedulerGrid(
                         ) {
                             Row(modifier = Modifier.width(totalDaysWidth)) {
                                 allDays.forEachIndexed { colIndex, date ->
-                                    val cellKey = SchedulerKey(breakSlot.id, date)
+                                    val cellKey = SchedulerKey(breakSlot.time, date)
                                     val data = cellData[cellKey]
                                     val isModified = modifiedCells.contains(cellKey)
 

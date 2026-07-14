@@ -3,11 +3,11 @@ package eu.anifantakis.commercials.mcp
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
-import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * A tool-level failure carrying a client-facing message. Thrown by tool bodies
@@ -82,22 +82,27 @@ class McpToolServices(
         }
     }
 
-    /** Resolve a break by its `HH:mm` label, or throw a clear tool error. */
-    fun resolveBreak(access: StationAccess, timeLabel: String): BreakSlotRow =
-        access.data.loadBreaks().firstOrNull { it.label == timeLabel }
-            ?: throw McpToolException(
-                "No break labelled '$timeLabel'. Break labels are HH:mm on a 15-minute grid (e.g. 17:30)."
-            )
+    /**
+     * A break's `HH:mm` label, as a time. There is nothing to RESOLVE any more:
+     * a break IS its time, so this parses and stops. It used to look the label up
+     * in the station's break catalog and fail if it was absent - which also made
+     * it impossible to air a spot at a time no spot had ever used, the very thing
+     * the catalog was costing us.
+     */
+    fun parseBreakTime(timeLabel: String): LocalTime {
+        val minutes = parseHhMm(timeLabel)
+        return LocalTime.of(minutes / 60, minutes % 60)
+    }
 
     /**
-     * The commercials of one break on one date, in air order - resolving the break
-     * by its `HH:mm` label and applying customer scoping. Shared by `spots_in_break`
-     * and `generate_break_report`.
+     * The commercials of one break on one date, in air order, with customer
+     * scoping applied. Shared by `spots_in_break` and `generate_break_report`.
+     * A time nothing aired at is not an error - it is an empty break.
      */
     fun breakSpots(access: StationAccess, date: LocalDate, timeLabel: String): List<CommercialRow> {
-        val slot = resolveBreak(access, timeLabel)
+        val time = parseBreakTime(timeLabel)
         val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
-        val spots = byKey[slot.id to date].orEmpty()
+        val spots = byKey[time to date].orEmpty()
         return if (isCustomerScoped(access.grant)) {
             spots.filter { it.clientCode == access.grant.clientCode }
         } else {

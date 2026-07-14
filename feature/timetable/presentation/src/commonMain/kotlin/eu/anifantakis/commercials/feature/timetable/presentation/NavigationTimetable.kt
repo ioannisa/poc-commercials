@@ -19,6 +19,7 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.serialization.Serializable
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -41,10 +42,14 @@ sealed interface TimetableStepNavType : NavKey {
     @Serializable
     data object Grid : TimetableStepNavType
 
-    /** The cell's identity - the ViewModel pulls everything else from the flow. */
+    /**
+     * The cell's identity - the ViewModel pulls everything else from the flow.
+     * A break is a TIME, so that is what the route carries; there is no break id
+     * to pass (see the domain's BreakSlotInfo).
+     */
     @Serializable
     data class CommercialDetail(
-        val breakId: Long,
+        val time: LocalTime,
         val date: LocalDate,
     ) : TimetableStepNavType
 }
@@ -112,8 +117,8 @@ private fun TimetableFlowHost(
             entry<TimetableStepNavType.Grid> {
                 TimetableScreenRoot(
                     viewModel = koinViewModel { parametersOf(common) },
-                    onOpenDetail = { breakId, date ->
-                        stepStack.add(TimetableStepNavType.CommercialDetail(breakId, date))
+                    onOpenDetail = { time, date ->
+                        stepStack.add(TimetableStepNavType.CommercialDetail(time, date))
                     },
                     onOpenEmailDialog = onOpenEmailDialog,
                     onLogout = onLogout,
@@ -126,15 +131,15 @@ private fun TimetableFlowHost(
                     // The nav arguments are the ViewModel's constructor - the
                     // Root only wires the VM and the navigation callbacks.
                     viewModel = koinViewModel(
-                        key = "commercial-detail-${route.breakId}-${route.date}",
-                    ) { parametersOf(route.breakId, route.date, common) },
+                        key = "commercial-detail-${route.time}-${route.date}",
+                    ) { parametersOf(route.time, route.date, common) },
                     onBack = { stepStack.removeLastOrNull() },
                     // Προηγούμενο/Επόμενο: RE-TARGET the top entry to the
                     // sibling break (replace, not push - Back still returns
                     // to the grid, exactly like the legacy Break Console).
-                    onNavigateToBreak = { breakId ->
+                    onNavigateToBreak = { time ->
                         stepStack[stepStack.lastIndex] =
-                            TimetableStepNavType.CommercialDetail(breakId, route.date)
+                            TimetableStepNavType.CommercialDetail(time, route.date)
                     },
                 )
             }

@@ -4,7 +4,6 @@ import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
-import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import eu.anifantakis.commercials.server.scheduler.CellRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
@@ -12,6 +11,7 @@ import eu.anifantakis.commercials.server.stations.SmtpConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
 
 /*
  * The adapters behind the ports. Each owns exactly ONE kind of I/O: the station
@@ -23,11 +23,10 @@ import java.time.LocalDate
 class StationDbDataSource(private val db: StationDb) : StationDataSource {
 
     override fun customerByCode(code: String): StationDb.CustomerContact? = db.customerByCode(code)
-    override fun loadBreaks(): List<BreakSlotRow> = db.loadBreaks()
     override fun loadMonth(
         year: Int,
         month: Int,
-    ): Pair<List<CellRow>, Map<Pair<Long, LocalDate>, List<CommercialRow>>> = db.loadMonth(year, month)
+    ): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> = db.loadMonth(year, month)
 
     override fun searchParties(query: String, byTrader: Boolean): List<StationDb.PartyRow> =
         db.searchParties(query, byTrader)
@@ -45,13 +44,13 @@ class StationDbDataSource(private val db: StationDb) : StationDataSource {
 
     override fun placementStats(): StationDb.PlacementStats = db.placementStats()
 
-    override fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? =
-        db.addPlacement(spotId, breakId, date)
+    override fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? =
+        db.addPlacement(spotId, time, date)
 
     override fun deletePlacement(placementId: Long): Boolean = db.deletePlacement(placementId)
 
-    override fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean =
-        db.reorderPlacements(breakId, date, orderedIds)
+    override fun reorderPlacements(time: LocalTime, date: LocalDate, orderedIds: List<Long>): Boolean =
+        db.reorderPlacements(time, date, orderedIds)
 
     override fun logEmail(entry: StationDb.EmailLogEntry): Long = db.logEmail(entry)
 }

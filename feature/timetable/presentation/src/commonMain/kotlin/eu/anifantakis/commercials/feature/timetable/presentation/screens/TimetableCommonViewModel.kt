@@ -1,6 +1,5 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
-import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Stable
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
@@ -9,6 +8,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseCommonViewM
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
@@ -16,6 +16,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /**
  * The timetable flow's shared owner (kmp-developer `<Feature>CommonViewModel`):
@@ -44,19 +45,20 @@ class TimetableCommonViewModel(
 
     override fun clear() = dispatch(TimetableCommonIntent.Clear)
 
-    override fun loadBreaks() = dispatch(TimetableCommonIntent.LoadBreaks)
-
     override fun loadMonth(year: Int, month: Int) =
         dispatch(TimetableCommonIntent.LoadMonth(year, month))
 
-    override fun add(spotId: Long, breakId: Long, date: LocalDate) =
-        dispatch(TimetableCommonIntent.Add(spotId, breakId, date))
+    override fun setViewMode(mode: GridViewMode) =
+        dispatch(TimetableCommonIntent.SetViewMode(mode))
 
-    override fun removeLast(breakId: Long, date: LocalDate) =
-        dispatch(TimetableCommonIntent.RemoveLast(breakId, date))
+    override fun add(spotId: Long, time: LocalTime, date: LocalDate) =
+        dispatch(TimetableCommonIntent.Add(spotId, time, date))
 
-    override fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>) =
-        dispatch(TimetableCommonIntent.Reorder(breakId, date, orderedIds))
+    override fun removeLast(time: LocalTime, date: LocalDate) =
+        dispatch(TimetableCommonIntent.RemoveLast(time, date))
+
+    override fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>) =
+        dispatch(TimetableCommonIntent.Reorder(time, date, orderedIds))
 
     // ── the single reducer ──────────────────────────────────────────────────
 
@@ -67,28 +69,16 @@ class TimetableCommonViewModel(
                 updateCommonState { TimetableCommonState() }
             }
 
-            TimetableCommonIntent.LoadBreaks -> {
-                // Station-scoped and idempotent: the grid and the Break Console
-                // both ask, and the reducer is serialized, so exactly one of
-                // them reaches the network. [Clear] (station switch) re-arms it.
-                if (commonState.value.breaks.isNotEmpty()) return
-                when (val result = scheduleRepository.getBreaks()) {
-                    is DataResult.Success -> updateCommonState { st ->
-                        st.copy(breaks = result.data.map { b -> b.toUi() }.toImmutableList())
-                    }
-                    is DataResult.Failure -> {
-                        updateCommonState { st -> st.copy(breaks = persistentListOf()) }
-                        showSnackbar(result.error.toUiText())
-                    }
-                }
-            }
-
             is TimetableCommonIntent.LoadMonth -> {
-                // Blank the OLD month's cells before the await - the new month's
-                // header must never sit above the previous month's numbers. The
-                // breaks survive: they belong to the station, not the month.
+                // Blank the OLD month's cells AND rows before the await - the new
+                // month's header must never sit above the previous month's
+                // numbers, and its rows are the previous month's breaks. (The
+                // rows used to survive here, back when they were a station-wide
+                // grid; they are the month's own now.)
                 addedByCell.clear()
-                updateCommonState { st -> TimetableCommonState(breaks = st.breaks) }
+                val mode = commonState.value.viewMode
+                updateCommonState { TimetableCommonState(viewMode = mode, year = intent.year, month = intent.month) }
+                loadRows(intent.year, intent.month, mode)
                 when (val result = scheduleRepository.getMonth(intent.year, intent.month)) {
                     is DataResult.Success -> updateCommonState { st ->
                         st.copy(cells = result.data.cells.associate { c -> c.toUi() }.toImmutableMap())
@@ -97,15 +87,26 @@ class TimetableCommonViewModel(
                 }
             }
 
+            is TimetableCommonIntent.SetViewMode -> {
+                val st = commonState.value
+                if (st.viewMode == intent.mode) return
+                updateCommonState { it.copy(viewMode = intent.mode) }
+                // Only the ROWS change: the cells are the same airings whichever
+                // view is on, so the month is not re-fetched.
+                val year = st.year
+                val month = st.month
+                if (year != null && month != null) loadRows(year, month, intent.mode)
+            }
+
             is TimetableCommonIntent.Add -> {
-                when (val result = placementsRepository.add(intent.spotId, intent.breakId, intent.date)) {
-                    is DataResult.Success -> applyAdd(SchedulerKey(intent.breakId, intent.date), result.data)
+                when (val result = placementsRepository.add(intent.spotId, intent.time, intent.date)) {
+                    is DataResult.Success -> applyAdd(SchedulerKey(intent.time, intent.date), result.data)
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
 
             is TimetableCommonIntent.RemoveLast -> {
-                val key = SchedulerKey(intent.breakId, intent.date)
+                val key = SchedulerKey(intent.time, intent.date)
                 val last = addedByCell[key]?.lastOrNull() ?: return
                 when (val result = placementsRepository.remove(last.id)) {
                     is DataResult.Success -> applyRemove(key, last)
@@ -114,7 +115,7 @@ class TimetableCommonViewModel(
             }
 
             is TimetableCommonIntent.Reorder -> {
-                val key = SchedulerKey(intent.breakId, intent.date)
+                val key = SchedulerKey(intent.time, intent.date)
                 // Optimistic apply first; the persist below is awaited inside
                 // the reducer, so overlapping reorders stay ordered.
                 updateCommonState { st ->
@@ -127,10 +128,26 @@ class TimetableCommonViewModel(
                         modifiedCells = (st.modifiedCells + key).toImmutableSet(),
                     )
                 }
-                when (val result = placementsRepository.reorder(intent.breakId, intent.date, intent.orderedIds)) {
+                when (val result = placementsRepository.reorder(intent.time, intent.date, intent.orderedIds)) {
                     is DataResult.Success -> Unit
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
+            }
+        }
+    }
+
+    /**
+     * The month's ROWS in the current view. Called from inside the reducer, so
+     * it is already serialized with everything else that touches the state.
+     */
+    private suspend fun loadRows(year: Int, month: Int, mode: GridViewMode) {
+        when (val result = scheduleRepository.getBreaks(year, month, mode)) {
+            is DataResult.Success -> updateCommonState { st ->
+                st.copy(breaks = result.data.map { b -> b.toUi() }.toImmutableList())
+            }
+            is DataResult.Failure -> {
+                updateCommonState { st -> st.copy(breaks = persistentListOf()) }
+                showSnackbar(result.error.toUiText())
             }
         }
     }

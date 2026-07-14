@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -26,7 +27,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
 
     private fun vm() = TimetableCommonViewModel(schedule, placements)
 
-    private val key = SchedulerKey(1L, TEST_DATE)
+    private val key = SchedulerKey(TEST_TIME, TEST_DATE)
 
     @Test
     fun loadMonthPopulatesCells() = runTest(testDispatcher) {
@@ -41,48 +42,108 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         assertEquals(2, cells[key]?.spotCount)
     }
 
+    /**
+     * Was `loadBreaksFetchesOnceHoweverManyScreensAsk` - the station-wide cache.
+     * There is no loadBreaks to call twice any more: the rows arrive WITH the
+     * month, in one verb, because they are the same fact (a break is a time a spot
+     * aired at). So what one load owes us is BOTH halves of the month.
+     */
     @Test
-    fun loadBreaksFetchesOnceHoweverManyScreensAsk() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10), breakSlot(2L, 12)))
-        val vm = vm()
-
-        vm.loadBreaks()   // the grid asks
-        vm.loadBreaks()   // the Break Console asks
-        advanceUntilIdle()
-
-        assertEquals(1, schedule.breaksFetches, "the station's grid is fetched exactly once")
-        assertEquals(listOf(1L, 2L), vm.commonState.value.breaks.map { it.id })
-    }
-
-    @Test
-    fun breaksAreStationScopedAndSurviveMonthNavigation() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10)))
+    fun loadMonthLoadsTheRowsAndTheCellsTogether() = runTest(testDispatcher) {
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10), breakSlot(12)))
         schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
         val vm = vm()
-        vm.loadBreaks()
+
         vm.loadMonth(2026, 7)
         advanceUntilIdle()
 
+        assertEquals(listOf("10:00", "12:00"), vm.commonState.value.breaks.map { it.label }, "the rows")
+        assertEquals(1, vm.commonState.value.cells.size, "and the cells - one load, both halves")
+        assertEquals(
+            listOf(Triple(2026, 7, GridViewMode.CONDENSED)),
+            schedule.breakLoads,
+            "the rows are fetched FOR that month, in the current view",
+        )
+    }
+
+    /**
+     * Was `breaksAreStationScopedAndSurviveMonthNavigation`. That behaviour is
+     * deliberately GONE: the rows were cached station-wide on the belief that an
+     * airtime grid is a property of the station, and it is not - a quiet month
+     * breaks at fewer times than a busy one. So the assertion inverts: navigating
+     * RELOADS them.
+     */
+    @Test
+    fun navigatingToAnotherMonthReloadsTheRows() = runTest(testDispatcher) {
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10)))
+        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadMonth(2026, 7)
+        advanceUntilIdle()
+
+        // August is quiet: it breaks at no time at all.
+        schedule.breaksResult = DataResult.Success(emptyList())
         schedule.monthResult = DataResult.Success(month())
         vm.loadMonth(2026, 8)
         advanceUntilIdle()
 
-        assertEquals(1, vm.commonState.value.breaks.size, "the rows belong to the station, not the month")
-        assertTrue(vm.commonState.value.cells.isEmpty(), "but the month's cells were replaced")
-        assertEquals(1, schedule.breaksFetches, "and no second /api/breaks was issued")
+        assertTrue(vm.commonState.value.breaks.isEmpty(), "the rows are the MONTH's, and August has none")
+        assertTrue(vm.commonState.value.cells.isEmpty(), "and so are the cells")
+        assertEquals(
+            listOf(Triple(2026, 7, GridViewMode.CONDENSED), Triple(2026, 8, GridViewMode.CONDENSED)),
+            schedule.breakLoads,
+            "each month fetches its own rows - there is no station-wide grid to reuse",
+        )
     }
 
     @Test
     fun clearDropsTheBreaksSoAStationSwitchRefetchesThem() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(1L, 10)))
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10)))
         val vm = vm()
-        vm.loadBreaks(); advanceUntilIdle()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        assertEquals(1, vm.commonState.value.breaks.size)
 
         vm.clear(); advanceUntilIdle()
         assertTrue(vm.commonState.value.breaks.isEmpty(), "the breaks belonged to the OLD station")
 
-        vm.loadBreaks(); advanceUntilIdle()
-        assertEquals(2, schedule.breaksFetches, "the new station's grid is fetched afresh")
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        assertEquals(2, schedule.breaksFetches, "the new station's rows are fetched afresh")
+    }
+
+    /**
+     * "Προβολή κάθε" reloads only the ROWS: the same airings are on screen either
+     * way - the view only decides how much empty scaffold is drawn around them.
+     */
+    @Test
+    fun setViewModeReloadsTheRowsButNotTheMonth() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(commercials = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+
+        schedule.breaksResult = DataResult.Success(listOf(breakSlot(8), breakSlot(9), breakSlot(10)))
+        vm.setViewMode(GridViewMode.HOURLY)
+        advanceUntilIdle()
+
+        assertEquals(GridViewMode.HOURLY, vm.commonState.value.viewMode)
+        assertEquals(3, vm.commonState.value.breaks.size, "the hourly view prints its empty scaffold")
+        assertEquals(
+            Triple(2026, 7, GridViewMode.HOURLY),
+            schedule.breakLoads.last(),
+            "the SAME month's rows, in the new view",
+        )
+        assertEquals(1, vm.commonState.value.cells.size, "the cells are untouched - the airings did not change")
+    }
+
+    @Test
+    fun setViewModeToTheModeAlreadyOnIsANoOp() = runTest(testDispatcher) {
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val fetches = schedule.breaksFetches
+
+        vm.setViewMode(GridViewMode.CONDENSED)   // already the mode
+        advanceUntilIdle()
+
+        assertEquals(fetches, schedule.breaksFetches, "re-selecting the current view must not refetch")
     }
 
     @Test
@@ -92,7 +153,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
-        vm.add(spotId = 5, breakId = 1, date = TEST_DATE)
+        vm.add(spotId = 5, time = TEST_TIME, date = TEST_DATE)
         advanceUntilIdle()
 
         val state = vm.commonState.value
@@ -110,7 +171,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
-        vm.removeLast(breakId = 1, date = TEST_DATE)
+        vm.removeLast(time = TEST_TIME, date = TEST_DATE)
         advanceUntilIdle()
 
         assertTrue(placements.removedIds.isEmpty(), "'r' must never delete a placement we did not add")
@@ -124,8 +185,8 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
-        vm.add(spotId = 5, breakId = 1, date = TEST_DATE); advanceUntilIdle()
-        vm.removeLast(breakId = 1, date = TEST_DATE); advanceUntilIdle()
+        vm.add(spotId = 5, time = TEST_TIME, date = TEST_DATE); advanceUntilIdle()
+        vm.removeLast(time = TEST_TIME, date = TEST_DATE); advanceUntilIdle()
 
         val state = vm.commonState.value
         assertEquals(0, state.cells[key]?.spotCount)
@@ -141,7 +202,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
         // Only one id for a two-placement cell: the client's view is stale.
-        vm.reorder(breakId = 1, date = TEST_DATE, orderedIds = listOf(10L))
+        vm.reorder(time = TEST_TIME, date = TEST_DATE, orderedIds = listOf(10L))
         advanceUntilIdle()
 
         assertEquals(
@@ -159,7 +220,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val effects = mutableListOf<GlobalEffect>()
         backgroundScope.launch { globalContainer.effects.collect { effects += it } }
 
-        vm.add(spotId = 5, breakId = 1, date = TEST_DATE)
+        vm.add(spotId = 5, time = TEST_TIME, date = TEST_DATE)
         advanceUntilIdle()
 
         assertEquals(

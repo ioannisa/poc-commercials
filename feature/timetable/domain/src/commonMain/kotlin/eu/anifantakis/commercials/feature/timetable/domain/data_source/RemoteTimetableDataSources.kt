@@ -6,27 +6,33 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 
 /*
  * Network side of the timetable - the only classes that touch the HTTP
  * client. One interface per I/O concern, mirroring the repositories.
  */
 
-/** Read side: breaks + the month grid. */
+/** Read side: the grid's rows + the month grid. */
 interface RemoteScheduleDataSource {
-    suspend fun getBreaks(): DataResult<List<BreakSlotInfo>, DataError.Network>
+    suspend fun getBreaks(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<List<BreakSlotInfo>, DataError.Network>
     suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network>
 }
 
 /** Write side: the 'a'/'r' keys and the detail screen's reorder. */
 interface RemotePlacementsDataSource {
-    suspend fun add(spotId: Long, breakId: Long, date: LocalDate): DataResult<PlacedCommercial, DataError.Network>
+    suspend fun add(spotId: Long, time: LocalTime, date: LocalDate): DataResult<PlacedCommercial, DataError.Network>
     suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network>
-    suspend fun reorder(breakId: Long, date: LocalDate, orderedIds: List<Long>): EmptyDataResult<DataError.Network>
+    suspend fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>): EmptyDataResult<DataError.Network>
 }
 
 /** The finder console's drill-down: party -> contract lines -> spots. */

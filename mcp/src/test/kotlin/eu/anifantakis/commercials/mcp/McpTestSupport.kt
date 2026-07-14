@@ -4,13 +4,13 @@ import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.server.auth.AuthUser
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
-import eu.anifantakis.commercials.server.scheduler.BreakSlotRow
 import eu.anifantakis.commercials.server.scheduler.CellRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
 
 // ── identity fixtures ───────────────────────────────────────────────────────
 
@@ -25,25 +25,28 @@ internal fun caller(vararg grants: StationGrant, admin: Boolean = false) =
 
 // ── port fakes (fakes, not mocks: they run anywhere and catch real bugs) ────
 
-/** In-memory station data. Only the reads/writes a test exercises need real values. */
+/**
+ * In-memory station data. Only the reads/writes a test exercises need real values.
+ *
+ * There is no canned break catalog to hand it any more: a break IS a time, so
+ * [byKey] - the month's cells - is the only place breaks come from.
+ */
 internal class FakeStationDataSource(
-    private val breaks: List<BreakSlotRow> = emptyList(),
-    private val byKey: Map<Pair<Long, LocalDate>, List<CommercialRow>> = emptyMap(),
+    private val byKey: Map<Pair<LocalTime, LocalDate>, List<CommercialRow>> = emptyMap(),
     private val customers: Map<String, StationDb.CustomerContact> = emptyMap(),
     private val parties: List<StationDb.PartyRow> = emptyList(),
 ) : StationDataSource {
 
-    var addedPlacement: Triple<Long, Long, LocalDate>? = null
+    var addedPlacement: Triple<Long, LocalTime, LocalDate>? = null
     var deletedPlacement: Long? = null
     var reordered: List<Long>? = null
     var loggedEmails: Int = 0
 
     override fun customerByCode(code: String): StationDb.CustomerContact? = customers[code]
-    override fun loadBreaks(): List<BreakSlotRow> = breaks
     override fun loadMonth(
         year: Int,
         month: Int,
-    ): Pair<List<CellRow>, Map<Pair<Long, LocalDate>, List<CommercialRow>>> = emptyList<CellRow>() to byKey
+    ): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> = emptyList<CellRow>() to byKey
 
     override fun searchParties(query: String, byTrader: Boolean): List<StationDb.PartyRow> = parties
     override fun partyActivity(code: String, byTrader: Boolean): List<StationDb.ActivityMonth> = emptyList()
@@ -52,8 +55,8 @@ internal class FakeStationDataSource(
     override fun contractStatus(code: String, byTrader: Boolean): List<StationDb.ContractStatusRow> = emptyList()
     override fun placementStats(): StationDb.PlacementStats = StationDb.PlacementStats(0, null, null)
 
-    override fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? {
-        addedPlacement = Triple(spotId, breakId, date)
+    override fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? {
+        addedPlacement = Triple(spotId, time, date)
         return null
     }
 
@@ -62,7 +65,7 @@ internal class FakeStationDataSource(
         return true
     }
 
-    override fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean {
+    override fun reorderPlacements(time: LocalTime, date: LocalDate, orderedIds: List<Long>): Boolean {
         reordered = orderedIds
         return true
     }

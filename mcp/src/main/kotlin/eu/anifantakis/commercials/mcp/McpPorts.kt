@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.io.File
 import java.time.LocalDate
+import java.time.LocalTime
 
 /*
  * The ports the MCP tools depend on (DIP).
@@ -31,9 +32,9 @@ interface StationDataSource : ScheduleEmailSource {
     fun placementStats(): StationDb.PlacementStats
 
     // ── writes ───────────────────────────────────────────────────────────────
-    fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow?
+    fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow?
     fun deletePlacement(placementId: Long): Boolean
-    fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean
+    fun reorderPlacements(time: LocalTime, date: LocalDate, orderedIds: List<Long>): Boolean
     fun logEmail(entry: StationDb.EmailLogEntry): Long
 }
 

@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.mcp.inputSchema
 import eu.anifantakis.commercials.mcp.parseIsoDate
 import eu.anifantakis.commercials.mcp.prop
 import eu.anifantakis.commercials.mcp.runTool
+import eu.anifantakis.commercials.server.scheduler.BreakTimeRow
 import eu.anifantakis.commercials.mcp.tools.McpTool
 import eu.anifantakis.commercials.mcp.tools.ToolContext
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
@@ -19,22 +20,27 @@ import java.time.LocalDate
 
 /**
  * Break DISCOVERY — the counterpart of the label-based tools (spots_in_break,
- * generate_break_report), which need an exact `HH:mm`. Needed because migrated
- * stations carry off-grid air times (22:05, 21:01) that can't be guessed.
+ * generate_break_report), which need an exact `HH:mm`. Needed because stations
+ * air at off-grid times (22:05, 21:01) that cannot be guessed.
+ *
+ * `date` is REQUIRED, and that is the model showing through: a break is not part
+ * of a station's standing configuration, it is a time something aired at. There
+ * is no station-wide grid to ask for - only "what did this station break at, on
+ * this day". (The tool used to answer date-less, off a stored catalog.)
  */
 object ListBreaksTool : McpTool {
     override val name = "list_breaks"
     override val description =
-        "Discover a station's breaks (the airtime grid), ascending by time. Without a date " +
-            "you get the grid (label + zone). With date='YYYY-MM-DD' each break also carries that day's " +
+        "Discover a station's breaks on a given day, ascending by time. A break exists where spots " +
+            "aired, so date='YYYY-MM-DD' is required. Each break carries its label, zone, that day's " +
             "spot count, total duration and programme (customer accounts see only their own spots). Use " +
-            "onlyWithSpots=true (needs a date) to list just the occupied breaks, and after='HH:mm' to find " +
+            "onlyWithSpots=true to drop breaks with nothing visible to you, and after='HH:mm' to find " +
             "the NEXT break after a time (the first result). The 'label' values feed spots_in_break / " +
             "generate_break_report."
-    override val inputSchema = inputSchema(required = listOf("station")) {
+    override val inputSchema = inputSchema(required = listOf("station", "date")) {
         prop("station", "string", "Station id (see list_stations).")
-        prop("date", "string", "Optional date YYYY-MM-DD; add it for per-day occupancy.")
-        prop("onlyWithSpots", "boolean", "Only breaks that have spots that date (requires date). Default false.")
+        prop("date", "string", "Date YYYY-MM-DD. Required - breaks exist per day, not per station.")
+        prop("onlyWithSpots", "boolean", "Drop breaks with no spots visible to you. Default false.")
         prop("after", "string", "Only breaks later than this HH:mm; the first result is the next break.")
     }
 
@@ -42,7 +48,7 @@ object ListBreaksTool : McpTool {
         val services = ctx.services
         val a = req.args
         val access = services.resolveStation(ctx.caller, a.stringOrNull("station"))
-        val date = a.stringOrNull("date")?.let { parseIsoDate(it) }
+        val date = parseIsoDate(a.string("date"))
         val breaks = listBreaks(
             access = access,
             customerScoped = services.isCustomerScoped(access.grant),
@@ -51,7 +57,7 @@ object ListBreaksTool : McpTool {
             after = a.stringOrNull("after"),
         )
         buildJsonObject {
-            date?.let { put("date", it.toString()) }
+            put("date", date.toString())
             put("breakCount", breaks.size)
             put("breaks", buildJsonArray {
                 breaks.forEach { b ->
@@ -68,10 +74,7 @@ object ListBreaksTool : McpTool {
     }
 }
 
-/**
- * A break in the airtime grid. Occupancy fields are null when no date was given
- * (pure grid discovery) and populated (customer-scoped) when a date is.
- */
+/** A break on a day: its time, and what aired in it (customer-scoped). */
 data class BreakInfo(
     val label: String,
     val hour: Int,
@@ -83,42 +86,41 @@ data class BreakInfo(
 )
 
 /**
- * The station's breaks, ascending by air time.
- * - no [date]  -> just the grid (label + zone); occupancy fields null.
- * - with [date] -> each break carries that day's spot count / duration / programme,
- *   customer-scoped when [customerScoped] (a CUSTOMER_VIEWER sees only THEIR spots).
- * - [onlyWithSpots] keeps only occupied breaks (requires a date).
+ * The station's breaks on [date], ascending by air time - which is to say, the
+ * DISTINCT times its airings landed on that day.
+ * - customer-scoped when [customerScoped] (a CUSTOMER_VIEWER sees only THEIR spots).
+ * - [onlyWithSpots] drops breaks with nothing visible to the caller. For staff every
+ *   break has spots by construction; for a CUSTOMER_VIEWER it is the useful filter.
  * - [after] ("HH:mm") keeps only breaks later than that time; the FIRST result is the "next break".
  */
 internal fun listBreaks(
     access: StationAccess,
     customerScoped: Boolean,
-    date: LocalDate?,
+    date: LocalDate,
     onlyWithSpots: Boolean,
     after: String?,
 ): List<BreakInfo> {
-    if (onlyWithSpots && date == null) {
-        throw McpToolException("onlyWithSpots needs a 'date' (occupancy is per-day).")
-    }
     val afterMinutes = after?.let { parseHhMm(it) }
-    val slots = access.data.loadBreaks()
-        .sortedBy { it.hour * 60 + it.minute }
+
+    // ONE query. The month grid's keys ARE the breaks - a break is the time an
+    // airing landed on - so the day's breaks are read straight off them. (This
+    // used to fetch the station's break catalog and index the month by its ids.)
+    val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
+    val times = byKey.keys.filter { it.second == date }
+        .map { BreakTimeRow(it.first) }
+        .distinct()
+        .sortedBy { it.time }
         .filter { afterMinutes == null || it.hour * 60 + it.minute > afterMinutes }
 
-    if (date == null) {
-        return slots.map { BreakInfo(it.label, it.hour, it.minute, it.zone.name, null, null, null) }
-    }
-
-    val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
-    return slots.mapNotNull { slot ->
-        var spots = byKey[slot.id to date].orEmpty()
+    return times.mapNotNull { b ->
+        var spots = byKey[b.time to date].orEmpty()
         if (customerScoped) spots = spots.filter { it.clientCode == access.grant.clientCode }
         if (onlyWithSpots && spots.isEmpty()) return@mapNotNull null
         BreakInfo(
-            label = slot.label,
-            hour = slot.hour,
-            minute = slot.minute,
-            zone = slot.zone.name,
+            label = b.label,
+            hour = b.hour,
+            minute = b.minute,
+            zone = b.zone.name,
             spotCount = spots.size,
             totalDurationSeconds = spots.sumOf { it.durationSeconds },
             programName = spots.firstOrNull()?.programName,
