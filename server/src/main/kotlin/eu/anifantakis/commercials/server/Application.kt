@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
 import eu.anifantakis.commercials.server.di.serverModule
 import eu.anifantakis.commercials.server.plugins.configureCallLogging
+import eu.anifantakis.commercials.server.plugins.configureCompression
 import eu.anifantakis.commercials.server.plugins.configureMcp
 import eu.anifantakis.commercials.server.plugins.configureRouting
 import eu.anifantakis.commercials.server.plugins.configureSecurity
@@ -44,6 +45,9 @@ fun Application.module() {
     authDb.bootstrap()
 
     configureCallLogging()
+    // Before routing: the month grid ships megabytes of repetitive JSON, and
+    // this is the biggest single win on that screen (7.79 MB -> 329 KB).
+    configureCompression()
     configureStatusPages()
     configureSecurity()
     configureSerialization()

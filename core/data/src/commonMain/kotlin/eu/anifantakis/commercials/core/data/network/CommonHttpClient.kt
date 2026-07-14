@@ -13,6 +13,7 @@ import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.ResponseException
+import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
@@ -67,6 +68,20 @@ abstract class CommonHttpClient(
         val config: HttpClientConfig<*>.() -> Unit = {
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true })
+            }
+            // Asks for gzip and transparently decodes it. NOT optional on desktop:
+            // the JVM engine here is CIO, which - unlike a browser - does NOT add
+            // `Accept-Encoding` by itself, so without this the server's compression
+            // would simply never be requested and desktop would keep downloading
+            // the raw payload.
+            //
+            // It matters most on the MONTH GRID: a busy month is 7.79 MB of JSON
+            // and 329 KB gzipped (measured) - a 23.7x cut, because it is thousands
+            // of repetitions of the same customer and product names. On wasmJS the
+            // browser negotiates this for us; desktop needs the plugin.
+            install(ContentEncoding) {
+                gzip()
+                deflate()
             }
             install(HttpTimeout) {
                 requestTimeoutMillis = this@CommonHttpClient.requestTimeoutMillis
