@@ -5,7 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
-import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationMapping
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
@@ -23,7 +23,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The super-admin migration console VM: form reducers, the canStart /
@@ -60,7 +62,7 @@ class MigrationViewModelTest {
 
         var startCalls = 0
         var lastStart: MigrationStart? = null
-        var lastChoose: MigrationFlowChoice? = null
+        var lastMapping: MigrationMapping? = null
         val browsePaths = mutableListOf<String?>()
 
         override suspend fun status(): DataResult<MigrationStatus, RemoteError> = statusGate.await()
@@ -71,8 +73,8 @@ class MigrationViewModelTest {
             return startResult
         }
 
-        override suspend fun chooseFlow(choice: MigrationFlowChoice): DataResult<MigrationStatus, RemoteError> {
-            lastChoose = choice
+        override suspend fun chooseMapping(mapping: MigrationMapping): DataResult<MigrationStatus, RemoteError> {
+            lastMapping = mapping
             return chooseResult
         }
 
@@ -84,10 +86,19 @@ class MigrationViewModelTest {
         }
     }
 
+    /** A complete step-1 form: dump, credentials, and a NEW target group. */
     private fun fillSource(vm: MigrationViewModel) {
         vm.onAction(MigrationIntent.DumpPathChanged("/srv/dump.sql"))
         vm.onAction(MigrationIntent.UsernameChanged("root"))
+        vm.onAction(MigrationIntent.GroupIdChanged("crete-group"))
+        vm.onAction(MigrationIntent.GroupNameChanged("Crete Group"))
         vm.onAction(MigrationIntent.SchemaChanged("legacy"))
+    }
+
+    /** Maps a flow to a station, the way step 2 does. */
+    private fun mapFlow(vm: MigrationViewModel, forTv: Int, id: String, name: String) {
+        vm.onAction(MigrationIntent.FlowStationIdChanged(forTv, id))
+        vm.onAction(MigrationIntent.FlowStationNameChanged(forTv, name))
     }
 
     @Test
@@ -163,30 +174,89 @@ class MigrationViewModelTest {
     }
 
     @Test
-    fun chooseFlowWithoutYamlNeedsNoStationAndAdoptsTheStatus() = runTest(testDispatcher) {
+    fun bothFlowsMapToStationsOfTheGroupInOneRun() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
         val vm = MigrationViewModel(repo)
 
-        vm.onAction(MigrationIntent.FlowSelected(1))
-        vm.onAction(MigrationIntent.AddToYamlChanged(false))   // no station id/name required
-        vm.onAction(MigrationIntent.ChooseFlow)
+        // The whole point of the group model: the dump's TV and radio flows are
+        // ONE company's, so they migrate together and share its customers and
+        // contracts - not one flow per run into a schema of its own.
+        mapFlow(vm, forTv = 1, id = "crete-tv", name = "Crete TV")
+        mapFlow(vm, forTv = 0, id = "radio-984", name = "Radio 984")
+        vm.onAction(MigrationIntent.ChooseMapping)
         advanceUntilIdle()
 
-        assertEquals(1, repo.lastChoose?.forTv)
+        val sent = repo.lastMapping?.mappings.orEmpty()
+        assertEquals(2, sent.size, "both flows travel in the SAME request")
+        assertEquals(listOf(1, 0), sent.map { it.forTv }, "TV first, then radio")
+        assertEquals(listOf("crete-tv", "radio-984"), sent.map { it.stationId })
         assertEquals("DONE", vm.state.status.state)
     }
 
     @Test
-    fun resetClearsTheSelectedFlowAndAdoptsTheStatus() = runTest(testDispatcher) {
+    fun aFlowWithoutAStationIdIsSkippedRatherThanMigrated() = runTest(testDispatcher) {
         val repo = FakeMigrationRepository()
         val vm = MigrationViewModel(repo)
-        vm.onAction(MigrationIntent.FlowSelected(1))
+
+        mapFlow(vm, forTv = 1, id = "crete-tv", name = "Crete TV")
+        // The radio flow is left blank on purpose - the operator does not want it.
+        vm.onAction(MigrationIntent.FlowStationNameChanged(0, "Radio 984"))
+
+        vm.onAction(MigrationIntent.ChooseMapping)
+        advanceUntilIdle()
+
+        assertEquals(listOf(1), repo.lastMapping?.mappings?.map { it.forTv })
+    }
+
+    @Test
+    fun twoFlowsCannotShareOneStationId() = runTest(testDispatcher) {
+        val vm = MigrationViewModel(FakeMigrationRepository())
+
+        mapFlow(vm, forTv = 1, id = "same-id", name = "TV")
+        mapFlow(vm, forTv = 0, id = "same-id", name = "Radio")
+
+        assertFalse(vm.state.canMap, "they are separate stations of the group, not one")
+    }
+
+    @Test
+    fun mappingWithNoFlowAtAllIsANoOp() = runTest(testDispatcher) {
+        val repo = FakeMigrationRepository()
+        val vm = MigrationViewModel(repo)
+
+        vm.onAction(MigrationIntent.ChooseMapping)
+        advanceUntilIdle()
+
+        assertNull(repo.lastMapping, "canMap gates the server call")
+    }
+
+    @Test
+    fun resetClearsTheFlowMappingAndAdoptsTheStatus() = runTest(testDispatcher) {
+        val repo = FakeMigrationRepository()
+        val vm = MigrationViewModel(repo)
+        mapFlow(vm, forTv = 1, id = "crete-tv", name = "Crete TV")
 
         vm.onAction(MigrationIntent.Reset)
         advanceUntilIdle()
 
-        assertNull(vm.state.selectedFlow)
+        assertTrue(vm.state.flowTargets.isEmpty())
         assertEquals("IDLE", vm.state.status.state)
+    }
+
+    @Test
+    fun anExistingGroupNeedsNoSchemaOfItsOwn() = runTest(testDispatcher) {
+        val repo = FakeMigrationRepository()
+        val vm = MigrationViewModel(repo)
+        vm.onAction(MigrationIntent.DumpPathChanged("/srv/dump.sql"))
+        vm.onAction(MigrationIntent.UsernameChanged("root"))
+
+        // An existing group OWNS its database, so the form must not ask for one.
+        vm.onAction(MigrationIntent.ExistingGroupSelected("crete-group"))
+
+        assertTrue(vm.state.canStart, "no schema needed - the group supplies it")
+        vm.onAction(MigrationIntent.Start)
+        advanceUntilIdle()
+
+        assertEquals("crete-group", repo.lastStart?.groupId)
     }
 
     @Test

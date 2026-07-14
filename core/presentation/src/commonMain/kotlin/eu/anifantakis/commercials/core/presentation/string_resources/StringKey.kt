@@ -280,7 +280,12 @@ enum class StringKey(val json: String = "") {
     DATABASES_CD_DELETE,
     DATABASES_DELETE_TITLE,
     DATABASES_SAFE_DELETE,
-    DATABASES_HARD_DELETE,
+    // A station does not own a database - its GROUP does. So "hard delete"
+    // (DROP DATABASE for one station) is gone: it would have taken the sibling
+    // stations with it. PURGE deletes the station's rows; DROP_GROUP drops the
+    // whole group database and says which stations die with it.
+    DATABASES_PURGE_DELETE,
+    DATABASES_DROP_GROUP,
     DATABASES_CONFIRM_ID,
     MIGRATION_DUMP_PATH,
     MIGRATION_BROWSE,
@@ -330,7 +335,9 @@ enum class StringKey(val json: String = "") {
     DATABASES_STATION_SUMMARY,
     DATABASES_EMPTY_RANGE,
     DATABASES_SAFE_DELETE_DESC,
-    DATABASES_HARD_DELETE_DESC,
+    DATABASES_PURGE_DELETE_DESC,
+    DATABASES_DROP_GROUP_DESC,
+    DATABASES_DROP_GROUP_SIBLINGS,
     DATABASES_DELETED_STATUS,
     USER_MGMT_SUPER_ADMIN_BADGE,
     USER_MGMT_RESET_INFO,
@@ -343,6 +350,19 @@ enum class StringKey(val json: String = "") {
     MIGRATION_STEP2,
     MIGRATION_FLOW_INFO,
     MIGRATION_FLOW_ITEM,
+    // Groups: a legacy database is ONE company's, and its TV and radio flows
+    // share the customers and contracts - so it migrates into one GROUP
+    // database whose stations are those flows.
+    MIGRATION_GROUP_SECTION,
+    MIGRATION_GROUP_INFO,
+    MIGRATION_GROUP_NEW,
+    MIGRATION_GROUP_ID,
+    MIGRATION_GROUP_NAME,
+    MIGRATION_FLOW_STATION_HINT,
+    MIGRATION_FLOW_SKIPPED,
+    MIGRATION_MIGRATE_FLOWS,
+    MIGRATION_SUM_STATION,
+    MIGRATION_SUM_SHARED,
     COMMON_TV,
     COMMON_RADIO,
     MIGRATION_SUM_CUSTOMERS,

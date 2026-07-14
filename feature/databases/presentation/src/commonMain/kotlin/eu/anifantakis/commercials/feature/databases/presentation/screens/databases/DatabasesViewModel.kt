@@ -1,7 +1,5 @@
 package eu.anifantakis.commercials.feature.databases.presentation.screens.databases
 
-import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
-import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
@@ -13,6 +11,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.databases.domain.DatabasesRepository
+import eu.anifantakis.commercials.feature.databases.domain.DeleteMode
 import eu.anifantakis.commercials.feature.databases.domain.HostedStation
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -24,16 +23,25 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** The delete confirmation dialog's sub-state (same screen, same VM). */
+/**
+ * The delete confirmation dialog's sub-state (same screen, same VM).
+ *
+ * The confirmation word depends on the mode: dropping the GROUP destroys the
+ * station's siblings too, so it is confirmed with the group's id, not the
+ * station's - a different decision takes a different word.
+ */
 @Immutable
 data class DeleteDialogState(
     val station: HostedStation,
-    val hard: Boolean = false,
+    val mode: DeleteMode = DeleteMode.SAFE,
     val confirmId: String = "",
     val busy: Boolean = false,
     val error: UiText? = null,
 ) {
-    val canConfirm: Boolean get() = !busy && confirmId.trim() == station.id
+    val expectedConfirmation: String
+        get() = if (mode == DeleteMode.DROP_GROUP) station.groupId else station.id
+
+    val canConfirm: Boolean get() = !busy && confirmId.trim() == expectedConfirmation
 }
 
 @Immutable
@@ -47,7 +55,7 @@ data class DatabasesState(
 sealed interface DatabasesIntent {
     data object Reload : DatabasesIntent
     data class DeleteRequested(val station: HostedStation) : DatabasesIntent
-    data class DeleteModeChanged(val hard: Boolean) : DatabasesIntent
+    data class DeleteModeChanged(val mode: DeleteMode) : DatabasesIntent
     data class ConfirmIdChanged(val value: String) : DatabasesIntent
     data object ConfirmDelete : DatabasesIntent
     data object DismissDelete : DatabasesIntent
@@ -69,8 +77,11 @@ class DatabasesViewModel(
             DatabasesIntent.Reload -> reload()
             is DatabasesIntent.DeleteRequested ->
                 _state.update { it.copy(delete = DeleteDialogState(intent.station)) }
+            // Switching mode clears the typed confirmation: it means a different
+            // word now (the group's id for a drop-group), and carrying the old
+            // one over would leave a "confirmed" dialog the user never read.
             is DatabasesIntent.DeleteModeChanged ->
-                _state.update { it.copy(delete = it.delete?.copy(hard = intent.hard)) }
+                _state.update { it.copy(delete = it.delete?.copy(mode = intent.mode, confirmId = "")) }
             is DatabasesIntent.ConfirmIdChanged ->
                 _state.update { it.copy(delete = it.delete?.copy(confirmId = intent.value)) }
             DatabasesIntent.DismissDelete ->
@@ -97,7 +108,7 @@ class DatabasesViewModel(
         if (!dialog.canConfirm) return
         _state.update { it.copy(delete = dialog.copy(busy = true, error = null)) }
         viewModelScope.launch {
-            when (val result = repository.deleteStation(dialog.station.id, dialog.hard, dialog.confirmId.trim())) {
+            when (val result = repository.deleteStation(dialog.station.id, dialog.mode, dialog.confirmId.trim())) {
                 is DataResult.Success -> {
                     _state.update {
                         it.copy(

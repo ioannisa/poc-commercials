@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import eu.anifantakis.commercials.feature.databases.domain.DeleteMode
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -149,7 +150,13 @@ private fun DeleteStationDialog(
     AppDialog(
         title = Strings[StringKey.DATABASES_DELETE_TITLE].withArgs(listOf(station.name)),
         onDismiss = { onIntent(DatabasesIntent.DismissDelete) },
-        confirmText = Strings[if (dialog.hard) StringKey.DATABASES_HARD_DELETE else StringKey.DATABASES_SAFE_DELETE],
+        confirmText = Strings[
+            when (dialog.mode) {
+                DeleteMode.SAFE -> StringKey.DATABASES_SAFE_DELETE
+                DeleteMode.PURGE -> StringKey.DATABASES_PURGE_DELETE
+                DeleteMode.DROP_GROUP -> StringKey.DATABASES_DROP_GROUP
+            }
+        ],
         onConfirm = { onIntent(DatabasesIntent.ConfirmDelete) },
         dismissText = Strings[StringKey.COMMON_CANCEL],
         confirmEnabled = dialog.canConfirm,
@@ -159,7 +166,10 @@ private fun DeleteStationDialog(
         // Two-line labels (title + description): AppRadioRow only carries a
         // single string label, so these rows stay hand-built around AppRadio.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AppRadio(selected = !dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(false)) })
+            AppRadio(
+                selected = dialog.mode == DeleteMode.SAFE,
+                onClick = { onIntent(DatabasesIntent.DeleteModeChanged(DeleteMode.SAFE)) },
+            )
             Column {
                 AppText(Strings[StringKey.DATABASES_SAFE_DELETE], AppTextStyle.BODY_STRONG)
                 AppText(
@@ -168,20 +178,58 @@ private fun DeleteStationDialog(
                 )
             }
         }
+        // The station's rows only. Its siblings keep the database, and so do the
+        // group's shared customers and contracts.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AppRadio(selected = dialog.hard, onClick = { onIntent(DatabasesIntent.DeleteModeChanged(true)) })
+            AppRadio(
+                selected = dialog.mode == DeleteMode.PURGE,
+                onClick = { onIntent(DatabasesIntent.DeleteModeChanged(DeleteMode.PURGE)) },
+            )
             Column {
-                AppText(Strings[StringKey.DATABASES_HARD_DELETE], AppTextStyle.BODY_STRONG, color = MaterialTheme.colorScheme.error)
                 AppText(
-                    Strings[StringKey.DATABASES_HARD_DELETE_DESC],
+                    Strings[StringKey.DATABASES_PURGE_DELETE],
+                    AppTextStyle.BODY_STRONG,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                AppText(
+                    Strings[StringKey.DATABASES_PURGE_DELETE_DESC].withArgs(listOf(station.groupName)),
                     AppTextStyle.NOTE,
                 )
+            }
+        }
+        // The whole group database - it takes every sibling station with it, so
+        // the dialog names them and asks for the GROUP's id.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppRadio(
+                selected = dialog.mode == DeleteMode.DROP_GROUP,
+                onClick = { onIntent(DatabasesIntent.DeleteModeChanged(DeleteMode.DROP_GROUP)) },
+            )
+            Column {
+                AppText(
+                    Strings[StringKey.DATABASES_DROP_GROUP],
+                    AppTextStyle.BODY_STRONG,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                AppText(
+                    Strings[StringKey.DATABASES_DROP_GROUP_DESC].withArgs(
+                        listOf(station.groupName, station.database)
+                    ),
+                    AppTextStyle.NOTE,
+                )
+                if (station.siblings.isNotEmpty()) {
+                    AppText(
+                        Strings[StringKey.DATABASES_DROP_GROUP_SIBLINGS]
+                            .withArgs(listOf(station.siblings.joinToString(", "))),
+                        AppTextStyle.NOTE,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
         AppTextField(
             value = dialog.confirmId,
             onValueChange = { onIntent(DatabasesIntent.ConfirmIdChanged(it)) },
-            label = Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(station.id)),
+            label = Strings[StringKey.DATABASES_CONFIRM_ID].withArgs(listOf(dialog.expectedConfirmation)),
             enabled = !dialog.busy,
         )
         dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }

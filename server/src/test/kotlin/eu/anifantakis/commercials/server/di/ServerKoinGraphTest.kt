@@ -50,12 +50,17 @@ class ServerKoinGraphTest {
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
           username: test
           password: test
-        stations:
-          - id: station-a
-            name: "Station A"
+        groups:
+          - id: group-a
+            name: "Group A"
             jdbcUrl: "jdbc:mysql://localhost:3306/commercials_a"
             username: test
             password: test
+            stations:
+              - id: station-a
+                name: "Station A"
+              - id: station-b
+                name: "Station B"
         """.trimIndent()
     ) {
         // Exactly what Application.module() installs.
@@ -67,7 +72,9 @@ class ServerKoinGraphTest {
         assertNotNull(koin.get<ServerConfig>())
         assertNotNull(koin.get<CentralDb>())
         assertNotNull(koin.get<AuthDb>())
-        assertEquals(listOf("station-a"), koin.get<StationRegistry>().ids)
+        // The registry flattens the group's stations: grants and ?station= never
+        // learn about groups.
+        assertEquals(listOf("station-a", "station-b"), koin.get<StationRegistry>().ids)
         // :mcp's own module resolves against the server's persistence graph
         assertNotNull(koin.get<McpToolServices>())
 
@@ -93,11 +100,11 @@ class ServerKoinGraphTest {
     }
 
     /**
-     * A station pointing at the central schema must be rejected at load time
+     * A group pointing at the central schema must be rejected at load time
      * (query-param differences in the URL must not disguise the collision).
      */
     @Test
-    fun stationUsingCentralSchemaIsRejected() = withStationsYaml(
+    fun groupUsingCentralSchemaIsRejected() = withStationsYaml(
         """
         superAdmin:
           username: root-admin
@@ -106,12 +113,15 @@ class ServerKoinGraphTest {
           jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?useUnicode=true"
           username: test
           password: test
-        stations:
-          - id: rogue
+        groups:
+          - id: rogue-group
             name: "Rogue"
             jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?characterEncoding=utf8"
             username: test
             password: test
+            stations:
+              - id: rogue
+                name: "Rogue"
         """.trimIndent()
     ) {
         assertFailsWith<IllegalArgumentException> {

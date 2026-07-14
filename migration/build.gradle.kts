@@ -32,6 +32,9 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.kotlinx.serialization.json)
 
+    // server.yaml surgery re-parses its own output before writing it (StationsYaml)
+    implementation(libs.kaml)
+
     testImplementation(libs.kotlin.test)
 }
 

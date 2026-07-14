@@ -135,7 +135,8 @@ contracts/documents (docid, docno, dotid, lines) ──┤   docref             
 
 | Legacy | Ours today | Notes |
 |---|---|---|
-| one DB (× forTV) | station schema | 1 legacy DB → 1–2 stations |
+| one DB | **one GROUP schema** | 1 legacy DB → 1 group database |
+| `forTV` (0/1) | **`station_id`** on the station-scoped tables | the group's stations; both flows migrate in ONE run |
 | `schedule` row | `commercials` row (+ aggregated `scheduler_cells`) | ours is denormalized snapshot; theirs normalized log |
 | `schedule.showDate/showTime` | `scheduler_cells.cell_date` + `break_slots` | breaks = distinct showTimes |
 | `schedule.showOrder` | `commercials.position` | |
@@ -195,7 +196,18 @@ is self-sufficient. Per station schema:
 
 - **Order**: customers ← contracts ← lines ← spots ← placements; keep
   `legacy_id` columns everywhere for idempotent re-runs and cross-checks.
-- **forTV split**: migrating one legacy DB writes into 1–2 target stations.
+- **forTV is a STAMP, not a filter** (corrected 2026-07-13): one legacy DB is one
+  COMPANY's, and its TV and radio flows share the customer base and the contracts —
+  1,823 contracts sell on both. So the dump migrates into ONE **group** database and
+  each flow becomes a `station_id` inside it, in a single run. The old design filtered
+  by `forTV` into two separate schemas, which duplicated every customer and split those
+  contracts in half. Two traps this exposed, both silent:
+  - the placements→breaks join matched on TIME ONLY; in a shared database both stations
+    own an 11:00 break, so it fans out and **doubles every placement**. It must also
+    match `station_id`.
+  - `programtypes.id` **repeats per flow** (programme 5 exists on the TV *and* the radio
+    side, meaning different shows), so every join to `programs` must match the station
+    too — on `legacy_id` alone it paints TV spots with the radio station's shows.
 - **Charset**: utf8mb3 → utf8mb4 is safe upward; watch `0000-00-00` dates
   (convert to NULL; MySQL 8 strict mode rejects them).
 - **MEMORY table** (`pelates_of_pelates`) dumps empty — agency/client pairs

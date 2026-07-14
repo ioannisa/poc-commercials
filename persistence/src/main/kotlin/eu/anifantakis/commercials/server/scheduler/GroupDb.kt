@@ -1,0 +1,687 @@
+package eu.anifantakis.commercials.server.scheduler
+
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import eu.anifantakis.commercials.server.stations.GroupConfig
+import java.sql.Connection
+
+/**
+ * One GROUP's database: a dedicated connection pool over the group's schema
+ * (its jdbcUrl/credentials from server.yaml) plus the schema itself.
+ *
+ * A group is a company that owns several stations (a TV channel and a radio
+ * station, say). They SHARE this one database - exactly as the legacy app did,
+ * where one MySQL database served both flows of an outlet and told them apart
+ * with a `forTV` 0/1 column. Our `station_id` is that column.
+ *
+ * SCHEMA - two kinds of table:
+ *
+ *   GROUP-scoped (stored ONCE, shared by every station):
+ *       customers ──< contracts ──< contract_lines >── spot_types
+ *   because one contract genuinely sells on several media: Ανυφαντάκης buys
+ *   1 TV spot and 2 radio spots on the SAME contract. Splitting these per
+ *   station (the old model) duplicated the customer and tore the contract in
+ *   half.
+ *
+ *   STATION-scoped (carry `station_id` ≙ legacy `forTV`):
+ *       break_slots, spots, programs, flow_comments, print_audit, station_meta
+ *   exactly the tables the legacy schema carried `forTV` on.
+ *
+ *   placements deliberately have NO station_id: the station rides on their
+ *   break (and their spot), just as legacy `schedule` carried no forTV.
+ *
+ * The grid the client renders is a READ model DERIVED at query time from
+ * placements ⋈ spots ⋈ customers ⋈ contracts - aggregates and cell colours are
+ * computed, never stored. Every table carries a nullable legacy_id so the
+ * migration from the original app's dumps is idempotent and cross-checkable.
+ *
+ * Created and cached by StationRegistry - NOT a Koin definition, since the set
+ * of groups is data, not wiring. The per-station [StationDb] views borrow this
+ * pool; they never own one.
+ */
+class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
+
+    private val dataSource = HikariDataSource(
+        HikariConfig().apply {
+            jdbcUrl = config.jdbcUrl
+            username = config.username
+            password = config.password
+            driverClassName = "com.mysql.cj.jdbc.Driver"
+            // ONE pool per group database, shared by all its stations - so the
+            // ceiling is resolved per group (server.yaml override / file
+            // default / built-in), not per station.
+            maximumPoolSize = maxPoolSize
+            minimumIdle = 1
+            connectionTimeout = 10_000
+            // Do not fail-fast at pool construction: connections are validated
+            // on first use, so an unreachable MySQL (or a test environment
+            // without one) doesn't crash instance creation.
+            initializationFailTimeout = -1
+            poolName = "group-${config.id}"
+        }
+    )
+
+    /** A pooled connection; closing it (e.g. via `.use {}`) returns it to the pool. */
+    fun connection(): Connection = dataSource.getConnection()
+
+    fun close() {
+        dataSource.close()
+    }
+
+    // ────────────────────────────────────────────────────────── bootstrap ──
+
+    /**
+     * Creates the group schema. Runs ONCE per group (StationRegistry creates a
+     * GroupDb once), and is idempotent anyway - every statement is
+     * CREATE TABLE IF NOT EXISTS / ensureColumn / ensureIndex.
+     */
+    fun bootstrap() {
+        connection().use { c ->
+            dropLegacyDemoTables(c)
+            createTables(c)
+            upgradeFromPerStationSchema(c)
+            ensureColumns(c)
+            syncStations(c)
+        }
+    }
+
+    private fun createTables(c: Connection) {
+        c.createStatement().use { s ->
+            // The group's stations, as server.yaml declares them. Kept in the
+            // database so a dumped group schema is self-describing, and so the
+            // station_id columns below have something to point at.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS stations (
+                    id VARCHAR(64) PRIMARY KEY,
+                    name VARCHAR(64) NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // Group-level flags (migrated_at, source dump). Its per-station
+            // twin is `station_meta`.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS group_meta (
+                    meta_key VARCHAR(64) PRIMARY KEY,
+                    meta_value VARCHAR(255) NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // STATION-scoped. The id is AUTO_INCREMENT (it used to be a
+            // computed 1..96, which would collide the moment two stations
+            // shared a database); a break is identified by its (station, time).
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS break_slots (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NOT NULL,
+                    hour_of_day TINYINT NOT NULL,
+                    minute_of_hour TINYINT NOT NULL,
+                    label VARCHAR(8) NOT NULL,
+                    zone VARCHAR(16) NOT NULL,
+                    UNIQUE KEY uq_break_station_slot (station_id, hour_of_day, minute_of_hour),
+                    CONSTRAINT fk_breaks_station FOREIGN KEY (station_id) REFERENCES stations(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // GROUP-scoped: one row per ERP customer, shared by every station.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS customers (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    legacy_id BIGINT NULL,
+                    legacy_lee_id BIGINT NULL,
+                    code VARCHAR(32) NOT NULL UNIQUE,
+                    name VARCHAR(128) NOT NULL,
+                    vat_number VARCHAR(16) NULL,
+                    contact_person VARCHAR(64) NULL,
+                    phone VARCHAR(32) NULL,
+                    fax VARCHAR(32) NULL,
+                    email VARCHAR(128) NULL,
+                    -- Main address (SEN gap-fill: the legacy app showed it live
+                    -- from the ERP's ADR table - "Κύρια Διεύθυνση"; the legacy
+                    -- MySQL never stored it).
+                    address_street VARCHAR(160) NULL,
+                    address_zip VARCHAR(16) NULL,
+                    address_city VARCHAR(64) NULL,
+                    notes TEXT NULL,
+                    synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+                    -- Galaxy (the client's NEW ERP) linkage: TRADER.GXID (the
+                    -- identity that carries the VAT, covering advertisers AND
+                    -- agencies). NULL until the Galaxy import stamps it - matched
+                    -- code-first (Galaxy inherited the legacy TRACODEs), then by
+                    -- zero-padded VAT. UNIQUE: one Galaxy trader = one row here.
+                    galaxy_id VARCHAR(36) NULL,
+                    -- UNIQUE, not a plain index: a legacy customer must exist ONCE
+                    -- per group. Migrating a dump's second flow into a populated
+                    -- group would otherwise silently duplicate every customer -
+                    -- the exact bug the group model exists to kill.
+                    UNIQUE KEY uq_customers_legacy (legacy_id),
+                    UNIQUE KEY uq_customers_galaxy (galaxy_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // GROUP-scoped: a contract is the DEAL, not a station's copy of it.
+            // Its lines may sell on different media (a TV line and two radio
+            // lines under one number) - which station each line ends up on is
+            // decided by the spots hanging off it.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS contracts (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    legacy_docid BIGINT NULL,
+                    number VARCHAR(64) NOT NULL,
+                    doc_type INT NULL,
+                    is_gift BOOLEAN NOT NULL DEFAULT FALSE,
+                    exclude_from_reports BOOLEAN NOT NULL DEFAULT FALSE,
+                    customer_id BIGINT NOT NULL,
+                    agency_id BIGINT NULL,
+                    entry_date DATE NULL,
+                    -- Contract period + renewal. PROVISIONAL until the Oracle ERP
+                    -- import supplies real values: the migration derives start/end
+                    -- from placements and sets dates_provisional=TRUE; renewed_at
+                    -- has no source yet and stays NULL.
+                    start_date DATE NULL,
+                    end_date DATE NULL,
+                    renewed_at DATE NULL,
+                    dates_provisional BOOLEAN NOT NULL DEFAULT FALSE,
+                    synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+                    -- Galaxy linkage: COMMERCIALENTRY.GXID plus the document's
+                    -- sequential number (the one a user quotes on the phone).
+                    galaxy_id VARCHAR(36) NULL,
+                    galaxy_number BIGINT NULL,
+                    KEY idx_contracts_number (number),
+                    -- UNIQUE for the same reason as customers.legacy_id above.
+                    UNIQUE KEY uq_contracts_legacy (legacy_docid),
+                    UNIQUE KEY uq_contracts_galaxy (galaxy_id),
+                    KEY idx_contracts_galaxy_number (galaxy_number),
+                    CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+                    CONSTRAINT fk_contracts_agency FOREIGN KEY (agency_id) REFERENCES customers(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            s.executeUpdate(
+                """
+                -- Contract PRODUCT lines (≙ legacy z_commercials - the owner's
+                -- Oracle view over the ERP doc lines, materialized in the dumps):
+                -- one row per (document, line), each line selling ONE item class
+                -- (spot_type_id ≙ z.mciid). line_no >= 1000 marks a fallback line
+                -- synthesized for a (doc, type) pair the view did not carry.
+                --
+                -- GROUP-scoped, and carries NO station_id: legacy z_commercials
+                -- had no forTV either. A line's MEDIUM is implied by the spots
+                -- charged to it - which is why one contract can hold a TV line
+                -- and a radio line side by side.
+                CREATE TABLE IF NOT EXISTS contract_lines (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    contract_id BIGINT NOT NULL,
+                    line_no INT NOT NULL,
+                    spot_type_id BIGINT NULL,
+                    desired_qty INT NOT NULL DEFAULT 0,
+                    agel_val DECIMAL(10,6) NOT NULL DEFAULT 0,
+                    eidikos_val DECIMAL(10,6) NOT NULL DEFAULT 0,
+                    zone_val DECIMAL(10,2) NOT NULL DEFAULT 0,
+                    -- Galaxy linkage: CommercEntryLines.GXID. NULL until stamped.
+                    galaxy_id VARCHAR(36) NULL,
+                    UNIQUE KEY uq_contract_line (contract_id, line_no),
+                    UNIQUE KEY uq_lines_galaxy (galaxy_id),
+                    CONSTRAINT fk_lines_contract FOREIGN KEY (contract_id)
+                        REFERENCES contracts(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            s.executeUpdate(
+                """
+                -- The ERP ITEM-CLASS catalog, keyed by the ERP's MCIID. GROUP-scoped:
+                -- the ERP sells the same item classes to every station of the group.
+                --
+                -- This is NOT the programme catalog. `z_commercials.mciid` lives in a
+                -- DIFFERENT id space from legacy `programtypes.id` (ΚΛΕΨΑ, ΞΕΝΗ ΤΑΙΝΙΑ:
+                -- shows), and joining one to the other's catalog compiles, runs, and
+                -- returns confident nonsense: 55% of mciids have no programtypes row at
+                -- all, and the colliding ones paired a news bulletin with a telephone.
+                -- The programme lives on `spots.booked_program` / `programs` instead.
+                --
+                -- The item NAME only exists in the ERP (SEN `sti.csv`), so a dump-only
+                -- migration seeds the ids and the SEN enricher fills name/item_code.
+                CREATE TABLE IF NOT EXISTS spot_types (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    -- the ERP item class id (STI.MCIID == z_commercials.mciid)
+                    legacy_id BIGINT NULL,
+                    -- STI.ITMNAME, e.g. 'Διαφ. TV Κρήτη Σ73.002'; the gift
+                    -- marker ('Δ Ω Ρ Α') is part of the name. '' until the
+                    -- SEN import runs.
+                    name VARCHAR(160) NOT NULL DEFAULT '',
+                    -- STI.CODCODE, e.g. 'Σ101'
+                    item_code VARCHAR(32) NULL,
+                    -- Galaxy linkage: ITEM.GXID. The 73.xxx item codes bridge the
+                    -- two catalogs (Galaxy inherited the legacy sales items).
+                    galaxy_id VARCHAR(36) NULL,
+                    UNIQUE KEY uq_spot_types_legacy (legacy_id),
+                    UNIQUE KEY uq_spot_types_galaxy (galaxy_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // STATION-scoped (≙ legacy `messages`, which carried forTV).
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS spots (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NOT NULL,
+                    legacy_id BIGINT NULL,
+                    customer_id BIGINT NOT NULL,
+                    contract_line_id BIGINT NULL,
+                    description VARCHAR(255) NOT NULL,
+                    duration_seconds INT NOT NULL,
+                    -- The PROGRAMME the spot was BOOKED into (legacy
+                    -- messages.messageTypeID -> programtypes). It is a show
+                    -- ("ΚΛΕΨΑ", "ΞΕΝΗ ΤΑΙΝΙΑ"). The spot's ERP ITEM comes from its
+                    -- contract LINE (contract_lines.spot_type_id -> spot_types),
+                    -- and the airing's own line wins over the spot's default.
+                    booked_program VARCHAR(128) NOT NULL DEFAULT '',
+                    booked_program_id BIGINT NULL,
+                    flow VARCHAR(32) NOT NULL DEFAULT '',
+                    hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                    force_position INT NULL,
+                    memo TEXT NULL,
+                    KEY idx_spots_station (station_id),
+                    -- UNIQUE: legacy `messages.id` is unique across the whole dump
+                    -- (both flows), so a spot must land exactly once. It also stops
+                    -- the placement join from fanning out.
+                    UNIQUE KEY uq_spots_legacy (legacy_id),
+                    CONSTRAINT fk_spots_station FOREIGN KEY (station_id) REFERENCES stations(id),
+                    CONSTRAINT fk_spots_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+                    CONSTRAINT fk_spots_line FOREIGN KEY (contract_line_id) REFERENCES contract_lines(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // STATION-scoped (≙ legacy `programtypes`, which carried forTV).
+            // legacy_id REPEATS across flows - programme 5 exists on both the TV
+            // and the radio side and means different shows - so the unique key
+            // and every join must include the station.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS programs (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NOT NULL,
+                    legacy_id BIGINT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    color_argb INT NULL,
+                    hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                    UNIQUE KEY uq_programs_station_legacy (station_id, legacy_id),
+                    CONSTRAINT fk_programs_station FOREIGN KEY (station_id) REFERENCES stations(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // ≙ legacy `schedule`, which carried NO forTV: an airing's station is
+            // its break's (and its spot's). Keeping it that way avoids a redundant
+            // column on the biggest table in the schema (millions of rows).
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS placements (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    legacy_id BIGINT NULL,
+                    spot_id BIGINT NOT NULL,
+                    break_id BIGINT NOT NULL,
+                    show_date DATE NOT NULL,
+                    position INT NOT NULL,
+                    duration_seconds INT NOT NULL,
+                    -- The ACTUAL charge of this airing (≙ legacy schedule.docID +
+                    -- lineno): the same spot airs under different contracts/
+                    -- products over time; the spot's own line is only its
+                    -- CURRENT default. NULL -> displays fall back to the spot's.
+                    contract_line_id BIGINT NULL,
+                    program_id BIGINT NULL,
+                    played BOOLEAN NOT NULL DEFAULT FALSE,
+                    hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                    -- Still station-safe: break_id is unique per station.
+                    UNIQUE KEY uq_placement_slot (break_id, show_date, position),
+                    KEY idx_placements_legacy (legacy_id),
+                    CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
+                    CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES break_slots(id),
+                    CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // Airtime price zones: NO app-layer tables here. The FAITHFUL UNION
+            // copies own the legacy names (`zones`/`zonefillers`, written verbatim
+            // by the migration - they carry their own forTV). Demo groups simply
+            // have no price data.
+
+            // ≙ legacy `roh_comments`, keyed by (date, forTV) - so the PK must
+            // carry the station, or the radio station's comment for a date
+            // silently overwrites (or is IGNOREd against) the TV one.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS flow_comments (
+                    station_id VARCHAR(64) NOT NULL,
+                    show_date DATE NOT NULL,
+                    comments TEXT NOT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (station_id, show_date),
+                    CONSTRAINT fk_flow_comments_station FOREIGN KEY (station_id) REFERENCES stations(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // ≙ legacy `emailhistory`: the audit archive of customer schedule
+            // emails. Summary rows are kept forever; the full HTML body is capped
+            // per customer (see logEmail) so the archive can't balloon like the
+            // legacy 1.2 GB email store.
+            //
+            // station_id is NULLABLE on purpose: legacy `emailhistory` has no
+            // forTV, so imported rows genuinely belong to the GROUP and must not
+            // be attributed to a station we'd only be guessing. New sends stamp it.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS email_log (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NULL,
+                    customer_code VARCHAR(32) NOT NULL,
+                    customer_name VARCHAR(128) NOT NULL,
+                    recipient VARCHAR(255) NOT NULL,
+                    subject VARCHAR(255) NOT NULL,
+                    period_year INT NOT NULL,
+                    period_month INT NOT NULL,
+                    spot_count INT NOT NULL DEFAULT 0,
+                    transmission_count INT NOT NULL DEFAULT 0,
+                    body_html LONGTEXT NULL,
+                    sent_by VARCHAR(64) NOT NULL,
+                    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(16) NOT NULL,
+                    error VARCHAR(512) NULL,
+                    KEY idx_email_log_customer (customer_code, period_year, period_month),
+                    KEY idx_email_log_station (station_id, sent_at),
+                    KEY idx_email_log_sent (sent_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // ≙ legacy `roh_print_history`, which carried forTV.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS print_audit (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NOT NULL,
+                    printed_date DATE NOT NULL,
+                    username VARCHAR(64) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    KEY idx_print_audit_date (station_id, printed_date),
+                    CONSTRAINT fk_print_audit_station FOREIGN KEY (station_id) REFERENCES stations(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS station_meta (
+                    station_id VARCHAR(64) NOT NULL,
+                    meta_key VARCHAR(64) NOT NULL,
+                    meta_value VARCHAR(255) NOT NULL,
+                    PRIMARY KEY (station_id, meta_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
+            // raw ERP doc ids awaiting the ERP import (see LegacyTransformer)
+            s.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB"
+            )
+        }
+    }
+
+    /**
+     * Idempotent ALTERs for schemas created by an older build. Fresh schemas
+     * already have every column from [createTables] and skip all of these.
+     */
+    private fun ensureColumns(c: Connection) {
+        // show_date is not the leftmost column of the placement unique key, so
+        // month-range scans need their own index.
+        ensureIndex(c, "placements", "idx_placements_date", "show_date")
+        ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
+        ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
+        // legacy calendar_excluded_docs: contracts whose spots stay OFF printed reports
+        ensureColumn(c, "contracts", "exclude_from_reports", "BOOLEAN NOT NULL DEFAULT FALSE")
+        // ERP LEE id (second legacy id series): links end clients of triangular
+        // contracts - see migration/legacy-schema.md, docref.
+        ensureColumn(c, "customers", "legacy_lee_id", "BIGINT NULL")
+        ensureIndex(c, "customers", "idx_customers_lee_legacy", "legacy_lee_id")
+        ensureColumn(c, "placements", "program_id", "BIGINT NULL")
+        // Contract period/renewal dates - see the CREATE TABLE note. Provisional
+        // until the ERP import; the migration backfills start/end.
+        ensureColumn(c, "contracts", "start_date", "DATE NULL")
+        ensureColumn(c, "contracts", "end_date", "DATE NULL")
+        ensureColumn(c, "contracts", "renewed_at", "DATE NULL")
+        ensureColumn(c, "contracts", "dates_provisional", "BOOLEAN NOT NULL DEFAULT FALSE")
+        // Galaxy (new ERP) linkage - see the CREATE TABLE notes. UUIDs are NULL
+        // until the Galaxy import stamps them. UNIQUE indexes are safe on the
+        // existing all-NULL data (MySQL allows repeated NULLs).
+        ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
+        ensureIndex(c, "customers", "uq_customers_galaxy", "galaxy_id", unique = true)
+        ensureColumn(c, "contracts", "galaxy_id", "VARCHAR(36) NULL")
+        ensureColumn(c, "contracts", "galaxy_number", "BIGINT NULL")
+        ensureIndex(c, "contracts", "uq_contracts_galaxy", "galaxy_id", unique = true)
+        ensureIndex(c, "contracts", "idx_contracts_galaxy_number", "galaxy_number")
+        ensureColumn(c, "contract_lines", "galaxy_id", "VARCHAR(36) NULL")
+        ensureIndex(c, "contract_lines", "uq_lines_galaxy", "galaxy_id", unique = true)
+        ensureColumn(c, "spot_types", "galaxy_id", "VARCHAR(36) NULL")
+        ensureIndex(c, "spot_types", "uq_spot_types_galaxy", "galaxy_id", unique = true)
+        // The BOOKED PROGRAMME (see the spots CREATE TABLE note). The dead
+        // `spots.spot_type_id` is deliberately NOT ensured any more - a spot's
+        // product is its contract LINE's, and leaving a plausible-looking column
+        // on the table is how the false join gets rebuilt by accident.
+        ensureColumn(c, "spots", "booked_program", "VARCHAR(128) NOT NULL DEFAULT ''")
+        ensureColumn(c, "spots", "booked_program_id", "BIGINT NULL")
+        // Product lines + per-airing charge (see the CREATE TABLE notes).
+        ensureColumn(c, "contract_lines", "spot_type_id", "BIGINT NULL")
+        ensureColumn(c, "placements", "contract_line_id", "BIGINT NULL")
+        // Main address (see the customers CREATE TABLE note).
+        ensureColumn(c, "customers", "address_street", "VARCHAR(160) NULL")
+        ensureColumn(c, "customers", "address_zip", "VARCHAR(16) NULL")
+        ensureColumn(c, "customers", "address_city", "VARCHAR(64) NULL")
+    }
+
+    /**
+     * Upgrades a schema written by the PER-STATION build (no station_id
+     * anywhere) into a group schema.
+     *
+     * It is only safe when the group has exactly ONE station, because that is
+     * what such a database was: one station's data, undifferentiated. Every row
+     * in it belongs to that station, so stamping them all is exact. A group with
+     * several stations pointed at a pre-group schema cannot be repaired by
+     * guessing - the flow information was thrown away at migration time - so we
+     * refuse to boot and say so.
+     */
+    private fun upgradeFromPerStationSchema(c: Connection) {
+        if (!tableExists(c, "break_slots")) return
+        // The tell: ANY of the station_id columns is still missing. Testing all
+        // of them (rather than just the first one it would add) is what makes a
+        // half-finished upgrade resume instead of silently short-circuiting on
+        // the next boot - which is exactly how this went wrong the first time.
+        val stamped = listOf("break_slots", "spots", "programs", "print_audit", "flow_comments", "station_meta")
+        if (stamped.all { !tableExists(c, it) || columnExists(c, it, "station_id") }) return
+
+        val stations = config.stations
+        require(stations.size == 1) {
+            "Group '${config.id}' points at a pre-group schema (${databaseName(c)}), written when each " +
+                "station had its OWN database, but it declares ${stations.size} stations " +
+                "(${stations.joinToString { it.id }}). Rows there carry no station, and the legacy " +
+                "forTV flag that could tell them apart was dropped at migration time. Migrate the " +
+                "original dump into a FRESH group schema instead (both flows in one run)."
+        }
+        val station = stations.single()
+
+        // The station must exist before anything can point at it.
+        c.prepareStatement("INSERT IGNORE INTO stations(id, name) VALUES(?,?)").use { ps ->
+            ps.setString(1, station.id)
+            ps.setString(2, station.name)
+            ps.executeUpdate()
+        }
+        for (table in stamped) {
+            if (!tableExists(c, table)) continue
+            ensureColumn(c, table, "station_id", "VARCHAR(64) NOT NULL DEFAULT ''")
+            c.prepareStatement("UPDATE $table SET station_id = ? WHERE station_id = ''").use { ps ->
+                ps.setString(1, station.id)
+                ps.executeUpdate()
+            }
+        }
+        // email_log's station_id is NULLABLE: the pre-group rows are this
+        // station's own sends mixed with the imported legacy archive, which has
+        // no flow at all - and they are no longer distinguishable. Leave them
+        // NULL ("belongs to the group"), which is how they read.
+        ensureColumn(c, "email_log", "station_id", "VARCHAR(64) NULL")
+
+        // break_slots.id was a computed 1..n; the database assigns it now.
+        // `placements.break_id` REFERENCES it, and MySQL refuses to modify a
+        // column an FK points at - so the FK comes off and goes straight back on.
+        c.createStatement().use { s ->
+            if (!isAutoIncrement(c, "break_slots", "id")) {
+                val fk = foreignKeyOn(c, "placements", "break_id")
+                if (fk != null) s.executeUpdate("ALTER TABLE placements DROP FOREIGN KEY `$fk`")
+                s.executeUpdate("ALTER TABLE break_slots MODIFY id BIGINT NOT NULL AUTO_INCREMENT")
+                if (fk != null) {
+                    s.executeUpdate(
+                        "ALTER TABLE placements ADD CONSTRAINT `$fk` FOREIGN KEY (break_id) REFERENCES break_slots(id)"
+                    )
+                }
+            }
+            ensureIndex(c, "break_slots", "uq_break_station_slot", "station_id, hour_of_day, minute_of_hour", unique = true)
+            ensureIndex(c, "spots", "idx_spots_station", "station_id")
+            ensureIndex(c, "programs", "uq_programs_station_legacy", "station_id, legacy_id", unique = true)
+
+            // flow_comments + station_meta: the station must JOIN the primary key,
+            // or the group's second station could never have a row of its own.
+            if (tableExists(c, "flow_comments") && !isInPrimaryKey(c, "flow_comments", "station_id")) {
+                s.executeUpdate("ALTER TABLE flow_comments DROP PRIMARY KEY, ADD PRIMARY KEY (station_id, show_date)")
+            }
+            if (tableExists(c, "station_meta") && !isInPrimaryKey(c, "station_meta", "station_id")) {
+                s.executeUpdate("ALTER TABLE station_meta DROP PRIMARY KEY, ADD PRIMARY KEY (station_id, meta_key)")
+            }
+        }
+    }
+
+    /** server.yaml is the source of truth for the group's stations; mirror it in. */
+    private fun syncStations(c: Connection) {
+        c.prepareStatement(
+            "INSERT INTO stations(id, name) VALUES(?,?) ON DUPLICATE KEY UPDATE name = VALUES(name)"
+        ).use { ps ->
+            for (station in config.stations) {
+                ps.setString(1, station.id)
+                ps.setString(2, station.name)
+                ps.addBatch()
+            }
+            ps.executeBatch()
+        }
+    }
+
+    // ─────────────────────────────────────────────────── schema helpers ──
+
+    internal fun ensureColumn(c: Connection, table: String, column: String, definition: String) {
+        if (columnExists(c, table, column)) return
+        c.createStatement().use { it.executeUpdate("ALTER TABLE $table ADD COLUMN $column $definition") }
+    }
+
+    internal fun ensureIndex(
+        c: Connection,
+        table: String,
+        indexName: String,
+        columns: String,
+        unique: Boolean = false,
+    ) {
+        val exists = c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, indexName)
+            ps.executeQuery().use { it.next() }
+        }
+        if (!exists) {
+            val kind = if (unique) "UNIQUE INDEX" else "INDEX"
+            c.createStatement().use { it.executeUpdate("CREATE $kind $indexName ON $table($columns)") }
+        }
+    }
+
+    private fun columnExists(c: Connection, table: String, column: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, column)
+            ps.executeQuery().use { it.next() }
+        }
+
+    private fun tableExists(c: Connection, table: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = DATABASE() AND table_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table)
+            ps.executeQuery().use { it.next() }
+        }
+
+    private fun isAutoIncrement(c: Connection, table: String, column: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+              AND extra LIKE '%auto_increment%'
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, column)
+            ps.executeQuery().use { it.next() }
+        }
+
+    private fun isInPrimaryKey(c: Connection, table: String, column: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.key_column_usage
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+              AND constraint_name = 'PRIMARY'
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, column)
+            ps.executeQuery().use { it.next() }
+        }
+
+    /** The name of the foreign key on [table].[column], if it has one. */
+    private fun foreignKeyOn(c: Connection, table: String, column: String): String? =
+        c.prepareStatement(
+            """
+            SELECT constraint_name FROM information_schema.key_column_usage
+            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+              AND referenced_table_name IS NOT NULL
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, column)
+            ps.executeQuery().use { if (it.next()) it.getString(1) else null }
+        }
+
+    private fun databaseName(c: Connection): String =
+        c.createStatement().use { s ->
+            s.executeQuery("SELECT DATABASE()").use { rs -> rs.next(); rs.getString(1) ?: "?" }
+        }
+
+    /**
+     * Migration from the pre-normalization demo schema: the old
+     * `scheduler_cells` (stored aggregates) and `commercials` (denormalized
+     * rows) tables are superseded by the derived read model. Their content was
+     * deterministic demo data, so they are simply dropped; months reseed on
+     * demand into `placements`. Idempotent.
+     */
+    private fun dropLegacyDemoTables(c: Connection) {
+        for (table in listOf("commercials", "scheduler_cells")) {
+            if (tableExists(c, table)) {
+                c.createStatement().use { it.executeUpdate("DROP TABLE $table") }
+            }
+        }
+    }
+}

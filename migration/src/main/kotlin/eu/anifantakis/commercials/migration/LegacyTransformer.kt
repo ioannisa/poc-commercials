@@ -5,10 +5,10 @@ import java.sql.Connection
 import kotlin.random.Random
 
 /**
- * Transforms replayed legacy data (scratch schema) into the normalized
- * target station schema, both on the SAME MySQL server so the heavy steps
- * are set-based cross-schema INSERT..SELECT (placements use a window
- * function - requires MySQL 8+).
+ * Transforms replayed legacy data (scratch schema) into the normalized target
+ * GROUP schema, both on the SAME MySQL server so the heavy steps are set-based
+ * cross-schema INSERT..SELECT (placements use a window function - requires
+ * MySQL 8+).
  *
  * The Oracle-side entities (customer names, ΑΦΜ, contact info, contract
  * numbers) are NOT in the legacy MySQL dumps. Recovery order:
@@ -17,19 +17,38 @@ import kotlin.random.Random
  *   3. everything still missing gets DETERMINISTIC FAKE data, flagged with
  *      synthetic=TRUE so a future ERP import can find and replace it.
  *
- * [forTv] selects which flow of the legacy DB to migrate (each legacy DB can
- * serve both a TV and a radio flow) - migrating the other flow is a second
- * run into a different target schema.
+ * ONE DUMP ⇒ ONE GROUP ⇒ N STATIONS. [stationByFlow] maps each legacy `forTV`
+ * value to a station of the target group, and BOTH flows migrate in this single
+ * run. `forTV` used to be a FILTER - one flow per run, into its own schema -
+ * which duplicated every customer of the outlet and tore contracts selling on
+ * both media in half. It is now a station STAMP:
+ *
+ *  - customers, contracts, contract lines and the item catalog are written ONCE
+ *    and shared (that is what makes contract 500 hold a TV line AND radio lines);
+ *  - spots, programmes, breaks, flow comments and print audits carry station_id;
+ *  - the verbatim legacy copies keep their own native forTV and are copied whole.
+ *
+ * A flow left out of the map is simply not migrated (its rows are counted as
+ * `otherFlow` in the coverage summary).
  */
 class LegacyTransformer(
     private val c: Connection,
     scratchSchema: String,
     targetSchema: String,
-    private val forTv: Int,
+    private val stationByFlow: Map<Int, String>,
     private val log: (String) -> Unit,
 ) {
     private val s = "`$scratchSchema`"
     private val t = "`$targetSchema`"
+
+    /**
+     * The scratch-resident (forTV -> station_id) dictionary. JOINing it does two
+     * jobs at once: it SCOPES the query to the mapped flows (an unmapped flow
+     * has no row, so its data drops out) and it SUPPLIES the station_id to
+     * stamp. It replaces the ~20 `WHERE forTV = <n>` filters of the old
+     * one-flow-per-run design.
+     */
+    private val flowJoin = "JOIN $s.flow_station fs ON fs.forTV = m.forTV"
 
     data class Summary(
         val breaks: Int,
@@ -61,10 +80,22 @@ class LegacyTransformer(
         /** Airtime price list rows (versioned; full history migrates). */
         val zones: Int = 0,
         val zoneFillers: Int = 0,
+        /** Per-station tallies - one dump now fills several stations. */
+        val stations: List<StationTally> = emptyList(),
+    )
+
+    /** What one flow's station actually received. */
+    data class StationTally(
+        val stationId: String,
+        val forTv: Int,
+        val spots: Int,
+        val placements: Int,
     )
 
     fun run(): Summary {
         c.createStatement().use { it.execute("SET SESSION sql_mode = ''") }
+
+        createFlowStationMap()
 
         log("Copying the legacy MySQL tables VERBATIM (faithful union layer)...")
         copyLegacyTables()
@@ -124,9 +155,9 @@ class LegacyTransformer(
         }
 
         // Coverage accounting: prove that every schedule row in the dump is
-        // either migrated, belongs to the other flow (a second migration run),
-        // is orphaned (references a spot the legacy app purged - no flow can
-        // be determined), or carries a zero/invalid date.
+        // either migrated, belongs to a flow the operator did NOT map, is
+        // orphaned (references a spot the legacy app purged - no flow can be
+        // determined), or carries a zero/invalid date.
         fun countOne(sql: String): Long = c.createStatement().use { st ->
             st.executeQuery(sql).use { rs -> rs.next(); rs.getLong(1) }
         }
@@ -136,13 +167,18 @@ class LegacyTransformer(
         )
         val zeroDate = countOne(
             """
-            SELECT COUNT(*) FROM $s.schedule sch JOIN $s.messages m ON m.id = sch.messageID
-            WHERE m.forTV = $forTv AND sch.showDate < '1900-01-01'
+            SELECT COUNT(*) FROM $s.schedule sch
+            JOIN $s.messages m ON m.id = sch.messageID
+            $flowJoin
+            WHERE sch.showDate < '1900-01-01'
             """.trimIndent()
         )
         val otherFlow = dumpTotal - orphaned - placements - zeroDate
 
-        log("Coverage: dump=$dumpTotal placements -> migrated=$placements, otherFlow=$otherFlow, orphaned=$orphaned, invalidDate=$zeroDate")
+        log("Coverage: dump=$dumpTotal placements -> migrated=$placements, unmappedFlow=$otherFlow, orphaned=$orphaned, invalidDate=$zeroDate")
+
+        val tallies = stationTallies()
+        tallies.forEach { log("  ${it.stationId} (forTV=${it.forTv}): ${it.spots} spots, ${it.placements} placements") }
 
         return Summary(
             breaks, customers, customersSynthetic, contracts, contractsSynthetic,
@@ -158,8 +194,57 @@ class LegacyTransformer(
             emailBodiesKept = emailBodiesKept,
             zones = zones,
             zoneFillers = zoneFillers,
+            stations = tallies,
         )
     }
+
+    /**
+     * Materializes [stationByFlow] in the scratch schema so every step can JOIN
+     * it (see [flowJoin]). Scratch-resident, so it is dropped with the scratch.
+     */
+    private fun createFlowStationMap() {
+        require(stationByFlow.isNotEmpty()) { "No flow was mapped to a station - nothing to migrate" }
+        c.createStatement().use { st ->
+            st.executeUpdate("DROP TABLE IF EXISTS $s.flow_station")
+            st.executeUpdate(
+                "CREATE TABLE $s.flow_station (forTV INT PRIMARY KEY, station_id VARCHAR(64) NOT NULL)"
+            )
+        }
+        c.prepareStatement("INSERT INTO $s.flow_station(forTV, station_id) VALUES(?,?)").use { ps ->
+            for ((forTv, stationId) in stationByFlow) {
+                ps.setInt(1, forTv)
+                ps.setString(2, stationId)
+                ps.addBatch()
+            }
+            ps.executeBatch()
+        }
+        log(
+            "Flow map: " + stationByFlow.entries.joinToString(", ") { (forTv, id) ->
+                "forTV=$forTv (${if (forTv == 1) "TV" else "radio"}) -> station '$id'"
+            }
+        )
+    }
+
+    private fun stationTallies(): List<StationTally> =
+        c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT fs.station_id, fs.forTV,
+                       (SELECT COUNT(*) FROM $t.spots sp WHERE sp.station_id = fs.station_id),
+                       (SELECT COUNT(*) FROM $t.placements p
+                          JOIN $t.spots sp2 ON sp2.id = p.spot_id
+                        WHERE sp2.station_id = fs.station_id)
+                FROM $s.flow_station fs
+                ORDER BY fs.forTV DESC
+                """.trimIndent()
+            ).use { rs ->
+                buildList {
+                    while (rs.next()) add(
+                        StationTally(rs.getString(1), rs.getInt(2), rs.getInt(3), rs.getInt(4))
+                    )
+                }
+            }
+        }
 
     // ─────────────────────────────────────────────── triangular contracts ──
 
@@ -190,7 +275,9 @@ class LegacyTransformer(
                 """
                 SELECT COUNT(DISTINCT d.docid) FROM $s.docref d
                 WHERE d.targetleeid <> d.pelatislee AND d.targetleeid > 0
-                  AND EXISTS (SELECT 1 FROM $s.messages m WHERE m.contractID = d.docid AND m.forTV = $forTv)
+                  AND EXISTS (
+                      SELECT 1 FROM $s.messages m $flowJoin WHERE m.contractID = d.docid
+                  )
                 """.trimIndent()
             ).use { rs -> rs.next(); rs.getInt(1) }
         }
@@ -204,23 +291,35 @@ class LegacyTransformer(
      * separate `program` table is empty in every backup), whose `color`
      * column holds the operator-assigned colour. Migrated as-is - the colour
      * is the programme's identity across the whole application.
+     *
+     * ⚠ `programtypes` carries its OWN forTV, and its ids RESTART per flow:
+     * programme 5 exists on the TV side and on the radio side, and they are
+     * different shows. So the programme is per station, and every later join to
+     * it must match the station as well as the legacy id - a join on legacy_id
+     * alone would paste the radio station's programme names and colours onto TV
+     * spots (and vice versa).
      */
     private fun migratePrograms(): Int {
         if (!tableExists("programtypes")) return 0
         var count = 0
         c.prepareStatement(
-            "INSERT INTO $t.programs(legacy_id, name, color_argb, hidden) VALUES(?,?,?,?)"
+            "INSERT INTO $t.programs(station_id, legacy_id, name, color_argb, hidden) VALUES(?,?,?,?,?)"
         ).use { insert ->
             c.createStatement().use { st ->
                 st.executeQuery(
-                    "SELECT id, descr, color, visible FROM $s.programtypes WHERE forTV = $forTv"
+                    """
+                    SELECT fs.station_id, pt.id, pt.descr, pt.color, pt.visible
+                    FROM $s.programtypes pt
+                    JOIN $s.flow_station fs ON fs.forTV = pt.forTV
+                    """.trimIndent()
                 ).use { rs ->
                     while (rs.next()) {
-                        insert.setLong(1, rs.getLong("id"))
-                        insert.setString(2, rs.getString("descr").trim())
-                        val argb = colorrefToArgb(rs.getLong("color"))
-                        if (argb != null) insert.setInt(3, argb) else insert.setNull(3, java.sql.Types.INTEGER)
-                        insert.setBoolean(4, !rs.getBoolean("visible"))
+                        insert.setString(1, rs.getString(1))
+                        insert.setLong(2, rs.getLong(2))
+                        insert.setString(3, rs.getString(3).trim())
+                        val argb = colorrefToArgb(rs.getLong(4))
+                        if (argb != null) insert.setInt(4, argb) else insert.setNull(4, java.sql.Types.INTEGER)
+                        insert.setBoolean(5, !rs.getBoolean(5))
                         insert.addBatch()
                         count++
                     }
@@ -248,70 +347,90 @@ class LegacyTransformer(
     // ─────────────────────────────────────────────────────────── breaks ──
 
     /**
-     * The station's REAL break grid: every distinct HH:MM at which the legacy
-     * schedule ever aired something (seconds are collapsed - two placements
-     * at 11:00:07 and 11:00:41 belong to the same break). Zone derived from
-     * the hour with the same rules the demo grid uses.
+     * Each station's REAL break grid: every distinct HH:MM at which the legacy
+     * schedule ever aired something FOR THAT FLOW (seconds are collapsed - two
+     * placements at 11:00:07 and 11:00:41 belong to the same break). Zone derived
+     * from the hour with the same rules the demo grid uses.
+     *
+     * The grids genuinely differ per station - a radio station breaks at times a
+     * TV channel never does - so they are built per flow, and the ids are left to
+     * the database (they used to be a computed 1..n, which would now collide
+     * between the group's stations).
      */
     private fun migrateBreaks(): Int {
-        val times = mutableListOf<Pair<Int, Int>>()
+        data class Slot(val stationId: String, val hour: Int, val minute: Int)
+
+        val slots = mutableListOf<Slot>()
         c.createStatement().use { st ->
             st.executeQuery(
                 """
-                SELECT DISTINCT HOUR(sch.showTime) h, MINUTE(sch.showTime) mi
-                FROM $s.schedule sch JOIN $s.messages m ON m.id = sch.messageID
-                WHERE m.forTV = $forTv AND sch.showDate >= '1900-01-01'
-                ORDER BY h, mi
+                SELECT DISTINCT fs.station_id, HOUR(sch.showTime) h, MINUTE(sch.showTime) mi
+                FROM $s.schedule sch
+                JOIN $s.messages m ON m.id = sch.messageID
+                $flowJoin
+                WHERE sch.showDate >= '1900-01-01'
+                ORDER BY fs.station_id, h, mi
                 """.trimIndent()
-            ).use { rs -> while (rs.next()) times += rs.getInt(1) to rs.getInt(2) }
+            ).use { rs -> while (rs.next()) slots += Slot(rs.getString(1), rs.getInt(2), rs.getInt(3)) }
         }
         c.prepareStatement(
-            "INSERT INTO $t.break_slots(id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
+            "INSERT INTO $t.break_slots(station_id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
         ).use { ps ->
-            times.forEachIndexed { index, (hour, minute) ->
-                val zone = when {
-                    hour in 20..23 -> "PRIME"
-                    hour in 10..14 -> "STANDARD"
-                    hour in 18..19 -> "SPECIAL"
+            for (slot in slots) {
+                val zone = when (slot.hour) {
+                    in 20..23 -> "PRIME"
+                    in 10..14 -> "STANDARD"
+                    in 18..19 -> "SPECIAL"
                     else -> "DEFAULT"
                 }
-                ps.setLong(1, index + 1L)
-                ps.setInt(2, hour)
-                ps.setInt(3, minute)
-                ps.setString(4, "%02d:%02d".format(hour, minute))
+                ps.setString(1, slot.stationId)
+                ps.setInt(2, slot.hour)
+                ps.setInt(3, slot.minute)
+                ps.setString(4, "%02d:%02d".format(slot.hour, slot.minute))
                 ps.setString(5, zone)
                 ps.addBatch()
             }
             ps.executeBatch()
         }
-        return times.size
+        return slots.size
     }
 
     // ─────────────────────────────────────────────────────── customers ──
 
-    /** Every legacy customer id the migrated data references. */
+    /**
+     * Every legacy customer id the migrated data references - across ALL the
+     * mapped flows, because customers belong to the GROUP.
+     *
+     * This is the heart of the fix. The same ERP customer advertises on the TV
+     * station and on the radio station; the old per-flow run wrote him twice,
+     * into two schemas that could never be joined. The set here is a union, so
+     * he lands exactly once - and `customers.code` (his zero-padded id) stays
+     * unique group-wide, as its UNIQUE key now insists.
+     */
     private fun referencedCustomerIds(): Set<Long> {
         val ids = sortedSetOf<Long>()
         c.createStatement().use { st ->
             st.executeQuery(
-                "SELECT DISTINCT cusID FROM $s.messages WHERE forTV = $forTv"
+                "SELECT DISTINCT m.cusID FROM $s.messages m $flowJoin"
             ).use { rs -> while (rs.next()) ids += maxOf(rs.getLong(1), 0L) }
             st.executeQuery(
                 """
                 SELECT DISTINCT d.traid FROM $s.docref d
                 JOIN $s.messages m ON m.contractID = d.docid
-                WHERE m.forTV = $forTv AND d.traid > 0
+                $flowJoin
+                WHERE d.traid > 0
                 """.trimIndent()
             ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
-            // END CLIENTS of this flow's triangular docs whose lee resolves
-            // to a tra id - they need a customer row even if they never
-            // bought anything directly on this flow.
+            // END CLIENTS of triangular docs whose lee resolves to a tra id -
+            // they need a customer row even if they never bought anything
+            // directly.
             st.executeQuery(
                 """
                 SELECT DISTINCT map.traid FROM $s.docref d
                 JOIN $s.lee_tra_map map ON map.lee = d.targetleeid
                 JOIN $s.messages m ON m.contractID = d.docid
-                WHERE m.forTV = $forTv AND d.targetleeid <> d.pelatislee
+                $flowJoin
+                WHERE d.targetleeid <> d.pelatislee
                 """.trimIndent()
             ).use { rs -> while (rs.next()) ids += rs.getLong(1) }
         }
@@ -422,7 +541,8 @@ class LegacyTransformer(
                 """
                 SELECT DISTINCT d.targetleeid FROM $s.docref d
                 JOIN $s.messages m ON m.contractID = d.docid
-                WHERE m.forTV = $forTv AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
+                $flowJoin
+                WHERE d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                   AND NOT EXISTS (SELECT 1 FROM $s.lee_tra_map map WHERE map.lee = d.targetleeid)
                 ORDER BY d.targetleeid
                 """.trimIndent()
@@ -457,6 +577,12 @@ class LegacyTransformer(
      * migrated spots. `docref` supplies real docno/dotid/customer when the
      * ERP shadow row survived; otherwise the contract is synthesized around
      * the spot's own customer.
+     *
+     * ONE row per document, ACROSS the flows: `GROUP BY m.contractID` now folds
+     * a document used by both the TV and the radio messages into a single
+     * contract. That is the whole point - contract 500 keeps its TV line and its
+     * radio lines together, and the ΣΥΜΒΟΛΑΙΑ views can finally answer "how much
+     * of this deal has aired" without adding up two schemas.
      */
     private fun migrateContracts(): Pair<Int, Int> {
         data class Row(val docId: Long, val traid: Long?, val docNo: String?, val dotId: Int?, val fallbackCus: Long, val isGift: Boolean)
@@ -467,9 +593,10 @@ class LegacyTransformer(
                 """
                 SELECT m.contractID, MIN(d.traid), MIN(d.docno), MIN(d.dotid), MIN(GREATEST(m.cusID,0)), MAX(COALESCE(sl.isGift,0))
                 FROM $s.messages m
+                $flowJoin
                 LEFT JOIN $s.docref d ON d.docid = m.contractID
                 LEFT JOIN $s.sld sl ON sl.dotid = d.dotid
-                WHERE m.forTV = $forTv AND m.contractID > 0
+                WHERE m.contractID > 0
                 GROUP BY m.contractID
                 """.trimIndent()
             ).use { rs ->
@@ -561,8 +688,9 @@ class LegacyTransformer(
                 INSERT INTO $t.contract_lines(contract_id, line_no, spot_type_id)
                 SELECT DISTINCT tc.id, 1000, NULL
                 FROM $s.messages m
+                $flowJoin
                 JOIN $t.contracts tc ON tc.legacy_docid = m.contractID
-                WHERE m.forTV = $forTv AND m.contractID > 0
+                WHERE m.contractID > 0
                   AND NOT EXISTS (
                       SELECT 1 FROM $t.contract_lines cl WHERE cl.contract_id = tc.id
                   )
@@ -603,17 +731,21 @@ class LegacyTransformer(
     // ──────────────────────────────────────────────────── spots/placements ──
 
     /**
-     * THE FAITHFUL UNION LAYER (owner directive): the station schema CONTAINS
-     * the legacy MySQL tables as VERBATIM copies - exact table names, exact
-     * column names, all rows of this station's flow. The app's working tables
-     * (spots/placements/...) are DERIVED from these; the copies are the
-     * inspectable source of truth inside the one functional database, and the
-     * SEN side lands next to them as `sen_*` tables (the enricher writes
-     * those - `sen_` because legacy `cus`/`sld` collide with the ERP names).
+     * THE FAITHFUL UNION LAYER (owner directive): the group schema CONTAINS the
+     * legacy MySQL tables as VERBATIM copies - exact table names, exact column
+     * names, ALL rows. The app's working tables (spots/placements/...) are
+     * DERIVED from these; the copies are the inspectable source of truth inside
+     * the one functional database, and the SEN side lands next to them as `sen_*`
+     * tables (the enricher writes those - `sen_` because legacy `cus`/`sld`
+     * collide with the ERP names).
      *
-     * Flow-scoped tables are filtered to this station's flow; shared tables
-     * copy whole. `emailhistory` copies WITHOUT the heavy bodies (the app's
-     * email_log keeps the capped bodies; the summaries here are complete).
+     * NOTHING is flow-filtered any more. One legacy database becomes one group
+     * database, so the copies are simply the dump - and the flow-scoped ones keep
+     * their own native `forTV` column, which is now genuinely faithful (the old
+     * per-flow runs sliced these tables in half and left a `forTV` column with a
+     * single value in it). `emailhistory` still copies WITHOUT the heavy bodies
+     * (the app's email_log keeps the capped bodies; the summaries here are
+     * complete).
      */
     private fun copyLegacyTables() {
         fun copy(table: String, filter: String = "", columns: String = "*") {
@@ -632,8 +764,8 @@ class LegacyTransformer(
             }
             log("  %-28s %,d rows (verbatim)".format(table, rows))
         }
-        copy("messages", "WHERE forTV = $forTv")
-        copy("schedule", "WHERE messageID IN (SELECT id FROM $s.messages WHERE forTV = $forTv)")
+        copy("messages")
+        copy("schedule")
         copy("programtypes")
         copy("docref")
         copy("z_commercials")
@@ -641,10 +773,10 @@ class LegacyTransformer(
         copy("sld")
         copy("calendar_excluded_docs")
         copy("commercials_calendar_final")
-        copy("roh_comments", "WHERE forTV = $forTv")
-        copy("roh_print_history", "WHERE forTV = $forTv")
-        copy("zones", "WHERE forTV = $forTv")
-        copy("zonefillers", "WHERE forTV = $forTv")
+        copy("roh_comments")
+        copy("roh_print_history")
+        copy("zones")
+        copy("zonefillers")
         copy(
             "emailhistory",
             columns = "id, subject, emailFrom, cusID, periodRequested, entryDate, entryTime, " +
@@ -696,21 +828,26 @@ class LegacyTransformer(
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT INTO $t.spots(legacy_id, customer_id, contract_line_id, description,
+                INSERT INTO $t.spots(station_id, legacy_id, customer_id, contract_line_id, description,
                                      duration_seconds, booked_program, booked_program_id, flow,
                                      hidden, force_position, memo)
-                SELECT m.id, COALESCE(tend.id, tcu.id), tl.id, m.descr, m.duration,
+                SELECT fs.station_id, m.id, COALESCE(tend.id, tcu.id), tl.id, m.descr, m.duration,
                        COALESCE(pt.descr, ''), tpr.id, 'ΡΟΗ', m.hidden, NULLIF(m.forcePosition, -1), m.memo
                 FROM $s.messages m
+                $flowJoin
                 JOIN $t.customers tcu ON tcu.legacy_id = GREATEST(m.cusID, 0)
                 LEFT JOIN $s.docref d ON d.docid = m.contractID
                                      AND d.targetleeid <> d.pelatislee AND d.targetleeid > 0
                 LEFT JOIN $t.customers tend ON tend.legacy_lee_id = d.targetleeid
                 LEFT JOIN $t.contracts tct ON tct.legacy_docid = m.contractID
                 -- messageTypeID names the PROGRAMME the spot was booked into
-                -- (it is NOT an ERP item class - see migrateSpotTypes)
-                LEFT JOIN $s.programtypes pt ON pt.id = m.messageTypeID
+                -- (it is NOT an ERP item class - see migrateSpotTypes). Both
+                -- programme joins MUST also match the flow/station: programme ids
+                -- restart per forTV, so joining on the id alone would label a TV
+                -- spot with the radio station's show.
+                LEFT JOIN $s.programtypes pt ON pt.id = m.messageTypeID AND pt.forTV = m.forTV
                 LEFT JOIN $t.programs tpr ON tpr.legacy_id = m.messageTypeID
+                                         AND tpr.station_id = fs.station_id
                 -- Default product line. The message carries no line number, so
                 -- it is only unambiguous when the document sells ONE item class
                 -- (68% of docs). Multi-line docs are backfilled AFTER placements
@@ -723,7 +860,6 @@ class LegacyTransformer(
                            WHERE cl2.contract_id = tct.id) = 1
                     LIMIT 1
                 )
-                WHERE m.forTV = $forTv
                 """.trimIndent()
             )
         }
@@ -763,6 +899,22 @@ class LegacyTransformer(
             )
         }
 
+    /**
+     * The airings. The spot decides the station (legacy `schedule` carries no
+     * forTV of its own), and EVERY station-scoped join below must agree with it:
+     *
+     *  - the BREAK join matches on time AND station. Matching on time alone was
+     *    fine when a schema held one station; in a group schema both stations own
+     *    an 11:00 break, so it would attach each airing to BOTH and silently
+     *    double every placement in the database.
+     *  - the ROW_NUMBER partition includes the station, or the two stations'
+     *    airings interleave and their positions inside a break come out wrong.
+     *  - the PROGRAMME join matches the station too (programme ids restart per
+     *    flow - see migratePrograms).
+     *
+     * The contract-line join stays group-scoped on purpose: that is the airing's
+     * actual charge, and the contract is the group's.
+     */
     private fun migratePlacements(): Int =
         c.createStatement().use { st ->
             st.executeUpdate(
@@ -771,19 +923,22 @@ class LegacyTransformer(
                                           duration_seconds, contract_line_id, program_id, played, hidden)
                 SELECT sch.id, ts.id, tb.id, sch.showDate,
                        ROW_NUMBER() OVER (
-                           PARTITION BY sch.showDate, HOUR(sch.showTime), MINUTE(sch.showTime)
+                           PARTITION BY ts.station_id, sch.showDate,
+                                        HOUR(sch.showTime), MINUTE(sch.showTime)
                            ORDER BY sch.showOrder, sch.id
                        ) - 1,
                        sch.durationSecs, pcl.id, tp.id, sch.played, sch.hideSchedule
                 FROM $s.schedule sch
                 JOIN $t.spots ts ON ts.legacy_id = sch.messageID
-                JOIN $t.break_slots tb ON tb.hour_of_day = HOUR(sch.showTime)
+                JOIN $t.break_slots tb ON tb.station_id = ts.station_id
+                                      AND tb.hour_of_day = HOUR(sch.showTime)
                                       AND tb.minute_of_hour = MINUTE(sch.showTime)
                 -- the airing's ACTUAL charge: schedule.docID + lineno name the
                 -- product line directly (NULL falls back to the spot's default)
                 LEFT JOIN $t.contracts pct ON pct.legacy_docid = sch.docID
                 LEFT JOIN $t.contract_lines pcl ON pcl.contract_id = pct.id AND pcl.line_no = sch.lineno
                 LEFT JOIN $t.programs tp ON tp.legacy_id = sch.programID
+                                        AND tp.station_id = ts.station_id
                 WHERE sch.showDate >= '1900-01-01'
                 """.trimIndent()
             )
@@ -791,14 +946,21 @@ class LegacyTransformer(
 
     // ───────────────────────────────────────────────── comments / audit ──
 
+    /**
+     * ≙ legacy `roh_comments`, keyed by (date, forTV) - so the station is part of
+     * the key here too. Without it the two stations' comments for the same date
+     * would collide, and INSERT IGNORE would quietly keep only the first.
+     */
     private fun migrateFlowComments(): Int {
         if (!tableExists("roh_comments")) return 0
         return c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT IGNORE INTO $t.flow_comments(show_date, comments)
-                SELECT startDate, comments FROM $s.roh_comments
-                WHERE forTV = $forTv AND comments <> '' AND startDate >= '1900-01-01'
+                INSERT IGNORE INTO $t.flow_comments(station_id, show_date, comments)
+                SELECT fs.station_id, rc.startDate, rc.comments
+                FROM $s.roh_comments rc
+                JOIN $s.flow_station fs ON fs.forTV = rc.forTV
+                WHERE rc.comments <> '' AND rc.startDate >= '1900-01-01'
                 """.trimIndent()
             )
         }
@@ -809,9 +971,11 @@ class LegacyTransformer(
         return c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT INTO $t.print_audit(printed_date, username, created_at)
-                SELECT printedDate, username, mystamp FROM $s.roh_print_history
-                WHERE forTV = $forTv AND printedDate >= '1900-01-01'
+                INSERT INTO $t.print_audit(station_id, printed_date, username, created_at)
+                SELECT fs.station_id, rp.printedDate, rp.username, rp.mystamp
+                FROM $s.roh_print_history rp
+                JOIN $s.flow_station fs ON fs.forTV = rp.forTV
+                WHERE rp.printedDate >= '1900-01-01'
                 """.trimIndent()
             )
         }
@@ -920,12 +1084,31 @@ class LegacyTransformer(
         return year to month
     }
 
+    /**
+     * `migrated_at` is the GROUP's (one dump, one run, one group). Each station
+     * records the flow it came from, and demo_seed=false so the server never
+     * fills its empty months with demo spots.
+     */
     private fun writeMeta() {
         c.createStatement().use { st ->
             st.executeUpdate(
                 """
-                INSERT INTO $t.station_meta(meta_key, meta_value)
-                VALUES ('migrated_at', NOW()), ('migrated_fortv', '$forTv')
+                INSERT INTO $t.group_meta(meta_key, meta_value)
+                VALUES ('migrated_at', NOW())
+                ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)
+                """.trimIndent()
+            )
+            st.executeUpdate(
+                """
+                INSERT INTO $t.station_meta(station_id, meta_key, meta_value)
+                SELECT fs.station_id, 'migrated_fortv', CAST(fs.forTV AS CHAR) FROM $s.flow_station fs
+                ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)
+                """.trimIndent()
+            )
+            st.executeUpdate(
+                """
+                INSERT INTO $t.station_meta(station_id, meta_key, meta_value)
+                SELECT fs.station_id, 'demo_seed', 'false' FROM $s.flow_station fs
                 ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)
                 """.trimIndent()
             )

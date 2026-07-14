@@ -13,6 +13,20 @@ data class BreakSlotRow(
 )
 
 /**
+ * A break to be CREATED - it has no id yet.
+ *
+ * Break ids used to be computed by the seeder (1..96, identical in every
+ * station's own schema). Now that a group's stations share one database the
+ * database assigns them, so the seed describes the slot and reads the id back.
+ */
+data class BreakTemplate(
+    val hour: Int,
+    val minute: Int,
+    val label: String,
+    val zone: BreakZone
+)
+
+/**
  * READ-MODEL row shapes returned by StationDb.loadMonth - the grid the client
  * renders. Since the normalized-schema evolution these are DERIVED from
  * placements ⋈ spots ⋈ customers ⋈ contracts, not stored.
@@ -106,9 +120,8 @@ fun cellColorArgb(zone: BreakZone, isWeekend: Boolean, spotCount: Int): Int = wh
 private fun formatTime(hour: Int, minute: Int): String =
     "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 
-fun generateBreaks(): List<BreakSlotRow> {
-    val out = mutableListOf<BreakSlotRow>()
-    var id = 1L
+fun generateBreaks(): List<BreakTemplate> {
+    val out = mutableListOf<BreakTemplate>()
     for (hour in 0..23) {
         for (minute in listOf(0, 15, 30, 45)) {
             val zone = when {
@@ -117,8 +130,7 @@ fun generateBreaks(): List<BreakSlotRow> {
                 hour in 18..19 -> BreakZone.SPECIAL
                 else -> BreakZone.DEFAULT
             }
-            out += BreakSlotRow(
-                id = id++,
+            out += BreakTemplate(
                 hour = hour,
                 minute = minute,
                 label = formatTime(hour, minute),
@@ -130,9 +142,12 @@ fun generateBreaks(): List<BreakSlotRow> {
 }
 
 // ────────────────────────────── demo catalog ────────────────────────────────
-// Deterministic per station: the same customers/spots on every boot, so month
-// seeding stays idempotent and concurrent-safe. Mirrors the legacy world:
-// customers (with ΑΦΜ), gift contracts, and a spot catalog (≙ `messages`).
+// Deterministic: the same customers/spots on every boot, so month seeding stays
+// idempotent and concurrent-safe. Mirrors the legacy world: customers (with
+// ΑΦΜ), gift contracts, and a spot catalog (≙ `messages`).
+//
+// The customers and contracts belong to the GROUP - every station of the group
+// shares them, which is what the model is for. Only the spots are per station.
 
 data class CustomerSeed(val code: String, val name: String, val vat: String)
 
@@ -166,6 +181,14 @@ val demoDurations = listOf(20, 28, 30, 32, 36, 40, 50)
 
 /** How many catalog spots each station gets. */
 const val DEMO_SPOTS_PER_STATION = 28
+
+/**
+ * Product lines on each demo contract. More than one on purpose: a station's
+ * spots charge to the line matching its index in the group, so a two-station
+ * demo group reproduces the real shape - ONE contract, a TV line and a radio
+ * line - without needing a migration to show it.
+ */
+const val DEMO_LINES_PER_CONTRACT = 2
 
 private fun daysInMonth(year: Int, month: Int): Int = when {
     month == 2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28

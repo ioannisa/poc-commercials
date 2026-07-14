@@ -6,9 +6,11 @@ import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseEntry
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
-import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowInfo
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationGroup
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationMapping
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStationTally
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationSummary
 import eu.anifantakis.commercials.feature.migration_console.domain.data_source.RemoteMigrationDataSource
@@ -21,21 +23,40 @@ private data class StartDto(
     val port: Int,
     val username: String,
     val password: String,
-    val schema: String,
+    val groupId: String,
+    val groupName: String? = null,
+    val schema: String = "",
     val createSchema: Boolean,
     val senDirPath: String? = null,
 )
 
 @Serializable
-private data class FlowChoiceDto(
+private data class FlowMappingDto(
     val forTv: Int,
     val stationId: String = "",
     val stationName: String = "",
+    val logo: String? = null,
+)
+
+@Serializable
+private data class MappingDto(
+    val mappings: List<FlowMappingDto>,
     val addToYaml: Boolean = true,
 )
 
 @Serializable
 private data class FlowInfoDto(val forTv: Int, val spots: Long, val placements: Long)
+
+@Serializable
+private data class GroupDto(val id: String, val name: String, val schema: String)
+
+@Serializable
+private data class StationTallyDto(
+    val stationId: String,
+    val forTv: Int,
+    val spots: Int,
+    val placements: Int,
+)
 
 @Serializable
 private data class SummaryDto(
@@ -55,6 +76,7 @@ private data class SummaryDto(
     val orphanedRows: Long = 0,
     val zeroDateRows: Long = 0,
     val programs: Int = 0,
+    val stations: List<StationTallyDto> = emptyList(),
 )
 
 @Serializable
@@ -65,6 +87,7 @@ private data class StatusDto(
     val summary: SummaryDto? = null,
     val error: String? = null,
     val schema: String? = null,
+    val groups: List<GroupDto> = emptyList(),
 )
 
 @Serializable
@@ -81,6 +104,7 @@ private fun SummaryDto.toDomain() = MigrationSummary(
     breaks, customers, customersSynthetic, contracts, contractsSynthetic, contractLines,
     spots, placements, flowComments, printAudits, dateRange,
     dumpScheduleRows, otherFlowRows, orphanedRows, zeroDateRows, programs,
+    stations.map { MigrationStationTally(it.stationId, it.forTv, it.spots, it.placements) },
 )
 
 private fun StatusDto.toDomain() = MigrationStatus(
@@ -90,6 +114,7 @@ private fun StatusDto.toDomain() = MigrationStatus(
     summary = summary?.toDomain(),
     error = error,
     schema = schema,
+    groups = groups.map { MigrationGroup(it.id, it.name, it.schema) },
 )
 
 private fun BrowseListingDto.toDomain() =
@@ -105,15 +130,19 @@ class RemoteMigrationDataSourceImpl(private val api: ApiHttpClient) : RemoteMigr
             "/api/admin/migration/start",
             StartDto(
                 request.dumpPath, request.host, request.port,
-                request.username, request.password, request.schema, request.createSchema,
+                request.username, request.password,
+                request.groupId, request.groupName, request.schema, request.createSchema,
                 request.senDirPath,
             ),
         ).map { it.toDomain() }
 
-    override suspend fun chooseFlow(choice: MigrationFlowChoice): DataResult<MigrationStatus, RemoteError> =
-        api.postRemote<FlowChoiceDto, StatusDto>(
+    override suspend fun chooseMapping(mapping: MigrationMapping): DataResult<MigrationStatus, RemoteError> =
+        api.postRemote<MappingDto, StatusDto>(
             "/api/admin/migration/flow",
-            FlowChoiceDto(choice.forTv, choice.stationId, choice.stationName, choice.addToYaml),
+            MappingDto(
+                mapping.mappings.map { FlowMappingDto(it.forTv, it.stationId, it.stationName, it.logo) },
+                mapping.addToYaml,
+            ),
         ).map { it.toDomain() }
 
     override suspend fun reset(): DataResult<MigrationStatus, RemoteError> =

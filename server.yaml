@@ -2,32 +2,44 @@
 #
 # central  (REQUIRED, standalone): the server's OWN schema - application
 #          users, tokens, and per-station grants. It must never double as a
-#          station schema; the server refuses to start if a station below
-#          points at the same database.
+#          group schema; the server refuses to start if a group below points
+#          at the same database.
 #
-# stations (OPTIONAL, 0..n): one entry per hosted TV/radio station. Identical
-#          table structure per schema; schemas may live on the same MySQL
-#          server (as below) or entirely different servers - every entry
-#          carries its own full jdbcUrl + credentials (plaintext by design;
-#          this file is server-side deployment config, keep it out of client
-#          bundles).
+# groups   (OPTIONAL, 0..n): one entry per hosted company GROUP. A group owns
+#          ONE database and hosts 1..n stations inside it.
 #
-# `id` is the stable key used in user grants and API calls; `name` is what
-# users see in the station dropdown.
+#          This mirrors the original app exactly: it kept one MySQL database
+#          per group and told the group's TV station apart from its radio
+#          station with a `forTV` 0/1 column. Customers, contracts and contract
+#          LINES are stored ONCE and shared, because one contract genuinely
+#          sells on several media - Ανυφαντάκης buys 1 TV spot and 2 radio
+#          spots on the SAME contract. Spots, programmes and breaks are per
+#          station (they carry `station_id`, our generalization of `forTV`).
 #
-# Connection pools: each database gets its own HikariCP pool. The optional
-# file-wide `maxPoolSize` below sets the default ceiling for central and every
-# station; `maxPoolSize` on any single block overrides it. Defaults when unset:
-# central 10, station 5. The theoretical peak against a MySQL server is the sum
-# of the pools pointing at it, so tune this against its `max_connections` as
-# stations grow. Example:
+#          So: one legacy dump => one group database => 1..n stations. Group
+#          schemas may live on the same MySQL server (as below) or on entirely
+#          different ones - every group carries its own full jdbcUrl +
+#          credentials (plaintext by design; this file is server-side
+#          deployment config, keep it out of client bundles).
+#
+# A station's `id` is the stable key used in user grants and API calls, and it
+# must be unique across ALL groups; `name` is what users see in the station
+# dropdown. A station carries no connection details of its own - it IS a
+# station_id inside its group's database.
+#
+# Connection pools: each GROUP database gets its own HikariCP pool, shared by
+# every station in it. The optional file-wide `maxPoolSize` sets the default
+# ceiling for central and every group; `maxPoolSize` on any single block
+# overrides it. Defaults when unset: central 10, group 10. The theoretical peak
+# against a MySQL server is the sum of the pools pointing at it, so tune this
+# against its `max_connections` as groups grow. Example:
 #
 #   maxPoolSize: 8          # file-wide default for every pool
 #   central:
 #     maxPoolSize: 20       # central is hottest (token check per request)
-#   stations:
-#     - id: crete-tv
-#       maxPoolSize: 3      # override just this station
+#   groups:
+#     - id: crete-group
+#       maxPoolSize: 16     # override just this group (it hosts 3 stations)
 #
 # superAdmin (REQUIRED): the break-glass administrator. Deliberately PLAINTEXT
 # here - same threat model as the DB credentials in this file, and the point:
@@ -36,10 +48,10 @@
 # rotate by editing the password here and restarting (old sessions revoked).
 # This account manages users/grants and gets implicit access to every station.
 #
-# smtp (OPTIONAL): outgoing mail for customer schedule emails. File-wide
-# default here; any station block may carry its own `smtp:` to send from its
-# own address (the legacy behaviour). Without one, email endpoints refuse
-# with a clear message. Example:
+# smtp (OPTIONAL): outgoing mail for customer schedule emails. Resolution is
+# station -> group -> file-wide, so a station may send from its own address
+# (the legacy behaviour) while its siblings fall back to the group's. Without
+# any, email endpoints refuse with a clear message. Example:
 #
 #   smtp:
 #     host: smtp.example.gr
@@ -75,28 +87,26 @@ central:
   username: root
   password: rootpass123
 
-stations:
-  - id: crete-tv
-    name: "Crete TV"
-    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_cretetv?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+groups:
+  - id: crete-group
+    name: "Κρητική Ραδιοτηλεόραση"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_crete_group?useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123
+    stations:
+      - id: crete-tv
+        name: "Crete TV"
+        logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
+      - id: radio-984
+        name: "Radio 984"
+        logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
 
-  - id: radio-984
-    name: "Radio 984"
-    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_radio984?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
-    username: root
-    password: rootpass123
-
-  - id: channel-4
+  # Demo group with a single station - seeded, no migration needed.
+  - id: channel4-group
     name: "Channel 4"
     jdbcUrl: "jdbc:mysql://localhost:3306/commercials_channel4?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
     username: root
     password: rootpass123
-
-  - id: my-sample
-    name: "My Sample"
-    logo: "/Users/ioannisanif/Downloads/ctv/cretetv-logo.png"
-    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_ctv_v4?useUnicode=true&characterEncoding=utf8"
-    username: root
-    password: rootpass123
+    stations:
+      - id: channel-4
+        name: "Channel 4"

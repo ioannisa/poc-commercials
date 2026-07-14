@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateCont
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.databases.domain.DatabasesRepository
+import eu.anifantakis.commercials.feature.databases.domain.DeleteMode
 import eu.anifantakis.commercials.feature.databases.domain.HostedStation
 import eu.anifantakis.commercials.feature.databases.domain.StationDeletion
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The super-admin Databases screen VM: lists hosted stations on start and
@@ -44,7 +46,17 @@ class DatabasesViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private val station = HostedStation(id = "crete-tv", name = "Crete TV", database = "commercials_crete")
+    // A station that SHARES its group's database with a sibling - the normal case
+    // now, and what makes "drop the group" a different decision from "delete the
+    // station".
+    private val station = HostedStation(
+        id = "crete-tv",
+        name = "Crete TV",
+        database = "commercials_crete",
+        groupId = "crete-group",
+        groupName = "Crete Group",
+        siblings = listOf("radio-984"),
+    )
 
     private class FakeDatabasesRepository(
         var stations: List<HostedStation> = emptyList(),
@@ -54,14 +66,18 @@ class DatabasesViewModelTest {
         ),
     ) : DatabasesRepository {
         var deleteCalls = 0
-        var lastDelete: Triple<String, Boolean, String>? = null
+        var lastDelete: Triple<String, DeleteMode, String>? = null
 
         override suspend fun listStations(): DataResult<List<HostedStation>, RemoteError> =
             listResult ?: DataResult.Success(stations)
 
-        override suspend fun deleteStation(id: String, hard: Boolean, confirmId: String): DataResult<StationDeletion, RemoteError> {
+        override suspend fun deleteStation(
+            id: String,
+            mode: DeleteMode,
+            confirmId: String,
+        ): DataResult<StationDeletion, RemoteError> {
             deleteCalls++
-            lastDelete = Triple(id, hard, confirmId)
+            lastDelete = Triple(id, mode, confirmId)
             return deleteResult
         }
     }
@@ -111,12 +127,12 @@ class DatabasesViewModelTest {
         advanceUntilIdle()
 
         vm.onAction(DatabasesIntent.DeleteRequested(station))
-        vm.onAction(DatabasesIntent.DeleteModeChanged(hard = true))
+        vm.onAction(DatabasesIntent.DeleteModeChanged(DeleteMode.PURGE))
         vm.onAction(DatabasesIntent.ConfirmIdChanged("crete-tv"))
         vm.onAction(DatabasesIntent.ConfirmDelete)
         advanceUntilIdle()
 
-        assertEquals(Triple("crete-tv", true, "crete-tv"), repo.lastDelete, "hard mode + typed id reach the repo")
+        assertEquals(Triple("crete-tv", DeleteMode.PURGE, "crete-tv"), repo.lastDelete, "purge mode + typed id reach the repo")
         assertEquals(null, vm.state.delete, "the dialog closes on success")
         assertEquals(
             UiText.Res(StringKey.DATABASES_DELETED_STATUS, listOf<Any>("ok", 3)),
@@ -136,5 +152,45 @@ class DatabasesViewModelTest {
 
         assertEquals(UiText.Dynamic("busy"), vm.state.delete?.error)
         assertFalse(vm.state.delete?.busy ?: true, "the button re-enables so the admin can retry")
+    }
+
+    /**
+     * Dropping the group destroys the sibling stations too, so it is confirmed
+     * with the GROUP's id. Typing the station's - the word muscle memory
+     * supplies - must NOT unlock it.
+     */
+    @Test
+    fun droppingTheGroupIsConfirmedWithTheGroupIdNotTheStationId() = runTest(testDispatcher) {
+        val repo = FakeDatabasesRepository(stations = listOf(station))
+        val vm = DatabasesViewModel(repo)
+
+        vm.onAction(DatabasesIntent.DeleteRequested(station))
+        vm.onAction(DatabasesIntent.DeleteModeChanged(DeleteMode.DROP_GROUP))
+        vm.onAction(DatabasesIntent.ConfirmIdChanged("crete-tv"))   // the STATION id
+        vm.onAction(DatabasesIntent.ConfirmDelete)
+        advanceUntilIdle()
+
+        assertEquals(0, repo.deleteCalls, "the station's own id does not unlock a group drop")
+
+        vm.onAction(DatabasesIntent.ConfirmIdChanged("crete-group"))
+        vm.onAction(DatabasesIntent.ConfirmDelete)
+        advanceUntilIdle()
+
+        assertEquals(Triple("crete-tv", DeleteMode.DROP_GROUP, "crete-group"), repo.lastDelete)
+    }
+
+    /** Switching mode re-arms the confirmation: it means a different word now. */
+    @Test
+    fun changingTheModeClearsTheTypedConfirmation() = runTest(testDispatcher) {
+        val vm = DatabasesViewModel(FakeDatabasesRepository())
+
+        vm.onAction(DatabasesIntent.DeleteRequested(station))
+        vm.onAction(DatabasesIntent.ConfirmIdChanged("crete-tv"))
+        assertTrue(vm.state.delete?.canConfirm ?: false, "safe mode is armed")
+
+        vm.onAction(DatabasesIntent.DeleteModeChanged(DeleteMode.DROP_GROUP))
+
+        assertEquals("", vm.state.delete?.confirmId)
+        assertFalse(vm.state.delete?.canConfirm ?: true, "the admin must read the new dialog and retype")
     }
 }

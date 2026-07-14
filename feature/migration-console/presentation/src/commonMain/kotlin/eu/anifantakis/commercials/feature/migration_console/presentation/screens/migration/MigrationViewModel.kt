@@ -10,10 +10,14 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
-import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowMapping
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationMapping
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,32 +39,62 @@ data class ServerBrowserState(
     val forSenDir: Boolean = false,
 )
 
+/**
+ * What one of the dump's flows should become. Empty [stationId] = do not migrate
+ * this flow.
+ */
+@Immutable
+data class FlowTarget(
+    val stationId: String = "",
+    val stationName: String = "",
+)
+
 @Immutable
 data class MigrationState(
     val status: MigrationStatus = MigrationStatus(),
     val formError: UiText? = null,
-    // step 1: source & target
+    // step 1: source & target group
     val dumpPath: String = "",
     val senDirPath: String = "",
     val host: String = "localhost",
     val port: String = "3306",
     val username: String = "",
     val password: String = "",
+    /** Blank = create a NEW group (below); otherwise the id of a hosted one. */
+    val existingGroupId: String = "",
+    val groupId: String = "",
+    val groupName: String = "",
     val schema: String = "",
     val createSchema: Boolean = true,
-    // step 2: flow choice
-    val selectedFlow: Int? = null,
-    val stationId: String = "",
-    val stationName: String = "",
+    // step 2: one target per detected flow (keyed by forTV)
+    val flowTargets: ImmutableMap<Int, FlowTarget> = persistentMapOf(),
     val addToYaml: Boolean = true,
     val browser: ServerBrowserState? = null,
 ) {
     val running: Boolean get() = status.state in setOf("REPLAYING", "TRANSFORMING")
 
-    val canStart: Boolean get() = dumpPath.isNotBlank() && username.isNotBlank() && schema.isNotBlank()
+    /** An existing group owns its schema and credentials; a new one needs both. */
+    val isNewGroup: Boolean get() = existingGroupId.isBlank()
 
-    val canChooseFlow: Boolean
-        get() = selectedFlow != null && (!addToYaml || (stationId.isNotBlank() && stationName.isNotBlank()))
+    val canStart: Boolean
+        get() = dumpPath.isNotBlank() && username.isNotBlank() &&
+            if (isNewGroup) groupId.isNotBlank() && schema.isNotBlank() else true
+
+    /** The flows the operator actually filled in - the ones that will migrate. */
+    val mappedFlows: List<Pair<Int, FlowTarget>>
+        get() = flowTargets.entries
+            .filter { it.value.stationId.isNotBlank() }
+            .map { it.key to it.value }
+            .sortedByDescending { it.first }
+
+    /**
+     * At least one flow mapped, each with a name, and no two flows sharing a
+     * station id (they are separate stations of the same group).
+     */
+    val canMap: Boolean
+        get() = mappedFlows.isNotEmpty() &&
+            mappedFlows.all { (_, t) -> t.stationName.isNotBlank() } &&
+            mappedFlows.map { (_, t) -> t.stationId }.toSet().size == mappedFlows.size
 }
 
 sealed interface MigrationIntent {
@@ -70,15 +104,19 @@ sealed interface MigrationIntent {
     data class PortChanged(val value: String) : MigrationIntent
     data class UsernameChanged(val value: String) : MigrationIntent
     data class PasswordChanged(val value: String) : MigrationIntent
+    /** "" = create a new group; otherwise migrate into this hosted one. */
+    data class ExistingGroupSelected(val groupId: String) : MigrationIntent
+    data class GroupIdChanged(val value: String) : MigrationIntent
+    data class GroupNameChanged(val value: String) : MigrationIntent
     data class SchemaChanged(val value: String) : MigrationIntent
     data class CreateSchemaChanged(val value: Boolean) : MigrationIntent
     data object Start : MigrationIntent
 
-    data class FlowSelected(val forTv: Int) : MigrationIntent
-    data class StationIdChanged(val value: String) : MigrationIntent
-    data class StationNameChanged(val value: String) : MigrationIntent
+    /** Per-flow station target; a blank id skips that flow. */
+    data class FlowStationIdChanged(val forTv: Int, val value: String) : MigrationIntent
+    data class FlowStationNameChanged(val forTv: Int, val value: String) : MigrationIntent
     data class AddToYamlChanged(val value: Boolean) : MigrationIntent
-    data object ChooseFlow : MigrationIntent
+    data object ChooseMapping : MigrationIntent
 
     data object Reset : MigrationIntent
 
@@ -91,9 +129,15 @@ sealed interface MigrationIntent {
 }
 
 /**
- * Steers the SERVER-side migration and polls its status live: tighter while
- * a replay/transform runs (700ms), relaxed when idle (2s). Polling runs for
- * as long as the screen subscribes to [state].
+ * Steers the SERVER-side migration and polls its status live: tighter while a
+ * replay/transform runs (700ms), relaxed when idle (2s). Polling runs for as
+ * long as the screen subscribes to [state].
+ *
+ * The wizard mirrors the hosting model: a legacy database is ONE COMPANY's, so
+ * it migrates into one GROUP database, and each of its flows (forTV) becomes a
+ * station inside that group. The operator therefore does not pick a flow and
+ * discard the other - he maps them, and both go in together, sharing the
+ * customers and contracts the dump has only one copy of.
  */
 @Stable
 class MigrationViewModel(
@@ -117,20 +161,27 @@ class MigrationViewModel(
                 _state.update { it.copy(port = intent.value.filter { ch -> ch.isDigit() }) }
             is MigrationIntent.UsernameChanged -> _state.update { it.copy(username = intent.value) }
             is MigrationIntent.PasswordChanged -> _state.update { it.copy(password = intent.value) }
+            is MigrationIntent.ExistingGroupSelected ->
+                _state.update { it.copy(existingGroupId = intent.groupId) }
+            is MigrationIntent.GroupIdChanged -> _state.update { it.copy(groupId = intent.value) }
+            is MigrationIntent.GroupNameChanged -> _state.update { it.copy(groupName = intent.value) }
             is MigrationIntent.SchemaChanged -> _state.update { it.copy(schema = intent.value) }
             is MigrationIntent.CreateSchemaChanged -> _state.update { it.copy(createSchema = intent.value) }
             MigrationIntent.Start -> start()
 
-            is MigrationIntent.FlowSelected -> _state.update { it.copy(selectedFlow = intent.forTv) }
-            is MigrationIntent.StationIdChanged -> _state.update { it.copy(stationId = intent.value) }
-            is MigrationIntent.StationNameChanged -> _state.update { it.copy(stationName = intent.value) }
+            is MigrationIntent.FlowStationIdChanged -> _state.update { s ->
+                s.copy(flowTargets = s.flowTargets.updated(intent.forTv) { it.copy(stationId = intent.value) })
+            }
+            is MigrationIntent.FlowStationNameChanged -> _state.update { s ->
+                s.copy(flowTargets = s.flowTargets.updated(intent.forTv) { it.copy(stationName = intent.value) })
+            }
             is MigrationIntent.AddToYamlChanged -> _state.update { it.copy(addToYaml = intent.value) }
-            MigrationIntent.ChooseFlow -> chooseFlow()
+            MigrationIntent.ChooseMapping -> chooseMapping()
 
             MigrationIntent.Reset -> viewModelScope.launch {
                 when (val result = repository.reset()) {
                     is DataResult.Success -> _state.update {
-                        it.copy(status = result.data, selectedFlow = null)
+                        it.copy(status = result.data, flowTargets = persistentMapOf())
                     }
                     is DataResult.Failure -> _state.update {
                         it.copy(formError = result.error.toUiText())
@@ -150,6 +201,12 @@ class MigrationViewModel(
                 _state.update { it.copy(senDirPath = intent.path, browser = null) }
         }
     }
+
+    private fun ImmutableMap<Int, FlowTarget>.updated(
+        forTv: Int,
+        edit: (FlowTarget) -> FlowTarget,
+    ): ImmutableMap<Int, FlowTarget> =
+        toMutableMap().apply { put(forTv, edit(this[forTv] ?: FlowTarget())) }.toImmutableMap()
 
     private fun startPolling() {
         if (polling) return
@@ -177,6 +234,8 @@ class MigrationViewModel(
                     port = s.port.toIntOrNull() ?: 3306,
                     username = s.username.trim(),
                     password = s.password,
+                    groupId = if (s.isNewGroup) s.groupId.trim() else s.existingGroupId,
+                    groupName = s.groupName.trim().ifEmpty { null },
                     schema = s.schema.trim(),
                     createSchema = s.createSchema,
                     senDirPath = s.senDirPath.trim().ifEmpty { null },
@@ -189,16 +248,20 @@ class MigrationViewModel(
         }
     }
 
-    private fun chooseFlow() {
+    private fun chooseMapping() {
         val s = _state.value
-        if (!s.canChooseFlow) return
+        if (!s.canMap) return
         _state.update { it.copy(formError = null) }
         viewModelScope.launch {
-            val result = repository.chooseFlow(
-                MigrationFlowChoice(
-                    forTv = s.selectedFlow ?: 1,
-                    stationId = s.stationId.trim(),
-                    stationName = s.stationName.trim(),
+            val result = repository.chooseMapping(
+                MigrationMapping(
+                    mappings = s.mappedFlows.map { (forTv, target) ->
+                        MigrationFlowMapping(
+                            forTv = forTv,
+                            stationId = target.stationId.trim(),
+                            stationName = target.stationName.trim(),
+                        )
+                    },
                     addToYaml = s.addToYaml,
                 )
             )

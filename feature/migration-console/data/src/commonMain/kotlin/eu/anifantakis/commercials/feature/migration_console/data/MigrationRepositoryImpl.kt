@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.migration_console.data
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.feature.migration_console.domain.BrowseListing
-import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowChoice
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationMapping
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
@@ -20,8 +20,8 @@ class MigrationRepositoryImpl(
     override suspend fun start(request: MigrationStart): DataResult<MigrationStatus, RemoteError> =
         remoteDataSource.start(request)
 
-    override suspend fun chooseFlow(choice: MigrationFlowChoice): DataResult<MigrationStatus, RemoteError> =
-        remoteDataSource.chooseFlow(choice)
+    override suspend fun chooseMapping(mapping: MigrationMapping): DataResult<MigrationStatus, RemoteError> =
+        remoteDataSource.chooseMapping(mapping)
 
     override suspend fun reset(): DataResult<MigrationStatus, RemoteError> =
         remoteDataSource.reset()

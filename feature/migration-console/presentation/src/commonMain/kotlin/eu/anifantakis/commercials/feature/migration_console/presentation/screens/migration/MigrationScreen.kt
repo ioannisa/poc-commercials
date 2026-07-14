@@ -236,17 +236,50 @@ private fun MigrationScreen(
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    AppTextField(
-                        value = state.schema,
-                        onValueChange = { onIntent(MigrationIntent.SchemaChanged(it)) },
-                        label = Strings[StringKey.MIGRATION_TARGET_SCHEMA],
-                        placeholder = "commercials_mystation",
+                    // The target GROUP owns the database. An existing group
+                    // supplies its own jdbcUrl and credentials, so only a NEW
+                    // one asks for a schema.
+                    AppText(Strings[StringKey.MIGRATION_GROUP_SECTION], AppTextStyle.ITEM_TITLE)
+                    AppText(Strings[StringKey.MIGRATION_GROUP_INFO], AppTextStyle.NOTE)
+                    AppRadioRow(
+                        selected = state.isNewGroup,
+                        onClick = { onIntent(MigrationIntent.ExistingGroupSelected("")) },
+                        label = Strings[StringKey.MIGRATION_GROUP_NEW],
                     )
-                    AppCheckboxRow(
-                        checked = state.createSchema,
-                        onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) },
-                        label = Strings[StringKey.MIGRATION_CREATE_SCHEMA],
-                    )
+                    status.groups.forEach { group ->
+                        AppRadioRow(
+                            selected = state.existingGroupId == group.id,
+                            onClick = { onIntent(MigrationIntent.ExistingGroupSelected(group.id)) },
+                            label = "${group.name} (${group.schema})",
+                        )
+                    }
+                    if (state.isNewGroup) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+                            AppTextField(
+                                value = state.groupId,
+                                onValueChange = { onIntent(MigrationIntent.GroupIdChanged(it)) },
+                                label = Strings[StringKey.MIGRATION_GROUP_ID],
+                                modifier = Modifier.weight(1f),
+                            )
+                            AppTextField(
+                                value = state.groupName,
+                                onValueChange = { onIntent(MigrationIntent.GroupNameChanged(it)) },
+                                label = Strings[StringKey.MIGRATION_GROUP_NAME],
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        AppTextField(
+                            value = state.schema,
+                            onValueChange = { onIntent(MigrationIntent.SchemaChanged(it)) },
+                            label = Strings[StringKey.MIGRATION_TARGET_SCHEMA],
+                            placeholder = "commercials_mygroup",
+                        )
+                        AppCheckboxRow(
+                            checked = state.createSchema,
+                            onCheckedChange = { onIntent(MigrationIntent.CreateSchemaChanged(it)) },
+                            label = Strings[StringKey.MIGRATION_CREATE_SCHEMA],
+                        )
+                    }
                     state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
                     AppButton(
                         text = Strings[StringKey.MIGRATION_START],
@@ -258,7 +291,9 @@ private fun MigrationScreen(
             Spacer(Modifier.height(UIConst.paddingCompact))
         }
 
-        // ── step 2: flow choice ─────────────────────────────────────────
+        // ── step 2: map every flow to a station of the group ─────────────
+        // Not a choice between the flows - they are the SAME company's TV and
+        // radio, sharing its customers and contracts, so they migrate together.
         if (status.state == "AWAITING_FLOW") {
             AppCard(Modifier.fillMaxWidth()) {
                 Column(
@@ -274,41 +309,46 @@ private fun MigrationScreen(
                         AppTextStyle.NOTE,
                     )
                     status.flows.forEach { flow ->
-                        AppRadioRow(
-                            selected = state.selectedFlow == flow.forTv,
-                            onClick = { onIntent(MigrationIntent.FlowSelected(flow.forTv)) },
-                            label = Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
-                                Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
-                                flow.spots, flow.placements,
-                            )),
-                        )
+                        val target = state.flowTargets[flow.forTv] ?: FlowTarget()
+                        Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall)) {
+                            AppText(
+                                Strings[StringKey.MIGRATION_FLOW_ITEM].withArgs(listOf(
+                                    Strings[if (flow.forTv == 1) StringKey.COMMON_TV else StringKey.COMMON_RADIO],
+                                    flow.spots, flow.placements,
+                                )) + if (target.stationId.isBlank())
+                                    " — ${Strings[StringKey.MIGRATION_FLOW_SKIPPED]}" else "",
+                                AppTextStyle.BODY_STRONG,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+                                AppTextField(
+                                    value = target.stationId,
+                                    onValueChange = {
+                                        onIntent(MigrationIntent.FlowStationIdChanged(flow.forTv, it))
+                                    },
+                                    label = Strings[StringKey.MIGRATION_FLOW_STATION_HINT],
+                                    modifier = Modifier.weight(1f),
+                                )
+                                AppTextField(
+                                    value = target.stationName,
+                                    onValueChange = {
+                                        onIntent(MigrationIntent.FlowStationNameChanged(flow.forTv, it))
+                                    },
+                                    label = Strings[StringKey.USER_MGMT_DISPLAY_NAME],
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
                     }
                     AppCheckboxRow(
                         checked = state.addToYaml,
                         onCheckedChange = { onIntent(MigrationIntent.AddToYamlChanged(it)) },
                         label = Strings[StringKey.MIGRATION_ADD_TO_YAML],
                     )
-                    if (state.addToYaml) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
-                            AppTextField(
-                                value = state.stationId,
-                                onValueChange = { onIntent(MigrationIntent.StationIdChanged(it)) },
-                                label = Strings[StringKey.MIGRATION_STATION_ID],
-                                modifier = Modifier.weight(1f),
-                            )
-                            AppTextField(
-                                value = state.stationName,
-                                onValueChange = { onIntent(MigrationIntent.StationNameChanged(it)) },
-                                label = Strings[StringKey.USER_MGMT_DISPLAY_NAME],
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
                     state.formError?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
                     AppButton(
-                        text = Strings[StringKey.MIGRATION_MIGRATE_FLOW],
-                        onClick = { onIntent(MigrationIntent.ChooseFlow) },
-                        enabled = state.canChooseFlow,
+                        text = Strings[StringKey.MIGRATION_MIGRATE_FLOWS],
+                        onClick = { onIntent(MigrationIntent.ChooseMapping) },
+                        enabled = state.canMap,
                     )
                 }
             }
@@ -331,6 +371,18 @@ private fun MigrationScreen(
                     )
                     AppText(Strings[StringKey.MIGRATION_SUM_CONTRACTS].withArgs(listOf(s.contracts, s.contractsSynthetic, s.contractLines)), AppTextStyle.BODY)
                     AppText(Strings[StringKey.MIGRATION_SUM_SPOTS].withArgs(listOf(s.spots, s.placements)), AppTextStyle.BODY)
+                    // One dump filled several stations - show what each got, and
+                    // say plainly that the customers/contracts above are shared.
+                    s.stations.forEach { st ->
+                        AppText(
+                            Strings[StringKey.MIGRATION_SUM_STATION]
+                                .withArgs(listOf(st.stationId, st.spots, st.placements)),
+                            AppTextStyle.BODY,
+                        )
+                    }
+                    if (s.stations.isNotEmpty()) {
+                        AppText(Strings[StringKey.MIGRATION_SUM_SHARED], AppTextStyle.NOTE)
+                    }
                     AppText(Strings[StringKey.MIGRATION_SUM_COMMENTS].withArgs(listOf(s.flowComments, s.printAudits)), AppTextStyle.BODY)
                     AppText(Strings[StringKey.MIGRATION_SUM_RANGE].withArgs(listOf(s.dateRange)), AppTextStyle.BODY_STRONG)
                     AppText(

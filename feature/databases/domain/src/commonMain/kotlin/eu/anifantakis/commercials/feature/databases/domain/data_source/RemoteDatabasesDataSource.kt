@@ -14,9 +14,12 @@ interface RemoteDatabasesDataSource {
     suspend fun listStations(): DataResult<List<HostedStation>, RemoteError>
 
     /**
-     * mode "safe": unhost only (yaml entry, user grants, live registry).
-     * mode "hard": additionally DROP the schema on its MySQL server.
-     * [confirmId] must repeat the station id - typed confirmation.
+     * See [DeleteMode]. [confirmId] is the typed confirmation - the STATION id,
+     * except for [DeleteMode.DROP_GROUP], which takes the GROUP id.
      */
-    suspend fun deleteStation(id: String, hard: Boolean, confirmId: String): DataResult<StationDeletion, RemoteError>
+    suspend fun deleteStation(
+        id: String,
+        mode: DeleteMode,
+        confirmId: String,
+    ): DataResult<StationDeletion, RemoteError>
 }

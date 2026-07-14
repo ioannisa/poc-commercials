@@ -1,6 +1,5 @@
 package eu.anifantakis.commercials.server.routes
 
-import eu.anifantakis.commercials.mailer.ScheduleEmailData
 import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.mailer.renderScheduleEmail
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler
@@ -12,12 +11,16 @@ import eu.anifantakis.commercials.server.plugins.authUser
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
-import eu.anifantakis.commercials.server.stations.SmtpConfig
 import eu.anifantakis.commercials.server.stations.StationRegistry
-import io.ktor.http.*
-import io.ktor.server.request.*
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -226,7 +229,9 @@ fun Route.emailRoutes(registry: StationRegistry) {
                     return@post
                 }
             }
-            val smtp = registry.config(access.grant.stationId)?.smtp ?: registry.defaultSmtp
+            // station -> group -> file-wide (each outlet traditionally sent from
+            // its own address, but siblings can share the group's).
+            val smtp = registry.smtpFor(access.grant.stationId)
             if (smtp == null) {
                 call.respond(
                     HttpStatusCode.BadRequest,

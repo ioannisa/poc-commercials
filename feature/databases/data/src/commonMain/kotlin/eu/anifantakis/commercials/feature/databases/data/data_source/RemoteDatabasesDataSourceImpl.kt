@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
+import eu.anifantakis.commercials.feature.databases.domain.DeleteMode
 import eu.anifantakis.commercials.feature.databases.domain.HostedStation
 import eu.anifantakis.commercials.feature.databases.domain.StationDeletion
 import eu.anifantakis.commercials.feature.databases.domain.data_source.RemoteDatabasesDataSource
@@ -17,6 +18,9 @@ private data class HostedStationDto(
     val reachable: Boolean = true,
     val placements: Long? = null,
     val dateRange: String? = null,
+    val groupId: String = "",
+    val groupName: String = "",
+    val siblings: List<String> = emptyList(),
 )
 
 @Serializable
@@ -28,9 +32,13 @@ private data class DeleteStationResultDto(
     val grantsRemoved: Int = 0,
     val yamlEntryRemoved: Boolean = false,
     val databaseDropped: Boolean = false,
+    val rowsPurged: Long = 0,
+    val stationsRemoved: List<String> = emptyList(),
 )
 
-private fun HostedStationDto.toDomain() = HostedStation(id, name, database, reachable, placements, dateRange)
+private fun HostedStationDto.toDomain() = HostedStation(
+    id, name, database, reachable, placements, dateRange, groupId, groupName, siblings,
+)
 
 class RemoteDatabasesDataSourceImpl(private val api: ApiHttpClient) : RemoteDatabasesDataSource {
 
@@ -40,11 +48,16 @@ class RemoteDatabasesDataSourceImpl(private val api: ApiHttpClient) : RemoteData
 
     override suspend fun deleteStation(
         id: String,
-        hard: Boolean,
+        mode: DeleteMode,
         confirmId: String,
     ): DataResult<StationDeletion, RemoteError> =
         api.postRemote<DeleteStationDto, DeleteStationResultDto>(
             "/api/admin/stations/$id/delete",
-            DeleteStationDto(if (hard) "hard" else "safe", confirmId),
-        ).map { dto -> StationDeletion(dto.status, dto.grantsRemoved, dto.yamlEntryRemoved, dto.databaseDropped) }
+            DeleteStationDto(mode.wire, confirmId),
+        ).map { dto ->
+            StationDeletion(
+                dto.status, dto.grantsRemoved, dto.yamlEntryRemoved, dto.databaseDropped,
+                dto.rowsPurged, dto.stationsRemoved,
+            )
+        }
 }

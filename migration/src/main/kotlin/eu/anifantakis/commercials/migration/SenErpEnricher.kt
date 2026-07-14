@@ -525,12 +525,18 @@ class SenErpEnricher(
                 )
             }
             // messages.messageTypeID is the PROGRAMME the spot was booked into.
+            // The programme join must match the SPOT'S STATION: `programtypes`
+            // ids restart per forTV, so programme 5 exists on both the TV and the
+            // radio side and means different shows. Joining on legacy_id alone
+            // would link a TV spot to whichever of the two rows MySQL reached
+            // first.
             val linked = c.createStatement().use { st ->
                 st.executeUpdate(
                     """
                     UPDATE $schema.spots sp
                     JOIN $scratch.messages m ON m.id = sp.legacy_id
                     JOIN $schema.programs pr ON pr.legacy_id = m.messageTypeID
+                                            AND pr.station_id = sp.station_id
                     SET sp.booked_program_id = pr.id
                     WHERE sp.booked_program_id IS NULL
                     """.trimIndent()

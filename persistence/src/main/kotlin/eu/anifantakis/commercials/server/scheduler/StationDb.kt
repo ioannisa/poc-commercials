@@ -1,7 +1,5 @@
 package eu.anifantakis.commercials.server.scheduler
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import eu.anifantakis.commercials.server.stations.StationConfig
 import java.sql.Connection
 import java.sql.SQLException
@@ -10,29 +8,27 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 
 /**
- * One station's database: a dedicated connection pool over that station's
- * schema (its own jdbcUrl/credentials from server.yaml) plus the queries.
- * Instances are created and cached by StationRegistry - NOT a Koin
- * definition, since the set of stations is data, not wiring.
+ * ONE STATION'S VIEW over its group's database ([GroupDb]).
  *
- * SCHEMA (normalized, migration-ready - see migration/legacy-schema.md):
+ * It owns no pool and no schema - it borrows the group's - and its whole job is
+ * to scope every statement to its `station_id`. Instances are created and cached
+ * by StationRegistry; the schema itself is created once per group by [GroupDb],
+ * which also documents the group-vs-station split of the tables.
  *
- *   customers ──< contracts ──< contract_lines
- *       │                            │
- *       └────────< spots >───────────┘        (the catalog, ≙ legacy `messages`)
- *                    │
- *                    └──< placements          (the WRITE model, ≙ legacy `schedule`)
+ * ⚠ AUTHORIZATION. When each station had its own database, "spot 123 belongs to
+ * this station" was true BY CONSTRUCTION - a caller with a grant on the radio
+ * station physically could not reach the TV station's rows. Sharing a database
+ * removes that guarantee, and several methods here take a raw id straight from
+ * the client ([addPlacement], [reorderPlacements], [deletePlacement],
+ * [emailLogBody], [contractLineSpots]). Every one of them must re-derive the
+ * station in SQL. Skipping the check does not throw - it silently drops a radio
+ * spot into a TV break.
  *
- *   break_slots                               (station airtime grid config)
- *   flow_comments, print_audit                (≙ legacy roh_comments / roh_print_history)
- *
- * The grid the client renders (cells + their commercials) is a READ model
- * DERIVED at query time from placements ⋈ spots ⋈ customers ⋈ contracts -
- * aggregates and cell colours are computed, never stored. Every table carries
- * a nullable legacy_id so the future migration from the original app's dumps
- * is idempotent and cross-checkable.
+ * The exceptions are the GROUP-scoped tables, where sharing IS the feature:
+ * [customerByCode] and [searchParties] deliberately see the whole group, so the
+ * same customer is found from either station.
  */
-class StationDb(private val station: StationConfig, maxPoolSize: Int) {
+class StationDb(private val group: GroupDb, private val station: StationConfig) {
 
     companion object {
         /**
@@ -43,466 +39,73 @@ class StationDb(private val station: StationConfig, maxPoolSize: Int) {
         const val EMAIL_BODY_RETENTION_PER_CUSTOMER = 10
     }
 
-    private val dataSource = HikariDataSource(
-        HikariConfig().apply {
-            jdbcUrl = station.jdbcUrl
-            username = station.username
-            password = station.password
-            driverClassName = "com.mysql.cj.jdbc.Driver"
-            // Several station pools coexist - ceiling resolved from
-            // server.yaml (per-station override / file default / built-in)
-            maximumPoolSize = maxPoolSize
-            minimumIdle = 1
-            connectionTimeout = 10_000
-            // Do not fail-fast at pool construction: connections are
-            // validated on first use, so an unreachable MySQL (or a test
-            // environment without one) doesn't crash instance creation
-            initializationFailTimeout = -1
-            poolName = "station-${station.id}"
-        }
-    )
+    /** The station this view is scoped to - the value of every `station_id` filter. */
+    private val stationId: String = station.id
 
-    /** A pooled connection; closing it (e.g. via `.use {}`) returns it to the pool. */
-    fun connection(): Connection = dataSource.getConnection()
-
-    fun close() {
-        dataSource.close()
-    }
+    /** A pooled connection from the GROUP's pool. */
+    fun connection(): Connection = group.connection()
 
     // ────────────────────────────────────────────────────────── bootstrap ──
 
     /**
-     * Creates the schema. [seedDemo] false is for MIGRATED stations: the
-     * migration tool builds breaks/catalog from the legacy dump instead of
-     * demo data, and empty months must STAY empty. The choice is recorded in
-     * station_meta (`demo_seed`) with INSERT IGNORE, so a later server
-     * bootstrap with the default `true` can never flip a migrated station
-     * back to demo seeding.
+     * Registers this station in its (already created) group schema and seeds
+     * its demo data.
+     *
+     * [seedDemo] false is for MIGRATED stations: the migration tool builds
+     * breaks/catalog from the legacy dump instead of demo data, and empty months
+     * must STAY empty. The choice is recorded per station in station_meta
+     * (`demo_seed`) with INSERT IGNORE, so a later server bootstrap with the
+     * default `true` can never flip a migrated station back to demo seeding.
      */
     fun bootstrap(seedDemo: Boolean = true) {
         connection().use { c ->
-            dropLegacyDemoTables(c)
-            c.createStatement().use { s ->
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS break_slots (
-                        id BIGINT PRIMARY KEY,
-                        hour_of_day TINYINT NOT NULL,
-                        minute_of_hour TINYINT NOT NULL,
-                        label VARCHAR(8) NOT NULL,
-                        zone VARCHAR(16) NOT NULL
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS customers (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        legacy_lee_id BIGINT NULL,
-                        code VARCHAR(32) NOT NULL UNIQUE,
-                        name VARCHAR(128) NOT NULL,
-                        vat_number VARCHAR(16) NULL,
-                        contact_person VARCHAR(64) NULL,
-                        phone VARCHAR(32) NULL,
-                        fax VARCHAR(32) NULL,
-                        email VARCHAR(128) NULL,
-                        -- Main address (SEN gap-fill: the legacy app showed it live
-                        -- from the ERP's ADR table - "Κύρια Διεύθυνση"; the legacy
-                        -- MySQL never stored it).
-                        address_street VARCHAR(160) NULL,
-                        address_zip VARCHAR(16) NULL,
-                        address_city VARCHAR(64) NULL,
-                        notes TEXT NULL,
-                        synthetic BOOLEAN NOT NULL DEFAULT FALSE,
-                        -- Galaxy (the client's NEW ERP) linkage: TRADER.GXID (the
-                        -- identity that carries the VAT, covering advertisers AND
-                        -- agencies). NULL until the Galaxy import stamps it - matched
-                        -- code-first (Galaxy inherited the legacy TRACODEs), then by
-                        -- zero-padded VAT. UNIQUE: one Galaxy trader = one row here.
-                        galaxy_id VARCHAR(36) NULL,
-                        KEY idx_customers_legacy (legacy_id),
-                        UNIQUE KEY uq_customers_galaxy (galaxy_id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS contracts (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_docid BIGINT NULL,
-                        number VARCHAR(64) NOT NULL,
-                        doc_type INT NULL,
-                        is_gift BOOLEAN NOT NULL DEFAULT FALSE,
-                        exclude_from_reports BOOLEAN NOT NULL DEFAULT FALSE,
-                        customer_id BIGINT NOT NULL,
-                        agency_id BIGINT NULL,
-                        entry_date DATE NULL,
-                        -- Contract period + renewal (Phase 6). PROVISIONAL until the
-                        -- Oracle ERP import supplies real values: the migration derives
-                        -- start/end from placements and sets dates_provisional=TRUE;
-                        -- renewed_at has no source yet and stays NULL.
-                        start_date DATE NULL,
-                        end_date DATE NULL,
-                        renewed_at DATE NULL,
-                        dates_provisional BOOLEAN NOT NULL DEFAULT FALSE,
-                        synthetic BOOLEAN NOT NULL DEFAULT FALSE,
-                        -- Galaxy linkage: COMMERCIALENTRY.GXID plus the document's
-                        -- sequential number (the one a user quotes on the phone).
-                        -- NULL until the Galaxy contract import stamps them.
-                        galaxy_id VARCHAR(36) NULL,
-                        galaxy_number BIGINT NULL,
-                        KEY idx_contracts_number (number),
-                        KEY idx_contracts_legacy (legacy_docid),
-                        UNIQUE KEY uq_contracts_galaxy (galaxy_id),
-                        KEY idx_contracts_galaxy_number (galaxy_number),
-                        CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
-                        CONSTRAINT fk_contracts_agency FOREIGN KEY (agency_id) REFERENCES customers(id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    -- Contract PRODUCT lines (≙ legacy z_commercials - the owner's
-                    -- Oracle view over the ERP doc lines, materialized in the dumps):
-                    -- one row per (document, line), each line selling ONE item class
-                    -- (spot_type_id ≙ z.mciid). line_no >= 1000 marks a fallback line
-                    -- synthesized for a (doc, type) pair the view did not carry.
-                    CREATE TABLE IF NOT EXISTS contract_lines (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        contract_id BIGINT NOT NULL,
-                        line_no INT NOT NULL,
-                        spot_type_id BIGINT NULL,
-                        desired_qty INT NOT NULL DEFAULT 0,
-                        agel_val DECIMAL(10,6) NOT NULL DEFAULT 0,
-                        eidikos_val DECIMAL(10,6) NOT NULL DEFAULT 0,
-                        zone_val DECIMAL(10,2) NOT NULL DEFAULT 0,
-                        -- Galaxy linkage: CommercEntryLines.GXID. NULL until stamped.
-                        galaxy_id VARCHAR(36) NULL,
-                        UNIQUE KEY uq_contract_line (contract_id, line_no),
-                        UNIQUE KEY uq_lines_galaxy (galaxy_id),
-                        CONSTRAINT fk_lines_contract FOREIGN KEY (contract_id)
-                            REFERENCES contracts(id) ON DELETE CASCADE
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    -- The ERP ITEM-CLASS catalog, keyed by the ERP's MCIID.
-                    --
-                    -- CORRECTED 2026-07-13: this used to mirror legacy
-                    -- `programtypes` - which is the PROGRAMME catalog (ΚΛΕΨΑ,
-                    -- ΞΕΝΗ ΤΑΙΝΙΑ, ΠΑΠΑΔΑΚΗΣ ΧΡΙΣΤΟΦΟΡΟΣ: shows, with presenter
-                    -- names). `z_commercials.mciid` lives in a DIFFERENT id
-                    -- space (the ERP item classes), so joining it to
-                    -- programtypes.id was a false join on coincidental small
-                    -- integers: 55% of mciids had no programtypes row at all,
-                    -- and the rest paired a show with an unrelated item
-                    -- ("ΟΙΚΟΝΟΜΙΚΟ ΔΕΛΤΙΟ" -> "Τηλέφωνο").
-                    --
-                    -- The item NAME only exists in the ERP (SEN `sti.csv`), so
-                    -- a dump-only migration seeds the ids and the SEN enricher
-                    -- fills name/item_code (verified 102/102 mciids resolve).
-                    CREATE TABLE IF NOT EXISTS spot_types (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        -- the ERP item class id (STI.MCIID == z_commercials.mciid)
-                        legacy_id BIGINT NULL,
-                        -- STI.ITMNAME, e.g. 'Διαφ. TV Κρήτη Σ73.002'; the gift
-                        -- marker ('Δ Ω Ρ Α') is part of the name. '' until the
-                        -- SEN import runs.
-                        name VARCHAR(160) NOT NULL DEFAULT '',
-                        -- STI.CODCODE, e.g. 'Σ101'
-                        item_code VARCHAR(32) NULL,
-                        -- Galaxy linkage: ITEM.GXID. The 73.xxx item codes bridge the
-                        -- two catalogs (Galaxy inherited the legacy sales items).
-                        galaxy_id VARCHAR(36) NULL,
-                        UNIQUE KEY uq_spot_types_legacy (legacy_id),
-                        UNIQUE KEY uq_spot_types_galaxy (galaxy_id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-CREATE TABLE IF NOT EXISTS spots (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        customer_id BIGINT NOT NULL,
-                        contract_line_id BIGINT NULL,
-                        description VARCHAR(255) NOT NULL,
-                        duration_seconds INT NOT NULL,
-                        -- The PROGRAMME the spot was BOOKED into (legacy
-                        -- messages.messageTypeID -> programtypes). CORRECTED
-                        -- 2026-07-13: this was called `spot_type` and mistaken
-                        -- for an ERP item class. It is a show ("ΚΛΕΨΑ", "ΞΕΝΗ
-                        -- ΤΑΙΝΙΑ"). The spot's ERP ITEM comes from its contract
-                        -- LINE (contract_lines.spot_type_id -> spot_types), and
-                        -- the airing's own line wins over the spot's default.
-                        booked_program VARCHAR(128) NOT NULL DEFAULT '',
-                        booked_program_id BIGINT NULL,
-                        flow VARCHAR(32) NOT NULL DEFAULT '',
-                        hidden BOOLEAN NOT NULL DEFAULT FALSE,
-                        force_position INT NULL,
-                        memo TEXT NULL,
-                        KEY idx_spots_legacy (legacy_id),
-                        CONSTRAINT fk_spots_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
-                        CONSTRAINT fk_spots_line FOREIGN KEY (contract_line_id) REFERENCES contract_lines(id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS programs (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        name VARCHAR(128) NOT NULL,
-                        color_argb INT NULL,
-                        hidden BOOLEAN NOT NULL DEFAULT FALSE,
-                        KEY idx_programs_legacy (legacy_id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS placements (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        legacy_id BIGINT NULL,
-                        spot_id BIGINT NOT NULL,
-                        break_id BIGINT NOT NULL,
-                        show_date DATE NOT NULL,
-                        position INT NOT NULL,
-                        duration_seconds INT NOT NULL,
-                        -- The ACTUAL charge of this airing (≙ legacy schedule.docID +
-                        -- lineno): the same spot airs under different contracts/
-                        -- products over time; the spot's own line is only its
-                        -- CURRENT default. NULL -> displays fall back to the spot's.
-                        contract_line_id BIGINT NULL,
-                        program_id BIGINT NULL,
-                        played BOOLEAN NOT NULL DEFAULT FALSE,
-                        hidden BOOLEAN NOT NULL DEFAULT FALSE,
-                        UNIQUE KEY uq_placement_slot (break_id, show_date, position),
-                        KEY idx_placements_legacy (legacy_id),
-                        CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
-                        CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES break_slots(id),
-                        CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                // Airtime price zones: NO app-layer tables here. The FAITHFUL
-                // UNION copies own the legacy names (`zones`/`zonefillers`,
-                // written verbatim by the migration - no feature reads them
-                // yet; the future price-list feature reads the copies
-                // directly). Demo stations simply have no price data.
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS flow_comments (
-                        show_date DATE PRIMARY KEY,
-                        comments TEXT NOT NULL,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                // ≙ legacy `emailhistory`: the audit archive of customer
-                // schedule emails. Summary rows are kept forever; the full
-                // HTML body is capped per customer (see logEmail) so the
-                // archive can't balloon like the legacy 1.2 GB email store.
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS email_log (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        customer_code VARCHAR(32) NOT NULL,
-                        customer_name VARCHAR(128) NOT NULL,
-                        recipient VARCHAR(255) NOT NULL,
-                        subject VARCHAR(255) NOT NULL,
-                        period_year INT NOT NULL,
-                        period_month INT NOT NULL,
-                        spot_count INT NOT NULL DEFAULT 0,
-                        transmission_count INT NOT NULL DEFAULT 0,
-                        body_html LONGTEXT NULL,
-                        sent_by VARCHAR(64) NOT NULL,
-                        sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        status VARCHAR(16) NOT NULL,
-                        error VARCHAR(512) NULL,
-                        KEY idx_email_log_customer (customer_code, period_year, period_month),
-                        KEY idx_email_log_sent (sent_at)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS print_audit (
-                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                        printed_date DATE NOT NULL,
-                        username VARCHAR(64) NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        KEY idx_print_audit_date (printed_date)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
-                s.executeUpdate(
-                    """
-                    CREATE TABLE IF NOT EXISTS station_meta (
-                        meta_key VARCHAR(64) PRIMARY KEY,
-                        meta_value VARCHAR(255) NOT NULL
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                    """.trimIndent()
-                )
+            c.prepareStatement(
+                "INSERT INTO stations(id, name) VALUES(?,?) ON DUPLICATE KEY UPDATE name = VALUES(name)"
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.setString(2, station.name)
+                ps.executeUpdate()
             }
-            // show_date is not the leftmost column of the placement unique
-            // key, so month-range scans need their own index.
-            ensureIndex(c, "placements", "idx_placements_date", "show_date")
-            // Schemas created before the migration tool lack these columns.
-            ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
-            ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
-            // legacy calendar_excluded_docs: contracts whose spots stay OFF printed reports
-            ensureColumn(c, "contracts", "exclude_from_reports", "BOOLEAN NOT NULL DEFAULT FALSE")
-            // raw ERP doc ids awaiting the ERP import (see LegacyTransformer)
-            c.createStatement().use {
-                it.executeUpdate("CREATE TABLE IF NOT EXISTS erp_excluded_docs (erp_docid BIGINT PRIMARY KEY) ENGINE=InnoDB")
-            }
-            // ERP LEE id (second legacy id series): links end clients of
-            // triangular contracts - see migration/legacy-schema.md, docref.
-            ensureColumn(c, "customers", "legacy_lee_id", "BIGINT NULL")
-            ensureIndex(c, "customers", "idx_customers_lee_legacy", "legacy_lee_id")
-            // Schemas created before programme colours (the ALTER path skips
-            // the FK; fresh schemas get it via CREATE TABLE above).
-            ensureColumn(c, "placements", "program_id", "BIGINT NULL")
-            // Contract period/renewal dates (Phase 6) - see the CREATE TABLE note.
-            // Provisional until the ERP import; the migration backfills start/end.
-            ensureColumn(c, "contracts", "start_date", "DATE NULL")
-            ensureColumn(c, "contracts", "end_date", "DATE NULL")
-            ensureColumn(c, "contracts", "renewed_at", "DATE NULL")
-            ensureColumn(c, "contracts", "dates_provisional", "BOOLEAN NOT NULL DEFAULT FALSE")
-            // Galaxy (new ERP) linkage - see the CREATE TABLE notes. UUIDs are
-            // NULL until the Galaxy import stamps them (customers matched
-            // code-first, then by zero-padded VAT). UNIQUE indexes are safe on
-            // the existing all-NULL data (MySQL allows repeated NULLs).
-            ensureColumn(c, "customers", "galaxy_id", "VARCHAR(36) NULL")
-            ensureIndex(c, "customers", "uq_customers_galaxy", "galaxy_id", unique = true)
-            ensureColumn(c, "contracts", "galaxy_id", "VARCHAR(36) NULL")
-            ensureColumn(c, "contracts", "galaxy_number", "BIGINT NULL")
-            ensureIndex(c, "contracts", "uq_contracts_galaxy", "galaxy_id", unique = true)
-            ensureIndex(c, "contracts", "idx_contracts_galaxy_number", "galaxy_number")
-            ensureColumn(c, "contract_lines", "galaxy_id", "VARCHAR(36) NULL")
-            ensureIndex(c, "contract_lines", "uq_lines_galaxy", "galaxy_id", unique = true)
-            ensureColumn(c, "spot_types", "galaxy_id", "VARCHAR(36) NULL")
-            ensureIndex(c, "spot_types", "uq_spot_types_galaxy", "galaxy_id", unique = true)
-            // The BOOKED PROGRAMME (see the CREATE TABLE notes). Schemas built
-            // before 2026-07-13 carried this as `spot_type` + a `spot_type_id`
-            // pointing into what was then wrongly believed to be an item
-            // catalog; they gain the honest columns here, empty until they are
-            // re-migrated. The dead `spots.spot_type_id` is deliberately NOT
-            // ensured any more - a spot's product is its contract LINE's, and
-            // leaving a plausible-looking column on the table is how the join
-            // gets rebuilt by accident.
-            ensureColumn(c, "spots", "booked_program", "VARCHAR(128) NOT NULL DEFAULT ''")
-            ensureColumn(c, "spots", "booked_program_id", "BIGINT NULL")
-            // Product lines + per-airing charge (see the CREATE TABLE notes).
-            ensureColumn(c, "contract_lines", "spot_type_id", "BIGINT NULL")
-            ensureColumn(c, "placements", "contract_line_id", "BIGINT NULL")
-            // Main address (see the customers CREATE TABLE note).
-            ensureColumn(c, "customers", "address_street", "VARCHAR(160) NULL")
-            ensureColumn(c, "customers", "address_zip", "VARCHAR(16) NULL")
-            ensureColumn(c, "customers", "address_city", "VARCHAR(64) NULL")
-
             // INSERT IGNORE: first writer wins - a migrated station stays
             // demo_seed=false forever, whoever bootstraps it afterwards.
             c.prepareStatement(
-                "INSERT IGNORE INTO station_meta(meta_key, meta_value) VALUES('demo_seed', ?)"
+                "INSERT IGNORE INTO station_meta(station_id, meta_key, meta_value) VALUES(?,'demo_seed',?)"
             ).use { ps ->
-                ps.setString(1, if (seedDemo) "true" else "false")
+                ps.setString(1, stationId)
+                ps.setString(2, if (seedDemo) "true" else "false")
                 ps.executeUpdate()
             }
 
             if (seedDemo && isDemoSeedEnabled(c)) {
+                seedGroupCatalogIfEmpty(c)
                 seedBreaksIfEmpty(c)
-                seedCatalogIfEmpty(c)
+                seedStationSpotsIfEmpty(c)
             }
         }
     }
 
     private fun isDemoSeedEnabled(c: Connection): Boolean =
-        c.prepareStatement("SELECT meta_value FROM station_meta WHERE meta_key = 'demo_seed'").use { ps ->
+        c.prepareStatement(
+            "SELECT meta_value FROM station_meta WHERE station_id = ? AND meta_key = 'demo_seed'"
+        ).use { ps ->
+            ps.setString(1, stationId)
             ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) == "true" else true }
         }
 
-    private fun ensureColumn(c: Connection, table: String, column: String, definition: String) {
-        val exists = c.prepareStatement(
-            """
-            SELECT 1 FROM information_schema.columns
-            WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
-            LIMIT 1
-            """.trimIndent()
-        ).use { ps ->
-            ps.setString(1, table); ps.setString(2, column)
-            ps.executeQuery().use { it.next() }
-        }
-        if (!exists) {
-            c.createStatement().use { it.executeUpdate("ALTER TABLE $table ADD COLUMN $column $definition") }
-        }
-    }
-
-    /**
-     * Migration from the pre-normalization demo schema: the old
-     * `scheduler_cells` (stored aggregates) and `commercials` (denormalized
-     * rows) tables are superseded by the derived read model. Their content
-     * was deterministic demo data, so they are simply dropped; months reseed
-     * on demand into `placements`. Idempotent.
-     */
-    private fun dropLegacyDemoTables(c: Connection) {
-        for (table in listOf("commercials", "scheduler_cells")) {
-            val exists = c.prepareStatement(
-                """
-                SELECT 1 FROM information_schema.tables
-                WHERE table_schema = DATABASE() AND table_name = ?
-                LIMIT 1
-                """.trimIndent()
-            ).use { ps ->
-                ps.setString(1, table)
-                ps.executeQuery().use { it.next() }
-            }
-            if (exists) {
-                c.createStatement().use { it.executeUpdate("DROP TABLE $table") }
-            }
-        }
-    }
-
-    private fun ensureIndex(
-        c: Connection,
-        table: String,
-        indexName: String,
-        columns: String,
-        unique: Boolean = false,
-    ) {
-        val exists = c.prepareStatement(
-            """
-            SELECT 1 FROM information_schema.statistics
-            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
-            LIMIT 1
-            """.trimIndent()
-        ).use { ps ->
-            ps.setString(1, table); ps.setString(2, indexName)
-            ps.executeQuery().use { it.next() }
-        }
-        if (!exists) {
-            val kind = if (unique) "UNIQUE INDEX" else "INDEX"
-            c.createStatement().use { it.executeUpdate("CREATE $kind $indexName ON $table($columns)") }
-        }
-    }
-
     private fun seedBreaksIfEmpty(c: Connection) {
-        val count = c.createStatement().use { s ->
-            s.executeQuery("SELECT COUNT(*) FROM break_slots").use { rs ->
-                rs.next(); rs.getInt(1)
-            }
+        val count = c.prepareStatement("SELECT COUNT(*) FROM break_slots WHERE station_id = ?").use { ps ->
+            ps.setString(1, stationId)
+            ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
         }
         if (count > 0) return
         c.autoCommit = false
         try {
+            // No explicit id: break ids are per-station now, so the DB assigns them.
             c.prepareStatement(
-                "INSERT INTO break_slots(id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
+                "INSERT INTO break_slots(station_id, hour_of_day, minute_of_hour, label, zone) VALUES(?,?,?,?,?)"
             ).use { ps ->
                 for (b in generateBreaks()) {
-                    ps.setLong(1, b.id)
+                    ps.setString(1, stationId)
                     ps.setInt(2, b.hour)
                     ps.setInt(3, b.minute)
                     ps.setString(4, b.label)
@@ -520,22 +123,26 @@ CREATE TABLE IF NOT EXISTS spots (
     }
 
     /**
-     * Demo catalog: customers (with ΑΦΜ), one gift contract + line each, and
-     * a deterministic per-station spot catalog. Runs once per schema; real
-     * deployments will fill these tables via the legacy migration instead.
+     * The GROUP's demo catalog: customers (with ΑΦΜ) and one gift contract each,
+     * carrying TWO product lines. Runs once per group - the first station of the
+     * group to boot creates it, the others find it and share it, which is the
+     * whole point of the model.
+     *
+     * The two lines exist so the demo shows the real shape: one contract selling
+     * on several media. Each station's spots charge to a DIFFERENT line of the
+     * same contract (see [seedStationSpotsIfEmpty]), so a demo group reproduces
+     * "Ανυφαντάκης bought 1 TV spot and 2 radio spots on contract 500" without a
+     * migration.
      */
-    private fun seedCatalogIfEmpty(c: Connection) {
+    private fun seedGroupCatalogIfEmpty(c: Connection) {
         val count = c.createStatement().use { s ->
-            s.executeQuery("SELECT COUNT(*) FROM spots").use { rs -> rs.next(); rs.getInt(1) }
+            s.executeQuery("SELECT COUNT(*) FROM customers").use { rs -> rs.next(); rs.getInt(1) }
         }
         if (count > 0) return
 
-        val random = kotlin.random.Random(station.id.hashCode())
         c.autoCommit = false
         try {
             val customerIds = mutableListOf<Long>()
-            val lineIdByCustomer = mutableMapOf<Long, Long>()
-
             c.prepareStatement(
                 "INSERT INTO customers(code, name, vat_number) VALUES(?,?,?)",
                 Statement.RETURN_GENERATED_KEYS
@@ -559,35 +166,83 @@ CREATE TABLE IF NOT EXISTS spots (
                     ps.executeUpdate()
                     val contractId = ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
                     c.prepareStatement(
-                        "INSERT INTO contract_lines(contract_id, line_no, desired_qty) VALUES(?,1,0)",
-                        Statement.RETURN_GENERATED_KEYS
+                        "INSERT INTO contract_lines(contract_id, line_no, desired_qty) VALUES(?,?,0)"
                     ).use { lps ->
-                        lps.setLong(1, contractId)
-                        lps.executeUpdate()
-                        lps.generatedKeys.use { rs -> rs.next(); lineIdByCustomer[customerId] = rs.getLong(1) }
+                        for (lineNo in 1..DEMO_LINES_PER_CONTRACT) {
+                            lps.setLong(1, contractId)
+                            lps.setInt(2, lineNo)
+                            lps.addBatch()
+                        }
+                        lps.executeBatch()
                     }
                 }
             }
+            c.commit()
+        } catch (e: Exception) {
+            c.rollback(); throw e
+        } finally {
+            c.autoCommit = true
+        }
+    }
 
+    /**
+     * This station's demo spot catalog, charged to the group's shared contract
+     * lines. The line each station picks is its index in the group, so sibling
+     * stations sell different lines of the same contract.
+     *
+     * The customer and line ids are READ BACK from the database rather than
+     * remembered from an insert: a sibling station may have created them.
+     */
+    private fun seedStationSpotsIfEmpty(c: Connection) {
+        val count = c.prepareStatement("SELECT COUNT(*) FROM spots WHERE station_id = ?").use { ps ->
+            ps.setString(1, stationId)
+            ps.executeQuery().use { rs -> rs.next(); rs.getInt(1) }
+        }
+        if (count > 0) return
+
+        // Which line of each demo contract is THIS station's.
+        val stationIndex = group.config.stations.indexOfFirst { it.id == stationId }.coerceAtLeast(0)
+        val lineNo = (stationIndex % DEMO_LINES_PER_CONTRACT) + 1
+
+        val lineIdByCustomer = c.prepareStatement(
+            """
+            SELECT ct.customer_id, cl.id
+            FROM contract_lines cl
+            JOIN contracts ct ON ct.id = cl.contract_id
+            WHERE cl.line_no = ? AND ct.number LIKE 'DEMO-%'
+            """.trimIndent()
+        ).use { ps ->
+            ps.setInt(1, lineNo)
+            ps.executeQuery().use { rs ->
+                buildMap { while (rs.next()) put(rs.getLong(1), rs.getLong(2)) }
+            }
+        }
+        if (lineIdByCustomer.isEmpty()) return
+        val customerIds = lineIdByCustomer.keys.sorted()
+
+        val random = kotlin.random.Random(stationId.hashCode())
+        c.autoCommit = false
+        try {
             c.prepareStatement(
                 """
-                INSERT INTO spots(customer_id, contract_line_id, description, duration_seconds, booked_program, flow)
-                VALUES(?,?,?,?,?,?)
+                INSERT INTO spots(station_id, customer_id, contract_line_id, description,
+                                  duration_seconds, booked_program, flow)
+                VALUES(?,?,?,?,?,?,?)
                 """.trimIndent()
             ).use { ps ->
                 repeat(DEMO_SPOTS_PER_STATION) {
                     val customerId = customerIds[random.nextInt(customerIds.size)]
-                    ps.setLong(1, customerId)
-                    ps.setLong(2, lineIdByCustomer.getValue(customerId))
-                    ps.setString(3, demoMessages[random.nextInt(demoMessages.size)])
-                    ps.setInt(4, demoDurations[random.nextInt(demoDurations.size)])
-                    ps.setString(5, demoSpotTypes[random.nextInt(demoSpotTypes.size)])
-                    ps.setString(6, "ΡΟΗ")
+                    ps.setString(1, stationId)
+                    ps.setLong(2, customerId)
+                    ps.setLong(3, lineIdByCustomer.getValue(customerId))
+                    ps.setString(4, demoMessages[random.nextInt(demoMessages.size)])
+                    ps.setInt(5, demoDurations[random.nextInt(demoDurations.size)])
+                    ps.setString(6, demoSpotTypes[random.nextInt(demoSpotTypes.size)])
+                    ps.setString(7, "ΡΟΗ")
                     ps.addBatch()
                 }
                 ps.executeBatch()
             }
-
             c.commit()
         } catch (e: Exception) {
             c.rollback(); throw e
@@ -600,11 +255,19 @@ CREATE TABLE IF NOT EXISTS spots (
 
     data class PlacementStats(val placements: Long, val minDate: String?, val maxDate: String?)
 
-    /** Quick footprint of this station's data (Databases admin screen). */
+    /** Quick footprint of THIS station's data (Databases admin screen). */
     fun placementStats(): PlacementStats =
         connection().use { c ->
-            c.createStatement().use { s ->
-                s.executeQuery("SELECT COUNT(*), MIN(show_date), MAX(show_date) FROM placements").use { rs ->
+            c.prepareStatement(
+                """
+                SELECT COUNT(*), MIN(p.show_date), MAX(p.show_date)
+                FROM placements p
+                JOIN spots s ON s.id = p.spot_id
+                WHERE s.station_id = ?
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.executeQuery().use { rs ->
                     rs.next()
                     PlacementStats(rs.getLong(1), rs.getString(2), rs.getString(3))
                 }
@@ -656,25 +319,26 @@ CREATE TABLE IF NOT EXISTS spots (
         connection().use { c ->
             val id = c.prepareStatement(
                 """
-                INSERT INTO email_log(customer_code, customer_name, recipient, subject,
+                INSERT INTO email_log(station_id, customer_code, customer_name, recipient, subject,
                     period_year, period_month, spot_count, transmission_count, body_html,
                     sent_by, status, error)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """.trimIndent(),
                 java.sql.Statement.RETURN_GENERATED_KEYS
             ).use { ps ->
-                ps.setString(1, entry.customerCode)
-                ps.setString(2, entry.customerName)
-                ps.setString(3, entry.recipient)
-                ps.setString(4, entry.subject)
-                ps.setInt(5, entry.year)
-                ps.setInt(6, entry.month)
-                ps.setInt(7, entry.spotCount)
-                ps.setInt(8, entry.transmissionCount)
-                if (entry.bodyHtml != null) ps.setString(9, entry.bodyHtml) else ps.setNull(9, java.sql.Types.LONGVARCHAR)
-                ps.setString(10, entry.sentBy)
-                ps.setString(11, entry.status)
-                if (entry.error != null) ps.setString(12, entry.error.take(512)) else ps.setNull(12, java.sql.Types.VARCHAR)
+                ps.setString(1, stationId)
+                ps.setString(2, entry.customerCode)
+                ps.setString(3, entry.customerName)
+                ps.setString(4, entry.recipient)
+                ps.setString(5, entry.subject)
+                ps.setInt(6, entry.year)
+                ps.setInt(7, entry.month)
+                ps.setInt(8, entry.spotCount)
+                ps.setInt(9, entry.transmissionCount)
+                if (entry.bodyHtml != null) ps.setString(10, entry.bodyHtml) else ps.setNull(10, java.sql.Types.LONGVARCHAR)
+                ps.setString(11, entry.sentBy)
+                ps.setString(12, entry.status)
+                if (entry.error != null) ps.setString(13, entry.error.take(512)) else ps.setNull(13, java.sql.Types.VARCHAR)
                 ps.executeUpdate()
                 ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
             }
@@ -688,6 +352,10 @@ CREATE TABLE IF NOT EXISTS spots (
      * bodied rows for a customer. The double-nested subquery is required: MySQL
      * cannot target the same table it selects from in an UPDATE unless the
      * selection is wrapped in a derived table.
+     *
+     * The cap is per CUSTOMER and GROUP-wide, not per station: the customer is a
+     * group-level entity, and the point of the cap is to bound what the archive
+     * retains for them in total.
      */
     private fun pruneEmailBodies(c: Connection, customerCode: String) {
         c.prepareStatement(
@@ -709,17 +377,25 @@ CREATE TABLE IF NOT EXISTS spots (
         }
     }
 
-    /** Recent send history (metadata only), newest first; optionally one customer. */
+    /**
+     * Recent send history (metadata only), newest first; optionally one customer.
+     *
+     * `station_id IS NULL` rows are the imported legacy `emailhistory` archive:
+     * that table carried no forTV, so those sends belong to the GROUP and are
+     * shown from any of its stations rather than attributed to one by guesswork.
+     */
     fun recentEmailLog(limit: Int, clientCode: String? = null): List<EmailLogRow> =
         connection().use { c ->
             val sql = buildString {
                 append("SELECT id, customer_code, customer_name, recipient, subject, period_year, period_month, ")
                 append("spot_count, transmission_count, sent_by, sent_at, status, error FROM email_log ")
-                if (clientCode != null) append("WHERE customer_code = ? ")
+                append("WHERE (station_id = ? OR station_id IS NULL) ")
+                if (clientCode != null) append("AND customer_code = ? ")
                 append("ORDER BY sent_at DESC, id DESC LIMIT ?")
             }
             c.prepareStatement(sql).use { ps ->
                 var i = 1
+                ps.setString(i++, stationId)
                 if (clientCode != null) ps.setString(i++, clientCode)
                 ps.setInt(i, limit.coerceIn(1, 500))
                 ps.executeQuery().use { rs ->
@@ -749,8 +425,11 @@ CREATE TABLE IF NOT EXISTS spots (
     /** The stored HTML body of a logged send (re-view exactly as delivered). */
     fun emailLogBody(id: Long): String? =
         connection().use { c ->
-            c.prepareStatement("SELECT body_html FROM email_log WHERE id = ?").use { ps ->
+            c.prepareStatement(
+                "SELECT body_html FROM email_log WHERE id = ? AND (station_id = ? OR station_id IS NULL)"
+            ).use { ps ->
                 ps.setLong(1, id)
+                ps.setString(2, stationId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
             }
         }
@@ -781,6 +460,14 @@ CREATE TABLE IF NOT EXISTS spots (
      * "triangular" deals an agency holds the contract for another company's
      * spots, so the two sets differ. Both live in `customers`; the
      * distinction is the join path.
+     *
+     * GROUP-WIDE ON PURPOSE - the one read here that is not station-scoped.
+     * Customers belong to the group, so a customer who advertises only on the
+     * sibling station is still found from this one (that IS the feature: the
+     * same Ανυφαντάκης, whichever station you are working on). What he has
+     * actually DONE here - [partyActivity], [partyContractLines],
+     * [contractLineSpots], [contractStatus] - is station-scoped, so a party
+     * with nothing on this station simply shows an empty activity list.
      */
     fun searchParties(
         query: String,
@@ -795,7 +482,7 @@ CREATE TABLE IF NOT EXISTS spots (
                             NULLIF(TRIM(CONCAT_WS(' ', cu.address_zip, cu.address_city)), ''))) AS address,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placement_count
                 FROM customers cu
-                ${partyJoin(byTrader)}
+                ${partyJoin(byTrader, stationScoped = false)}
                 JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE (cu.name LIKE ? OR cu.code LIKE ?)
                 GROUP BY cu.id, cu.code, cu.name, cu.email, cu.vat_number, cu.phone,
@@ -830,8 +517,8 @@ CREATE TABLE IF NOT EXISTS spots (
     data class ActivityMonth(val year: Int, val month: Int, val placements: Int)
 
     /**
-     * The months in which a party has airings, newest first with counts -
-     * feeds the year/month drill-down after the party is picked.
+     * The months in which a party has airings ON THIS STATION, newest first with
+     * counts - feeds the year/month drill-down after the party is picked.
      */
     fun partyActivity(code: String, byTrader: Boolean): List<ActivityMonth> =
         connection().use { c ->
@@ -839,14 +526,15 @@ CREATE TABLE IF NOT EXISTS spots (
                 """
                 SELECT YEAR(p.show_date) AS y, MONTH(p.show_date) AS m, COUNT(*) AS cnt
                 FROM customers cu
-                ${partyJoin(byTrader)}
+                ${partyJoin(byTrader, stationScoped = true)}
                 JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE cu.code = ?
                 GROUP BY y, m
                 ORDER BY y DESC, m DESC
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, code)
+                ps.setString(1, stationId)
+                ps.setString(2, code)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(ActivityMonth(rs.getInt("y"), rs.getInt("m"), rs.getInt("cnt")))
@@ -877,13 +565,31 @@ CREATE TABLE IF NOT EXISTS spots (
     )
 
     /**
-     * The party's contract lines: for a CUSTOMER the lines whose spots
-     * belong to them; for a TRADER the lines of the contracts they pay.
+     * The party's contract lines: for a CUSTOMER the lines whose spots belong to
+     * them; for a TRADER the lines of the contracts they pay.
+     *
+     * STATION-SCOPED, and this is where the group model becomes visible. A
+     * contract can hold a TV line and two radio lines; scheduling on Crete TV
+     * must show the TV one. So a line qualifies when it has spots ON THIS
+     * STATION - plus, as an escape hatch, when it has no spots at ALL: a line
+     * that has been sold but has no creative yet belongs to no medium, and
+     * hiding it everywhere would make it unreachable.
      */
     fun partyContractLines(code: String, byTrader: Boolean): List<ContractLineRow> {
+        // The line's spots are LEFT-joined (a spot-less line must survive), so
+        // the party filter cannot hang off them on the trader path - it hangs
+        // off the contract. On the customer path a spot-less line has no
+        // customer of its own, so it falls back to the contract's customer.
         val partyFilter =
             if (byTrader) "JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"
-            else "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+            else "JOIN customers cu ON cu.code = ?"
+        val spotJoin =
+            if (byTrader) "LEFT JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ?"
+            else "LEFT JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ? AND s.customer_id = cu.id"
+        val keep =
+            if (byTrader) "s.id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id)"
+            else "s.id IS NOT NULL OR (NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id) AND ct.customer_id = cu.id)"
+
         return connection().use { c ->
             c.prepareStatement(
                 """
@@ -895,14 +601,16 @@ CREATE TABLE IF NOT EXISTS spots (
                        COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
                 FROM contract_lines cl
                 JOIN contracts ct ON ct.id = cl.contract_id
-                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE
                 $partyFilter
+                $spotJoin
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                WHERE ($keep)
                 GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty
                 ORDER BY ct.number, cl.line_no
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, code)
+                ps.setString(2, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
@@ -933,7 +641,13 @@ CREATE TABLE IF NOT EXISTS spots (
         val totalSeconds: Long,
     )
 
-    /** The spots (creatives) hanging off one contract line. */
+    /**
+     * The spots (creatives) hanging off one contract line, ON THIS STATION.
+     *
+     * The station filter is not cosmetic: a shared line legitimately holds the
+     * TV spot AND the radio spots, and the caller places whatever this returns
+     * into one of THIS station's breaks.
+     */
     fun contractLineSpots(lineId: Long): List<LineSpotRow> =
         connection().use { c ->
             c.prepareStatement(
@@ -944,12 +658,13 @@ CREATE TABLE IF NOT EXISTS spots (
                        COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
                 FROM spots s
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
-                WHERE s.contract_line_id = ? AND s.hidden = FALSE
+                WHERE s.contract_line_id = ? AND s.hidden = FALSE AND s.station_id = ?
                 GROUP BY s.id, s.description, s.duration_seconds
                 ORDER BY s.description, s.id
                 """.trimIndent()
             ).use { ps ->
                 ps.setLong(1, lineId)
+                ps.setString(2, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
@@ -966,13 +681,6 @@ CREATE TABLE IF NOT EXISTS spots (
             }
         }
 
-    /**
-     * Appends [spotId] at the END of the (break, date) cell - next free
-     * position, duration copied from the spot (like the legacy add). The
-     * (break_id, show_date, position) unique key turns concurrent adds into
-     * a retry with the next position. Returns the new placement as the same
-     * row shape the month grid serves, or null if the spot doesn't exist.
-     */
     data class ContractStatusRow(
         val contractNumber: String,
         val isGift: Boolean,
@@ -992,26 +700,42 @@ CREATE TABLE IF NOT EXISTS spots (
      * Oracle ERP import lands, start/end are placement-derived and flagged
      * [ContractStatusRow.datesProvisional]; [ContractStatusRow.renewedAt] has no
      * source yet, so contract-renewal recency must be read from [ContractStatusRow.lastAired].
+     *
+     * Note the two halves now have different scopes, and that is deliberate: the
+     * contract's PERIOD is the deal's (group-wide, the same on every station),
+     * while first/last-aired and the placement count are THIS station's.
      */
     fun contractStatus(code: String, byTrader: Boolean): List<ContractStatusRow> {
-        val partyFilter =
-            if (byTrader) "JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"
-            else "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+        // Params in SQL order: trader path filters on the contract's customer
+        // first, customer path reaches the customer through the spot.
+        val partyJoins =
+            if (byTrader)
+                """
+                JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?
+                JOIN contract_lines cl ON cl.contract_id = ct.id
+                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ?
+                """.trimIndent()
+            else
+                """
+                JOIN contract_lines cl ON cl.contract_id = ct.id
+                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ?
+                JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?
+                """.trimIndent()
+        val params = if (byTrader) listOf(code, stationId) else listOf(stationId, code)
+
         return connection().use { c ->
             c.prepareStatement(
                 """
                 SELECT ct.number, ct.is_gift, ct.start_date, ct.end_date, ct.renewed_at, ct.dates_provisional,
                        MIN(p.show_date) AS first_aired, MAX(p.show_date) AS last_aired, COUNT(p.id) AS placements
                 FROM contracts ct
-                JOIN contract_lines cl ON cl.contract_id = ct.id
-                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE
-                $partyFilter
+                $partyJoins
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 GROUP BY ct.id, ct.number, ct.is_gift, ct.start_date, ct.end_date, ct.renewed_at, ct.dates_provisional
                 ORDER BY last_aired DESC, ct.number
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, code)
+                params.forEachIndexed { i, p -> ps.setString(i + 1, p) }
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
@@ -1033,14 +757,36 @@ CREATE TABLE IF NOT EXISTS spots (
         }
     }
 
+    /**
+     * Appends [spotId] at the END of the (break, date) cell - next free
+     * position, duration copied from the spot (like the legacy add). The
+     * (break_id, show_date, position) unique key turns concurrent adds into
+     * a retry with the next position. Returns the new placement as the same
+     * row shape the month grid serves, or null if the spot or the break does
+     * not exist ON THIS STATION.
+     *
+     * BOTH ids are re-checked against the station. They arrive from the client,
+     * and the group's stations share a database: without the checks, a caller
+     * granted only the radio station could air a radio spot in a TV break, and
+     * MySQL would happily accept it (the foreign keys are satisfied).
+     */
     fun addPlacement(spotId: Long, breakId: Long, date: LocalDate): CommercialRow? {
         connection().use { c ->
             val duration = c.prepareStatement(
-                "SELECT duration_seconds FROM spots WHERE id = ? AND hidden = FALSE"
+                "SELECT duration_seconds FROM spots WHERE id = ? AND hidden = FALSE AND station_id = ?"
             ).use { ps ->
                 ps.setLong(1, spotId)
+                ps.setString(2, stationId)
                 ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else return null }
             }
+            val breakIsOurs = c.prepareStatement(
+                "SELECT 1 FROM break_slots WHERE id = ? AND station_id = ?"
+            ).use { ps ->
+                ps.setLong(1, breakId)
+                ps.setString(2, stationId)
+                ps.executeQuery().use { it.next() }
+            }
+            if (!breakIsOurs) return null
 
             repeat(3) {
                 val nextPos = c.prepareStatement(
@@ -1100,10 +846,11 @@ CREATE TABLE IF NOT EXISTS spots (
             LEFT JOIN spot_types sty    ON sty.id = cl.spot_type_id
             LEFT JOIN customers pay     ON pay.id = ct.customer_id
             LEFT JOIN programs pr       ON pr.id = p.program_id
-            WHERE p.id = ?
+            WHERE p.id = ? AND s.station_id = ?
             """.trimIndent()
         ).use { ps ->
             ps.setLong(1, placementId)
+            ps.setString(2, stationId)
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return null
                 val programColor = rs.getInt("program_color").takeIf { !rs.wasNull() }
@@ -1135,9 +882,21 @@ CREATE TABLE IF NOT EXISTS spots (
      * view was stale). New positions are the list indexes. Positions collide
      * mid-renumber under the (break, date, position) unique key, so all rows
      * are first bumped far away, in one transaction.
+     *
+     * The break is re-checked against the station first: it is a client-supplied
+     * id into a database this station shares with its siblings.
      */
     fun reorderPlacements(breakId: Long, date: LocalDate, orderedIds: List<Long>): Boolean =
         connection().use { c ->
+            val breakIsOurs = c.prepareStatement(
+                "SELECT 1 FROM break_slots WHERE id = ? AND station_id = ?"
+            ).use { ps ->
+                ps.setLong(1, breakId)
+                ps.setString(2, stationId)
+                ps.executeQuery().use { it.next() }
+            }
+            if (!breakIsOurs) return false
+
             val current = c.prepareStatement(
                 "SELECT id FROM placements WHERE break_id = ? AND show_date = ?"
             ).use { ps ->
@@ -1175,25 +934,42 @@ CREATE TABLE IF NOT EXISTS spots (
             }
         }
 
-    /** True if the placement existed and is gone now. */
+    /**
+     * True if the placement existed ON THIS STATION and is gone now. The join is
+     * the authorization: a placement id belonging to a sibling station simply
+     * does not match, so the delete is a no-op rather than a cross-station wipe.
+     */
     fun deletePlacement(placementId: Long): Boolean =
         connection().use { c ->
-            c.prepareStatement("DELETE FROM placements WHERE id = ?").use { ps ->
+            c.prepareStatement(
+                """
+                DELETE p FROM placements p
+                JOIN spots s ON s.id = p.spot_id
+                WHERE p.id = ? AND s.station_id = ?
+                """.trimIndent()
+            ).use { ps ->
                 ps.setLong(1, placementId)
+                ps.setString(2, stationId)
                 ps.executeUpdate() > 0
             }
         }
 
-    /** The `customers cu` -> `spots s` join path for the two party kinds. */
-    private fun partyJoin(byTrader: Boolean): String =
-        if (byTrader)
+    /**
+     * The `customers cu` -> `spots s` join path for the two party kinds.
+     * [stationScoped] adds this station's filter to the spot - and takes a bound
+     * parameter, which must be the FIRST one the caller sets.
+     */
+    private fun partyJoin(byTrader: Boolean, stationScoped: Boolean): String {
+        val stationFilter = if (stationScoped) "AND s.station_id = ?" else ""
+        return if (byTrader)
             """
             JOIN contracts ct       ON ct.customer_id = cu.id
             JOIN contract_lines cl  ON cl.contract_id = ct.id
-            JOIN spots s            ON s.contract_line_id = cl.id AND s.hidden = FALSE
+            JOIN spots s            ON s.contract_line_id = cl.id AND s.hidden = FALSE $stationFilter
             """.trimIndent()
         else
-            "JOIN spots s ON s.customer_id = cu.id AND s.hidden = FALSE"
+            "JOIN spots s ON s.customer_id = cu.id AND s.hidden = FALSE $stationFilter"
+    }
 
     /** `%query%` with LIKE wildcards neutralized (MySQL's default escape is `\`). */
     private fun likeContains(query: String): String {
@@ -1204,7 +980,10 @@ CREATE TABLE IF NOT EXISTS spots (
         return "%$escaped%"
     }
 
-    /** Customer lookup for the schedule email (default recipient + salutation). */
+    /**
+     * Customer lookup for the schedule email (default recipient + salutation).
+     * GROUP-scoped, like [searchParties]: the customer is the group's.
+     */
     fun customerByCode(code: String): CustomerContact? =
         connection().use { c ->
             c.prepareStatement("SELECT name, email FROM customers WHERE code = ?").use { ps ->
@@ -1215,11 +994,21 @@ CREATE TABLE IF NOT EXISTS spots (
             }
         }
 
+    /**
+     * This station's breaks. Ordered by TIME, not by id: ids are assigned by the
+     * database now (they used to be a computed 1..96, which happened to be in
+     * time order and would silently stop being so).
+     */
     fun loadBreaks(): List<BreakSlotRow> =
         connection().use { c ->
             c.prepareStatement(
-                "SELECT id, hour_of_day, minute_of_hour, label, zone FROM break_slots ORDER BY id"
+                """
+                SELECT id, hour_of_day, minute_of_hour, label, zone
+                FROM break_slots WHERE station_id = ?
+                ORDER BY hour_of_day, minute_of_hour
+                """.trimIndent()
             ).use { ps ->
+                ps.setString(1, stationId)
                 ps.executeQuery().use { rs ->
                     val out = mutableListOf<BreakSlotRow>()
                     while (rs.next()) {
@@ -1245,9 +1034,15 @@ CREATE TABLE IF NOT EXISTS spots (
     private fun monthHasPlacements(c: Connection, year: Int, month: Int): Boolean {
         val (start, end) = monthRange(year, month)
         return c.prepareStatement(
-            "SELECT 1 FROM placements WHERE show_date >= ? AND show_date < ? LIMIT 1"
+            """
+            SELECT 1 FROM placements p
+            JOIN spots s ON s.id = p.spot_id
+            WHERE s.station_id = ? AND p.show_date >= ? AND p.show_date < ?
+            LIMIT 1
+            """.trimIndent()
         ).use { ps ->
-            ps.setDate(1, java.sql.Date.valueOf(start)); ps.setDate(2, java.sql.Date.valueOf(end))
+            ps.setString(1, stationId)
+            ps.setDate(2, java.sql.Date.valueOf(start)); ps.setDate(3, java.sql.Date.valueOf(end))
             ps.executeQuery().use { it.next() }
         }
     }
@@ -1291,12 +1086,14 @@ CREATE TABLE IF NOT EXISTS spots (
                 LEFT JOIN spot_types sty    ON sty.id = cl.spot_type_id
                 LEFT JOIN customers pay     ON pay.id = ct.customer_id
                 LEFT JOIN programs pr       ON pr.id = p.program_id
-                WHERE p.show_date >= ? AND p.show_date < ?
+                WHERE s.station_id = ?
+                  AND p.show_date >= ? AND p.show_date < ?
                   AND p.hidden = FALSE AND s.hidden = FALSE
                 ORDER BY p.break_id, p.show_date, p.position
                 """.trimIndent()
             ).use { ps ->
-                ps.setDate(1, java.sql.Date.valueOf(start)); ps.setDate(2, java.sql.Date.valueOf(end))
+                ps.setString(1, stationId)
+                ps.setDate(2, java.sql.Date.valueOf(start)); ps.setDate(3, java.sql.Date.valueOf(end))
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
                         val breakId = rs.getLong("break_id")
@@ -1360,7 +1157,7 @@ CREATE TABLE IF NOT EXISTS spots (
     }
 
     /**
-     * Loads the month; seeds demo placements if the schema has none for that
+     * Loads the month; seeds demo placements if the station has none for that
      * month.
      *
      * Concurrency: two requests for the same unseeded month can both pass the
@@ -1381,7 +1178,10 @@ CREATE TABLE IF NOT EXISTS spots (
             if (monthHasPlacements(c, year, month)) return
 
             val breaks = loadBreaks()
-            val spots = c.prepareStatement("SELECT id, duration_seconds FROM spots ORDER BY id").use { ps ->
+            val spots = c.prepareStatement(
+                "SELECT id, duration_seconds FROM spots WHERE station_id = ? ORDER BY id"
+            ).use { ps ->
+                ps.setString(1, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(SpotRef(rs.getLong(1), rs.getInt(2)))
@@ -1389,7 +1189,7 @@ CREATE TABLE IF NOT EXISTS spots (
                 }
             }
             val generated = generateMonthPlacements(
-                breaks, spots, year, month, stationSeed = station.id.hashCode()
+                breaks, spots, year, month, stationSeed = stationId.hashCode()
             )
             if (generated.isEmpty()) return
 
