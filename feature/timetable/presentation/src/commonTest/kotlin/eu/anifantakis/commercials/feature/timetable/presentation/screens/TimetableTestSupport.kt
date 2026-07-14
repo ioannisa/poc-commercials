@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.reports.ReportPayload
 import eu.anifantakis.commercials.reports.ReportService
+import eu.anifantakis.commercials.reports.StationLogoCache
 import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
@@ -24,6 +25,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -45,6 +47,7 @@ import kotlin.test.BeforeTest
  * container instance is exposed so tests can observe the app-wide snackbar
  * effects (the "one error policy" assertion).
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 abstract class TimetableTestBase {
     protected val testDispatcher = UnconfinedTestDispatcher()
     protected lateinit var globalContainer: GlobalStateContainer
@@ -256,4 +259,11 @@ class FakeReportService(
     }
 
     override fun isReportGenerationAvailable(): Boolean = available
+}
+
+class FakeStationLogoCache(
+    /** Override to exercise a report carrying a client-side logo. */
+    private val path: String? = null,
+) : StationLogoCache {
+    override suspend fun localLogoPath(): String? = path
 }

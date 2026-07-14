@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.commer
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
@@ -13,8 +14,10 @@ import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.reports.ReportService
+import eu.anifantakis.commercials.reports.StationLogoCache
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalTime
@@ -37,6 +40,7 @@ import kotlin.test.assertTrue
  * job (the screen only renders), so they are covered here rather than in a
  * UI test.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class CommercialDetailViewModelTest : TimetableTestBase() {
 
     private val key = SchedulerKey(1L, TEST_DATE)
@@ -69,12 +73,14 @@ class CommercialDetailViewModelTest : TimetableTestBase() {
         breakId: Long = 1,
         role: AppRole = AppRole.NORMAL_USER,
         reportService: ReportService = FakeReportService(),
+        logoCache: StationLogoCache = FakeStationLogoCache(),
     ) = CommercialDetailViewModel(
         breakId = breakId,
         date = TEST_DATE,
         common = common,
         session = FakeUserSession(role),
         reportService = reportService,
+        logoCache = logoCache,
     )
 
     @Test

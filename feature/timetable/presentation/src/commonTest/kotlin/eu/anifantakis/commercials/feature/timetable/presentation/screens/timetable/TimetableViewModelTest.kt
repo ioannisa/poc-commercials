@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeFinderRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
@@ -16,13 +17,14 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.cell
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.placed
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.StableDate
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import eu.anifantakis.commercials.reports.StationLogoCache
 import eu.anifantakis.commercials.reports.models.ReportResult
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -39,6 +41,7 @@ import kotlin.test.assertTrue
  * (display toggle, finder-armed 'a') and the star-topology delegation to the
  * [eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon] contract.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class TimetableViewModelTest : TimetableTestBase() {
 
     private val finder = FakeFinderRepository()
@@ -51,7 +54,8 @@ class TimetableViewModelTest : TimetableTestBase() {
         prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
         session: FakeUserSession = FakeUserSession(),
         reportService: FakeReportService = reports,
-    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reportService)
+        logoCache: StationLogoCache = FakeStationLogoCache(),
+    ) = TimetableViewModel(finder, partySearch, common, prefs, session, reportService, logoCache)
 
     /** A month with one spot in the 10:00 break - enough to build a payload. */
     private fun aMonthWithOneSpot(): TimetableCommonState {
