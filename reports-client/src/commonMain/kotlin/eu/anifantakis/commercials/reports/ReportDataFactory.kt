@@ -1,9 +1,9 @@
 package eu.anifantakis.commercials.reports
 
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.BreakSlot
+import eu.anifantakis.commercials.grids.CommercialItem
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.reports.model.ProgramFlow
 import eu.anifantakis.commercials.reports.models.ProgramFlowItem
 import eu.anifantakis.commercials.reports.models.ProgramFlowReportData

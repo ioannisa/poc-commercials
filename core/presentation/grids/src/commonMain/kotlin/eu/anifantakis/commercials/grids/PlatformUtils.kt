@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.core.presentation.grids
+package eu.anifantakis.commercials.grids
 
 /**
  * Multiplatform utility functions

@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.core.presentation.grids
+package eu.anifantakis.commercials.grids
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft

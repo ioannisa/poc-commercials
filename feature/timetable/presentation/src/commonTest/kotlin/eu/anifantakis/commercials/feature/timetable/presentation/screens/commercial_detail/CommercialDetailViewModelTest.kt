@@ -9,11 +9,11 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTim
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableTestBase
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
-import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.BreakSlot
+import eu.anifantakis.commercials.grids.CommercialItem
+import eu.anifantakis.commercials.grids.FLOW_ROH
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.StationLogoCache
 import kotlinx.collections.immutable.persistentListOf

@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch

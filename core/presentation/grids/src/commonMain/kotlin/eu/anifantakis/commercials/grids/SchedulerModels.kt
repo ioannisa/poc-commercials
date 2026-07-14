@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.core.presentation.grids
+package eu.anifantakis.commercials.grids
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize

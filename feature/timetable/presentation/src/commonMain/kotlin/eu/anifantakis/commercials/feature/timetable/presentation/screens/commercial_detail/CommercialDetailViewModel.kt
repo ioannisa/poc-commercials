@@ -5,9 +5,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
 import eu.anifantakis.commercials.core.domain.auth.UserSession
-import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
-import eu.anifantakis.commercials.core.presentation.grids.FLOW_ROH
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.CommercialItem
+import eu.anifantakis.commercials.grids.FLOW_ROH
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon

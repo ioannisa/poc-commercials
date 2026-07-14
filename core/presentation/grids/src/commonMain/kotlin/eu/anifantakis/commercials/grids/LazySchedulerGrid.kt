@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.core.presentation.grids
+package eu.anifantakis.commercials.grids
 
 import androidx.compose.foundation.ScrollState
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppHorizontalScrollbar
@@ -47,8 +47,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
@@ -60,6 +61,7 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DayOfWeek
+import kotlin.math.roundToInt
 import kotlinx.datetime.LocalDate
 
 /**
@@ -122,6 +124,10 @@ fun LazySchedulerGrid(
     val dayColumnW = dayColumnWidth * s
     val rowH = rowHeight * s
     val headerH = headerHeight * s
+
+    // Measured once, drawn ~800 times - see CellTextCache. The cells' Text
+    // composables were the single biggest cost of opening a month.
+    val cellTextCache = rememberCellTextCache(LocalTextStyle.current, (10 * s).sp, dayColumnW)
 
     // Keyboard navigation state - use rememberSaveable to survive configuration changes
     var selectedRow by rememberSaveable { mutableStateOf(initialSelectedRow) }
@@ -425,6 +431,7 @@ fun LazySchedulerGrid(
                                         dateWrapper = StableDate(date),
                                         width = dayColumnW,
                                         showTimes = showTimes,
+                                        textCache = cellTextCache,
                                         isModified = isModified,
                                         isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
                                         onSelect = { updateSelection(rowIndex, colIndex) },
@@ -652,6 +659,7 @@ private fun GridCell(
     dateWrapper: StableDate,
     width: Dp,
     showTimes: Boolean,
+    textCache: CellTextCache,
     isModified: Boolean,
     isSelected: Boolean,
     onSelect: () -> Unit,
@@ -701,6 +709,13 @@ private fun GridCell(
         dataColor != null -> contrastTextColor(dataColor)
         else -> light.cellText
     }
+    // Null = an empty cell, which draws no number (it held no Text before either).
+    val cellText = when {
+        spotCount <= 0 -> null
+        showTimes && data != null -> data.formattedDuration
+        else -> spotCount.toString()
+    }
+
     val selectionColor = light.selectionBorder
     val normalBorderColor = light.cellBorder
 
@@ -737,6 +752,27 @@ private fun GridCell(
                         style = Stroke(strokeWidth)
                     )
                 }
+
+                // The number, centred - measured once by the cache, painted here.
+                // Empty cells draw nothing, exactly as before (they held no Text).
+                if (cellText != null) {
+                    val layout = textCache.layout(cellText, isSelected || isModified)
+                    // x = 0 because the cached paragraph is already the cell's width and
+                    // centres its own glyphs - the same thing the Text composable's
+                    // paragraph did. Only the VERTICAL centring is ours, and it is
+                    // rounded to a whole pixel because that is where Compose placed the
+                    // Text's layout node. Centre it at a fractional offset instead and
+                    // every glyph shifts by a fraction of a pixel and re-antialiases:
+                    // the grid still looks fine, but no digit renders as it used to.
+                    drawText(
+                        textLayoutResult = layout,
+                        color = textColor,
+                        topLeft = androidx.compose.ui.geometry.Offset(
+                            0f,
+                            ((size.height - layout.size.height) / 2f).roundToInt().toFloat(),
+                        ),
+                    )
+                }
             }
             // Use separate onRightClick modifier for reliable right-click detection (same pattern as EnhancedDataGrid)
             .let { mod ->
@@ -761,30 +797,19 @@ private fun GridCell(
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (spotCount > 0) {
-            // PLAIN Text, deliberately - NOT GridText.
-            //
-            // This is the scheduler's cell, and there are ~1,500 of them on screen.
-            // It only ever holds DIGITS: a spot count, or a duration as MM:SS. No
-            // letters, so no script can appear here that Roboto does not have, so
-            // the glyph-fallback scan would find nothing 1,500 times over.
-            //
-            // The letters in this grid live in its LABELS - the day abbreviations,
-            // the totals row, the corner - and those go through GridText. Route the
-            // cells through it too and you would pay the scan on the app's densest
-            // surface to serve text that cannot exist there.
-            Text(
-                // "spots times" mode: the cell's summed durations as MM:SS
-                // (10 spots x 342s total -> 05:42), like the legacy app
-                text = if (showTimes && data != null) data.formattedDuration else spotCount.toString(),
-                fontSize = (10 * scale).sp,
-                fontWeight = if (isSelected || isModified) FontWeight.Bold else FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-                color = textColor
-            )
-        }
+        // The number is DRAWN, not composed - see CellTextCache.
+        //
+        // It used to be a plain Text (deliberately not GridText: a cell holds only
+        // DIGITS - a spot count, or a duration as MM:SS - so no script can appear
+        // here that Roboto lacks, and paying the glyph-fallback scan ~800 times over
+        // would have been absurd). But a Text composable is not free either: style
+        // resolution, shaping and a layout node, per cell, every time a month opens.
+        //
+        // The digits are still digits, and a month holds a couple of dozen distinct
+        // strings across hundreds of cells. So they are measured once by the cache
+        // and painted here. The letters of this grid - day abbreviations, the totals
+        // row, the corner - remain real GridText composables; they are few, and they
+        // are where the fallback scan earns its keep.
 
         // Render Context Menu LOCALLY inside the cell
         // This ensures the offset is relative to the cell, fixing the "jumping menu" bug.

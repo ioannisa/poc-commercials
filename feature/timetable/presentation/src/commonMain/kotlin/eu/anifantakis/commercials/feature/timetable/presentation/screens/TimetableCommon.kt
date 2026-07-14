@@ -1,9 +1,9 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Immutable
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.BreakSlot
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap

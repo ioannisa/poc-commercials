@@ -1,7 +1,7 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
 import kotlinx.datetime.DayOfWeek
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerLabels
+import eu.anifantakis.commercials.grids.SchedulerLabels
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
@@ -59,13 +59,13 @@ import eu.anifantakis.commercials.core.presentation.commands.RegisterAppCommand
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.BreakZone
-import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
-import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import eu.anifantakis.commercials.core.presentation.grids.formatTime
+import eu.anifantakis.commercials.grids.BreakSlot
+import eu.anifantakis.commercials.grids.BreakZone
+import eu.anifantakis.commercials.grids.ContextMenuEntry
+import eu.anifantakis.commercials.grids.LazySchedulerGrid
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.formatTime
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarLabels
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarMetrics

@@ -21,9 +21,9 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.Timetab
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.cell
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.placed
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
-import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
-import eu.anifantakis.commercials.core.presentation.grids.StableDate
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.BreakSlot
+import eu.anifantakis.commercials.grids.StableDate
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf

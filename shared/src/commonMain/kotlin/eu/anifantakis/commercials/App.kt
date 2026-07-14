@@ -19,13 +19,13 @@ import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.CommercialsTheme
 import eu.anifantakis.commercials.core.presentation.design_system.FontSizeStep
 import eu.anifantakis.commercials.core.presentation.design_system.WindowSizeProvider
-import eu.anifantakis.commercials.core.presentation.grids.GridInputConfig
-import eu.anifantakis.commercials.core.presentation.grids.LocalGridInput
+import eu.anifantakis.commercials.grids.GridInputConfig
+import eu.anifantakis.commercials.grids.LocalGridInput
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationManager
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
 import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.design_system.LocalGlyphFallback
-import eu.anifantakis.commercials.core.presentation.grids.LocalGridTextAnnotator
+import eu.anifantakis.commercials.grids.LocalGridTextAnnotator
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState

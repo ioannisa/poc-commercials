@@ -26,7 +26,7 @@ composeCompiler {
 
 kotlin {
     android {
-        namespace = "eu.anifantakis.commercials.core.presentation.grids"
+        namespace = "eu.anifantakis.commercials.grids"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -86,6 +86,11 @@ kotlin {
             // publishes android + desktop variants ONLY, so declaring it there fails
             // resolution for wasmJs/js/iOS and takes the web app down with it.
             implementation(libs.compose.uiTooling)
+        }
+        jvmTest.dependencies {
+            // TEMPORARY: perf harness for the grid (remove with the harness).
+            implementation(libs.kotlin.test)
+            implementation(compose.desktop.currentOs)
         }
         // iosMain comes from the default hierarchy template
     }

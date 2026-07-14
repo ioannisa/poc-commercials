@@ -2,8 +2,8 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Stable
 import eu.anifantakis.commercials.core.domain.util.DataResult
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseCommonViewModel
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository

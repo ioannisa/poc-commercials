@@ -1,9 +1,9 @@
 package eu.anifantakis.commercials.data
 
-import eu.anifantakis.commercials.core.presentation.grids.DailyStats
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
-import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
-import eu.anifantakis.commercials.core.presentation.grids.StableDate
+import eu.anifantakis.commercials.grids.DailyStats
+import eu.anifantakis.commercials.grids.SchedulerCellData
+import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.grids.StableDate
 
 object SampleData {
 
