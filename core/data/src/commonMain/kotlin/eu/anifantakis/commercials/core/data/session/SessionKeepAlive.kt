@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
@@ -18,6 +19,9 @@ import kotlin.time.Duration.Companion.seconds
  */
 interface SessionCredentialStore {
     val isLoggedIn: Boolean
+
+    /** Adopts the server's current station list (see [SessionKeepAlive.knock]). */
+    suspend fun refreshStations(stations: List<StationAccess>)
 }
 
 /**
@@ -115,10 +119,24 @@ class SessionKeepAlive(
      * through - in which case we do NOTHING. A 401 has already been handled for us
      * (the session is cleared, the UI is on its way to Login); anything else is the
      * network, and the stored token is still perfectly good.
+     *
+     * It also carries the station list home. The knock is the ONLY thing a logged-in,
+     * idle client does on its own, which makes it the only place a station added
+     * AFTER sign-in can be noticed: the list used to arrive once, in the login reply,
+     * and was never refreshed - so a group migrated in was hosted, granted and
+     * reachable, yet missing from the dropdown until the operator logged out and back
+     * in. Restarting the client did not help either; it re-read the same stale
+     * snapshot from storage.
+     *
+     * A knock that FAILS changes nothing: an unreachable server is not evidence that
+     * the user lost a station.
      */
     internal suspend fun knock(): Duration? =
         when (val result = api.get<SessionInfoDto>("/api/auth/session")) {
-            is DataResult.Success -> result.data.expiresInSeconds.toInterval()
+            is DataResult.Success -> {
+                session.refreshStations(result.data.stations)
+                result.data.expiresInSeconds.toInterval()
+            }
             is DataResult.Failure -> null
         }
 
@@ -135,4 +153,7 @@ class SessionKeepAlive(
 
 /** The server's SessionInfoResponse (`GET /api/auth/session`). */
 @Serializable
-private data class SessionInfoDto(val expiresInSeconds: Long? = null)
+private data class SessionInfoDto(
+    val expiresInSeconds: Long? = null,
+    val stations: List<StationAccess> = emptyList(),
+)

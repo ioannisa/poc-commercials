@@ -42,8 +42,22 @@ data class LoginResponse(
  * lapses. The client paces its heartbeat from this, so editing `session:` in
  * server.yaml retunes every client without a release.
  */
+/**
+ * The keep-alive's answer - and the ONLY thing that keeps a running client's
+ * station list honest.
+ *
+ * [stations] is the CURRENT access list, recomputed per knock. Login used to be
+ * the only place it was ever sent, so the client's list was a snapshot taken at
+ * sign-in: a group migrated in afterwards was hosted, granted and reachable, yet
+ * invisible until the operator logged out and back in. Restarting the server did
+ * not help (it is not the server that is stale) and neither did restarting the
+ * client (it just re-read the same stored snapshot).
+ */
 @Serializable
-data class SessionInfoResponse(val expiresInSeconds: Long? = null)
+data class SessionInfoResponse(
+    val expiresInSeconds: Long? = null,
+    val stations: List<StationAccessDto> = emptyList(),
+)
 
 @Serializable
 data class ChangePasswordRequest(val currentPassword: String, val newPassword: String)
@@ -156,7 +170,16 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                 val expiresIn = call.bearerToken()?.let {
                     withContext(Dispatchers.IO) { authDb.tokenExpiresInSeconds(it) }
                 }
-                call.respond(SessionInfoResponse(expiresInSeconds = expiresIn))
+                // The live registry, not a login-time snapshot: a group added by a
+                // migration is in it immediately (MigrationService.hostLive), so
+                // the next knock is when the client learns about it.
+                val user = call.authUser()
+                call.respond(
+                    SessionInfoResponse(
+                        expiresInSeconds = expiresIn,
+                        stations = user?.let { registry.accessFor(it) }.orEmpty(),
+                    )
+                )
             }
 
             // Logout = revocation: delete the row and the token is dead on the

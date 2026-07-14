@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
@@ -37,6 +38,14 @@ class SessionKeepAliveTest {
         val stored: String? get() = token
         override val isLoggedIn: Boolean get() = token != null
 
+        /** Null = never told. Distinguishes "adopted an empty list" from "not called". */
+        var stations: List<StationAccess>? = null
+            private set
+
+        override suspend fun refreshStations(stations: List<StationAccess>) {
+            this.stations = stations
+        }
+
         fun clear() {
             token = null
             cleared = true
@@ -70,6 +79,56 @@ class SessionKeepAliveTest {
     private fun failing(status: HttpStatusCode) = MockEngine { request ->
         seen += request.url.encodedPath
         respondError(status)
+    }
+
+    /** The keep-alive's reply as the server actually sends it: lifetime AND stations. */
+    private fun servingStations(vararg ids: String) = MockEngine { request ->
+        seen += request.url.encodedPath
+        val stations = ids.joinToString(",") {
+            """{"id":"$it","name":"$it","role":"NORMAL_USER"}"""
+        }
+        respond(
+            """{"expiresInSeconds":3600,"stations":[$stations]}""",
+            HttpStatusCode.OK,
+            headersOf(HttpHeaders.ContentType, "application/json"),
+        )
+    }
+
+    /**
+     * THE FIX for "a station migrated in after sign-in stays invisible".
+     *
+     * The station list used to arrive exactly once - in the login reply - and nothing
+     * ever refreshed it. A group added afterwards was hosted, granted and reachable by
+     * the API, yet absent from the dropdown until the operator logged OUT and back in;
+     * restarting the client only re-read the same stale snapshot from storage. The
+     * knock is the one thing a logged-in, idle client does on its own, so it is where
+     * the list has to come home.
+     */
+    @Test
+    fun knock_adopts_the_servers_current_station_list() = runTest {
+        val store = FakeStore()
+
+        keepAlive(store, servingStations("crete-tv", "radio-984", "test-tv")).knock()
+
+        assertEquals(
+            listOf("crete-tv", "radio-984", "test-tv"),
+            store.stations?.map { it.id },
+        )
+    }
+
+    /**
+     * A knock that did NOT get through is not evidence that the user lost their
+     * stations. Adopting the empty list a failed call carries would empty the dropdown
+     * of a working client every time the server blinked - the same class of bug as
+     * logging someone out on a network hiccup, which this whole type exists to avoid.
+     */
+    @Test
+    fun a_failed_knock_leaves_the_station_list_untouched() = runTest {
+        val store = FakeStore()
+
+        keepAlive(store, failing(HttpStatusCode.ServiceUnavailable)).knock()
+
+        assertNull(store.stations)
     }
 
     /**
@@ -154,7 +213,9 @@ class SessionKeepAliveTest {
 
     /** A 90-day lifetime would put a quarter of it 22 days out. Cap it - knocks are nearly free. */
     @Test
-    fun `a long lifetime is capped, not trusted blindly`() = runTest {
+    // No comma in the name: Apple targets reject one in a backticked identifier,
+    // and it fails the iOS test COMPILE, not just the run.
+    fun `a long lifetime is capped rather than trusted blindly`() = runTest {
         val ninetyDays = 90L * 24 * 3600
         assertEquals(6.hours, keepAlive(FakeStore(), serving(ninetyDays)).knock())
     }

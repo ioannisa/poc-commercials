@@ -193,6 +193,36 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         _revision.value++
     }
 
+    /**
+     * Replaces the station list with the server's CURRENT one (the keep-alive
+     * brings it on every knock), without touching the token or the identity.
+     *
+     * This is what makes a station added AFTER sign-in appear: the list used to be
+     * written once, at login, and nothing ever refreshed it - so a group migrated
+     * in was reachable by the API and invisible in the dropdown until the operator
+     * logged out and back in.
+     *
+     * The SELECTED station survives if it is still granted; otherwise the
+     * selection falls back to the first one, because a UI pointed at a station the
+     * user can no longer reach would 403 on every request. No-op when nothing
+     * changed, so the revision does not churn on every keep-alive tick.
+     */
+    override suspend fun refreshStations(stations: List<StationAccess>) {
+        if (!isLoggedIn) return
+        if (stations == stored.stations) return
+
+        val keepSelected = stations.any { it.id == stored.selectedStationId }
+        val session = stored.copy(
+            stations = stations,
+            selectedStationId =
+                if (keepSelected) stored.selectedStationId else stations.firstOrNull()?.id ?: "",
+        )
+        // Persist, so a client restart does not fall back to the stale snapshot -
+        // which is exactly the bug this fixes.
+        ksafe.put(SESSION_KEY, session)
+        _revision.value++
+    }
+
     /** Switches the active station (no-op for ids the user has no grant on). */
     override fun selectStation(stationId: String) {
         if (stored.stations.none { it.id == stationId }) return
