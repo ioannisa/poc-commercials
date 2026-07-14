@@ -136,8 +136,9 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
      */
     @Test
     fun loadMonthLoadsTheRowsAndTheCellsTogether() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10), breakSlot(12)))
-        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(
+            month(cell(spots = listOf(placed(10))), rows = listOf(breakSlot(10), breakSlot(12)))
+        )
         val vm = vm()
 
         vm.loadMonth(2026, 7)
@@ -145,11 +146,15 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
 
         assertEquals(listOf("10:00", "12:00"), vm.commonState.value.breaks.map { it.label }, "the rows")
         assertEquals(1, vm.commonState.value.cells.size, "and the cells - one load, both halves")
+        // ONE round trip, not two. The rows ARE the distinct times of the cells, so
+        // the server derives them from the same scan; fetching them separately made
+        // the screen wait twice and scanned the month twice.
         assertEquals(
-            listOf(Triple(2026, 7, GridViewMode.CONDENSED)),
-            schedule.breakLoads,
-            "the rows are fetched FOR that month, in the current view",
+            listOf(GridViewMode.CONDENSED),
+            schedule.monthLoads,
+            "the grid is one call, in the current view",
         )
+        assertTrue(schedule.breakLoads.isEmpty(), "and it does NOT also hit the rows endpoint")
     }
 
     /**
@@ -161,14 +166,14 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
      */
     @Test
     fun navigatingToAnotherMonthReloadsTheRows() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10)))
-        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        schedule.monthResult = DataResult.Success(
+            month(cell(spots = listOf(placed(10))), rows = listOf(breakSlot(10)))
+        )
         val vm = vm()
         vm.loadMonth(2026, 7)
         advanceUntilIdle()
 
         // August is quiet: it breaks at no time at all.
-        schedule.breaksResult = DataResult.Success(emptyList())
         schedule.monthResult = DataResult.Success(month())
         vm.loadMonth(2026, 8)
         advanceUntilIdle()
@@ -176,15 +181,15 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         assertTrue(vm.commonState.value.breaks.isEmpty(), "the rows are the MONTH's, and August has none")
         assertTrue(vm.commonState.value.cells.isEmpty(), "and so are the cells")
         assertEquals(
-            listOf(Triple(2026, 7, GridViewMode.CONDENSED), Triple(2026, 8, GridViewMode.CONDENSED)),
-            schedule.breakLoads,
-            "each month fetches its own rows - there is no station-wide grid to reuse",
+            listOf(GridViewMode.CONDENSED, GridViewMode.CONDENSED),
+            schedule.monthLoads,
+            "each month fetches its own grid - there is no station-wide one to reuse",
         )
     }
 
     @Test
     fun clearDropsTheBreaksSoAStationSwitchRefetchesThem() = runTest(testDispatcher) {
-        schedule.breaksResult = DataResult.Success(listOf(breakSlot(10)))
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
         assertEquals(1, vm.commonState.value.breaks.size)
@@ -193,7 +198,7 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         assertTrue(vm.commonState.value.breaks.isEmpty(), "the breaks belonged to the OLD station")
 
         vm.loadMonth(2026, 7); advanceUntilIdle()
-        assertEquals(2, schedule.breaksFetches, "the new station's rows are fetched afresh")
+        assertEquals(2, schedule.monthLoads.size, "the new station's grid is fetched afresh")
     }
 
     /**

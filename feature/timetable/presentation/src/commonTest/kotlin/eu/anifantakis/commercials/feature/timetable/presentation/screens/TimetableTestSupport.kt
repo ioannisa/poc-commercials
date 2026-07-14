@@ -131,8 +131,20 @@ fun cell(
     commercials = emptyList(),
 )
 
-fun month(vararg cells: ScheduleCell): MonthSchedule =
-    MonthSchedule(year = 2026, month = 7, cells = cells.toList())
+/**
+ * A month as the repository returns it: its ROWS and its CELLS, from ONE call.
+ *
+ * The rows default to the cells' own distinct times - which is exactly what the
+ * server derives them from, so a fixture cannot accidentally describe a grid whose
+ * rows and cells disagree. Pass [rows] to add empty scaffold rows on top.
+ */
+fun month(vararg cells: ScheduleCell, rows: List<BreakSlotInfo>? = null): MonthSchedule =
+    MonthSchedule(
+        year = 2026,
+        month = 7,
+        rows = rows ?: cells.map { BreakSlotInfo(it.time, "DEFAULT", 0) }.distinctBy { it.time },
+        cells = cells.toList(),
+    )
 
 /** One ROW of the month's grid, as the repository returns it. */
 fun breakSlot(hour: Int, minute: Int = 0): BreakSlotInfo = BreakSlotInfo(
@@ -198,13 +210,22 @@ class FakeScheduleRepository : ScheduleRepository {
      * purpose and exactly as the real repository drops them: `/api/schedule`
      * returns a count, a duration and a colour per cell - never a spot.
      */
-    override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
-        when (val result = monthResult) {
+    override suspend fun getMonth(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<MonthSchedule, DataError.Network> {
+        monthLoads += mode
+        return when (val result = monthResult) {
             is DataResult.Success -> DataResult.Success(
                 result.data.copy(cells = result.data.cells.map { it.copy(commercials = emptyList()) })
             )
             is DataResult.Failure -> result
         }
+    }
+
+    /** Every mode the grid was loaded with - one entry per round trip. */
+    val monthLoads = mutableListOf<GridViewMode>()
 
     /** The stocked airings, narrowed to the slice asked for (both filters optional). */
     override suspend fun getCommercials(

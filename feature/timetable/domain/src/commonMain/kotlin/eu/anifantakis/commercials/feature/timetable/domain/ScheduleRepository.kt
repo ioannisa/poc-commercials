@@ -27,7 +27,7 @@ interface ScheduleRepository {
      * The month's grid: one aggregate per cell (count + duration + colour). It
      * carries NO airings - see [getCommercials].
      */
-    suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network>
+    suspend fun getMonth(year: Int, month: Int, mode: GridViewMode): DataResult<MonthSchedule, DataError.Network>
 
     /**
      * The airings, for a slice: the whole month, one day ([date]), one break

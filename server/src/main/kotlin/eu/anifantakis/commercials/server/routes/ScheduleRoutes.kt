@@ -69,10 +69,18 @@ data class CellDto(
     val programName: String? = null,
 )
 
+/**
+ * The whole grid in ONE response: its ROWS and its CELLS.
+ *
+ * They used to be two endpoints the client fetched back-to-back (`/breaks` then
+ * `/schedule`), which cost two round trips AND two scans of the same month - the
+ * rows are just the DISTINCT times of the cells. Now one scan answers both.
+ */
 @Serializable
 data class ScheduleDto(
     val year: Int,
     val month: Int,
+    val rows: List<BreakSlotDto>,
     val cells: List<CellDto>
 )
 
@@ -202,6 +210,15 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "year and month (1..12) required"))
                 return@get
             }
+            val modeParam = call.request.queryParameters["mode"] ?: GridViewMode.CONDENSED.name
+            val mode = runCatching { GridViewMode.valueOf(modeParam) }.getOrNull()
+            if (mode == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("error" to "mode must be one of ${GridViewMode.entries.joinToString { it.name }}")
+                )
+                return@get
+            }
 
             val access = call.stationAccessOrRespond(registry) ?: return@get
 
@@ -211,24 +228,40 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             val grant = access.grant
             val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
 
-            // JDBC is blocking - keep it off Ktor's request threads
-            val cells = withContext(Dispatchers.IO) {
+            // ONE scan of the month. The rows are derived from the cells' own times
+            // (see gridRowsFrom) - fetching them separately meant scanning the same
+            // month twice and making the client wait for two round trips.
+            //
+            // JDBC is blocking - keep it off Ktor's request threads.
+            val (cells, rows) = withContext(Dispatchers.IO) {
                 access.db.ensureMonthSeeded(year, month)
-                access.db.loadMonthCells(year, month, onlyClientCode)
+                val c = access.db.loadMonthCells(year, month, onlyClientCode)
+                c to access.db.gridRowsFrom(c.map { it.time }.distinct(), mode)
             }
 
-            val dtos = cells.map { cell ->
-                CellDto(
-                    time = formatHhMm(cell.time),
-                    date = cell.date.toString(),
-                    spotCount = cell.spotCount,
-                    totalDurationSeconds = cell.totalDurationSeconds,
-                    zoneColorArgb = cell.zoneColorArgb,
-                    programName = cell.programName,
+            call.respond(
+                ScheduleDto(
+                    year = year,
+                    month = month,
+                    rows = rows.map {
+                        BreakSlotDto(
+                            time = it.label,
+                            zone = it.zone.name,
+                            zoneColorArgb = breakZoneColorArgb(it.zone),
+                        )
+                    },
+                    cells = cells.map { cell ->
+                        CellDto(
+                            time = formatHhMm(cell.time),
+                            date = cell.date.toString(),
+                            spotCount = cell.spotCount,
+                            totalDurationSeconds = cell.totalDurationSeconds,
+                            zoneColorArgb = cell.zoneColorArgb,
+                            programName = cell.programName,
+                        )
+                    },
                 )
-            }
-
-            call.respond(ScheduleDto(year = year, month = month, cells = dtos))
+            )
         }
 
         /**

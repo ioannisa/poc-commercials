@@ -1032,6 +1032,23 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         )
 
     /**
+     * The same rows, from times the caller ALREADY has - no second scan.
+     *
+     * The month's cells are the month's breaks: [loadMonthCells] groups the airings
+     * by time, so its keys ARE the distinct times [breakTimes] would go and find
+     * again. Handing them straight over means one scan of the month instead of two,
+     * and lets the grid be served in ONE response instead of the /breaks + /schedule
+     * pair the client used to fetch back-to-back.
+     *
+     * It also fixes a quiet inconsistency for a CUSTOMER_VIEWER: the cells are
+     * filtered to their spots, so rows derived from them are too - where the
+     * separate [breakTimes] scan handed them every station row, including breaks
+     * they have nothing in.
+     */
+    fun gridRowsFrom(times: List<LocalTime>, mode: GridViewMode): List<BreakTimeRow> =
+        gridRows(breakTimes = times, mode = mode, emptyRowsFrom = emptyRowsFrom)
+
+    /**
      * Where this station's printed grid starts (server.yaml). A malformed value
      * is a configuration error worth failing loudly on, not silently rounding to
      * midnight - it would print fourteen blank night rows and look like a bug in

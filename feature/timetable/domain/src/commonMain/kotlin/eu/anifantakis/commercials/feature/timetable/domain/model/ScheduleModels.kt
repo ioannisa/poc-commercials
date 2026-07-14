@@ -63,8 +63,16 @@ data class ScheduleCell(
     val commercials: List<PlacedCommercial>,
 )
 
+/**
+ * A month's grid: its ROWS and its CELLS, from ONE call.
+ *
+ * The rows are the DISTINCT times of the cells plus the view's empty scaffold, so
+ * the server derives them from the same scan - asking for them separately meant
+ * two round trips and two scans of the same month.
+ */
 data class MonthSchedule(
     val year: Int,
     val month: Int,
+    val rows: List<BreakSlotInfo>,
     val cells: List<ScheduleCell>,
 )

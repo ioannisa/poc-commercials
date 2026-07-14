@@ -43,8 +43,12 @@ class RemoteScheduleDataSourceImpl(private val api: ApiHttpClient) : RemoteSched
             "/api/breaks", "year" to year, "month" to month, "mode" to mode.name,
         ).map { list -> list.map { it.toDomain() } }
 
-    override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
-        api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month)
+    override suspend fun getMonth(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<MonthSchedule, DataError.Network> =
+        api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month, "mode" to mode.name)
             .map { it.toDomain() }
 
     override suspend fun getCommercials(

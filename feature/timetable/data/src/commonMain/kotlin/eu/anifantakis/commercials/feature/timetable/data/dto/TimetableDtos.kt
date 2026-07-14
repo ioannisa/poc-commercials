@@ -44,10 +44,12 @@ internal data class CellDto(
     val programName: String? = null,
 )
 
+/** The whole grid in ONE response: its ROWS and its CELLS (one scan, one round trip). */
 @Serializable
 internal data class ScheduleDto(
     val year: Int,
     val month: Int,
+    val rows: List<BreakSlotDto>,
     val cells: List<CellDto>,
 )
 

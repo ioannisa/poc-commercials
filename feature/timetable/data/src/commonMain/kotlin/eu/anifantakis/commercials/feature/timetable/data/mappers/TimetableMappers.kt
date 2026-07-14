@@ -45,7 +45,9 @@ internal fun CommercialsDto.toDomain(): Map<Pair<LocalTime, LocalDate>, List<Pla
     }
 
 internal fun ScheduleDto.toDomain(): MonthSchedule = MonthSchedule(
-    year = year, month = month, cells = cells.map { it.toDomain() },
+    year = year, month = month,
+    rows = rows.map { it.toDomain() },
+    cells = cells.map { it.toDomain() },
 )
 
 internal fun ContractLineDto.toDomain(): ContractLine = ContractLine(

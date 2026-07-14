@@ -25,7 +25,7 @@ interface RemoteScheduleDataSource {
         month: Int,
         mode: GridViewMode,
     ): DataResult<List<BreakSlotInfo>, DataError.Network>
-    suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network>
+    suspend fun getMonth(year: Int, month: Int, mode: GridViewMode): DataResult<MonthSchedule, DataError.Network>
     suspend fun getCommercials(
         year: Int,
         month: Int,

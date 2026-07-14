@@ -81,12 +81,21 @@ class TimetableCommonViewModel(
                 addedByCell.clear()
                 val mode = commonState.value.viewMode
                 updateCommonState { TimetableCommonState(viewMode = mode, year = intent.year, month = intent.month) }
-                loadRows(intent.year, intent.month, mode)
-                when (val result = scheduleRepository.getMonth(intent.year, intent.month)) {
+                // ONE call for the whole grid. The rows and the cells came from two
+                // endpoints fetched back-to-back, which made the screen wait for two
+                // sequential round trips and had the server scan the same month
+                // twice - the rows ARE the distinct times of the cells.
+                when (val result = scheduleRepository.getMonth(intent.year, intent.month, mode)) {
                     is DataResult.Success -> updateCommonState { st ->
-                        st.copy(cells = result.data.cells.associate { c -> c.toUi() }.toImmutableMap())
+                        st.copy(
+                            breaks = result.data.rows.map { b -> b.toUi() }.toImmutableList(),
+                            cells = result.data.cells.associate { c -> c.toUi() }.toImmutableMap(),
+                        )
                     }
-                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
+                    is DataResult.Failure -> {
+                        updateCommonState { st -> st.copy(breaks = persistentListOf()) }
+                        showSnackbar(result.error.toUiText())
+                    }
                 }
             }
 

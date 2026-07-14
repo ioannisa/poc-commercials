@@ -35,8 +35,11 @@ class ScheduleRepositoryImpl(
         mode: GridViewMode,
     ): DataResult<List<BreakSlotInfo>, DataError.Network> = remoteDataSource.getBreaks(year, month, mode)
 
-    override suspend fun getMonth(year: Int, month: Int): DataResult<MonthSchedule, DataError.Network> =
-        remoteDataSource.getMonth(year, month)
+    override suspend fun getMonth(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+    ): DataResult<MonthSchedule, DataError.Network> = remoteDataSource.getMonth(year, month, mode)
 
     override suspend fun getCommercials(
         year: Int,
