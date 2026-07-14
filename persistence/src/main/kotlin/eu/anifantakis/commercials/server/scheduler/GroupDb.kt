@@ -342,12 +342,31 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     hidden BOOLEAN NOT NULL DEFAULT FALSE,
                     UNIQUE KEY uq_placement_slot (station_id, show_date, show_time, position),
                     KEY idx_placements_legacy (legacy_id),
+                    -- COVERING, and measured. Every "what did this party air?"
+                    -- query (searchParties, partyActivity, partyContractLines,
+                    -- contractStatus, contractLineSpots) reaches the airings by
+                    -- spot_id and then needs exactly `hidden` and `show_date`.
+                    -- With spot_id alone, InnoDB found the rows in the index and
+                    -- then made one PRIMARY-key lookup per row to read those two
+                    -- columns - 115,785 of them for the heaviest customer. Adding
+                    -- them here answers those queries from the index alone:
+                    -- partyActivity 213 -> 69ms, contractStatus 4x, the trader
+                    -- search ~2x. It also SERVES the fk_placements_spot foreign
+                    -- key (spot_id is leftmost), so it replaces the narrow index
+                    -- InnoDB would otherwise create rather than adding to it.
+                    KEY idx_placements_spot_cover (spot_id, hidden, show_date),
                     CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
                     CONSTRAINT fk_placements_station FOREIGN KEY (station_id) REFERENCES stations(id),
                     CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
             )
+            // NO index on show_date alone. It existed when the unique key led with
+            // break_id and a month scan could not use it - but the key now leads
+            // with (station_id, show_date), and EVERY query that filters by date
+            // also filters by station. Dropping it changed no query's timing at
+            // all (measured across the whole suite) and returned ~100 MB, plus the
+            // write cost of maintaining it on the biggest table in the schema.
             // Airtime price zones: NO app-layer tables here. The FAITHFUL UNION
             // copies own the legacy names (`zones`/`zonefillers`, written verbatim
             // by the migration - they carry their own forTV). Demo groups simply
@@ -436,10 +455,28 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
      * already have every column from [createTables] and skip all of these.
      */
     private fun ensureColumns(c: Connection) {
+        // ── placements indexes (all three decisions are MEASURED - see the
+        //    CREATE TABLE above, and re-measure before changing any of them) ──
+        //
         // Station-scoped month scans ride the unique key (station_id, show_date,
-        // show_time, position) - which is also what the grid's GROUP BY on
-        // show_time reads. This one is for the few scans that span every station.
-        ensureIndex(c, "placements", "idx_placements_date", "show_date")
+        // show_time, position), which is also what the grid's GROUP BY on
+        // show_time reads. Nothing more is needed for the grid.
+        //
+        // The party/finder family reaches airings by spot_id and needs `hidden`
+        // and `show_date` off them: this makes that index-only.
+        ensureIndex(c, "placements", "idx_placements_spot_cover", "spot_id, hidden, show_date")
+        // Retired: an index on show_date ALONE. Every query that filters by date
+        // filters by station too, so the unique key already serves them; dropping
+        // it regressed nothing and freed ~100 MB on the biggest table.
+        dropIndexIfExists(c, "placements", "idx_placements_date")
+        // Retired: the narrow (spot_id) index InnoDB auto-created for
+        // fk_placements_spot. idx_placements_spot_cover leads with spot_id, so it
+        // serves the foreign key on its own - keeping both would be one redundant
+        // index on 4M rows. (MySQL drops the auto-created one itself once the
+        // wider index exists; this is here for schemas where it lingers.)
+        if (indexExists(c, "placements", "idx_placements_spot_cover")) {
+            dropIndexIfExists(c, "placements", "fk_placements_spot")
+        }
         ensureColumn(c, "customers", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
         ensureColumn(c, "contracts", "synthetic", "BOOLEAN NOT NULL DEFAULT FALSE")
         // legacy calendar_excluded_docs: contracts whose spots stay OFF printed reports
@@ -664,8 +701,8 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         }
     }
 
-    private fun dropIndexIfExists(c: Connection, table: String, indexName: String) {
-        val exists = c.prepareStatement(
+    private fun indexExists(c: Connection, table: String, indexName: String): Boolean =
+        c.prepareStatement(
             """
             SELECT 1 FROM information_schema.statistics
             WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
@@ -675,9 +712,10 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
             ps.setString(1, table); ps.setString(2, indexName)
             ps.executeQuery().use { it.next() }
         }
-        if (exists) {
-            c.createStatement().use { it.executeUpdate("ALTER TABLE $table DROP INDEX $indexName") }
-        }
+
+    private fun dropIndexIfExists(c: Connection, table: String, indexName: String) {
+        if (!indexExists(c, table, indexName)) return
+        c.createStatement().use { it.executeUpdate("ALTER TABLE $table DROP INDEX $indexName") }
     }
 
     private fun columnExists(c: Connection, table: String, column: String): Boolean =
