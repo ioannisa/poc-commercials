@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/kotlin-template-guard.sh\"",
+            "timeout": 15,
+            "statusMessage": "Checking Kotlin string templates"
+          }
+        ]
+      }
+    ]
+  }
+}
