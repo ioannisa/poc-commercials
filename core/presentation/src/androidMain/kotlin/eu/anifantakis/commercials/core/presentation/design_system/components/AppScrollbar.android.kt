@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.core.presentation.grids
+package eu.anifantakis.commercials.core.presentation.design_system.components
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
@@ -10,7 +10,7 @@ import androidx.compose.ui.Modifier
  */
 
 @Composable
-actual fun PlatformVerticalScrollbar(
+actual fun AppVerticalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier
 ) {
@@ -18,7 +18,7 @@ actual fun PlatformVerticalScrollbar(
 }
 
 @Composable
-actual fun PlatformVerticalScrollbar(
+actual fun AppVerticalScrollbar(
     lazyListState: LazyListState,
     modifier: Modifier
 ) {
@@ -26,7 +26,7 @@ actual fun PlatformVerticalScrollbar(
 }
 
 @Composable
-actual fun PlatformHorizontalScrollbar(
+actual fun AppHorizontalScrollbar(
     scrollState: ScrollState,
     modifier: Modifier
 ) {

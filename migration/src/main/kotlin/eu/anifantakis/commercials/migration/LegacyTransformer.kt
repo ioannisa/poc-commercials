@@ -37,12 +37,33 @@ class LegacyTransformer(
     targetSchema: String,
     private val stationByFlow: Map<Int, String>,
     private val log: (String) -> Unit,
+    /**
+     * (steps done, steps total, the step's label). The transform has no measurable
+     * quantity of its own - only a fixed sequence - so its bar counts steps, and
+     * says which one. Default no-op: the CLI prints text and wants none.
+     */
+    private val onStep: (done: Int, total: Int, label: String) -> Unit = { _, _, _ -> },
 ) {
     private val s = "`$scratchSchema`"
     private val t = "`$targetSchema`"
 
     /** The bare name - `information_schema` lookups cannot take the backticked form. */
     private val targetSchemaName = targetSchema
+
+    private var stepsDone = 0
+
+    /**
+     * Announce a step: log it AND advance the progress bar.
+     *
+     * The total is [TOTAL_STEPS], clamped so a stale constant can never make the
+     * bar exceed 100%, and run() finishes it at exactly 100% regardless - a
+     * forgotten update costs a slightly-off bar mid-run, never a wrong one.
+     */
+    private fun step(label: String) {
+        stepsDone++
+        onStep(stepsDone, maxOf(TOTAL_STEPS, stepsDone), label)
+        log(label)
+    }
 
     /**
      * The scratch-resident (forTV -> station_id) dictionary. JOINing it does two
@@ -112,45 +133,45 @@ class LegacyTransformer(
 
         createFlowStationMap()
 
-        log("Copying the legacy MySQL tables VERBATIM (faithful union layer)...")
+        step("Copying the legacy MySQL tables VERBATIM (faithful union layer)...")
         copyLegacyTables()
 
-        log("Migrating programmes (with their operator-assigned colours)...")
+        step("Migrating programmes (with their operator-assigned colours)...")
         val programs = migratePrograms()
 
-        log("Building the lee<->tra id mapping (triangular contracts)...")
+        step("Building the lee<->tra id mapping (triangular contracts)...")
         val triangular = buildLeeTraMap()
 
-        log("Migrating customers (recovering real names where possible)...")
+        step("Migrating customers (recovering real names where possible)...")
         val (customers, customersSynthetic, endClients) = migrateCustomers()
 
         // The type catalog MUST precede the product lines: lines carry
         // spot_type_id (z.mciid) and spots resolve their default line by type.
-        log("Migrating the ERP item catalog (the item classes the contract lines reference)...")
+        step("Migrating the ERP item catalog (the item classes the contract lines reference)...")
         val spotTypes = migrateSpotTypes()
         log("  $spotTypes spot types (the SEN import adds each type's ERP sales item)")
 
-        log("Migrating contracts and lines...")
+        step("Migrating contracts and lines...")
         val (contracts, contractsSynthetic) = migrateContracts()
         val lines = migrateContractLines()
 
-        log("Migrating spot catalog (triangular spots land on their END client)...")
+        step("Migrating spot catalog (triangular spots land on their END client)...")
         val spots = migrateSpots()
 
         // BULK-LOAD SHAPE: the read indexes come OFF before the big insert and go
         // back on after. Building an index ONCE over finished rows is far cheaper
         // than maintaining it across 4.1M inserts - measured on the real dump:
         // 77.5s with every index live, 60.0s this way (-23%).
-        log("Dropping the read-only indexes on placements for the bulk load...")
+        step("Dropping the read-only indexes on placements for the bulk load...")
         dropBulkLoadIndexes()
 
-        log("Migrating placements (this is the big one)...")
+        step("Migrating placements (this is the big one)...")
         val placements = migratePlacements()
 
         // legacy_id goes back IMMEDIATELY: the SEN enricher re-points every airing
         // to its charge with `WHERE sch.id = p.legacy_id`, and without the index
         // that join is 4.1M x 4.1M. (2.6s to build - do not defer it.)
-        log("Rebuilding the legacy_id index (the enricher joins airings on it)...")
+        step("Rebuilding the legacy_id index (the enricher joins airings on it)...")
         rebuildLegacyIndex()
 
         // The breaks are not migrated - they EMERGE. This is a report, not a
@@ -159,32 +180,34 @@ class LegacyTransformer(
         val breaks = countBreakTimes()
         log("  $breaks distinct break times emerged from the airings")
 
-        log("Backfilling each spot's DEFAULT product line from its own airings...")
+        step("Backfilling each spot's DEFAULT product line from its own airings...")
         val defaultLines = backfillSpotDefaultLines()
         log("  $defaultLines spots got a default line (multi-line documents)")
 
-        log("Backfilling provisional contract period dates from placements (until the ERP import)...")
+        step("Backfilling provisional contract period dates from placements (until the ERP import)...")
         val provisionalContracts = backfillProvisionalContractDates()
         log("  $provisionalContracts contracts got provisional start/end dates (dates_provisional=TRUE)")
 
-        log("Migrating flow comments and print audit...")
+        step("Migrating flow comments and print audit...")
         val comments = migrateFlowComments()
         val audits = migratePrintAudit()
 
-        log("Migrating email archive (bodies capped at ${StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER}/customer, summaries for all)...")
+        step("Migrating email archive (bodies capped at ${StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER}/customer, summaries for all)...")
         val (emails, emailBodiesKept) = migrateEmailHistory()
 
-        log("Migrating airtime price zones (full price history)...")
+        step("Migrating airtime price zones (full price history)...")
         val (zones, zoneFillers) = migrateZones()
 
         // LAST. Nothing in the migration reads it - it exists for the app's month
         // grid - so it is built once, over finished rows, at the very end. It is
         // also the widest index on the biggest table, so it is the one that costs
         // most to carry through a bulk load.
-        log("Rebuilding the month-grid index (app read path; nothing here uses it)...")
+        step("Rebuilding the month-grid index (app read path; nothing here uses it)...")
         rebuildGridIndex()
 
         writeMeta()
+        // Finish the bar honestly: whatever TOTAL_STEPS says, the run is over.
+        onStep(stepsDone, stepsDone, "")
 
         val range = c.createStatement().use { st ->
             st.executeQuery("SELECT MIN(show_date), MAX(show_date) FROM $t.placements").use { rs ->
@@ -1208,6 +1231,15 @@ class LegacyTransformer(
         }
 
     companion object {
+        /**
+         * How many [step] calls [run] makes. Keep it in sync when adding a step -
+         * but a stale value is survivable by construction: [step] clamps the total
+         * so the bar can never exceed 100%, and [run] finishes it at exactly 100%
+         * whatever this says. A drift costs a slightly-off bar mid-run, never a
+         * wrong one and never a crash.
+         */
+        const val TOTAL_STEPS = 16
+
         const val SYNTHETIC_NOTE =
             "SYNTHETIC placeholder - real data lives in the ERP (Oracle) and was not part of the legacy MySQL dump"
 

@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.migration_console.domain.MigrationGrou
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationMapping
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStart
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStationTally
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationProgress
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationSummary
 import eu.anifantakis.commercials.feature.migration_console.domain.data_source.RemoteMigrationDataSource
@@ -59,6 +60,14 @@ private data class StationTallyDto(
 )
 
 @Serializable
+private data class ProgressDto(
+    val phase: String,
+    val label: String,
+    val done: Long,
+    val total: Long,
+)
+
+@Serializable
 private data class SummaryDto(
     val breaks: Int,
     val customers: Int,
@@ -83,6 +92,7 @@ private data class SummaryDto(
 private data class StatusDto(
     val state: String = "IDLE",
     val log: List<String> = emptyList(),
+    val progress: ProgressDto? = null,
     val flows: List<FlowInfoDto> = emptyList(),
     val summary: SummaryDto? = null,
     val error: String? = null,
@@ -110,6 +120,7 @@ private fun SummaryDto.toDomain() = MigrationSummary(
 private fun StatusDto.toDomain() = MigrationStatus(
     state = state,
     log = log,
+    progress = progress?.let { MigrationProgress(it.phase, it.label, it.done, it.total) },
     flows = flows.map { MigrationFlowInfo(it.forTv, it.spots, it.placements) },
     summary = summary?.toDomain(),
     error = error,

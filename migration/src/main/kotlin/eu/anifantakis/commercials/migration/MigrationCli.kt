@@ -147,7 +147,7 @@ private fun runMigration(opts: Options) {
             it.executeUpdate("CREATE DATABASE `$scratch` DEFAULT CHARACTER SET utf8mb4")
         }
         println("\nReplaying dump into scratch schema '$scratch' (irrelevant tables skipped)...")
-        val replayed = DumpReplayer(c, scratch) { println(it) }.replay(dumpFile)
+        val replayed = DumpReplayer(c, scratch, log = { println(it) }).replay(dumpFile)
         replayed.forEach { (table, rows) -> println("  %-28s %,d rows".format(table, rows)) }
 
         // ── 4. map each flow to a station of the group ──────────────────
@@ -179,8 +179,9 @@ private fun runMigration(opts: Options) {
         )
         println("Transforming ...")
         val summary = LegacyTransformer(
-            c, scratch, schema, stations.mapValues { (_, st) -> st.first }
-        ) { println("  $it") }.run()
+            c, scratch, schema, stations.mapValues { (_, st) -> st.first },
+            log = { println("  $it") },
+        ).run()
 
         println(
             """
@@ -217,7 +218,7 @@ private fun runMigration(opts: Options) {
             val senDir = File(senDirPath)
             require(senDir.isDirectory) { "--sen-dir is not a directory: $senDirPath" }
             println("\nEnriching from the SEN exports in $senDirPath ...")
-            val senSummary = SenErpEnricher(c, schema) { println("  $it") }
+            val senSummary = SenErpEnricher(c, schema, log = { println("  $it") })
                 .enrich(senDir, apply = true, legacyScratchSchema = scratch)
             printSenSummary(senSummary, apply = true)
         } else {

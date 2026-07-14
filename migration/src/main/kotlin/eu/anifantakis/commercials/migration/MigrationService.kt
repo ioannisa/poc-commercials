@@ -77,6 +77,8 @@ class MigrationService(private val registry: StationRegistry) {
     data class Snapshot(
         val state: State,
         val log: List<String>,
+        /** Null until something measurable is running (see [Progress]). */
+        val progress: Progress?,
         val flows: List<FlowInfo>,
         val summary: LegacyTransformer.Summary?,
         val error: String?,
@@ -87,6 +89,24 @@ class MigrationService(private val registry: StationRegistry) {
 
     /** A group the operator can migrate into, as offered by the wizard. */
     data class GroupOption(val id: String, val name: String, val schema: String)
+
+    /**
+     * Where the migration is, in numbers the operator can trust.
+     *
+     * NOT invented: [done]/[total] is megabytes of the dump during the replay (the
+     * only phase with a real measurable size, and the longest), and steps-completed
+     * during the transform and the enrichment. When a phase can offer no honest
+     * number, [total] is 0 and the bar must render INDETERMINATE rather than guess.
+     */
+    data class Progress(
+        /** REPLAY | TRANSFORM | ENRICH - which bar, and what the unit means. */
+        val phase: String,
+        /** The step or file being worked on, for the caption under the bar. */
+        val label: String,
+        val done: Long,
+        /** 0 = no honest total; show an indeterminate bar. */
+        val total: Long,
+    )
 
     data class StartRequest(
         val dumpPath: String,
@@ -133,6 +153,7 @@ class MigrationService(private val registry: StationRegistry) {
     @Volatile private var flows: List<FlowInfo> = emptyList()
     @Volatile private var summary: LegacyTransformer.Summary? = null
     @Volatile private var error: String? = null
+    @Volatile private var progress: Progress? = null
     @Volatile private var request: StartRequest? = null
     /** Set at start(): the group is either already hosted or brand new. */
     @Volatile private var existingGroup: GroupConfig? = null
@@ -143,6 +164,7 @@ class MigrationService(private val registry: StationRegistry) {
     fun snapshot() = Snapshot(
         state = state,
         log = logLines.toList(),
+        progress = progress,
         flows = flows,
         summary = summary,
         error = error,
@@ -157,7 +179,7 @@ class MigrationService(private val registry: StationRegistry) {
         check(state in setOf(State.DONE, State.FAILED, State.IDLE)) { "A migration is still running" }
         state = State.IDLE
         logLines.clear(); flows = emptyList(); summary = null; error = null
-        request = null; existingGroup = null
+        request = null; existingGroup = null; progress = null
     }
 
     /**
@@ -224,7 +246,12 @@ class MigrationService(private val registry: StationRegistry) {
                         it.executeUpdate("DROP DATABASE IF EXISTS `$scratch`")
                         it.executeUpdate("CREATE DATABASE `$scratch` DEFAULT CHARACTER SET utf8mb4")
                     }
-                    val replayed = DumpReplayer(c, scratch, ::log).replay(dump)
+                    val replayed = DumpReplayer(
+                        c, scratch, ::log,
+                        onProgress = { mb, totalMb ->
+                            progress = Progress("REPLAY", dump.name, mb, totalMb)
+                        },
+                    ).replay(dump)
                     replayed.forEach { (table, rows) -> log("  %-28s %,d rows".format(table, rows)) }
 
                     flows = c.createStatement().use { st ->
@@ -297,12 +324,24 @@ class MigrationService(private val registry: StationRegistry) {
                     // Belt and braces: the one offending statement was also rewritten
                     // (SenErpEnricher, "synthetic lines nothing references any more").
                     c.catalog = schema
-                    summary = LegacyTransformer(c, scratch, schema, stationByFlow) { log("  $it") }.run()
+                    summary = LegacyTransformer(
+                        c, scratch, schema, stationByFlow,
+                        log = { log("  $it") },
+                        onStep = { done, total, label ->
+                            progress = Progress("TRANSFORM", label, done.toLong(), total.toLong())
+                        },
+                    ).run()
                     req.senDirPath?.let { senDir ->
                         // ONCE per group: everything it fills (customers, contract
                         // periods, gift flags, the ERP item catalog) is group-scoped.
                         log("Enriching from the SEN (Oracle ERP) exports in $senDir ...")
-                        SenErpEnricher(c, schema) { log("  $it") }
+                        SenErpEnricher(
+                            c, schema,
+                            log = { log("  $it") },
+                            onStep = { done, total, label ->
+                                progress = Progress("ENRICH", label, done.toLong(), total.toLong())
+                            },
+                        )
                             .enrich(File(senDir), apply = true, legacyScratchSchema = scratch)
                     } ?: log("(no SEN folder given - the ERP enrichment can run later from the CLI)")
                     c.createStatement().use { it.executeUpdate("DROP DATABASE `$scratch`") }
@@ -313,6 +352,7 @@ class MigrationService(private val registry: StationRegistry) {
                     hostLive(req, stations)
                 }
                 log("Migration finished.")
+                progress = null
                 state = State.DONE
             } catch (e: Exception) {
                 fail(e)
@@ -359,6 +399,8 @@ class MigrationService(private val registry: StationRegistry) {
     }
 
     private fun fail(e: Exception) {
+        // A half-filled bar next to "FAILED" reads as "still working" - clear it.
+        progress = null
         error = e.message ?: e.toString()
         log("FAILED: $error")
         // The message ALONE is close to useless on a migration: "No database

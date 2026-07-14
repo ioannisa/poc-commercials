@@ -43,6 +43,13 @@ class DumpReplayer(
     private val connection: Connection,
     private val scratchSchema: String,
     private val log: (String) -> Unit,
+    /**
+     * (megabytes replayed, megabytes total). The ONLY phase of a migration with a
+     * genuinely measurable total - the dump's size on disk - and also the longest,
+     * so it is the one the operator most needs a real bar for. Default no-op: the
+     * CLI prints text and wants none.
+     */
+    private val onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
 ) {
 
     fun replay(dumpFile: File): Map<String, Long> {
@@ -55,7 +62,9 @@ class DumpReplayer(
 
         var bytesRead = 0L
         var lastReportedMb = 0L
+        var lastProgressMb = -1L
         val totalMb = dumpFile.length() / 1_048_576
+        onProgress(0, totalMb)
 
         dumpFile.bufferedReader(Charsets.UTF_8).use { reader ->
             val stmt = connection.createStatement()
@@ -69,6 +78,13 @@ class DumpReplayer(
                     if (mb >= lastReportedMb + 100) {
                         lastReportedMb = mb
                         log("  ... replayed $mb/$totalMb MB")
+                    }
+                    // Progress on its own channel, far more often than the log:
+                    // this is the ONE phase with a genuinely measurable total, and
+                    // it is also the longest, so the bar must actually move.
+                    if (mb != lastProgressMb) {
+                        lastProgressMb = mb
+                        onProgress(mb, totalMb)
                     }
 
                     when {

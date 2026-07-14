@@ -317,6 +317,12 @@ enum class StringKey(val json: String = "") {
     MIGRATION_ERROR,
     MIGRATION_START_ANOTHER,
     MIGRATION_PROGRESS,
+
+    // The migration's three phases, for the caption under the progress bar. The
+    // server names the phase (REPLAY/TRANSFORM/ENRICH); the operator reads these.
+    MIGRATION_PHASE_REPLAY,
+    MIGRATION_PHASE_TRANSFORM,
+    MIGRATION_PHASE_ENRICH,
     MIGRATION_PICK_DUMP,
     MIGRATION_SEN_DIR,
     MIGRATION_PICK_SEN_DIR,

@@ -63,6 +63,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            api(projects.core.presentation)   // AppVerticalScrollbar & the design system
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

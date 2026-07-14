@@ -57,7 +57,29 @@ class SenErpEnricher(
     private val c: Connection,
     private val schema: String,
     private val log: (String) -> Unit = {},
+    /**
+     * (steps done, steps total, label). Like the transform, the enrichment has no
+     * measurable quantity of its own - just a fixed sequence of phases - so its
+     * bar counts them. Default no-op: the CLI prints text and wants none.
+     */
+    private val onStep: (done: Int, total: Int, label: String) -> Unit = { _, _, _ -> },
 ) {
+
+    private var stepsDone = 0
+
+    companion object {
+        /** How many [step] calls [enrich] makes. A stale value is survivable - see [step]. */
+        const val TOTAL_STEPS = 8
+    }
+
+    /**
+     * Advance the bar. The total is clamped, and [enrich] finishes it at exactly
+     * 100%, so a stale [TOTAL_STEPS] costs a slightly-off bar and nothing worse.
+     */
+    private fun step(label: String) {
+        stepsDone++
+        onStep(stepsDone, maxOf(TOTAL_STEPS, stepsDone), label)
+    }
 
     data class Summary(
         var customersExamined: Int = 0,
@@ -117,6 +139,7 @@ class SenErpEnricher(
         log("needed from MySQL: ${neededLegacyIds.size} trader ids, ${neededLeeIds.size} lee ids, ${neededDocIds.size} doc ids")
 
         // ── targeted SEN reads (only rows the schema asks for) ──────────────
+        step("Reading the SEN exports")
         val cus = parse(senDir, "cus", keyColumn = "TRAID", keys = neededLegacyIds, s = s)
         val traidToLeeId = cus?.rows?.associate { cus.value(it, "TRAID") to cus.value(it, "LEEID") }.orEmpty()
         val allLeeIds = neededLeeIds + traidToLeeId.values.filter { it.isNotEmpty() }
@@ -129,21 +152,29 @@ class SenErpEnricher(
         val ssd = parse(senDir, "ssd", keyColumn = "DOCID", keys = neededDocIds, s = s)
         val sti = parse(senDir, "sti", s = s) // 224-row item catalog
 
+        step("Materializing the SEN tables")
         materializeSenTables(lee, cus, adr, sld, ssd, sdt, sti, apply, s)
 
+        step("Customers: real names, VAT, contacts")
         if (lee != null) enrichCustomers(lee, traidToLeeId, cus, adr, apply, s)
         else log("lee.csv absent - customer identity/contact phases skipped")
+        step("Contracts: ERP periods and gift flags")
         if (sld != null) enrichContracts(sld, sdt, apply, s)
         else log("sld.csv absent - contract phase skipped")
         // BEFORE the catalog phase: the recovered lines may reference item
         // classes no z_commercials row ever did, and they must gain their
         // STI name/code in the same run.
+        step("Recovering the contract lines z_commercials missed")
         if (ssd != null) recoverMissingContractLines(apply, s)
+        step("Contract lines: agreed quantities")
         if (ssd != null) enrichLineQuantities(ssd, apply, s)
         else log("ssd.csv absent - product lines + quantities skipped")
+        step("The ERP item catalog")
         if (sti != null) enrichSpotTypeCatalog(sti, legacyScratchSchema, apply, s)
         else log("sti.csv absent - spot-type catalog phase skipped")
+        step("Provisional contract dates")
         backfillProvisional(apply, s)
+        onStep(stepsDone, stepsDone, "")
         return s
     }
 

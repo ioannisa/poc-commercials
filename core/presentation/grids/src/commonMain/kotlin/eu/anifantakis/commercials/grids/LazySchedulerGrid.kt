@@ -1,6 +1,8 @@
 package eu.anifantakis.commercials.core.presentation.grids
 
 import androidx.compose.foundation.ScrollState
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppHorizontalScrollbar
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppVerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -438,12 +440,12 @@ fun LazySchedulerGrid(
                     }
                 }
             }
-            PlatformVerticalScrollbar(
+            AppVerticalScrollbar(
                 lazyListState = lazyListState,
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             )
             }
-            PlatformHorizontalScrollbar(
+            AppHorizontalScrollbar(
                 scrollState = horizontalScrollState,
                 modifier = Modifier.fillMaxWidth(),
             )

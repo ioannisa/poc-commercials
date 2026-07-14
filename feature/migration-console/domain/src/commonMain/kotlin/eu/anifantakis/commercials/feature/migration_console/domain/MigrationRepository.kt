@@ -80,9 +80,29 @@ data class MigrationSummary(
     val stations: List<MigrationStationTally> = emptyList(),
 )
 
+/**
+ * Where the migration is - in numbers the server MEASURED, never guessed.
+ *
+ * [done]/[total] is megabytes of the dump while replaying (the only phase with a
+ * real size, and by far the longest) and steps while transforming or enriching.
+ * [total] == 0 means the phase can offer no honest total, and the bar must render
+ * INDETERMINATE - a made-up percentage is worse than an honest "working".
+ */
+data class MigrationProgress(
+    val phase: String,
+    val label: String,
+    val done: Long,
+    val total: Long,
+) {
+    /** 0f..1f, or null when there is nothing honest to show. */
+    val fraction: Float? get() = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
+}
+
 data class MigrationStatus(
     val state: String = "IDLE",
     val log: List<String> = emptyList(),
+    /** Null when nothing measurable is running. */
+    val progress: MigrationProgress? = null,
     val flows: List<MigrationFlowInfo> = emptyList(),
     val summary: MigrationSummary? = null,
     val error: String? = null,

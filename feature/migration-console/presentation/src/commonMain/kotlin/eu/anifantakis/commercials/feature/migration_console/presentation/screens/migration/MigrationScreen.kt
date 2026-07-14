@@ -51,6 +51,11 @@ import eu.anifantakis.commercials.core.presentation.files.nativeFilePickerAvaila
 import eu.anifantakis.commercials.core.presentation.files.pickFileNative
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.foundation.layout.fillMaxHeight
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationProgress
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppVerticalScrollbar
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppProgressBar
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppLogConsole
 
 /**
  * Super-admin migration tool: point the SERVER at a legacy mysqldump file,
@@ -417,29 +422,25 @@ private fun MigrationScreen(
             ServerFileBrowserDialog(browser = browser, onIntent = onIntent)
         }
 
-        // ── live log ────────────────────────────────────────────────────
+        // ── live progress + log ─────────────────────────────────────────
         if (status.log.isNotEmpty()) {
             AppText(Strings[StringKey.MIGRATION_PROGRESS], AppTextStyle.SECTION_TITLE)
             Spacer(Modifier.height(UIConst.paddingExtraSmall))
-            val listState = rememberLazyListState()
-            LaunchedEffect(status.log.size) {
-                if (status.log.isNotEmpty()) listState.scrollToItem(status.log.size - 1)
+
+            // The bar only appears while the server has something MEASURED to
+            // report (see MigrationProgress). A finished or failed run clears it
+            // server-side rather than freezing it at 97%, which would read as
+            // "still working".
+            status.progress?.let { p ->
+                AppProgressBar(
+                    fraction = p.fraction,
+                    caption = "${migrationPhaseLabel(p.phase)} — ${p.label}",
+                    detail = migrationProgressDetail(p),
+                )
+                Spacer(Modifier.height(UIConst.paddingSmall))
             }
-            // Console colours/heights are the console's own look - only the
-            // container spacing is on the UIConst ladder.
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp, max = 320.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(UIConst.paddingSmall)
-            ) {
-                items(status.log) { line ->
-                    AppText(line, AppTextStyle.LOG_LINE)
-                }
-            }
+
+            AppLogConsole(lines = status.log)
         }
     }
 }
@@ -474,7 +475,11 @@ private fun ServerFileBrowserDialog(
         browser.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
-        LazyColumn(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
+        // A directory can hold hundreds of entries; without a visible scrollbar
+        // the pane looks like it is showing all of them.
+        val browseState = rememberLazyListState()
+        Row(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 380.dp)) {
+        LazyColumn(state = browseState, modifier = Modifier.weight(1f).fillMaxHeight()) {
             listing?.parent?.let { parent ->
                 item(key = "..") {
                     Row(
@@ -518,5 +523,33 @@ private fun ServerFileBrowserDialog(
                 }
             }
         }
+        AppVerticalScrollbar(
+            lazyListState = browseState,
+            modifier = Modifier.fillMaxHeight(),
+        )
+        }
     }
+}
+
+
+/** The server names the phase; the operator reads it in his own language. */
+@Composable
+private fun migrationPhaseLabel(phase: String): String = Strings[
+    when (phase) {
+        "REPLAY" -> StringKey.MIGRATION_PHASE_REPLAY
+        "TRANSFORM" -> StringKey.MIGRATION_PHASE_TRANSFORM
+        else -> StringKey.MIGRATION_PHASE_ENRICH
+    }
+]
+
+/**
+ * The bar's right-hand figure, in the PHASE'S OWN UNIT - megabytes while reading
+ * the dump, steps while transforming or enriching. Not a percentage: the percent
+ * is already the bar, and "1204/1707 MB" is what tells the operator whether to go
+ * and make coffee.
+ */
+private fun migrationProgressDetail(p: MigrationProgress): String? = when {
+    p.total <= 0L -> null
+    p.phase == "REPLAY" -> "${p.done}/${p.total} MB"
+    else -> "${p.done}/${p.total}"
 }

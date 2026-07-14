@@ -93,12 +93,27 @@ data class MigrationSummaryDto(
 data class MigrationStatusDto(
     val state: String,
     val log: List<String>,
+    /** Null when nothing measurable is running - the UI then shows no bar. */
+    val progress: MigrationProgressDto? = null,
     val flows: List<MigrationFlowInfoDto> = emptyList(),
     val summary: MigrationSummaryDto? = null,
     val error: String? = null,
     val schema: String? = null,
     /** The hosted groups, so the wizard can offer them as targets. */
     val groups: List<MigrationGroupDto> = emptyList(),
+)
+
+/**
+ * Honest progress: [done] of [total], in the phase's own unit (megabytes of the
+ * dump while replaying, steps while transforming/enriching). [total] = 0 means
+ * there IS no honest total - render an indeterminate bar, never a guessed one.
+ */
+@Serializable
+data class MigrationProgressDto(
+    val phase: String,
+    val label: String,
+    val done: Long,
+    val total: Long,
 )
 
 @Serializable
@@ -205,6 +220,7 @@ fun Route.migrationRoutes(
 private fun MigrationService.Snapshot.toDto() = MigrationStatusDto(
     state = state.name,
     log = log,
+    progress = progress?.let { MigrationProgressDto(it.phase, it.label, it.done, it.total) },
     flows = flows.map { MigrationFlowInfoDto(it.forTv, it.spots, it.placements) },
     summary = summary?.let {
         MigrationSummaryDto(

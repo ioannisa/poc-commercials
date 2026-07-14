@@ -110,7 +110,7 @@ private fun run(opts: Opts) {
 
     val url = "jdbc:mysql://$host:$port/?useUnicode=true&characterEncoding=utf8&allowPublicKeyRetrieval=true&useSSL=false"
     DriverManager.getConnection(url, user, password).use { c ->
-        val summary = SenErpEnricher(c, schema) { println("  $it") }.enrich(dir, apply, legacyScratch)
+        val summary = SenErpEnricher(c, schema, log = { println("  $it") }).enrich(dir, apply, legacyScratch)
         printSenSummary(summary, apply)
         if (!apply) println("Nothing was written. Re-run with --apply to perform the update.")
     }
