@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.core.presentation.design_system.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,10 +13,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.core.presentation.design_system.text.nativePlatformImeOptions
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * THE single `OutlinedTextField` of the app (skill rule: one base field,
@@ -147,3 +152,118 @@ fun AppPasswordField(
         if (visible) VisualTransformation.None else PasswordVisualTransformation(),
     keyboardOptions = keyboardOptions,
 )
+
+// The base field: the states the thin wrappers cannot show - read-only, a caller
+// supplied trailing slot, and multi-line.
+@Preview
+@Composable
+private fun AppWireframeFieldPreview() = AppPreview {
+    Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        AppWireframeField(
+            value = "",
+            onValueChange = {},
+            label = "Spot title",
+            placeholder = "Summer campaign 30s",
+        )
+        AppWireframeField(
+            value = "Summer campaign 30s",
+            onValueChange = {},
+            label = "Spot title",
+            trailingIcon = { AppIcon(AppIcons.clear, contentDescription = null) },
+        )
+        AppWireframeField(
+            value = "Crete TV",
+            onValueChange = {},
+            label = "Station",
+            readOnly = true,
+            leadingIcon = AppIcons.dns,
+        )
+        AppWireframeField(
+            value = "Two spots moved out of the 21:00 break at the customer's request.",
+            onValueChange = {},
+            label = "Break notes",
+            singleLine = false,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun AppTextFieldPreview() = AppPreview {
+    Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        // Empty (placeholder showing), filled, in error, and disabled: the four
+        // states every form field actually lives in.
+        AppTextField(
+            value = "",
+            onValueChange = {},
+            label = "Customer",
+            placeholder = "Aegean Foods",
+            leadingIcon = AppIcons.person,
+        )
+        AppTextField(
+            value = "CTV-2026-014",
+            onValueChange = {},
+            label = "Contract number",
+            leadingIcon = AppIcons.numbers,
+        )
+        AppTextField(
+            value = "25:00",
+            onValueChange = {},
+            label = "Break time",
+            isError = true,
+            errorText = "Not a valid time of day",
+            leadingIcon = AppIcons.timer,
+        )
+        AppTextField(
+            value = "Radio 984",
+            onValueChange = {},
+            label = "Station",
+            enabled = false,
+            leadingIcon = AppIcons.dns,
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun AppPasswordFieldPreview() = AppPreview {
+    Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        // Masked and revealed are the SAME field with the eye toggle flipped -
+        // previewing one hides half the component.
+        AppPasswordField(
+            value = "traffic-desk-2026",
+            onValueChange = {},
+            label = "Password",
+            visible = false,
+            onToggleVisibility = {},
+            leadingIcon = AppIcons.lock,
+        )
+        AppPasswordField(
+            value = "traffic-desk-2026",
+            onValueChange = {},
+            label = "Password",
+            visible = true,
+            onToggleVisibility = {},
+            leadingIcon = AppIcons.lock,
+        )
+        AppPasswordField(
+            value = "wrong",
+            onValueChange = {},
+            label = "Password",
+            visible = false,
+            onToggleVisibility = {},
+            isError = true,
+            errorText = "Wrong password for this station account",
+            leadingIcon = AppIcons.lock,
+        )
+        AppPasswordField(
+            value = "traffic-desk-2026",
+            onValueChange = {},
+            label = "Password",
+            visible = false,
+            onToggleVisibility = {},
+            enabled = false,
+            leadingIcon = AppIcons.lock,
+        )
+    }
+}

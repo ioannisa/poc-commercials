@@ -125,3 +125,14 @@ groups:
     stations:
       - id: channel-4
         name: "Channel 4"
+
+  - id: test-group
+    name: "Test Group"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_test_group?useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: rootpass123
+    stations:
+      - id: test-tv
+        name: "Test TV"
+      - id: test-radio
+        name: "Test Radio"

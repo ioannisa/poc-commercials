@@ -21,6 +21,24 @@ kotlin {
             implementation(catalog.findLibrary("compose-foundation").get())
             implementation(catalog.findLibrary("compose-material3").get())
             implementation(catalog.findLibrary("compose-ui").get())
+            // The @Preview annotation, in COMMON code: every presentation module
+            // gets it here rather than repeating the dependency seven times.
+            //
+            // This artifact publishes `androidx.compose.ui.tooling.preview` into
+            // commonMain. Do NOT reach for components-ui-tooling-preview and its
+            // `org.jetbrains.compose.ui.tooling.preview.Preview` - same annotation,
+            // same rendering, but deprecated in favour of this one, and 46 previews
+            // is a lot of places to have to un-deprecate later.
+            //
+            // `api`, not `implementation` - a preview in a downstream module is
+            // annotated with a type this module hands it.
+            api(catalog.findLibrary("compose-uiToolingPreview").get())
+
+            // The renderer engine for the IDE's Compose Preview.
+            // ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter
+            // is thrown when this is missing.
+            implementation(catalog.findLibrary("compose-uiTooling").get())
+
             implementation(catalog.findLibrary("material-icons-extended").get())
             implementation(catalog.findLibrary("androidx-lifecycle-viewmodelCompose").get())
             implementation(catalog.findLibrary("androidx-lifecycle-runtimeCompose").get())

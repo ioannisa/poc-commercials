@@ -15,6 +15,14 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import eu.anifantakis.commercials.core.presentation.design_system.CommercialsTheme
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.global_state.GlobalState
+import eu.anifantakis.commercials.core.presentation.string_resources.LocalizationProvider
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
 /**
@@ -55,6 +63,56 @@ fun ApplicationScaffold(
                 isLoading = globalState.isLoading,
                 isCritical = globalState.isCriticalLoading,
             )
+        }
+    }
+}
+
+/*
+ * The scaffold's Koin dependency is a DEFAULT argument, not a body call - which is
+ * exactly what lets a preview hand it a plain container and never start Koin.
+ *
+ * The three previews below are the three things the scaffold is FOR: the idle
+ * chrome, the ambient (non-blocking) loading bar, and the critical overlay that
+ * blocks the whole app. The last one in particular can only be judged by looking
+ * at it on top of real content.
+ */
+
+@Preview
+@Composable
+private fun ApplicationScaffoldPreview() = CommercialsTheme {
+    LocalizationProvider {
+        ApplicationScaffold(globalStateContainer = GlobalStateContainer()) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                AppText("Timetable", AppTextStyle.SCREEN_TITLE)
+            }
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun ApplicationScaffoldLoadingPreview() = CommercialsTheme {
+    LocalizationProvider {
+        ApplicationScaffold(
+            globalStateContainer = GlobalStateContainer(GlobalState(isLoading = true)),
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                AppText("Content stays usable while this loads", AppTextStyle.BODY)
+            }
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun ApplicationScaffoldCriticalLoadingPreview() = CommercialsTheme {
+    LocalizationProvider {
+        ApplicationScaffold(
+            globalStateContainer = GlobalStateContainer(GlobalState(isCriticalLoading = true)),
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                AppText("This content is blocked", AppTextStyle.BODY)
+            }
         }
     }
 }

@@ -12,6 +12,8 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import eu.anifantakis.commercials.feature.databases.domain.DeleteMode
+import eu.anifantakis.commercials.feature.databases.domain.HostedStation
+import kotlinx.collections.immutable.persistentListOf
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -234,4 +239,76 @@ private fun DeleteStationDialog(
         )
         dialog.error?.let { AppText(it.asString(), AppTextStyle.ERROR_NOTE) }
     }
+}
+
+// ── previews ────────────────────────────────────────────────────────────────
+
+/**
+ * Two stations SHARING a group database plus one unreachable station - the three
+ * rows whose rendering differs. A list of three identical healthy stations would
+ * prove nothing.
+ */
+private val previewStations = persistentListOf(
+    HostedStation(
+        id = "crete-tv",
+        name = "Crete TV",
+        database = "db1.internal:3306/commercials_crete",
+        placements = 18_432,
+        dateRange = "01/01/2024 - 31/07/2026",
+        groupId = "crete-group",
+        groupName = "Crete Media Group",
+        siblings = listOf("Radio 984"),
+    ),
+    HostedStation(
+        id = "radio-984",
+        name = "Radio 984",
+        database = "db1.internal:3306/commercials_crete",
+        placements = 4_107,
+        dateRange = "12/03/2025 - 30/06/2026",
+        groupId = "crete-group",
+        groupName = "Crete Media Group",
+        siblings = listOf("Crete TV"),
+    ),
+    HostedStation(
+        id = "aegean-fm",
+        name = "Aegean FM",
+        database = "db2.internal:3306/commercials_aegean",
+        reachable = false,
+        groupId = "aegean-group",
+        groupName = "Aegean Broadcasting",
+    ),
+)
+
+@Preview
+@Composable
+private fun DatabasesScreenPreview() = AppPreview(padded = false) {
+    DatabasesScreen(
+        state = DatabasesState(stations = previewStations),
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+/** No hosted station yet - the header row is the whole screen. */
+@Preview
+@Composable
+private fun DatabasesScreenEmptyPreview() = AppPreview(padded = false) {
+    DatabasesScreen(
+        state = DatabasesState(),
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+/** The admin API is down: the banner must not be mistaken for a station row. */
+@Preview
+@Composable
+private fun DatabasesScreenErrorPreview() = AppPreview(padded = false) {
+    DatabasesScreen(
+        state = DatabasesState(
+            error = UiText.Dynamic("Could not reach the station admin API"),
+        ),
+        onIntent = {},
+        onNavIntent = {},
+    )
 }

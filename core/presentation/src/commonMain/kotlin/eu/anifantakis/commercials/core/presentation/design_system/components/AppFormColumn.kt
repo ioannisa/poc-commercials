@@ -9,8 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isUnspecified
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * The centred-form idiom (`widthIn(max=420/560).fillMaxWidth()`): on
@@ -36,4 +41,40 @@ fun AppFormColumn(
         verticalArrangement = verticalArrangement,
         content = content,
     )
+}
+
+// The default cap: on a wide window the form stays a readable column instead of
+// stretching a login box across a 27" monitor.
+@Preview
+@Composable
+private fun AppFormColumnPreview() = AppPreview {
+    AppFormColumn(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        AppText("Book a spot", AppTextStyle.SECTION_TITLE)
+        AppTextField(value = "Aegean Foods", onValueChange = {}, label = "Customer", leadingIcon = AppIcons.person)
+        AppTextField(value = "Crete TV", onValueChange = {}, label = "Station", leadingIcon = AppIcons.dns)
+        AppTextField(value = "21:00", onValueChange = {}, label = "Break", leadingIcon = AppIcons.timer)
+        AppButton(text = "Confirm booking", onClick = {}, fillMaxWidth = true)
+    }
+}
+
+// An explicit, narrower cap - the literal stays visible at the call site.
+@Preview
+@Composable
+private fun AppFormColumnNarrowPreview() = AppPreview {
+    AppFormColumn(
+        maxWidth = 280.dp,
+        verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+    ) {
+        AppText("Sign in", AppTextStyle.SECTION_TITLE)
+        AppTextField(value = "traffic@crete-tv.example", onValueChange = {}, label = "Email", leadingIcon = AppIcons.email)
+        AppPasswordField(
+            value = "traffic-desk-2026",
+            onValueChange = {},
+            label = "Password",
+            visible = false,
+            onToggleVisibility = {},
+            leadingIcon = AppIcons.lock,
+        )
+        AppButton(text = "Sign in", onClick = {}, fillMaxWidth = true)
+    }
 }

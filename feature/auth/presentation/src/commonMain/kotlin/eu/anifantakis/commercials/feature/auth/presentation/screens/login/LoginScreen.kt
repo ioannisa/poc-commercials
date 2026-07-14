@@ -23,10 +23,13 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -167,4 +170,60 @@ private fun LoginScreen(
             }
         }
     }
+}
+
+// ── previews ────────────────────────────────────────────────────────────────
+// The four states this card can actually be in. The happy path alone would hide
+// the three that are worth looking at: a disabled/busy submit, the error note
+// pushing the buttons down, and recovery mode (an EXTRA field, a different title
+// and different button labels - a layout the idle preview never renders).
+
+@Preview
+@Composable
+private fun LoginScreenPreview() = AppPreview(padded = false) {
+    LoginScreen(
+        state = LoginState(username = "maria.k"),
+        onIntent = {},
+    )
+}
+
+@Preview
+@Composable
+private fun LoginScreenLoadingPreview() = AppPreview(padded = false) {
+    LoginScreen(
+        state = LoginState(
+            username = "maria.k",
+            password = "secret-pass",
+            isLoading = true,
+        ),
+        onIntent = {},
+    )
+}
+
+@Preview
+@Composable
+private fun LoginScreenErrorPreview() = AppPreview(padded = false) {
+    LoginScreen(
+        state = LoginState(
+            username = "maria.k",
+            password = "secret-pass",
+            errorMessage = UiText.Dynamic("Wrong username or password"),
+        ),
+        onIntent = {},
+    )
+}
+
+@Preview
+@Composable
+private fun LoginScreenRecoveryPreview() = AppPreview(padded = false) {
+    LoginScreen(
+        state = LoginState(
+            username = "maria.k",
+            recoveryCode = "7QF3-2K9D-8ZP4-1XR6",
+            password = "new-secret-pass",
+            recoveryMode = true,
+            passwordVisible = true,
+        ),
+        onIntent = {},
+    )
 }

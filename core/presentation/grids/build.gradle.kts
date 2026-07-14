@@ -74,6 +74,10 @@ kotlin {
             // their API - both are part of this module's public surface.
             api(libs.kotlinx.datetime)
             api(libs.kotlinx.collections.immutable)
+
+            // The @Preview annotation and renderer for the IDE.
+            api(libs.compose.uiToolingPreview)
+            implementation(libs.compose.uiTooling)
         }
         jvmMain.dependencies {
             // Desktop scrollbar APIs (VerticalScrollbar, rememberScrollbarAdapter)

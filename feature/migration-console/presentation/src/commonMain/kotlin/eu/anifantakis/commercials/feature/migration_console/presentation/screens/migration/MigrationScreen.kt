@@ -20,7 +20,6 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppWireframeField
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,15 +35,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.files.nativeFilePickerAvailable
@@ -52,10 +48,18 @@ import eu.anifantakis.commercials.core.presentation.files.pickFileNative
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import androidx.compose.foundation.layout.fillMaxHeight
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationFlowInfo
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationGroup
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationProgress
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStationTally
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationStatus
+import eu.anifantakis.commercials.feature.migration_console.domain.MigrationSummary
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppVerticalScrollbar
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppProgressBar
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppLogConsole
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import kotlinx.collections.immutable.persistentMapOf
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * Super-admin migration tool: point the SERVER at a legacy mysqldump file,
@@ -552,4 +556,173 @@ private fun migrationProgressDetail(p: MigrationProgress): String? = when {
     p.total <= 0L -> null
     p.phase == "REPLAY" -> "${p.done}/${p.total} MB"
     else -> "${p.done}/${p.total}"
+}
+
+// ═══ Previews ══════════════════════════════════════════════════════════
+//
+// The wizard is a STATE MACHINE (IDLE -> REPLAYING -> AWAITING_FLOW ->
+// TRANSFORMING -> DONE|FAILED) and each state draws a different screen. One
+// happy-path preview would therefore only ever show the form - which is the
+// one state that never breaks. So there is a preview per state.
+
+/** The hosted groups the wizard offers as targets (same in every preview). */
+private val previewGroups = listOf(
+    MigrationGroup(id = "crete-media", name = "Crete Media Group", schema = "commercials_crete"),
+    MigrationGroup(id = "aegean-media", name = "Aegean Media Group", schema = "commercials_aegean"),
+)
+
+private val previewLog = listOf(
+    "[00:00:01] Opening dump /backups/commercials3.sql (1707 MB)",
+    "[00:00:02] Replaying schema commercials_crete",
+    "[00:01:14] customers: 1842 rows",
+    "[00:02:38] contracts: 3910 rows",
+    "[00:04:05] spots: 6332 rows",
+    "[00:07:51] schedule: 168558 rows",
+)
+
+private val previewSummary = MigrationSummary(
+    breaks = 8421,
+    customers = 1842,
+    customersSynthetic = 214,
+    contracts = 3910,
+    contractsSynthetic = 96,
+    contractLines = 7745,
+    spots = 6332,
+    placements = 168558,
+    flowComments = 402,
+    printAudits = 1188,
+    dateRange = "2011-01-01 .. 2026-06-30",
+    dumpScheduleRows = 170_112,
+    otherFlowRows = 1_204,
+    orphanedRows = 318,
+    zeroDateRows = 32,
+    programs = 276,
+    stations = listOf(
+        MigrationStationTally(stationId = "crete-tv", forTv = 1, spots = 4820, placements = 128_340),
+        MigrationStationTally(stationId = "crete-radio", forTv = 0, spots = 1512, placements = 40_218),
+    ),
+)
+
+/** A filled-in form, nothing running yet: the operator is about to press Start. */
+@Preview
+@Composable
+private fun MigrationScreenPreview() = AppPreview(padded = false) {
+    MigrationScreen(
+        state = MigrationState(
+            status = MigrationStatus(state = "IDLE", groups = previewGroups),
+            dumpPath = "/backups/commercials3.sql",
+            senDirPath = "/backups/SEN",
+            host = "localhost",
+            port = "3306",
+            username = "root",
+            password = "s3cret",
+            groupId = "crete-media",
+            groupName = "Crete Media Group",
+            schema = "commercials_crete",
+        ),
+        onIntent = {},
+        onNavIntent = {},
+        onBrowseClicked = {},
+        onBrowseSenClicked = {},
+    )
+}
+
+/** A replay in flight: the spinner, the measured bar and the live log. */
+@Preview
+@Composable
+private fun MigrationScreenRunningPreview() = AppPreview(padded = false) {
+    MigrationScreen(
+        state = MigrationState(
+            status = MigrationStatus(
+                state = "REPLAYING",
+                log = previewLog,
+                progress = MigrationProgress(
+                    phase = "REPLAY",
+                    label = "commercials3.sql",
+                    done = 1204,
+                    total = 1707,
+                ),
+                schema = "commercials_crete",
+                groups = previewGroups,
+            ),
+            dumpPath = "/backups/commercials3.sql",
+            username = "root",
+        ),
+        onIntent = {},
+        onNavIntent = {},
+        onBrowseClicked = {},
+        onBrowseSenClicked = {},
+    )
+}
+
+/** Step 2: the dump's flows are counted and each is mapped to a station. */
+@Preview
+@Composable
+private fun MigrationScreenAwaitingMappingPreview() = AppPreview(padded = false) {
+    MigrationScreen(
+        state = MigrationState(
+            status = MigrationStatus(
+                state = "AWAITING_FLOW",
+                log = previewLog,
+                schema = "commercials_crete",
+                flows = listOf(
+                    MigrationFlowInfo(forTv = 1, spots = 4820, placements = 128_340),
+                    MigrationFlowInfo(forTv = 0, spots = 1512, placements = 40_218),
+                ),
+                groups = previewGroups,
+            ),
+            dumpPath = "/backups/commercials3.sql",
+            username = "root",
+            flowTargets = persistentMapOf(
+                1 to FlowTarget(stationId = "crete-tv", stationName = "Crete TV"),
+                0 to FlowTarget(stationId = "crete-radio", stationName = "Crete Radio"),
+            ),
+        ),
+        onIntent = {},
+        onNavIntent = {},
+        onBrowseClicked = {},
+        onBrowseSenClicked = {},
+    )
+}
+
+/** The outcome banner + the summary the operator actually reads. */
+@Preview
+@Composable
+private fun MigrationScreenDonePreview() = AppPreview(padded = false) {
+    MigrationScreen(
+        state = MigrationState(
+            status = MigrationStatus(
+                state = "DONE",
+                log = previewLog + "[00:12:44] DONE - commercials_crete",
+                schema = "commercials_crete",
+                summary = previewSummary,
+                groups = previewGroups,
+            ),
+        ),
+        onIntent = {},
+        onNavIntent = {},
+        onBrowseClicked = {},
+        onBrowseSenClicked = {},
+    )
+}
+
+/** The failure the happy path never shows: banner, error line, Start another. */
+@Preview
+@Composable
+private fun MigrationScreenFailedPreview() = AppPreview(padded = false) {
+    MigrationScreen(
+        state = MigrationState(
+            status = MigrationStatus(
+                state = "FAILED",
+                log = previewLog + "[00:03:02] FAILED",
+                schema = "commercials_crete",
+                error = "Access denied for user 'root'@'localhost' (using password: YES)",
+                groups = previewGroups,
+            ),
+        ),
+        onIntent = {},
+        onNavIntent = {},
+        onBrowseClicked = {},
+        onBrowseSenClicked = {},
+    )
 }

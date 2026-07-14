@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.core.presentation.grids.ColumnDef
 import eu.anifantakis.commercials.core.presentation.grids.CommercialItem
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
@@ -49,8 +50,11 @@ import eu.anifantakis.commercials.core.presentation.grids.StickyRowsConfig
 import eu.anifantakis.commercials.core.presentation.grids.formatDuration
 import eu.anifantakis.commercials.core.presentation.grids.gridPalette
 import eu.anifantakis.commercials.core.presentation.grids.rememberEnhancedDataGridState
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * Break Console entry point: own ViewModel (per-screen), the cell's
@@ -668,4 +672,127 @@ private fun StatGrid(
             }
         }
     }
+}
+
+// ═══ Previews ══════════════════════════════════════════════════════════
+//
+// The console has two shapes, and only one of them is the happy path: a break
+// with airings (grid rows, real stats, the paging chain) and a break that has
+// been emptied (a grid with no rows, zeroed stats, no neighbour to page to).
+
+/** The 20:30 break of a Friday on Crete TV - paid spots plus two flow items. */
+private val previewCommercials = persistentListOf(
+    CommercialItem(
+        id = 1,
+        clientCode = "CUS-1042",
+        clientName = "Minoan Lines",
+        message = "Summer crossings 2026",
+        durationSeconds = 30,
+        type = "SPOT",
+        salesItem = "TV Advertising Crete S73.002",
+        contract = "S73.002",
+        flow = "",
+    ),
+    CommercialItem(
+        id = 2,
+        clientCode = "CUS-2210",
+        clientName = "Chania Olive Coop",
+        message = "Extra virgin - harvest campaign",
+        durationSeconds = 20,
+        type = "SPOT",
+        salesItem = "TV Advertising Crete S74.118",
+        contract = "S74.118",
+        flow = "",
+    ),
+    CommercialItem(
+        id = 3,
+        clientCode = "CUS-0917",
+        clientName = "Heraklion Motors",
+        message = "New showroom opening",
+        durationSeconds = 45,
+        type = "SPOT",
+        salesItem = "TV Advertising Crete S75.006",
+        contract = "S75.006",
+        flow = "",
+    ),
+    CommercialItem(
+        id = 4,
+        clientCode = "CUS-3381",
+        clientName = "Crete TV",
+        message = "Coming up after the break",
+        durationSeconds = 15,
+        type = "TRAILER",
+        contract = "S75.900",
+        isGift = true,
+        flow = FLOW_ROH,
+    ),
+    CommercialItem(
+        id = 5,
+        clientCode = "CUS-1503",
+        clientName = "Aegean Bank",
+        message = "Home loans - summer rates",
+        durationSeconds = 30,
+        type = "SPOT",
+        salesItem = "TV Advertising Crete S73.441",
+        contract = "S73.441",
+        flow = "",
+        excludeFromReports = true,
+    ),
+    CommercialItem(
+        id = 6,
+        clientCode = "CUS-3381",
+        clientName = "Crete TV",
+        message = "Evening News sponsor billboard",
+        durationSeconds = 25,
+        type = "BILLBOARD",
+        contract = "S75.900",
+        flow = FLOW_ROH,
+    ),
+)
+
+/** A break with several commercials: the grid, the stats, both paging arrows. */
+@Preview
+@Composable
+private fun CommercialDetailScreenPreview() = AppPreview(padded = false) {
+    CommercialDetailScreen(
+        state = CommercialDetailState(
+            date = LocalDate(2026, 7, 3),
+            breakLabel = "20:30",
+            commercials = previewCommercials,
+            programName = "Evening News",
+            previousBreak = BreakRef(LocalTime(19, 45), "19:45", spotCount = 4),
+            nextBreak = BreakRef(LocalTime(21, 45), "21:45", spotCount = 5),
+            canEdit = true,
+            totalSpots = 6,
+            flowSpots = 2,
+            excludedSpots = 4,
+            totalDuration = 165,
+            flowDuration = 40,
+            excludedDuration = 125,
+            reportsAvailable = true,
+        ),
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+/**
+ * An empty break: no rows, zeroed stats, no programme on record - and only a
+ * previous neighbour, so the Next button is disabled (the day's last occupied break).
+ */
+@Preview
+@Composable
+private fun CommercialDetailScreenEmptyPreview() = AppPreview(padded = false) {
+    CommercialDetailScreen(
+        state = CommercialDetailState(
+            date = LocalDate(2026, 7, 3),
+            breakLabel = "23:00",
+            commercials = persistentListOf(),
+            previousBreak = BreakRef(LocalTime(21, 45), "21:45", spotCount = 5),
+            canEdit = true,
+            reportsAvailable = true,
+        ),
+        onIntent = {},
+        onNavIntent = {},
+    )
 }

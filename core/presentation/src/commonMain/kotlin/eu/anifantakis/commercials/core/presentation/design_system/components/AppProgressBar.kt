@@ -13,6 +13,8 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * A progress bar that refuses to lie.
@@ -72,5 +74,14 @@ fun AppProgressBar(
                 }
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun AppProgressBarPreview() = AppPreview {
+    Column {
+        AppProgressBar(fraction = 0.42f, caption = "Replaying dump", detail = "1204/1707 MB")
+        AppProgressBar(fraction = null, caption = "Rebuilding indexes")
     }
 }

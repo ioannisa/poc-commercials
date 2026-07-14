@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * A scrolling console of log lines, with a VISIBLE scrollbar.
@@ -87,4 +89,43 @@ fun AppLogConsole(
             modifier = Modifier.fillMaxHeight(),
         )
     }
+}
+
+private val sampleRunLog = listOf(
+    "10:02:01  Connected to Crete TV traffic desk",
+    "10:02:01  Loading contracts for Wednesday 15 July",
+    "10:02:02  Aegean Foods       CTV-2026-014   120 spots",
+    "10:02:02  Minoan Travel      CTV-2026-021    48 spots",
+    "10:02:02  Heraklion Motors   CTV-2025-198    12 spots",
+    "10:02:03  Building the break scaffold (06:00 - 23:59)",
+    "10:02:04  14 breaks, 38 spots placed",
+    "10:02:05  WARN  break 21:00 is at 174s of 180s",
+    "10:02:06  Rendering the timetable",
+    "10:02:07  Mirroring the run to Radio 984",
+    "10:02:09  Radio 984: 9 breaks, 21 spots placed",
+    "10:02:10  Done in 8.4s",
+)
+
+// A long run: more lines than fit, so the scrollbar thumb is the only honest
+// signal of how much is hidden - that is the component's whole reason to exist.
+@Preview
+@Composable
+private fun AppLogConsolePreview() = AppPreview {
+    AppLogConsole(lines = sampleRunLog)
+}
+
+// Nothing has run yet: the console still holds its minHeight instead of
+// collapsing the layout out from under whatever sits below it.
+@Preview
+@Composable
+private fun AppLogConsoleEmptyPreview() = AppPreview {
+    AppLogConsole(lines = emptyList())
+}
+
+// A short run - fewer lines than the pane: no scrollbar thumb to drag, and the
+// pane must NOT pretend there is more to see.
+@Preview
+@Composable
+private fun AppLogConsoleShortPreview() = AppPreview {
+    AppLogConsole(lines = sampleRunLog.take(3))
 }

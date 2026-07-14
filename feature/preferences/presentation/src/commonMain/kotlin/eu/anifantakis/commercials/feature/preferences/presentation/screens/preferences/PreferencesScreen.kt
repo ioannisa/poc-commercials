@@ -29,12 +29,14 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.core.presentation.string_resources.Language
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.ThemePreference
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
@@ -260,4 +262,50 @@ private fun PreferenceEntry(
             AppText(description, AppTextStyle.TINY)
         }
     }
+}
+
+// ── previews ────────────────────────────────────────────────────────────────
+// This screen has no list, so its "empty vs populated" is WHO is looking: the
+// normal user sees the account card and NOT the maintenance one, the super admin
+// sees the opposite (the server 403s account self-service for the yaml admin).
+// The third preview is the one people forget - the largest text step, where a
+// two-line preference row is what actually overflows.
+
+@Preview
+@Composable
+private fun PreferencesScreenPreview() = AppPreview(padded = false) {
+    PreferencesScreen(
+        theme = ThemePreference.SYSTEM,
+        fontSize = FontSizePreference.MEDIUM,
+        language = Language.EN,
+        isAdmin = false,
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+@Preview
+@Composable
+private fun PreferencesScreenAdminPreview() = AppPreview(padded = false) {
+    PreferencesScreen(
+        theme = ThemePreference.DARK,
+        fontSize = FontSizePreference.MEDIUM,
+        language = Language.EN,
+        isAdmin = true,
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+@Preview
+@Composable
+private fun PreferencesScreenLargeFontPreview() = AppPreview(padded = false) {
+    PreferencesScreen(
+        theme = ThemePreference.LIGHT,
+        fontSize = FontSizePreference.XLARGE,
+        language = Language.EN,
+        isAdmin = false,
+        onIntent = {},
+        onNavIntent = {},
+    )
 }

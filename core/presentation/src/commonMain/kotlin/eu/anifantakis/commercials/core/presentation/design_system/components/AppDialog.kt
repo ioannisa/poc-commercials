@@ -12,8 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.window.DialogProperties
+import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * The design-system alert/confirm dialog.
@@ -76,4 +79,70 @@ fun AppDialog(
             }
         },
     )
+}
+
+@Preview
+@Composable
+private fun AppDialogPreview() = AppPreview {
+    AppDialog(
+        title = "Send tomorrow's schedule?",
+        onDismiss = {},
+        confirmText = "Send",
+        onConfirm = {},
+        dismissText = "Cancel",
+        icon = AppIcons.email,
+    ) {
+        AppText("Crete TV - Wednesday 15 July", AppTextStyle.BODY_STRONG)
+        AppText("14 breaks, 38 spots. The traffic desk gets one email per station.", AppTextStyle.BODY)
+    }
+}
+
+@Preview
+@Composable
+private fun AppDialogDestructivePreview() = AppPreview {
+    AppDialog(
+        title = "Delete the 21:00 break?",
+        onDismiss = {},
+        confirmText = "Delete",
+        onConfirm = {},
+        dismissText = "Keep it",
+        destructive = true,
+        icon = AppIcons.delete,
+    ) {
+        AppText("The break on Radio 984 holds 4 spots from 2 contracts.", AppTextStyle.BODY)
+        AppText("Deleting it releases those spots back to the pool.", AppTextStyle.NOTE)
+    }
+}
+
+// In-flight confirm: the whole reason the busy flag exists - the confirm button
+// spins and BOTH actions lock, so a second click cannot double-send.
+@Preview
+@Composable
+private fun AppDialogBusyPreview() = AppPreview {
+    AppDialog(
+        title = "Sending to Radio 984",
+        onDismiss = {},
+        confirmText = "Send",
+        onConfirm = {},
+        dismissText = "Cancel",
+        confirmBusy = true,
+    ) {
+        AppText("Uploading 38 spots to the station traffic desk.", AppTextStyle.BODY)
+    }
+}
+
+// Nothing to confirm yet: the primary action is disabled but the dialog is live.
+@Preview
+@Composable
+private fun AppDialogConfirmDisabledPreview() = AppPreview {
+    AppDialog(
+        title = "Move spot to another break",
+        onDismiss = {},
+        confirmText = "Move",
+        onConfirm = {},
+        dismissText = "Cancel",
+        confirmEnabled = false,
+    ) {
+        AppText("Pick a target break on Crete TV first.", AppTextStyle.BODY)
+    }
 }

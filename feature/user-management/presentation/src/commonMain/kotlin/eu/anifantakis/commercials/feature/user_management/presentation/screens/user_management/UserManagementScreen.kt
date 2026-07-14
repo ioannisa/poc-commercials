@@ -16,6 +16,7 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppWireframeField
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import eu.anifantakis.commercials.core.domain.auth.AppRole
+import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
+import kotlinx.collections.immutable.persistentListOf
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
@@ -325,4 +330,71 @@ private fun EditGrantsDialog(
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
     }
+}
+
+// ── previews ────────────────────────────────────────────────────────────────
+
+private val previewStationChoices = listOf(
+    "crete-tv" to "Crete TV",
+    "radio-984" to "Radio 984",
+    "aegean-fm" to "Aegean FM",
+)
+
+/**
+ * One row of each kind the list can hold: the super admin (badge, NO action
+ * buttons), a multi-station operator, a customer viewer scoped to a client code,
+ * and an account with no grant at all - the row that renders "no access".
+ */
+private val previewUsers = persistentListOf(
+    ManagedUser(
+        id = 1,
+        username = "admin",
+        displayName = "Super Administrator",
+        isAdmin = true,
+    ),
+    ManagedUser(
+        id = 2,
+        username = "maria.k",
+        displayName = "Maria Kalogeraki",
+        grants = listOf(
+            UserGrant("crete-tv", AppRole.NORMAL_USER.name),
+            UserGrant("radio-984", AppRole.REPORT_VIEWER.name),
+        ),
+    ),
+    ManagedUser(
+        id = 3,
+        username = "nikos.p",
+        displayName = "Nikos Papadakis",
+        grants = listOf(
+            UserGrant("aegean-fm", AppRole.CUSTOMER_VIEWER.name, clientCode = "ACME"),
+        ),
+    ),
+    ManagedUser(
+        id = 4,
+        username = "temp.account",
+        displayName = "Temporary Account",
+    ),
+)
+
+@Preview
+@Composable
+private fun UserManagementScreenPreview() = AppPreview(padded = false) {
+    UserManagementScreen(
+        state = UserManagementState(users = previewUsers),
+        stationChoices = previewStationChoices,
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
+
+/** Fresh install: the stations exist, the accounts don't yet. */
+@Preview
+@Composable
+private fun UserManagementScreenEmptyPreview() = AppPreview(padded = false) {
+    UserManagementScreen(
+        state = UserManagementState(),
+        stationChoices = previewStationChoices,
+        onIntent = {},
+        onNavIntent = {},
+    )
 }

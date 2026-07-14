@@ -58,17 +58,29 @@ import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
 import eu.anifantakis.commercials.core.presentation.commands.RegisterAppCommand
 import eu.anifantakis.commercials.core.presentation.helper.ObserveEffects
 import org.koin.compose.koinInject
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import eu.anifantakis.commercials.core.presentation.grids.BreakSlot
+import eu.anifantakis.commercials.core.presentation.grids.BreakZone
 import eu.anifantakis.commercials.core.presentation.grids.ContextMenuEntry
 import eu.anifantakis.commercials.core.presentation.grids.LazySchedulerGrid
+import eu.anifantakis.commercials.core.presentation.grids.SchedulerCellData
 import eu.anifantakis.commercials.core.presentation.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.grids.formatTime
+import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarLabels
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarMetrics
 import eu.anifantakis.commercials.reports.ui.ReportToolbar
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.number
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
@@ -859,4 +871,115 @@ private fun schedulerLabels(): SchedulerLabels {
  * strings (no spots / cancelled / PDF saved) belong to the ViewModel now -
  * they travel to the global snackbar, not to this component.
  */
+
+// ═══ Previews ══════════════════════════════════════════════════════════
+//
+// Two months, because the grid's two shapes are genuinely different code
+// paths: a month with real breaks and cells, and a month where nothing aired
+// (the view's empty scaffold and an empty totals row - the shape a single
+// happy-path preview would never show).
+
+/** The station whose data is on screen (one grant - a plain label, no dropdown). */
+private val previewStation = StationAccess(
+    id = "crete-tv",
+    name = "Crete TV",
+    role = AppRole.NORMAL_USER.name,
+)
+
+/**
+ * A busy month's rows. The zone colours are DATA (the legacy console's own),
+ * never theme-adapted - so they are literals here, exactly as the server sends
+ * them.
+ */
+private val previewBreaks = persistentListOf(
+    BreakSlot(LocalTime(9, 30), "09:30", Color(0xFFBBDEFB), BreakZone.STANDARD),
+    BreakSlot(LocalTime(12, 0), "12:00", Color(0xFFBBDEFB), BreakZone.STANDARD),
+    BreakSlot(LocalTime(15, 30), "15:30", Color(0xFFC8E6C9), BreakZone.SPECIAL),
+    BreakSlot(LocalTime(20, 30), "20:30", Color(0xFFF8BBD0), BreakZone.PRIME),
+    BreakSlot(LocalTime(21, 45), "21:45", Color(0xFFF8BBD0), BreakZone.PRIME),
+    BreakSlot(LocalTime(23, 0), "23:00"),
+)
+
+/** July 2026 on Crete TV: most cells busy, some breaks quiet on some days. */
+private fun previewCells(): ImmutableMap<SchedulerKey, SchedulerCellData> {
+    val programs = listOf(
+        "Morning Edition", "Midday News", "Crete Today",
+        "Evening News", "Late Movie", "Night Music",
+    )
+    return buildMap {
+        previewBreaks.forEachIndexed { row, slot ->
+            for (day in 1..31) {
+                val spots = (day + row * 2) % 7
+                if (spots == 0) continue        // a quiet break leaves the cell empty
+                put(
+                    SchedulerKey(slot.time, LocalDate(2026, 7, day)),
+                    SchedulerCellData(
+                        spotCount = spots,
+                        totalDurationSeconds = spots * 31,
+                        zoneColor = slot.zoneColor,
+                        programName = programs[row],
+                    ),
+                )
+            }
+        }
+    }.toImmutableMap()
+}
+
+/** A populated month: real breaks, cells, daily totals, an editing user. */
+@Preview
+@Composable
+private fun TimetableScreenPreview() {
+    val cells = previewCells()
+    AppPreview(padded = false) {
+        TimetableScreen(
+            state = TimetableState(
+                year = 2026,
+                month = 7,
+                breaks = previewBreaks,
+                viewMode = GridViewMode.CONDENSED,
+                cells = cells,
+                dailyTotals = calculateDailyTotals(cells).toImmutableMap(),
+                selectedRow = 3,
+                selectedColumn = 2,
+                reportsAvailable = true,
+                canEdit = true,
+                displayName = "Maria Nikolaou",
+                role = AppRole.NORMAL_USER,
+                stations = persistentListOf(previewStation),
+                selectedStation = previewStation,
+            ),
+            onIntent = {},
+            onNavIntent = {},
+        )
+    }
+}
+
+/**
+ * A month nothing aired in. There are no real breaks to draw, so the grid is
+ * only the view's hourly scaffold - empty rows, no cells, an empty totals row.
+ */
+@Preview
+@Composable
+private fun TimetableScreenEmptyMonthPreview() = AppPreview(padded = false) {
+    TimetableScreen(
+        state = TimetableState(
+            year = 2026,
+            month = 8,
+            breaks = (6..23)
+                .map { hour -> BreakSlot(LocalTime(hour, 0), formatTime(hour, 0)) }
+                .toImmutableList(),
+            viewMode = GridViewMode.HOURLY,
+            cells = persistentMapOf(),
+            dailyTotals = persistentMapOf(),
+            reportsAvailable = true,
+            canEdit = true,
+            displayName = "Maria Nikolaou",
+            role = AppRole.NORMAL_USER,
+            stations = persistentListOf(previewStation),
+            selectedStation = previewStation,
+        ),
+        onIntent = {},
+        onNavIntent = {},
+    )
+}
 

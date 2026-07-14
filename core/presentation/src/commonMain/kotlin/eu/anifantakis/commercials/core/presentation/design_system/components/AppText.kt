@@ -1,5 +1,8 @@
 package eu.anifantakis.commercials.core.presentation.design_system.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -8,13 +11,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.FallbackText
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
+import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
+import androidx.compose.ui.tooling.preview.Preview
 
 /**
  * The app's semantic text roles (dealer-totem pattern): screens pick a ROLE,
@@ -171,4 +181,107 @@ fun AppText(
         maxLines = maxLines,
         overflow = overflow,
     )
+}
+
+/**
+ * The whole type scale in one column. This is the ONLY place the roles can be
+ * compared against each other - and a role whose size or colour has quietly
+ * collapsed into its neighbour's is invisible anywhere else.
+ *
+ * BUTTON / BUTTON_STRONG / FIELD_LABEL are deliberately absent: they are SLOT
+ * roles that inherit the enclosing component's colour, so rendering them loose
+ * on a Surface would show a picture the app never draws. See AppButton's and
+ * AppField's previews for those.
+ */
+@Composable
+private fun AppTextScale() {
+    Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall)) {
+        AppText("Timetable", AppTextStyle.SCREEN_TITLE)
+        AppText("Breaks for Wednesday", AppTextStyle.SECTION_TITLE)
+        AppText("Crete TV", AppTextStyle.ITEM_TITLE)
+        AppText("Aegean Foods - 30s", AppTextStyle.BODY_STRONG)
+        AppText("Contract CTV-2026-014 covers 120 spots until 31 August.", AppTextStyle.BODY)
+        AppText("Spots are billed per break, not per second.", AppTextStyle.NOTE)
+        AppText("Last synced 2 minutes ago", AppTextStyle.TINY)
+        AppText("STATION", AppTextStyle.TABLE_HEADER)
+        AppText("Radio 984", AppTextStyle.TABLE_CELL)
+        AppText("Radio 984 (selected)", AppTextStyle.TABLE_CELL_STRONG)
+        AppText("10:02:05  WARN  break 21:00 is at 174s of 180s", AppTextStyle.LOG_LINE)
+        AppText("CTV-2026-014", AppTextStyle.MONO)
+        AppText("38", AppTextStyle.STAT_VALUE)
+        AppText("Spots today", AppTextStyle.STAT_LABEL)
+        AppText("Break time is required", AppTextStyle.ERROR_NOTE)
+        AppText("Delete the 21:00 break?", AppTextStyle.DIALOG_TITLE)
+    }
+}
+
+@Preview
+@Composable
+private fun AppTextPreview() = AppPreview { AppTextScale() }
+
+// Half the roles differ ONLY by colour (NOTE and TINY drop to onSurfaceVariant,
+// ERROR_NOTE to error) - and colour is exactly what the dark palette changes.
+@Preview
+@Composable
+private fun AppTextDarkPreview() = AppPreview(dark = true) { AppTextScale() }
+
+// Overflow and alignment: a station name too long for its column MUST ellipsize
+// rather than push the layout, which is only visible under a real width cap.
+@Preview
+@Composable
+private fun AppTextOverflowPreview() = AppPreview {
+    Column(
+        modifier = Modifier.width(160.dp),
+        verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall),
+    ) {
+        AppText(
+            "Crete TV - main transmitter, Heraklion",
+            AppTextStyle.BODY,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        AppText(
+            "Crete TV - main transmitter, Heraklion",
+            AppTextStyle.BODY,
+        )
+        AppText(
+            "Centred caption",
+            AppTextStyle.NOTE,
+            modifier = Modifier.width(160.dp),
+            textAlign = TextAlign.Center,
+        )
+        AppText(
+            "Superseded contract",
+            AppTextStyle.NOTE,
+            textDecoration = TextDecoration.LineThrough,
+        )
+    }
+}
+
+// The AnnotatedString overload: the case the plain-String one cannot express -
+// mixed weight and a coloured span inside ONE line of running text.
+@Preview
+@Composable
+private fun AppTextAnnotatedPreview() = AppPreview {
+    val warning = buildAnnotatedString {
+        append("The 21:00 break on ")
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Crete TV") }
+        append(" is ")
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)) {
+            append("overbooked")
+        }
+        append(" by 14 seconds.")
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall)) {
+        AppText(warning, AppTextStyle.BODY)
+        AppText(warning, AppTextStyle.NOTE)
+        // Same string, capped: the spans must survive the ellipsis.
+        AppText(
+            warning,
+            AppTextStyle.BODY,
+            modifier = Modifier.width(180.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
