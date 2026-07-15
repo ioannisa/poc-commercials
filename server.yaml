@@ -95,6 +95,22 @@ session:
   days: 3            # token lifetime in days when expiration is enabled
   sliding: true      # true = window slides forward on use (idle timeout); false = fixed from login
 
+# File-wide SMTP for customer schedule emails (a station/group block may override).
+# Office 365 requires the From to be the authenticated mailbox; the display name is
+# allowed. STARTTLS on 587. NOTE: real credential below - do NOT commit this file.
+smtp:
+  host: smtp.office365.com
+  port: 587
+  username: noreply@cretetv.gr
+  password: "D/391154566324uq"
+  from: "No Reply Cretetv <noreply@cretetv.gr>"
+  startTls: true
+
+# TEST safety valve: while set, EVERY customer schedule email is delivered HERE
+# instead of the real customer (the intended recipient is kept in the subject and
+# the audit log). REMOVE before any real send.
+emailRedirectTo: "ioannisanif@gmail.com"
+
 central:
   jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
   username: root

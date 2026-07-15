@@ -47,6 +47,13 @@ interface StationDirectory {
     fun logo(stationId: String): String?
     /** Null when the station is not hosted. Opening its pool is lazy and blocking. */
     fun dataSource(stationId: String): StationDataSource?
+    /**
+     * TEST-ONLY: if set, every outgoing schedule email goes HERE instead of the
+     * customer. Default null (normal delivery). It exists on this port so the MCP
+     * send tool honours the same safety valve as the REST route - a test redirect
+     * with a hole in it is worse than none.
+     */
+    val emailRedirectTo: String? get() = null
 }
 
 /** Renders a report request to PDF bytes. */

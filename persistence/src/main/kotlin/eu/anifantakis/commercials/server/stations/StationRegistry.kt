@@ -192,6 +192,14 @@ data class HostingConfig(
     val smtp: SmtpConfig? = null,
     /** Bearer-token lifetime policy. Defaults to expiration on / 90 days / sliding. */
     val session: SessionConfig = SessionConfig(),
+    /**
+     * TEST-ONLY safety valve. When set, EVERY outgoing customer email is
+     * delivered to THIS address instead of the customer's - so a test run can
+     * never reach a real customer. The intended recipient is preserved in the
+     * subject (`[TEST -> original]`) and in the audit log. Leave it UNSET in
+     * production; a stray value here silently swallows every real send.
+     */
+    val emailRedirectTo: String? = null,
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -339,6 +347,13 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** File-wide SMTP default for customer emails (group/station blocks override). */
     val defaultSmtp: SmtpConfig? = hosting.smtp
+
+    /**
+     * TEST-ONLY: redirect every outgoing customer email here (see HostingConfig).
+     * A BLANK value counts as unset - so commenting out OR emptying the YAML line
+     * both restore normal delivery, never a send to "".
+     */
+    val emailRedirectTo: String? = hosting.emailRedirectTo?.takeIf { it.isNotBlank() }
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

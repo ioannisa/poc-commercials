@@ -83,11 +83,19 @@ object SendScheduleEmailTool : McpTool {
                 "No spots for '$clientCode' in $month/$year (kind=${if (byTrader) "trader" else "customer"})."
             )
 
-            val recipient = a.stringOrNull("to")?.takeIf { it.isNotBlank() }
+            // Same TEST redirect as the REST route: while server.yaml sets
+            // emailRedirectTo, every send is delivered there, never to the real
+            // customer. The intended address stays in the subject and the log.
+            val redirectTo = services.emailRedirectTo
+            val intendedTo = a.stringOrNull("to")?.takeIf { it.isNotBlank() }
                 ?: access.data.customerByCode(clientCode)?.email
-                ?: throw McpToolException("Customer '${data.customerName}' has no stored email - pass 'to' explicitly.")
-            val subject = a.stringOrNull("subject")?.takeIf { it.isNotBlank() }
+            if (intendedTo == null && redirectTo == null) {
+                throw McpToolException("Customer '${data.customerName}' has no stored email - pass 'to' explicitly.")
+            }
+            val recipient = redirectTo ?: intendedTo!!
+            val baseSubject = a.stringOrNull("subject")?.takeIf { it.isNotBlank() }
                 ?: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ - ${data.mediumLabel} - ${ScheduleEmailAssembler.greekMonths[month - 1]} $year"
+            val subject = if (redirectTo != null) "[TEST → ${intendedTo ?: "χωρίς διεύθυνση"}] $baseSubject" else baseSubject
             val html = renderScheduleEmail(data)
             val transmissions =
                 data.spots.sumOf { s -> s.rows.sumOf { r -> r.cells.sumOf { it?.count ?: 0 } } }

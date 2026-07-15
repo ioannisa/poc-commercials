@@ -63,6 +63,7 @@ class StationRegistryDirectory(private val registry: StationRegistry) : StationD
     override fun logo(stationId: String): String? = registry.config(stationId)?.logo?.takeIf { it.isNotBlank() }
     override fun dataSource(stationId: String): StationDataSource? =
         registry.db(stationId)?.let(::StationDbDataSource)
+    override val emailRedirectTo: String? get() = registry.emailRedirectTo
 }
 
 /** Renders through the shared JasperReports engine (headless, server-side). */

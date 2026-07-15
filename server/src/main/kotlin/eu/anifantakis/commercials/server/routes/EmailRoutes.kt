@@ -243,8 +243,15 @@ fun Route.emailRoutes(registry: StationRegistry) {
             val result = withContext(Dispatchers.IO) {
                 val customer = access.db.customerByCode(req.clientCode)
                     ?: return@withContext SendResult(false, "Unknown customer '${req.clientCode}' on this station")
-                val to = req.to?.takeIf { it.isNotBlank() } ?: customer.email
-                    ?: return@withContext SendResult(false, "Customer '${customer.name}' has no stored email - pass a recipient explicitly")
+                // TEST redirect (server.yaml `emailRedirectTo`): every send is delivered
+                // THERE, never to the real customer. The intended address is preserved
+                // in the subject and the audit log so a test run stays traceable.
+                val redirectTo = registry.emailRedirectTo
+                val intendedTo = req.to?.takeIf { it.isNotBlank() } ?: customer.email
+                if (intendedTo == null && redirectTo == null) {
+                    return@withContext SendResult(false, "Customer '${customer.name}' has no stored email - pass a recipient explicitly")
+                }
+                val to = redirectTo ?: intendedTo!!
 
                 access.db.ensureMonthSeeded(req.year, req.month)
                 val data = ScheduleEmailAssembler.assemble(
@@ -254,8 +261,9 @@ fun Route.emailRoutes(registry: StationRegistry) {
                 )
                     ?: return@withContext SendResult(false, "No spots for customer '${req.clientCode}' this month")
 
-                val subject = req.subject?.takeIf { it.isNotBlank() }
+                val baseSubject = req.subject?.takeIf { it.isNotBlank() }
                     ?: "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ - ${data.mediumLabel} - ${ScheduleEmailAssembler.greekMonths[req.month - 1]} ${req.year}"
+                val subject = if (redirectTo != null) "[TEST → ${intendedTo ?: "χωρίς διεύθυνση"}] $baseSubject" else baseSubject
                 val html = renderScheduleEmail(data)
                 val transmissions = data.spots.sumOf { sec -> sec.rows.sumOf { r -> r.cells.sumOf { it?.count ?: 0 } } }
 
@@ -270,7 +278,8 @@ fun Route.emailRoutes(registry: StationRegistry) {
                             bodyHtml = html, sentBy = operator, status = "SENT",
                         )
                     )
-                    SendResult(true, "Sent to $to (${data.spots.size} σποτ)", to = to, spots = data.spots.size)
+                    val note = if (redirectTo != null) " (TEST redirect - intended $intendedTo)" else ""
+                    SendResult(true, "Sent to $to$note (${data.spots.size} σποτ)", to = to, spots = data.spots.size)
                 } catch (e: Exception) {
                     access.db.logEmail(
                         StationDb.EmailLogEntry(
@@ -288,6 +297,40 @@ fun Route.emailRoutes(registry: StationRegistry) {
             } else {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to result.message))
             }
+        }
+
+        // Connectivity smoke test: send a tiny email through the resolved SMTP,
+        // WITHOUT touching any customer or month. Goes to `emailRedirectTo` if set,
+        // else to a `?to=` address. Proves the server.yaml `smtp:` block actually
+        // reaches the mail server and authenticates - the failure message is the
+        // provider's own (e.g. Office 365's "SmtpClientAuthentication is disabled").
+        post("/test-smtp") {
+            val access = call.staffAccessOrRespond(registry) ?: return@post
+            val smtp = registry.smtpFor(access.grant.stationId)
+            if (smtp == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "No SMTP settings - add an `smtp:` block in server.yaml"))
+                return@post
+            }
+            val to = registry.emailRedirectTo ?: call.request.queryParameters["to"]?.trim()?.takeIf { it.isNotBlank() }
+            if (to == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Provide ?to=<address> or set emailRedirectTo in server.yaml"))
+                return@post
+            }
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    SmtpMailer(smtp.toSettings()).sendHtml(
+                        to = to,
+                        subject = "Commercials Manager — SMTP test",
+                        html = "<p>SMTP test from <b>${smtp.from}</b> via <b>${smtp.host}:${smtp.port}</b>. " +
+                            "If you are reading this, outgoing mail works.</p>",
+                    )
+                    "OK" to "Test email sent to $to via ${smtp.host}"
+                } catch (e: Exception) {
+                    "ERR" to "SMTP send failed: ${e.message}"
+                }
+            }
+            if (result.first == "OK") call.respond(mapOf("status" to result.second))
+            else call.respond(HttpStatusCode.BadGateway, mapOf("error" to result.second))
         }
 
         // ── audit trail ─────────────────────────────────────────────────

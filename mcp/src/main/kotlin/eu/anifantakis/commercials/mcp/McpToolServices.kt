@@ -130,6 +130,9 @@ class McpToolServices(
     /** The station's SMTP settings (its own override, else the file-wide default). */
     fun smtpFor(stationId: String): SmtpConfig? = directory.smtp(stationId)
 
+    /** TEST-ONLY: redirect every outgoing email here (blank = unset). */
+    val emailRedirectTo: String? get() = directory.emailRedirectTo
+
     /** This station's report logo (server.yaml); null when it has none. */
     fun logoFor(stationId: String): String? = directory.logo(stationId)
 
