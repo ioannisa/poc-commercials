@@ -8,6 +8,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
@@ -45,6 +50,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.material3.LocalTextStyle
@@ -63,12 +72,16 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DayOfWeek
 import kotlin.math.roundToInt
 import kotlinx.datetime.LocalDate
+import kotlinx.coroutines.withTimeout
 
 /**
  * Lazy Scheduler Grid - Uses LazyColumn for virtualization (better performance)
  * Only renders visible rows, significantly reducing the number of composables.
  * * Update: Now handles Right-Click Context Menus locally within cells for correct positioning.
  */
+private const val DOUBLE_TAP_MS = 400L
+private const val LONG_PRESS_MS = 500L
+
 @Composable
 fun LazySchedulerGrid(
     breaks: ImmutableList<BreakSlot>,
@@ -381,7 +394,17 @@ fun LazySchedulerGrid(
                     // is unique among the rows, which are distinct times in order.
                     key = { _, breakSlot -> "row_${breakSlot.time}" }
                 ) { rowIndex, breakSlot ->
-                    val isRowSelected = rowIndex == selectedRow
+                    // Per-row derived selection: a selection move now touches ONLY the
+                    // two rows whose value flips, never all the visible ones. Without
+                    // these, every row's item lambda reads selectedRow (recompose) and
+                    // every cell's drawBehind reads it (redraw) - so moving the cursor
+                    // re-ran the whole viewport. The header needs its flag at
+                    // composition (a Text colour); the cells need only "which of MY
+                    // columns is selected, or -1", read in draw.
+                    val isRowSelected by remember { derivedStateOf { rowIndex == selectedRow } }
+                    val selectedColInRow = remember {
+                        derivedStateOf { if (selectedRow == rowIndex) selectedColumn else -1 }
+                    }
 
                     Row(modifier = Modifier.fillMaxWidth().height(rowH)) {
                         // Break time column (frozen - not in horizontal scroll):
@@ -415,34 +438,33 @@ fun LazySchedulerGrid(
                                 .fillMaxHeight()
                                 .horizontalScroll(horizontalScrollState)
                         ) {
-                            Row(modifier = Modifier.width(totalDaysWidth)) {
-                                allDays.forEachIndexed { colIndex, date ->
-                                    val cellKey = SchedulerKey(breakSlot.time, date)
-                                    val data = cellData[cellKey]
-                                    val isModified = modifiedCells.contains(cellKey)
-
-                                    // Pass the menu items provider lambda to the cell
-                                    // The cell will call this only when clicked
-                                    // PERFORMANCE: Wrap LocalDate in StableDate to satisfy Compose stability.
-                                    // isSelected is resolved HERE so that a selection move only
-                                    // recomposes the two affected cells - all others skip.
-                                    GridCell(
-                                        data = data,
-                                        dateWrapper = StableDate(date),
-                                        width = dayColumnW,
-                                        showTimes = showTimes,
-                                        textCache = cellTextCache,
-                                        isModified = isModified,
-                                        isSelected = rowIndex == selectedRow && colIndex == selectedColumn,
-                                        onSelect = { updateSelection(rowIndex, colIndex) },
-                                        onDoubleClick = { onCellDoubleClick?.invoke(breakSlot, date, data) },
-                                        // Pass the menu provider if the parent provided contextMenuItems
-                                        menuEntriesProvider = if (contextMenuItems != null) {
-                                            { contextMenuItems(breakSlot, date, data) }
-                                        } else null
-                                    )
-                                }
-                            }
+                            // The whole row's cells as ONE drawing node. Selection is
+                            // passed as lambdas, read inside the row's drawBehind, so a
+                            // selection move repaints the affected rows and composes
+                            // nothing.
+                            SchedulerCanvasRow(
+                                breakSlot = breakSlot,
+                                days = allDays,
+                                cellData = cellData,
+                                modifiedCells = modifiedCells,
+                                cellWidth = dayColumnW,
+                                showTimes = showTimes,
+                                textCache = cellTextCache,
+                                isRtl = isRtl,
+                                selectedColInRow = { selectedColInRow.value },
+                                onSelect = { col -> updateSelection(rowIndex, col) },
+                                onDoubleClick = { col ->
+                                    val date = allDays[col]
+                                    onCellDoubleClick?.invoke(breakSlot, date, cellData[SchedulerKey(breakSlot.time, date)])
+                                },
+                                contextMenuItems = if (contextMenuItems != null) {
+                                    { col ->
+                                        val date = allDays[col]
+                                        contextMenuItems(breakSlot, date, cellData[SchedulerKey(breakSlot.time, date)])
+                                    }
+                                } else null,
+                                requestFocus = { focusRequester.requestFocus() },
+                            )
                         }
                     }
                 }
@@ -588,7 +610,7 @@ private fun LazyDayHeader(
 /**
  * A frozen header cell (day column header or break-time row header) that can
  * host a right-click context menu. The menu is rendered locally inside the
- * box so its offset is relative to the header cell (same pattern as GridCell).
+ * box so its offset is relative to the header cell (same pattern as SchedulerCanvasRow).
  * [onMenuOpen] fires when the menu opens - used to move the grid selection to
  * the right-clicked column/row, mirroring how cells select on right-click.
  */
@@ -653,178 +675,217 @@ private fun DayOfWeek.toGreekAbbrLazy(): String = when (this) {
     DayOfWeek.SUNDAY -> "ΚΥ"
 }
 
+
+/**
+ * A whole break-row's day cells as a SINGLE drawing node.
+ *
+ * This is where the grid stops paying for ~31 composable cells per row (a Box, two
+ * remembered states and two pointer-input nodes EACH) and pays for one draw pass and
+ * one pointer input instead. The cell VISUALS are unchanged - each cell already drew
+ * itself with drawBehind + drawText; this just does that in a loop, one level up.
+ *
+ * Interaction is preserved, not lost:
+ *  - a tap selects the cell it lands in: `col = x / cellWidth` (RTL-mirrored);
+ *  - a double-tap opens its detail;
+ *  - a right-click / long-press opens the context menu at the pointer;
+ *  - the selection is read INSIDE drawBehind, so moving it repaints only the affected
+ *    rows and composes nothing.
+ *
+ * [A]/[R] are not here and never were - they live on the grid's key handler, which
+ * acts on the selection this row reports.
+ */
 @Composable
-private fun GridCell(
-    data: SchedulerCellData?,
-    dateWrapper: StableDate,
-    width: Dp,
+private fun SchedulerCanvasRow(
+    breakSlot: BreakSlot,
+    days: List<LocalDate>,
+    cellData: ImmutableMap<SchedulerKey, SchedulerCellData>,
+    modifiedCells: ImmutableSet<SchedulerKey>,
+    cellWidth: Dp,
     showTimes: Boolean,
     textCache: CellTextCache,
-    isModified: Boolean,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-    onDoubleClick: () -> Unit,
-    menuEntriesProvider: (() -> List<ContextMenuEntry>)? = null
+    isRtl: Boolean,
+    /** Which column is selected IN THIS ROW, or -1. A per-row derived value, read in
+     *  draw, so a selection move invalidates only the two rows whose value flips. */
+    selectedColInRow: () -> Int,
+    onSelect: (col: Int) -> Unit,
+    onDoubleClick: (col: Int) -> Unit,
+    contextMenuItems: ((col: Int) -> List<ContextMenuEntry>)?,
+    requestFocus: () -> Unit,
 ) {
-    val scale = LocalGridScale.current
-    // Extract LocalDate from stable wrapper (StableDate is @Immutable)
-    val date = dateWrapper.value
-
-    val isWeekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
-    val spotCount = data?.spotCount ?: 0
-
-    // Local menu state for right-click handling
-    var menuVisible by remember { mutableStateOf(false) }
-    var clickOffset by remember { mutableStateOf(Offset.Zero) }
-    val density = LocalDensity.current
-
-    // The scheduler INTERIOR is always LIGHT, whatever the app theme.
-    // Cell colours are DATA from the database - each programme carries an
-    // operator-assigned colour (legacy `programtypes.color`), so a "news"
-    // cell looks like news on every screen and in every theme - and empty
-    // cells must read as paper, never as dark holes. Only the frozen chrome
-    // (day headers, break column, totals) follows the theme.
-    // Color.White is the "no programme colour" wire sentinel, compared raw.
     val light = LightGridPalette
-    val dataColor = when {
-        isModified -> null
-        data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor
-        spotCount > 10 -> SchedulerDataColors.densityHigh
-        spotCount > 5 -> SchedulerDataColors.densityMedium
-        spotCount > 0 -> SchedulerDataColors.densityLow
-        else -> null
+    val density = LocalDensity.current
+    val cellWidthPx = with(density) { cellWidth.toPx() }
+    val n = days.size
+
+    // This row's keys, built once - not a fresh SchedulerKey per cell per draw.
+    val keys = remember(breakSlot.time, days) { days.map { SchedulerKey(breakSlot.time, it) } }
+
+    var menuVisible by remember { mutableStateOf(false) }
+    var menuOffset by remember { mutableStateOf(Offset.Zero) }
+    var menuCol by remember { mutableStateOf(0) }
+
+    // Screen x -> logical column. In RTL the day axis is mirrored (day 1 rightmost),
+    // exactly as Compose auto-mirrors the day-header Row, so this inverts the same way.
+    fun colAt(x: Float): Int {
+        val phys = (x / cellWidthPx).toInt().coerceIn(0, n - 1)
+        return if (isRtl) n - 1 - phys else phys
     }
 
-    val bgColor = when {
-        isModified -> light.modifiedCellBackground
-        dataColor != null -> dataColor
-        isWeekend -> light.weekendColumn.copy(alpha = 0.3f)
-        else -> light.cellBackground
+    fun openMenu(off: Offset) {
+        menuCol = colAt(off.x)
+        menuOffset = off
+        menuVisible = true
+        requestFocus()
+        onSelect(menuCol)
     }
-
-    // Text follows the FILL, not the theme: programme colours are operator
-    // -assigned and can be arbitrarily dark, so contrast is computed per cell.
-    val textColor = when {
-        isModified -> light.onModifiedCell
-        dataColor != null -> contrastTextColor(dataColor)
-        else -> light.cellText
-    }
-    // Null = an empty cell, which draws no number (it held no Text before either).
-    val cellText = when {
-        spotCount <= 0 -> null
-        showTimes && data != null -> data.formattedDuration
-        else -> spotCount.toString()
-    }
-
-    val selectionColor = light.selectionBorder
-    val normalBorderColor = light.cellBorder
 
     Box(
         modifier = Modifier
-            .width(width)
+            .width(cellWidth * n)
             .fillMaxHeight()
-            .drawBehind {
-                // Draw background
-                drawRect(bgColor)
-                // Draw border - inset to draw inside bounds
-                if (isSelected) {
-                    val strokeWidth = 3.dp.toPx()
-                    val halfStroke = strokeWidth / 2
-                    drawRect(
-                        color = selectionColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(halfStroke, halfStroke),
-                        size = androidx.compose.ui.geometry.Size(
-                            size.width - strokeWidth,
-                            size.height - strokeWidth
-                        ),
-                        style = Stroke(strokeWidth)
-                    )
-                } else {
-                    val strokeWidth = 0.5.dp.toPx()
-                    val halfStroke = strokeWidth / 2
-                    drawRect(
-                        color = normalBorderColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(halfStroke, halfStroke),
-                        size = androidx.compose.ui.geometry.Size(
-                            size.width - strokeWidth,
-                            size.height - strokeWidth
-                        ),
-                        style = Stroke(strokeWidth)
-                    )
-                }
+            // One gesture handler for the whole row. Modelled on multiButtonClickable:
+            // the tap SELECTS IMMEDIATELY - it never waits to see if a double-tap is
+            // coming, which is what made a click feel like it hung for a second. It
+            // also moves focus here, so the keyboard (arrows, [A]/[R]) works after a
+            // click; the tap gesture consumes the event, so the grid's own
+            // focus-on-click never sees it.
+            .pointerInput(n, isRtl, contextMenuItems == null) {
+                var lastTapTime = 0L
+                var lastTapCol = -1
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val pos = down.position
 
-                // The number, centred - measured once by the cache, painted here.
-                // Empty cells draw nothing, exactly as before (they held no Text).
-                if (cellText != null) {
-                    val layout = textCache.layout(cellText, isSelected || isModified)
-                    // x = 0 because the cached paragraph is already the cell's width and
-                    // centres its own glyphs - the same thing the Text composable's
-                    // paragraph did. Only the VERTICAL centring is ours, and it is
-                    // rounded to a whole pixel because that is where Compose placed the
-                    // Text's layout node. Centre it at a fractional offset instead and
-                    // every glyph shifts by a fraction of a pixel and re-antialiases:
-                    // the grid still looks fine, but no digit renders as it used to.
-                    drawText(
-                        textLayoutResult = layout,
-                        color = textColor,
-                        topLeft = androidx.compose.ui.geometry.Offset(
-                            0f,
-                            ((size.height - layout.size.height) / 2f).roundToInt().toFloat(),
-                        ),
-                    )
-                }
-            }
-            // Use separate onRightClick modifier for reliable right-click detection (same pattern as EnhancedDataGrid)
-            .let { mod ->
-                if (menuEntriesProvider != null) {
-                    mod.onRightClick(
-                        onLongPress = { offset ->
-                            clickOffset = offset
-                            menuVisible = true
-                            onSelect()
-                        },
-                    ) { offset ->
-                        clickOffset = offset
-                        menuVisible = true
-                        onSelect()
+                    // Mouse right-click -> context menu.
+                    if (contextMenuItems != null && currentEvent.buttons.isSecondaryPressed) {
+                        if (waitForUpOrCancellation() != null) openMenu(pos)
+                        return@awaitEachGesture
                     }
-                } else mod
-            }
-            .multiButtonClickable(
-                onClick = { onSelect() },
-                onDoubleClick = onDoubleClick,
-                onRightClick = null  // Right-click handled by separate modifier above
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        // The number is DRAWN, not composed - see CellTextCache.
-        //
-        // It used to be a plain Text (deliberately not GridText: a cell holds only
-        // DIGITS - a spot count, or a duration as MM:SS - so no script can appear
-        // here that Roboto lacks, and paying the glyph-fallback scan ~800 times over
-        // would have been absurd). But a Text composable is not free either: style
-        // resolution, shaping and a layout node, per cell, every time a month opens.
-        //
-        // The digits are still digits, and a month holds a couple of dozen distinct
-        // strings across hundreds of cells. So they are measured once by the cache
-        // and painted here. The letters of this grid - day abbreviations, the totals
-        // row, the corner - remain real GridText composables; they are few, and they
-        // are where the fallback scan earns its keep.
 
-        // Render Context Menu LOCALLY inside the cell
-        // This ensures the offset is relative to the cell, fixing the "jumping menu" bug.
-        if (menuVisible && menuEntriesProvider != null) {
-            val entries = menuEntriesProvider()
-            if (entries.isNotEmpty()) {
-                val dpOffset = with(density) {
-                    DpOffset(clickOffset.x.toDp(), clickOffset.y.toDp())
+                    // Touch/stylus long-press -> the same menu. A drag/scroll consumes
+                    // the pointer and cancels the wait, so scrolling never opens it.
+                    val touchLike = down.type == PointerType.Touch || down.type == PointerType.Stylus
+                    val up = if (contextMenuItems != null && touchLike) {
+                        try {
+                            withTimeout(LONG_PRESS_MS) { waitForUpOrCancellation() }
+                        } catch (_: PointerEventTimeoutCancellationException) {
+                            openMenu(pos)
+                            while (true) {
+                                val c = awaitPointerEvent().changes.firstOrNull() ?: break
+                                if (!c.pressed) break
+                                c.consume()
+                            }
+                            return@awaitEachGesture
+                        }
+                    } else {
+                        waitForUpOrCancellation()
+                    }
+
+                    if (up != null) {
+                        val col = colAt(pos.x)
+                        requestFocus()
+                        val now = up.uptimeMillis
+                        if (now - lastTapTime <= DOUBLE_TAP_MS && lastTapCol == col) {
+                            onDoubleClick(col)
+                            lastTapTime = 0L
+                            lastTapCol = -1
+                        } else {
+                            onSelect(col)
+                            lastTapTime = now
+                            lastTapCol = col
+                        }
+                    }
                 }
+            }
+            .drawBehind {
+                val cw = size.width / n
+                val selCol = selectedColInRow()
+                for (col in 0 until n) {
+                    val key = keys[col]
+                    val data = cellData[key]
+                    val spotCount = data?.spotCount ?: 0
+                    val isModified = key in modifiedCells
+                    val isWeekend = days[col].dayOfWeek == DayOfWeek.SATURDAY ||
+                        days[col].dayOfWeek == DayOfWeek.SUNDAY
 
+                    // Cell colours are DATA (operator-assigned programme colours); the
+                    // interior is always the light palette, theme notwithstanding.
+                    val dataColor: Color? = when {
+                        isModified -> null
+                        data?.zoneColor != null && data.zoneColor != Color.White -> data.zoneColor
+                        spotCount > 10 -> SchedulerDataColors.densityHigh
+                        spotCount > 5 -> SchedulerDataColors.densityMedium
+                        spotCount > 0 -> SchedulerDataColors.densityLow
+                        else -> null
+                    }
+                    val bg = when {
+                        isModified -> light.modifiedCellBackground
+                        dataColor != null -> dataColor
+                        isWeekend -> light.weekendColumn.copy(alpha = 0.3f)
+                        else -> light.cellBackground
+                    }
+                    val fg = when {
+                        isModified -> light.onModifiedCell
+                        dataColor != null -> contrastTextColor(dataColor)
+                        else -> light.cellText
+                    }
+
+                    // Mirror the physical position; hit-testing inverts it above.
+                    val x = (if (isRtl) n - 1 - col else col) * cw
+                    drawRect(color = bg, topLeft = Offset(x, 0f), size = Size(cw, size.height))
+
+                    if (col == selCol) {
+                        val s = 3.dp.toPx()
+                        val h = s / 2
+                        drawRect(
+                            color = light.selectionBorder,
+                            topLeft = Offset(x + h, h),
+                            size = Size(cw - s, size.height - s),
+                            style = Stroke(s),
+                        )
+                    } else {
+                        val s = 0.5.dp.toPx()
+                        val h = s / 2
+                        drawRect(
+                            color = light.cellBorder,
+                            topLeft = Offset(x + h, h),
+                            size = Size(cw - s, size.height - s),
+                            style = Stroke(s),
+                        )
+                    }
+
+                    val text = when {
+                        spotCount <= 0 -> null
+                        showTimes && data != null -> data.formattedDuration
+                        else -> spotCount.toString()
+                    }
+                    if (text != null) {
+                        val layout = textCache.layout(text, col == selCol || isModified)
+                        // The cached paragraph is one cell wide and centres its glyphs;
+                        // drawing it at the cell's left edge centres it in the cell.
+                        drawText(
+                            textLayoutResult = layout,
+                            color = fg,
+                            topLeft = Offset(
+                                x,
+                                ((size.height - layout.size.height) / 2f).roundToInt().toFloat(),
+                            ),
+                        )
+                    }
+                }
+            },
+    ) {
+        // One context menu per row, positioned at the pointer (offset relative to this
+        // row's cell area). The horizontalScroll parent's translation is already baked
+        // into the anchor, so the raw local offset lands the menu under the cursor.
+        if (menuVisible && contextMenuItems != null) {
+            val entries = contextMenuItems(menuCol)
+            if (entries.isNotEmpty()) {
                 RichContextMenu(
                     expanded = true,
                     onDismissRequest = { menuVisible = false },
                     entries = entries.toImmutableList(),
-                    offset = dpOffset
+                    offset = with(density) { DpOffset(menuOffset.x.toDp(), menuOffset.y.toDp()) },
                 )
             }
         }
