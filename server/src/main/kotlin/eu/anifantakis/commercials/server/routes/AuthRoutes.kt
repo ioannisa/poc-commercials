@@ -32,6 +32,9 @@ data class LoginResponse(
     val token: String,
     val displayName: String,
     val isAdmin: Boolean = false,
+    /** After an admin reset / on a fresh account: the client must trap the user
+     *  on a change-password screen until they pick a new one. */
+    val mustChangePassword: Boolean = false,
     val stations: List<StationAccessDto>
 )
 
@@ -61,12 +64,6 @@ data class SessionInfoResponse(
 
 @Serializable
 data class ChangePasswordRequest(val currentPassword: String, val newPassword: String)
-
-@Serializable
-data class RecoverPasswordRequest(val username: String, val recoveryCode: String, val newPassword: String)
-
-@Serializable
-data class RecoveryCodesResponse(val codes: List<String>)
 
 /** The raw bearer value, as the client holds it (the DB only ever sees its hash). */
 private fun ApplicationCall.bearerToken(): String? =
@@ -109,27 +106,10 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     token = token,
                     displayName = user.displayName,
                     isAdmin = user.isAdmin,
+                    mustChangePassword = user.mustChangePassword,
                     stations = registry.accessFor(user),
                 )
             )
-        }
-
-        // Open: "forgot password" - a one-time recovery code sets a new
-        // password (and consumes the code + revokes all sessions). The error
-        // is deliberately generic: never reveal whether the username exists.
-        post("/recover") {
-            val request = call.receive<RecoverPasswordRequest>()
-            val recovered = withContext(Dispatchers.IO) {
-                authDb.recoverPassword(request.username, request.recoveryCode, request.newPassword)
-            }
-            if (recovered) {
-                call.respond(mapOf("status" to "password reset - please log in"))
-            } else {
-                call.respond(
-                    HttpStatusCode.BadRequest,
-                    mapOf("error" to "Invalid username or recovery code")
-                )
-            }
         }
 
         authenticate(AUTH_BEARER) {
@@ -200,14 +180,6 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     authDb.changePassword(user.id, request.currentPassword, request.newPassword)
                 }
                 call.respond(mapOf("status" to "password changed - please log in again"))
-            }
-
-            // Regenerates the caller's one-time recovery codes. The raw codes
-            // appear ONLY in this response - the server stores hashes.
-            post("/recovery-codes") {
-                val user = call.authUser()
-                val codes = withContext(Dispatchers.IO) { authDb.generateRecoveryCodes(user.id) }
-                call.respond(RecoveryCodesResponse(codes))
             }
         }
     }

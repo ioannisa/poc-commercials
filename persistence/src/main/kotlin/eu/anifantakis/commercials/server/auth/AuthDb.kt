@@ -12,9 +12,13 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 /**
- * Application users + bearer tokens + per-station grants + recovery codes,
- * all in the server's CENTRAL database. Users are server-level accounts; what
- * they may touch is expressed per hosted station in `user_station_grants`.
+ * Application users + bearer tokens + per-station grants + email password-reset
+ * codes, all in the server's CENTRAL database. Users are server-level accounts;
+ * what they may touch is expressed per hosted station in `user_station_grants`.
+ *
+ * Password recovery is by emailed 6-digit code (self-service) or an admin reset
+ * that mints a temp password and forces a change at next login; there are no
+ * user-held recovery codes.
  *
  * Passwords are stored as PBKDF2-HMAC-SHA256 hashes with a per-user random
  * salt (never plaintext, even for demo users). Tokens are 256-bit random
@@ -24,11 +28,11 @@ import javax.crypto.spec.PBEKeySpec
  * logout (or a password change, which revokes ALL of the user's tokens)
  * removes it and the very next request gets 401.
  *
- * Tokens and recovery codes are stored HASHED (single SHA-256, see
- * [tokenHash]): the raw values exist only on the client, so a database leak
- * yields nothing usable as a credential. Unlike passwords, these don't need
- * slow salted hashing - they're high-entropy CSPRNG output, so there is
- * nothing to brute-force.
+ * Tokens and reset codes are stored HASHED (single SHA-256, see [tokenHash]):
+ * the raw token exists only on the client, so a database leak yields nothing
+ * usable as a credential. A 256-bit token needs no slow salted hashing (it is
+ * high-entropy CSPRNG output); the 6-digit reset code is guarded instead by an
+ * online rate-limit + short TTL + single use.
  *
  * THE SUPER ADMIN is config-managed (server.yaml `superAdmin` block): its
  * plaintext lives only in that file; bootstrap upserts a users row holding
@@ -48,8 +52,20 @@ class AuthDb(
     private companion object {
         const val PBKDF2_ITERATIONS = 100_000
         const val PBKDF2_KEY_BITS = 256
-        const val RECOVERY_CODE_COUNT = 6
         const val MIN_PASSWORD_LENGTH = 6
+
+        /** Email password-reset code: six digits, no letters (so it is language-
+         *  and keyboard-agnostic - a Greek/English layout can't mistype it). */
+        const val RESET_CODE_DIGITS = 6
+        const val RESET_CODE_TTL_SECONDS = 15L * 60
+        /** Wrong tries allowed with no delay before the escalating lock kicks in. */
+        const val RESET_FREE_ATTEMPTS = 5
+        /** First lock after the free tries are spent; each further wrong try ×3. */
+        const val RESET_BASE_LOCK_SECONDS = 10L
+        const val RESET_LOCK_MULTIPLIER = 3
+
+        /** A generated temporary password (admin reset / new account). */
+        const val TEMP_PASSWORD_LENGTH = 12
 
         /** Crockford-style alphabet: no I/L/O/U to avoid transcription errors. */
         const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ0123456789"
@@ -89,6 +105,8 @@ class AuthDb(
                         password_hash VARCHAR(64) NOT NULL,
                         password_salt VARCHAR(32) NOT NULL,
                         display_name VARCHAR(128) NOT NULL,
+                        email VARCHAR(255) NULL,
+                        must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
                         is_admin BOOLEAN NOT NULL DEFAULT FALSE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
@@ -120,11 +138,13 @@ class AuthDb(
                 )
                 s.executeUpdate(
                     """
-                    CREATE TABLE IF NOT EXISTS recovery_codes (
-                        code_hash VARCHAR(64) PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        CONSTRAINT fk_codes_user FOREIGN KEY (user_id)
+                    CREATE TABLE IF NOT EXISTS password_resets (
+                        user_id BIGINT PRIMARY KEY,
+                        code_hash VARCHAR(64) NOT NULL,
+                        expires_at TIMESTAMP NOT NULL,
+                        wrong_count INT NOT NULL DEFAULT 0,
+                        locked_until TIMESTAMP NULL DEFAULT NULL,
+                        CONSTRAINT fk_resets_user FOREIGN KEY (user_id)
                             REFERENCES users(id) ON DELETE CASCADE
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
@@ -132,6 +152,11 @@ class AuthDb(
             }
             ensureIsAdminColumn(c)
             ensureExpiresAtColumn(c)
+            ensureColumn(c, "users", "email", "VARCHAR(255) NULL")
+            ensureColumn(c, "users", "must_change_password", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // Recovery codes were retired in favour of email + admin reset; drop
+            // the legacy table so a leaked backup can't be replayed as a credential.
+            c.createStatement().use { it.executeUpdate("DROP TABLE IF EXISTS recovery_codes") }
             seedUsersIfEmpty(c)
             seedGrantsIfEmpty(c, registry.ids)
             syncSuperAdmin(c)
@@ -156,6 +181,18 @@ class AuthDb(
         if (!columnExists(c, "users", "is_admin")) {
             c.createStatement().use {
                 it.executeUpdate("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE")
+            }
+        }
+    }
+
+    /**
+     * Adds [column] to [table] with the given DDL type if it is missing.
+     * [table]/[column]/[ddl] are internal constants, never user input.
+     */
+    private fun ensureColumn(c: Connection, table: String, column: String, ddl: String) {
+        if (!columnExists(c, table, column)) {
+            c.createStatement().use {
+                it.executeUpdate("ALTER TABLE $table ADD COLUMN $column $ddl")
             }
         }
     }
@@ -416,7 +453,8 @@ class AuthDb(
         return db.connection().use { c ->
             val row = c.prepareStatement(
                 """
-                SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt
+                SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
+                       u.must_change_password
                 FROM auth_tokens t, users u
                 WHERE u.id = t.user_id
                   AND t.token_hash = ?$expiryClause
@@ -522,87 +560,206 @@ class AuthDb(
         }
     }
 
+    /**
+     * A user-chosen password change/reset: clears must_change_password (they
+     * picked it themselves) and revokes all sessions (log in again).
+     */
     private fun updatePassword(c: Connection, userId: Long, newPassword: String) {
-        val salt = randomBytes(16)
-        c.prepareStatement("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?").use { ps ->
-            ps.setString(1, pbkdf2(newPassword, salt).toHex())
-            ps.setString(2, salt.toHex())
-            ps.setLong(3, userId)
-            ps.executeUpdate()
-        }
+        setPassword(c, userId, newPassword, mustChange = false)
         revokeAllTokens(c, userId)
     }
 
-    // ───────────────────────────────────────────────────── recovery codes ──
+    /**
+     * Writes a fresh PBKDF2 hash + salt and sets must_change_password. Does NOT
+     * revoke tokens - callers decide (a change/reset revokes; a flag flip need
+     * not). [mustChange] = true for an admin reset or a new account: the temp
+     * password only gets the user to the forced change-password screen.
+     */
+    private fun setPassword(c: Connection, userId: Long, newPassword: String, mustChange: Boolean) {
+        val salt = randomBytes(16)
+        c.prepareStatement(
+            "UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = ? WHERE id = ?"
+        ).use { ps ->
+            ps.setString(1, pbkdf2(newPassword, salt).toHex())
+            ps.setString(2, salt.toHex())
+            ps.setBoolean(3, mustChange)
+            ps.setLong(4, userId)
+            ps.executeUpdate()
+        }
+    }
+
+    // ─────────────────────────────────────────────── password reset (email) ──
+
+    /** The raw reset code (to email) plus the address to send it to. */
+    data class ResetRequest(val code: String, val email: String)
+
+    /** The outcome of submitting a reset code. */
+    sealed interface ResetOutcome {
+        data object Success : ResetOutcome
+        /** Wrong code. [retryAfterSeconds] is non-null once the escalating lock armed. */
+        data class InvalidCode(val retryAfterSeconds: Long?) : ResetOutcome
+        /** A try arrived while still locked out; wait [retryAfterSeconds]. */
+        data class Locked(val retryAfterSeconds: Long) : ResetOutcome
+        data object Expired : ResetOutcome
+        data object NoRequest : ResetOutcome
+    }
+
+    /** A generated temporary password plus the address to email it to (if any). */
+    data class TempPassword(val password: String, val email: String?)
 
     /**
-     * Replaces the user's recovery codes with [RECOVERY_CODE_COUNT] fresh
-     * one-time codes and returns them RAW - this is the only moment they
-     * exist in plaintext; only their SHA-256 is stored. Refused for the super
-     * admin (the YAML is its recovery).
+     * Starts a "forgot password" flow: mints a fresh [RESET_CODE_DIGITS]-digit
+     * numeric code, stores its hash with a [RESET_CODE_TTL_SECONDS] expiry
+     * (replacing any earlier request and clearing its lockout), and returns the
+     * RAW code + the user's email so the caller can send it. Returns null - and
+     * nothing is emailed - when the username is unknown, is the super admin, or
+     * has no email on file. The ROUTE answers identically either way, so this
+     * never reveals whether an account exists.
      */
-    fun generateRecoveryCodes(userId: Long): List<String> {
+    fun createPasswordReset(username: String): ResetRequest? {
         db.connection().use { c ->
-            val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin recovers via server.yaml, not recovery codes" }
+            val row = selectUserByUsername(c, username) ?: return null
+            if (row.isAdmin) return null
+            val email = selectEmail(c, row.id)?.takeIf { it.isNotBlank() } ?: return null
 
-            val codes = List(RECOVERY_CODE_COUNT) { generateRecoveryCode() }
-            c.autoCommit = false
-            try {
-                c.prepareStatement("DELETE FROM recovery_codes WHERE user_id = ?").use { ps ->
-                    ps.setLong(1, userId); ps.executeUpdate()
-                }
-                c.prepareStatement("INSERT INTO recovery_codes(code_hash, user_id) VALUES(?,?)").use { ps ->
-                    for (code in codes) {
-                        ps.setString(1, tokenHash(normalizeRecoveryCode(code)))
-                        ps.setLong(2, userId)
-                        ps.addBatch()
-                    }
-                    ps.executeBatch()
-                }
-                c.commit()
-            } catch (e: Exception) {
-                c.rollback(); throw e
-            } finally {
-                c.autoCommit = true
+            val code = generateNumericCode(RESET_CODE_DIGITS)
+            c.prepareStatement(
+                """
+                INSERT INTO password_resets(user_id, code_hash, expires_at, wrong_count, locked_until)
+                VALUES(?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), 0, NULL) AS new
+                ON DUPLICATE KEY UPDATE code_hash = new.code_hash,
+                    expires_at = new.expires_at, wrong_count = 0, locked_until = NULL
+                """.trimIndent()
+            ).use { ps ->
+                ps.setLong(1, row.id)
+                ps.setString(2, tokenHash(code))
+                ps.setLong(3, RESET_CODE_TTL_SECONDS)
+                ps.executeUpdate()
             }
-            return codes
+            return ResetRequest(code, email)
         }
     }
 
     /**
-     * "Forgot password" flow: username + ONE unused recovery code sets a new
-     * password. The code is consumed on success, and every session of the
-     * user is revoked. Returns false on any mismatch (never reveals whether
-     * the username or the code was wrong).
+     * Completes a "forgot password" flow with the emailed code, enforcing the
+     * escalating lockout: [RESET_FREE_ATTEMPTS] wrong tries are free, then each
+     * further wrong try locks for
+     * RESET_BASE_LOCK_SECONDS × RESET_LOCK_MULTIPLIER^n (10s, 30s, 90s…). On
+     * success the password is set, the flag cleared, the request consumed and
+     * every session revoked. A wrong username/expired/absent request all read as
+     * generic failures - never revealing which.
      */
-    fun recoverPassword(username: String, recoveryCode: String, newPassword: String): Boolean {
+    fun resetPasswordWithCode(username: String, code: String, newPassword: String): ResetOutcome {
         validatePassword(newPassword)
         db.connection().use { c ->
-            val row = selectUserByUsername(c, username) ?: return false
-            if (row.isAdmin) return false
+            val row = selectUserByUsername(c, username) ?: return ResetOutcome.NoRequest
+            if (row.isAdmin) return ResetOutcome.NoRequest
 
-            val codeHash = tokenHash(normalizeRecoveryCode(recoveryCode))
-            val consumed = c.prepareStatement(
-                "DELETE FROM recovery_codes WHERE code_hash = ? AND user_id = ?"
+            data class Reset(val codeHash: String, val expired: Boolean, val wrongCount: Int, val lockRemaining: Long)
+            val reset = c.prepareStatement(
+                """
+                SELECT code_hash,
+                       (expires_at <= NOW()) AS expired,
+                       wrong_count,
+                       GREATEST(COALESCE(TIMESTAMPDIFF(SECOND, NOW(), locked_until), 0), 0) AS lock_remaining
+                FROM password_resets WHERE user_id = ?
+                """.trimIndent()
             ).use { ps ->
-                ps.setString(1, codeHash)
-                ps.setLong(2, row.id)
-                ps.executeUpdate() == 1
-            }
-            if (!consumed) return false
+                ps.setLong(1, row.id)
+                ps.executeQuery().use { rs ->
+                    if (!rs.next()) null
+                    else Reset(
+                        rs.getString("code_hash"),
+                        rs.getBoolean("expired"),
+                        rs.getInt("wrong_count"),
+                        rs.getLong("lock_remaining"),
+                    )
+                }
+            } ?: return ResetOutcome.NoRequest
 
-            updatePassword(c, row.id, newPassword)
-            return true
+            if (reset.lockRemaining > 0) return ResetOutcome.Locked(reset.lockRemaining)
+            if (reset.expired) {
+                deletePasswordReset(c, row.id)
+                return ResetOutcome.Expired
+            }
+
+            // Constant-time compare of the stored vs submitted code hash.
+            val matches = MessageDigest.isEqual(
+                tokenHash(code).encodeToByteArray(),
+                reset.codeHash.encodeToByteArray(),
+            )
+            if (matches) {
+                updatePassword(c, row.id, newPassword)
+                deletePasswordReset(c, row.id)
+                return ResetOutcome.Success
+            }
+
+            // Wrong code: bump the counter and, once the free tries are spent,
+            // arm the escalating lock (served BEFORE the next attempt).
+            val wrong = reset.wrongCount + 1
+            val lockSeconds = if (wrong > RESET_FREE_ATTEMPTS) {
+                RESET_BASE_LOCK_SECONDS * intPow(RESET_LOCK_MULTIPLIER, wrong - RESET_FREE_ATTEMPTS - 1)
+            } else 0L
+            c.prepareStatement(
+                "UPDATE password_resets SET wrong_count = ?, " +
+                    "locked_until = CASE WHEN ? > 0 THEN DATE_ADD(NOW(), INTERVAL ? SECOND) ELSE NULL END " +
+                    "WHERE user_id = ?"
+            ).use { ps ->
+                ps.setInt(1, wrong)
+                ps.setLong(2, lockSeconds)
+                ps.setLong(3, lockSeconds)
+                ps.setLong(4, row.id)
+                ps.executeUpdate()
+            }
+            return ResetOutcome.InvalidCode(lockSeconds.takeIf { it > 0 })
         }
     }
 
-    /** 4 groups of 4 chars from a 32-char alphabet = 80 bits of entropy. */
-    private fun generateRecoveryCode(): String =
-        (1..16).map { CODE_ALPHABET[secureRandom.nextInt(CODE_ALPHABET.length)] }
+    /**
+     * Admin/super-admin reset: sets a random TEMP password (returned RAW for the
+     * admin to see/copy and to email), forces a change at next login, clears any
+     * reset lockout, and revokes all sessions. This is the mail-server-independent
+     * path - the temp password is ALWAYS returned to the admin, whether or not the
+     * mail goes out. Refused for the super admin (managed in server.yaml).
+     */
+    fun adminResetPassword(userId: Long): TempPassword {
+        db.connection().use { c ->
+            val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
+            require(!row.isAdmin) { "The super admin password is managed in server.yaml, not via the API" }
+            val temp = generateTempPassword()
+            setPassword(c, userId, temp, mustChange = true)
+            deletePasswordReset(c, userId)
+            revokeAllTokens(c, userId)
+            return TempPassword(temp, selectEmail(c, userId)?.takeIf { it.isNotBlank() })
+        }
+    }
+
+    private fun selectEmail(c: Connection, userId: Long): String? =
+        c.prepareStatement("SELECT email FROM users WHERE id = ?").use { ps ->
+            ps.setLong(1, userId)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getString("email") else null }
+        }
+
+    private fun deletePasswordReset(c: Connection, userId: Long) {
+        c.prepareStatement("DELETE FROM password_resets WHERE user_id = ?").use { ps ->
+            ps.setLong(1, userId); ps.executeUpdate()
+        }
+    }
+
+    private fun generateNumericCode(digits: Int): String =
+        (1..digits).joinToString("") { secureRandom.nextInt(10).toString() }
+
+    private fun generateTempPassword(): String =
+        (1..TEMP_PASSWORD_LENGTH)
+            .map { CODE_ALPHABET[secureRandom.nextInt(CODE_ALPHABET.length)] }
             .joinToString("")
-            .chunked(4)
-            .joinToString("-")
+
+    /** Integer power for the lock escalation (avoids Double rounding). */
+    private fun intPow(base: Int, exp: Int): Long {
+        var r = 1L
+        repeat(exp) { r *= base }
+        return r
+    }
 
     // ───────────────────────────────────────────────────── user management ──
 
@@ -622,6 +779,7 @@ class AuthDb(
         val id: Long,
         val username: String,
         val displayName: String,
+        val email: String?,
         val isAdmin: Boolean,
         val grants: List<StationGrant>,
     )
@@ -629,7 +787,7 @@ class AuthDb(
     fun listUsers(): List<UserSummary> =
         db.connection().use { c ->
             val users = c.createStatement().use { s ->
-                s.executeQuery("SELECT id, username, display_name, is_admin FROM users ORDER BY username").use { rs ->
+                s.executeQuery("SELECT id, username, display_name, email, is_admin FROM users ORDER BY username").use { rs ->
                     buildList {
                         while (rs.next()) {
                             add(
@@ -637,6 +795,7 @@ class AuthDb(
                                     id = rs.getLong("id"),
                                     username = rs.getString("username"),
                                     displayName = rs.getString("display_name"),
+                                    email = rs.getString("email"),
                                     isAdmin = rs.getBoolean("is_admin"),
                                     grants = emptyList(),
                                 )
@@ -653,7 +812,14 @@ class AuthDb(
      * goes through the same PBKDF2 path as everyone else's.
      * @throws IllegalArgumentException for invalid input or duplicate username
      */
-    fun createUser(username: String, displayName: String, password: String, grants: List<StationGrant>): Long {
+    fun createUser(
+        username: String,
+        displayName: String,
+        password: String,
+        grants: List<StationGrant>,
+        email: String? = null,
+        mustChangePassword: Boolean = false,
+    ): Long {
         require(username.matches(USERNAME_FORMAT)) {
             "Username must be 3-64 chars of letters, digits, '.', '_' or '-'"
         }
@@ -672,13 +838,16 @@ class AuthDb(
             try {
                 val salt = randomBytes(16)
                 val userId = c.prepareStatement(
-                    "INSERT INTO users(username, password_hash, password_salt, display_name) VALUES(?,?,?,?)",
+                    "INSERT INTO users(username, password_hash, password_salt, display_name, email, must_change_password) " +
+                        "VALUES(?,?,?,?,?,?)",
                     java.sql.Statement.RETURN_GENERATED_KEYS
                 ).use { ps ->
                     ps.setString(1, username)
                     ps.setString(2, pbkdf2(password, salt).toHex())
                     ps.setString(3, salt.toHex())
                     ps.setString(4, displayName)
+                    ps.setString(5, email?.takeIf { it.isNotBlank() })
+                    ps.setBoolean(6, mustChangePassword)
                     ps.executeUpdate()
                     ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
                 }
@@ -770,6 +939,7 @@ class AuthDb(
         val isAdmin: Boolean,
         val hashHex: String,
         val saltHex: String,
+        val mustChangePassword: Boolean,
     )
 
     private fun java.sql.ResultSet.toUserRow() = UserRow(
@@ -779,11 +949,13 @@ class AuthDb(
         isAdmin = getBoolean("is_admin"),
         hashHex = getString("password_hash"),
         saltHex = getString("password_salt"),
+        mustChangePassword = getBoolean("must_change_password"),
     )
 
     private fun selectUserByUsername(c: Connection, username: String): UserRow? =
         c.prepareStatement(
-            "SELECT id, username, display_name, is_admin, password_hash, password_salt FROM users WHERE username = ?"
+            "SELECT id, username, display_name, is_admin, password_hash, password_salt, must_change_password " +
+                "FROM users WHERE username = ?"
         ).use { ps ->
             ps.setString(1, username)
             ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
@@ -791,7 +963,8 @@ class AuthDb(
 
     private fun selectUserById(c: Connection, id: Long): UserRow? =
         c.prepareStatement(
-            "SELECT id, username, display_name, is_admin, password_hash, password_salt FROM users WHERE id = ?"
+            "SELECT id, username, display_name, is_admin, password_hash, password_salt, must_change_password " +
+                "FROM users WHERE id = ?"
         ).use { ps ->
             ps.setLong(1, id)
             ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
@@ -811,7 +984,8 @@ class AuthDb(
             registry.ids.map { StationGrant(it, UserRole.NORMAL_USER, null) }
         } else {
             loadGrants(c, row.id)
-        }
+        },
+        mustChangePassword = row.mustChangePassword,
     )
 
     private fun loadGrants(c: Connection, userId: Long): List<StationGrant> =
@@ -848,16 +1022,14 @@ class AuthDb(
 }
 
 /**
- * How bearer tokens and recovery codes are stored at rest: a single SHA-256
- * over the raw value. Fast hashing is correct here (unlike passwords): the
- * inputs are high-entropy CSPRNG output, so there is nothing to brute-force,
- * and an indexed hash lookup avoids any secret comparison in app code.
+ * How bearer tokens and email reset codes are stored at rest: a single SHA-256
+ * over the raw value. For a 256-bit token, fast hashing is correct - the input
+ * is high-entropy CSPRNG output, so a DB leak yields nothing brute-forceable.
+ * The 6-digit reset code is low-entropy by design; hashing it at rest is only
+ * defence-in-depth - its real protection is the online rate-limit + 15-minute
+ * TTL + single use in [AuthDb.resetPasswordWithCode], not hash strength.
  */
 internal fun tokenHash(token: String): String =
     MessageDigest.getInstance("SHA-256")
         .digest(token.encodeToByteArray())
         .joinToString("") { byte -> ((byte.toInt() and 0xFF) + 0x100).toString(16).substring(1) }
-
-/** Case/dash-insensitive recovery-code matching ("ab1-2cd" == "AB12CD"). */
-internal fun normalizeRecoveryCode(code: String): String =
-    code.uppercase().filter { it in "ABCDEFGHJKMNPQRSTVWXYZ0123456789" }

@@ -30,13 +30,17 @@ data class StationGrant(
  *        may manage users, and receives synthesized NORMAL_USER grants on
  *        every hosted station. Its password/recovery are managed in the YAML,
  *        never via the API.
+ * @param mustChangePassword set after an admin reset or a fresh account: the
+ *        client traps the user on a change-password screen until they pick a
+ *        new one (the temp password only ever gets them that far).
  */
 data class AuthUser(
     val id: Long,
     val username: String,
     val displayName: String,
     val isAdmin: Boolean,
-    val grants: List<StationGrant>
+    val grants: List<StationGrant>,
+    val mustChangePassword: Boolean = false,
 ) {
     fun grantFor(stationId: String): StationGrant? = grants.firstOrNull { it.stationId == stationId }
     fun hasRoleAnywhere(role: UserRole): Boolean = grants.any { it.role == role }
