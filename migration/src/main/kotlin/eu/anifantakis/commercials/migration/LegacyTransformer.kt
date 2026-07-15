@@ -113,6 +113,8 @@ class LegacyTransformer(
         /** Archived legacy emails migrated (metadata always; bodies capped). */
         val emails: Int = 0,
         val emailBodiesKept: Int = 0,
+        /** Customers whose placeholder default email was recovered from the archive. */
+        val emailsEnriched: Int = 0,
         /** Airtime price list rows (versioned; full history migrates). */
         val zones: Int = 0,
         val zoneFillers: Int = 0,
@@ -195,6 +197,9 @@ class LegacyTransformer(
         step("Migrating email archive (bodies capped at ${StationDb.EMAIL_BODY_RETENTION_PER_CUSTOMER}/customer, summaries for all)...")
         val (emails, emailBodiesKept) = migrateEmailHistory()
 
+        step("Recovering customer default emails from the sent-email history...")
+        val emailsEnriched = enrichCustomerEmailsFromHistory()
+
         step("Migrating airtime price zones (full price history)...")
         val (zones, zoneFillers) = migrateZones()
 
@@ -253,6 +258,7 @@ class LegacyTransformer(
             endClientsSynthesized = endClients,
             emails = emails,
             emailBodiesKept = emailBodiesKept,
+            emailsEnriched = emailsEnriched,
             zones = zones,
             zoneFillers = zoneFillers,
             stations = tallies,
@@ -1164,6 +1170,49 @@ class LegacyTransformer(
         return migrated to bodiesKept
     }
 
+    /**
+     * Recovers each customer's DEFAULT email from the sent-email archive.
+     *
+     * The legacy `cus` table barely stored emails, so [migrateCustomers] falls
+     * back to a `customer{id}@example.gr` placeholder - which is why a customer
+     * who has, in fact, been emailed for years shows a fake default. But the
+     * address that ACTUALLY received those reports is in `emailhistory`
+     * (migrated verbatim into `email_log.recipient`), so we take the MOST RECENT
+     * real recipient per customer and use it as the default.
+     *
+     * Rules, matching [SenErpEnricher.placeholderEmail]: fill ONLY a blank or
+     * `@example.` placeholder - a real email already on the customer (from the
+     * ERP enrichment or the legacy row) is never overwritten. Multi-recipient
+     * sends are all but nonexistent in the archive (one borderline row in the
+     * whole 1.2 GB), but handled anyway: the FIRST address wins.
+     */
+    private fun enrichCustomerEmailsFromHistory(): Int {
+        if (!tableExists("emailhistory")) return 0
+        return c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $t.customers cu
+                JOIN (
+                    SELECT customer_code, first_addr FROM (
+                        SELECT customer_code,
+                               TRIM(SUBSTRING_INDEX(REPLACE(REPLACE(recipient, ',', ';'), ' ', ''), ';', 1)) AS first_addr,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY customer_code ORDER BY sent_at DESC, id DESC
+                               ) AS rn
+                        FROM $t.email_log
+                        WHERE recipient <> '' AND recipient NOT LIKE '%@example.%'
+                    ) ranked
+                    WHERE rn = 1
+                      AND first_addr LIKE '%_@_%._%'
+                      AND first_addr NOT LIKE '%@example.%'
+                ) h ON h.customer_code = cu.code
+                SET cu.email = h.first_addr
+                WHERE cu.email IS NULL OR cu.email = '' OR cu.email LIKE '%@example.%'
+                """.trimIndent()
+            )
+        }
+    }
+
     // ───────────────────────────────────────────────── zones (pricing) ──
 
     /**
@@ -1238,7 +1287,7 @@ class LegacyTransformer(
          * whatever this says. A drift costs a slightly-off bar mid-run, never a
          * wrong one and never a crash.
          */
-        const val TOTAL_STEPS = 16
+        const val TOTAL_STEPS = 17
 
         const val SYNTHETIC_NOTE =
             "SYNTHETIC placeholder - real data lives in the ERP (Oracle) and was not part of the legacy MySQL dump"

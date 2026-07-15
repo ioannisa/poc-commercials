@@ -267,28 +267,36 @@ fun Route.emailRoutes(registry: StationRegistry) {
                 val html = renderScheduleEmail(data)
                 val transmissions = data.spots.sumOf { sec -> sec.rows.sumOf { r -> r.cells.sumOf { it?.count ?: 0 } } }
 
-                // Send, then archive the attempt either way (audit trail).
+                // Send, then archive the attempt either way (audit trail) - UNLESS
+                // this was a TEST redirect. A redirected send must leave no trace: its
+                // recipient is the test address, and logging it would feed that fake
+                // into the audit trail, the next-month smart pre-fill and any
+                // history-based email recovery - corrupting real customer data.
                 try {
                     SmtpMailer(smtp.toSettings()).sendHtml(to, subject, html)
-                    access.db.logEmail(
-                        StationDb.EmailLogEntry(
-                            customerCode = req.clientCode, customerName = customer.name, recipient = to,
-                            subject = subject, year = req.year, month = req.month,
-                            spotCount = data.spots.size, transmissionCount = transmissions,
-                            bodyHtml = html, sentBy = operator, status = "SENT",
+                    if (redirectTo == null) {
+                        access.db.logEmail(
+                            StationDb.EmailLogEntry(
+                                customerCode = req.clientCode, customerName = customer.name, recipient = to,
+                                subject = subject, year = req.year, month = req.month,
+                                spotCount = data.spots.size, transmissionCount = transmissions,
+                                bodyHtml = html, sentBy = operator, status = "SENT",
+                            )
                         )
-                    )
-                    val note = if (redirectTo != null) " (TEST redirect - intended $intendedTo)" else ""
+                    }
+                    val note = if (redirectTo != null) " (TEST redirect - intended $intendedTo, not logged)" else ""
                     SendResult(true, "Sent to $to$note (${data.spots.size} σποτ)", to = to, spots = data.spots.size)
                 } catch (e: Exception) {
-                    access.db.logEmail(
-                        StationDb.EmailLogEntry(
-                            customerCode = req.clientCode, customerName = customer.name, recipient = to,
-                            subject = subject, year = req.year, month = req.month,
-                            spotCount = data.spots.size, transmissionCount = transmissions,
-                            bodyHtml = null, sentBy = operator, status = "FAILED", error = e.message,
+                    if (redirectTo == null) {
+                        access.db.logEmail(
+                            StationDb.EmailLogEntry(
+                                customerCode = req.clientCode, customerName = customer.name, recipient = to,
+                                subject = subject, year = req.year, month = req.month,
+                                spotCount = data.spots.size, transmissionCount = transmissions,
+                                bodyHtml = null, sentBy = operator, status = "FAILED", error = e.message,
+                            )
                         )
-                    )
+                    }
                     SendResult(false, "Send failed: ${e.message}")
                 }
             }

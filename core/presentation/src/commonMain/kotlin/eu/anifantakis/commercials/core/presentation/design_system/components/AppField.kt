@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.core.presentation.design_system.components
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -40,6 +44,7 @@ fun AppWireframeField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    labelFocused: String? = null,
     placeholder: String? = null,
     leadingIcon: ImageVector? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
@@ -61,11 +66,21 @@ fun AppWireframeField(
                 ?.let { keyboardOptions.copy(platformImeOptions = it) }
                 ?: keyboardOptions
         } else keyboardOptions
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth().heightIn(min = t.fieldHeight),
-        label = { AppText(label, AppTextStyle.FIELD_LABEL) },
+        label = {
+            val minimized = isFocused || value.isNotEmpty()
+            AppText(
+                text = if (minimized) (labelFocused ?: label) else label,
+                style = AppTextStyle.FIELD_LABEL,
+            )
+        },
         placeholder = placeholder?.let { { AppText(it, AppTextStyle.FIELD_LABEL) } },
         leadingIcon = leadingIcon?.let { { AppIcon(it, contentDescription = null) } },
         trailingIcon = trailingIcon,
@@ -77,6 +92,10 @@ fun AppWireframeField(
         visualTransformation = visualTransformation,
         keyboardOptions = effectiveKeyboardOptions,
         shape = RoundedCornerShape(t.cornerSmall),
+        // Must be the SAME source we read isFocused from - otherwise the field spins
+        // up its own internal one, our isFocused stays false forever, and the label
+        // never swaps to labelFocused.
+        interactionSource = interactionSource,
     )
 }
 
@@ -87,6 +106,7 @@ fun AppTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    labelFocused: String? = null,
     placeholder: String? = null,
     leadingIcon: ImageVector? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
@@ -100,6 +120,7 @@ fun AppTextField(
     onValueChange = onValueChange,
     label = label,
     modifier = modifier,
+    labelFocused = labelFocused?.takeIf { it.isNotBlank() } ?: label,
     placeholder = placeholder,
     leadingIcon = leadingIcon,
     trailingIcon = trailingIcon,

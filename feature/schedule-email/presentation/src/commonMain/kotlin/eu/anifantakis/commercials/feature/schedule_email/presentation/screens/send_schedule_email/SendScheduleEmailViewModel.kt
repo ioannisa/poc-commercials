@@ -47,7 +47,13 @@ data class SendScheduleEmailState(
     val selectedMonth: Int? = null,
     val spots: ImmutableList<EmailSpot> = persistentListOf(),
     val includedSpotIds: ImmutableSet<Long> = persistentSetOf(),
+    /** What the operator typed / the smart pre-fill (the last-sent address). Empty
+     *  falls back to [customerEmail]. */
     val recipient: String = "",
+    /** The customer's stored default - the FAINT PLACEHOLDER shown when [recipient]
+     *  is empty. Empty when the customer has no real email (then a recipient is
+     *  mandatory). Placeholders (`@example.`) are stripped before it reaches here. */
+    val customerEmail: String = "",
     val note: String = "",
     val history: ImmutableList<EmailLogEntry> = persistentListOf(),
     val error: UiText? = null,
@@ -56,9 +62,12 @@ data class SendScheduleEmailState(
 ) {
     val chosenSpotIds: List<Long> get() = spots.map { it.spotId }.filter { it in includedSpotIds }
 
+    /** What the email actually goes to: the field if filled, else the placeholder. */
+    val effectiveRecipient: String get() = recipient.ifBlank { customerEmail }
+
     val canPreview: Boolean
         get() = selectedParty != null && selectedYear != null && selectedMonth != null &&
-            recipient.isNotBlank() && chosenSpotIds.isNotEmpty()
+            effectiveRecipient.isNotBlank() && chosenSpotIds.isNotEmpty()
 }
 
 sealed interface SendScheduleEmailIntent {
@@ -74,6 +83,11 @@ sealed interface SendScheduleEmailIntent {
 
     /** Reported by the preview screen's own ViewModel after a real send. */
     data class MarkSent(val status: String) : SendScheduleEmailIntent
+
+    /** Clears everything for a fresh dialog. Fired when the dialog (re)opens - the
+     *  ViewModel outlives the dialog, so without this a reopened dialog would still
+     *  show the previous send's "sent" confirmation instead of an empty form. */
+    data object Reset : SendScheduleEmailIntent
 }
 
 sealed interface SendScheduleEmailEffect {
@@ -149,7 +163,7 @@ class SendScheduleEmailViewModel(
                             clientCode = s.selectedParty!!.code,
                             kind = s.selectedKind,
                             spotIds = s.chosenSpotIds,
-                            recipient = s.recipient,
+                            recipient = s.effectiveRecipient,
                             personalMessage = s.note,
                         )
                     )
@@ -157,6 +171,11 @@ class SendScheduleEmailViewModel(
             }
 
             is SendScheduleEmailIntent.MarkSent -> _state.update { it.copy(done = intent.status) }
+
+            SendScheduleEmailIntent.Reset -> {
+                searchJob?.cancel()
+                _state.value = SendScheduleEmailState()
+            }
         }
     }
 
@@ -189,7 +208,13 @@ class SendScheduleEmailViewModel(
                 selectedKind = it.kind,
                 query = "",
                 results = persistentListOf(),
-                recipient = party.email.orEmpty(),
+                // The stored default becomes the faint PLACEHOLDER; the field starts
+                // empty and is pre-filled below with the LAST-SENT address once the
+                // history arrives (a customer whose accountant asked for a different
+                // address last time gets that one offered again). Placeholders never
+                // masquerade as a real default.
+                recipient = "",
+                customerEmail = realEmail(party.email),
                 activity = persistentListOf(),
                 loadingActivity = true,
                 selectedYear = null,
@@ -215,7 +240,16 @@ class SendScheduleEmailViewModel(
         }
         viewModelScope.launch {
             when (val result = repository.history(limit = 8, clientCode = party.code)) {
-                is DataResult.Success -> _state.update { it.copy(history = result.data.toImmutableList()) }
+                is DataResult.Success -> _state.update { s ->
+                    // Smart pre-fill: the MOST RECENT send's recipient (history is
+                    // newest-first). Only while the field is still untouched, so it
+                    // never clobbers what the operator has started typing.
+                    val lastSent = realEmail(result.data.firstOrNull()?.recipient)
+                    s.copy(
+                        history = result.data.toImmutableList(),
+                        recipient = if (s.recipient.isBlank() && lastSent.isNotBlank()) lastSent else s.recipient,
+                    )
+                }
                 is DataResult.Failure -> Unit   // the audit list is best-effort
             }
         }
@@ -240,6 +274,11 @@ class SendScheduleEmailViewModel(
         }
     }
 }
+
+/** A real address, or "" for a blank or synthetic (`@example.`) placeholder - so a
+ *  migration fake never reaches the recipient field as if it were genuine. */
+private fun realEmail(v: String?): String =
+    v?.trim()?.takeIf { it.isNotBlank() && !it.contains("@example.", ignoreCase = true) }.orEmpty()
 
 /** Email failures to operator text; server messages pass through verbatim. */
 fun EmailError.toUiText(): UiText = when (this) {

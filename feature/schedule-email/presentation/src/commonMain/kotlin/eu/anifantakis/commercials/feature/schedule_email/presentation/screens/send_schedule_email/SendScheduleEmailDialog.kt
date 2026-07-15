@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
@@ -17,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +58,11 @@ fun SendScheduleEmailDialogRoot(
     viewModel: SendScheduleEmailViewModel = koinViewModel(),
 ) {
     var previewRequest by remember { mutableStateOf<EmailPreviewRequest?>(null) }
+
+    // The ViewModel outlives this dialog (it is store-scoped, the dialog is a
+    // show/hide boolean), so a fresh open must clear the previous run - otherwise
+    // reopening after a send shows the old "sent" confirmation, not an empty form.
+    LaunchedEffect(Unit) { viewModel.onAction(SendScheduleEmailIntent.Reset) }
 
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
@@ -205,10 +213,19 @@ private fun SendScheduleEmailDialog(
 
         if (state.selectedParty != null && state.selectedMonth != null) {
             Spacer(Modifier.height(UIConst.paddingExtraSmall))
+
+            val recipientHint = state.customerEmail.takeIf { it.isNotBlank() } ?: Strings[StringKey.EMAIL_RECIPIENT_LABEL]
             AppTextField(
                 value = state.recipient,
                 onValueChange = { onIntent(SendScheduleEmailIntent.RecipientChanged(it)) },
-                label = Strings[StringKey.EMAIL_RECIPIENT_LABEL],
+                label = recipientHint,
+                labelFocused = Strings[StringKey.EMAIL_RECIPIENT_LABEL],
+                // The customer's stored email shows FAINT as the placeholder: leave
+                // the field blank to send there, or type to override. Empty (no stored
+                // email) means a recipient is mandatory - the Preview button stays
+                // disabled until one is entered (canPreview).
+                placeholder = recipientHint,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             )
 
             // spot checklist - each becomes a table in the one email

@@ -43,8 +43,21 @@ abstract class ScheduleEmailTestBase {
     }
 }
 
-fun party(code: String = "CUS1", email: String? = "c@example.gr"): Party =
+// A REAL domain, not `@example.`: that suffix is the migration's placeholder marker
+// and the send screen now strips it, so a fixture using it would read as "no email".
+fun party(code: String = "CUS1", email: String? = "c@acme.gr"): Party =
     Party(code = code, name = "Party $code", email = email)
+
+fun logEntry(
+    recipient: String,
+    sentAt: String = "2026-07-01 09:00",
+    year: Int = 2026,
+    month: Int = 6,
+): EmailLogEntry = EmailLogEntry(
+    id = 1L, customerCode = "CUS1", customerName = "Party CUS1", recipient = recipient,
+    subject = "ΠΡΟΓΡΑΜΜΑΤΙΣΜΟΙ", year = year, month = month, spotCount = 1, transmissionCount = 1,
+    sentBy = "su", sentAt = sentAt, status = "SENT",
+)
 
 fun previewRequest(
     spotIds: List<Long> = listOf(1L),

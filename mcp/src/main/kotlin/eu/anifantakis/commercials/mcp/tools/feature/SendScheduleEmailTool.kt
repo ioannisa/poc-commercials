@@ -118,21 +118,27 @@ object SendScheduleEmailTool : McpTool {
                 ?: throw McpToolException("No SMTP configured - add an smtp: block (file-wide or on this station) in server.yaml.")
             try {
                 services.sendEmail(smtp, recipient, subject, html)
-                access.data.logEmail(
-                    StationDb.EmailLogEntry(
-                        customerCode = clientCode,
-                        customerName = data.customerName,
-                        recipient = recipient,
-                        subject = subject,
-                        year = year,
-                        month = month,
-                        spotCount = data.spots.size,
-                        transmissionCount = transmissions,
-                        bodyHtml = html,
-                        sentBy = caller.user.username,
-                        status = "SENT",
+                // A TEST-redirected send is NOT recorded: its recipient is the test
+                // address, and logging it would feed that fake into the audit trail,
+                // the smart pre-fill and history-based email recovery. (The mutation
+                // audit below still fires - it tracks tool USE, not "email sent to X".)
+                if (redirectTo == null) {
+                    access.data.logEmail(
+                        StationDb.EmailLogEntry(
+                            customerCode = clientCode,
+                            customerName = data.customerName,
+                            recipient = recipient,
+                            subject = subject,
+                            year = year,
+                            month = month,
+                            spotCount = data.spots.size,
+                            transmissionCount = transmissions,
+                            bodyHtml = html,
+                            sentBy = caller.user.username,
+                            status = "SENT",
+                        )
                     )
-                )
+                }
                 services.audit(
                     caller,
                     "send_schedule_email",
@@ -144,23 +150,26 @@ object SendScheduleEmailTool : McpTool {
                     put("spotSections", data.spots.size); put("transmissions", transmissions)
                 }
             } catch (e: Exception) {
-                access.data.logEmail(
-                    StationDb.EmailLogEntry(
-                        customerCode = clientCode,
-                        customerName = data.customerName,
-                        recipient = recipient,
-                        subject = subject,
-                        year = year,
-                        month = month,
-                        spotCount = data.spots.size,
-                        transmissionCount = transmissions,
-                        bodyHtml = null,
-                        sentBy = caller.user.username,
-                        status = "FAILED",
-                        error = e.message,
+                if (redirectTo == null) {
+                    access.data.logEmail(
+                        StationDb.EmailLogEntry(
+                            customerCode = clientCode,
+                            customerName = data.customerName,
+                            recipient = recipient,
+                            subject = subject,
+                            year = year,
+                            month = month,
+                            spotCount = data.spots.size,
+                            transmissionCount = transmissions,
+                            bodyHtml = null,
+                            sentBy = caller.user.username,
+                            status = "FAILED",
+                            error = e.message,
+                        )
                     )
-                )
-                throw McpToolException("Send failed (logged): ${e.message}")
+                }
+                val logged = if (redirectTo == null) " (logged)" else ""
+                throw McpToolException("Send failed$logged: ${e.message}")
             }
         }
 }
