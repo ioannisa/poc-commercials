@@ -153,18 +153,17 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
             val outcome = withContext(Dispatchers.IO) {
                 authDb.resetPasswordWithCode(request.username.trim(), request.code.trim(), request.newPassword)
             }
-            when (outcome) {
-                AuthDb.ResetOutcome.Success ->
-                    call.respond(ResetResultResponse("ok"))
-                is AuthDb.ResetOutcome.Locked ->
-                    call.respond(HttpStatusCode.TooManyRequests, ResetResultResponse("locked", outcome.retryAfterSeconds))
-                is AuthDb.ResetOutcome.InvalidCode ->
-                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("invalid_code", outcome.retryAfterSeconds))
-                AuthDb.ResetOutcome.Expired ->
-                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("expired"))
-                AuthDb.ResetOutcome.NoRequest ->
-                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("invalid_code"))
+            // Always 200: the [status] field carries the outcome, so the client
+            // parses one shape and never has to read a 4xx body. ("invalid_code"
+            // covers a wrong/expired-less/absent request too - anti-enumeration.)
+            val result = when (outcome) {
+                AuthDb.ResetOutcome.Success -> ResetResultResponse("ok")
+                is AuthDb.ResetOutcome.Locked -> ResetResultResponse("locked", outcome.retryAfterSeconds)
+                is AuthDb.ResetOutcome.InvalidCode -> ResetResultResponse("invalid_code", outcome.retryAfterSeconds)
+                AuthDb.ResetOutcome.Expired -> ResetResultResponse("expired")
+                AuthDb.ResetOutcome.NoRequest -> ResetResultResponse("invalid_code")
             }
+            call.respond(result)
         }
 
         authenticate(AUTH_BEARER) {

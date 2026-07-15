@@ -106,11 +106,6 @@ fun FrameWindowScope.AppMenuBar(registry: CommandRegistry) {
                 enabled = enabled(AppCommand.CHANGE_PASSWORD),
                 onClick = { registry.execute(AppCommand.CHANGE_PASSWORD) },
             )
-            Item(
-                text = label(StringKey.RECOVERY_TITLE),
-                enabled = enabled(AppCommand.RECOVERY_CODES),
-                onClick = { registry.execute(AppCommand.RECOVERY_CODES) },
-            )
             Separator()
             Item(
                 text = label(StringKey.TIMETABLE_CD_LOGOUT),

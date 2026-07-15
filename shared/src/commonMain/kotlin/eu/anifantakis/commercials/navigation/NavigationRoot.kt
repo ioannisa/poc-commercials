@@ -37,7 +37,6 @@ import eu.anifantakis.commercials.core.presentation.scaffold.ApplicationScaffold
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.AuthNavType
 import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordDialogRoot
-import eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes.RecoveryCodesDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
@@ -108,10 +107,6 @@ fun NavigationRoot() {
     if (showChangePassword) {
         ChangePasswordDialogRoot(onDismiss = { showChangePassword = false })
     }
-    var showRecoveryCodes by remember { mutableStateOf(false) }
-    if (showRecoveryCodes) {
-        RecoveryCodesDialogRoot(onDismiss = { showRecoveryCodes = false })
-    }
 
     // Critical-loading back-block (golden-standard AppLoadingIndicator rule):
     // while an uninterruptible operation shows the overlay, swallow back
@@ -145,9 +140,6 @@ fun NavigationRoot() {
     }
     RegisterAppCommand(commandRegistry, navOwner, AppCommand.CHANGE_PASSWORD, enabled = loggedIn) {
         showChangePassword = true
-    }
-    RegisterAppCommand(commandRegistry, navOwner, AppCommand.RECOVERY_CODES, enabled = loggedIn) {
-        showRecoveryCodes = true
     }
 
     ApplicationScaffold { scaffoldPadding ->
@@ -190,7 +182,6 @@ fun NavigationRoot() {
                     navigator = navigator,
                     isAdmin = { authSession.isAdmin },
                     onChangePassword = { showChangePassword = true },
-                    onRecoveryCodes = { showRecoveryCodes = true },
                     onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
                     onMigration = { navigator.navigate(MigrationNavType.Migration) },
                     onDatabases = { navigator.navigate(DatabasesNavType.Databases) },

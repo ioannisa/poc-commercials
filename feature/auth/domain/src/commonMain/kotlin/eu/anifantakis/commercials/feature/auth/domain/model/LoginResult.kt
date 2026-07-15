@@ -14,4 +14,7 @@ data class LoginResult(
     val displayName: String,
     val isAdmin: Boolean,
     val stations: List<GrantedStation>,
+    /** After an admin reset / on a fresh account: the app traps the user on a
+     *  change-password screen until they pick a new one. */
+    val mustChangePassword: Boolean = false,
 )

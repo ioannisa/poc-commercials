@@ -264,6 +264,12 @@ enum class StringKey(val json: String = "") {
     LOGIN_FORGOT_PASSWORD,
     LOGIN_DEMO_ACCOUNTS,
     LOGIN_DEMO_ACCOUNTS_BODY,
+    LOGIN_SEND_CODE,
+    LOGIN_CODE_SENT,
+    LOGIN_ENTER_CODE_HINT,
+    LOGIN_RESET_INVALID,
+    LOGIN_RESET_LOCKED,
+    LOGIN_RESET_EXPIRED,
 
     // ── Admin screens (user mgmt / databases / migration) + auth dialogs ─
     COMMON_SAVE,

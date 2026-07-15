@@ -6,7 +6,6 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordViewModel
 import eu.anifantakis.commercials.feature.auth.presentation.screens.login.LoginViewModel
-import eu.anifantakis.commercials.feature.auth.presentation.screens.recovery_codes.RecoveryCodesViewModel
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.bind
@@ -17,5 +16,4 @@ val authModule = module {
     singleOf(::AuthRepositoryImpl).bind<AuthRepository>()
     viewModelOf(::LoginViewModel)
     viewModelOf(::ChangePasswordViewModel)
-    viewModelOf(::RecoveryCodesViewModel)
 }

@@ -241,7 +241,13 @@ internal class It : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "Reimposta password"
         StringKey.LOGIN_BUTTON -> "Accedi"
         StringKey.LOGIN_BACK_TO_LOGIN -> "Torna all'accesso"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "Password dimenticata? Usa un codice di recupero"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "Password dimenticata?"
+        StringKey.LOGIN_SEND_CODE -> "Invia codice"
+        StringKey.LOGIN_CODE_SENT -> "Se l'account esiste, è stato inviato un codice via email."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "Inserisci il codice a 6 cifre inviato via email."
+        StringKey.LOGIN_RESET_INVALID -> "Codice errato."
+        StringKey.LOGIN_RESET_LOCKED -> "Troppi tentativi — attendi {0}s."
+        StringKey.LOGIN_RESET_EXPIRED -> "Codice scaduto — richiedine uno nuovo."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Account demo"
         // Le credenziali sono fisse; vengono tradotti solo i ruoli ({0}-{2}).
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

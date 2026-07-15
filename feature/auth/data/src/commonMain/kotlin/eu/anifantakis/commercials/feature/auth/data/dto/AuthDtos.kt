@@ -18,6 +18,7 @@ internal data class LoginResponseDto(
     val token: String,
     val displayName: String,
     val isAdmin: Boolean = false,
+    val mustChangePassword: Boolean = false,
     val stations: List<StationAccessDto> = emptyList(),
 )
 
@@ -25,7 +26,11 @@ internal data class LoginResponseDto(
 internal data class ChangePasswordDto(val currentPassword: String, val newPassword: String)
 
 @Serializable
-internal data class RecoverPasswordDto(val username: String, val recoveryCode: String, val newPassword: String)
+internal data class ForgotPasswordDto(val username: String)
 
 @Serializable
-internal data class RecoveryCodesDto(val codes: List<String> = emptyList())
+internal data class ResetPasswordDto(val username: String, val code: String, val newPassword: String)
+
+/** status: "ok" | "invalid_code" | "locked" | "expired"; retryAfterSeconds set on a lock. */
+@Serializable
+internal data class ResetResultDto(val status: String, val retryAfterSeconds: Long? = null)

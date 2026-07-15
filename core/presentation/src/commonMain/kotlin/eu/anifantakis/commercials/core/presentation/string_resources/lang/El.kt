@@ -241,7 +241,13 @@ internal class El : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "Επαναφορά κωδικού"
         StringKey.LOGIN_BUTTON -> "Σύνδεση"
         StringKey.LOGIN_BACK_TO_LOGIN -> "Πίσω στη σύνδεση"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "Ξεχάσατε τον κωδικό; Χρησιμοποιήστε κωδικό ανάκτησης"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "Ξεχάσατε τον κωδικό;"
+        StringKey.LOGIN_SEND_CODE -> "Αποστολή κωδικού"
+        StringKey.LOGIN_CODE_SENT -> "Αν υπάρχει ο λογαριασμός, στάλθηκε κωδικός στο email."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "Εισαγάγετε τον 6ψήφιο κωδικό που στάλθηκε στο email σας."
+        StringKey.LOGIN_RESET_INVALID -> "Λάθος κωδικός."
+        StringKey.LOGIN_RESET_LOCKED -> "Πολλές προσπάθειες — περιμένετε {0}δ."
+        StringKey.LOGIN_RESET_EXPIRED -> "Ο κωδικός έληξε — ζητήστε νέον."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Δοκιμαστικοί λογαριασμοί"
         // Τα διαπιστευτήρια είναι σταθερά· μόνο οι ρόλοι ({0}-{2}) μεταφράζονται.
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

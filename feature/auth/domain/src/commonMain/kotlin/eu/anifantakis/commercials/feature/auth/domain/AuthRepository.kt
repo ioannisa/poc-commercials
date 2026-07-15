@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.auth.domain
 
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
+import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 
 /**
  * Authentication operations. Implementations own the session persistence:
@@ -18,9 +19,9 @@ interface AuthRepository {
     /** On success the server revokes ALL sessions; the local one is cleared. */
     suspend fun changePassword(currentPassword: String, newPassword: String): EmptyDataResult<AuthError>
 
-    /** "Forgot password": consumes ONE recovery code to set a new password. */
-    suspend fun recoverPassword(username: String, recoveryCode: String, newPassword: String): EmptyDataResult<AuthError>
+    /** "Forgot password" step 1: request an emailed 6-digit code (always succeeds bar a network error). */
+    suspend fun forgotPassword(username: String): EmptyDataResult<AuthError>
 
-    /** Regenerates one-time recovery codes; raw codes are shown ONCE. */
-    suspend fun regenerateRecoveryCodes(): DataResult<List<String>, AuthError>
+    /** Step 2: complete the reset with the emailed code; the outcome distinguishes wrong/locked/expired. */
+    suspend fun resetPassword(username: String, code: String, newPassword: String): DataResult<ResetOutcome, AuthError>
 }

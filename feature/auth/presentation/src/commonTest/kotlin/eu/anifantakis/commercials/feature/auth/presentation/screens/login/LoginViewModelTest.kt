@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -50,10 +51,12 @@ class LoginViewModelTest {
 
     private class FakeAuthRepository(
         var loginResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
-        var recoverResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
+        var forgotResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
+        var resetResult: DataResult<ResetOutcome, AuthError> = DataResult.Success(ResetOutcome.Success),
     ) : AuthRepository {
         var loginCalls = 0
-        var recoverCalls = 0
+        var forgotCalls = 0
+        var resetCalls = 0
 
         override suspend fun login(username: String, password: String): EmptyDataResult<AuthError> {
             loginCalls++
@@ -65,17 +68,19 @@ class LoginViewModelTest {
         override suspend fun changePassword(currentPassword: String, newPassword: String): EmptyDataResult<AuthError> =
             DataResult.Success(Unit)
 
-        override suspend fun recoverPassword(
-            username: String,
-            recoveryCode: String,
-            newPassword: String,
-        ): EmptyDataResult<AuthError> {
-            recoverCalls++
-            return recoverResult
+        override suspend fun forgotPassword(username: String): EmptyDataResult<AuthError> {
+            forgotCalls++
+            return forgotResult
         }
 
-        override suspend fun regenerateRecoveryCodes(): DataResult<List<String>, AuthError> =
-            DataResult.Success(emptyList())
+        override suspend fun resetPassword(
+            username: String,
+            code: String,
+            newPassword: String,
+        ): DataResult<ResetOutcome, AuthError> {
+            resetCalls++
+            return resetResult
+        }
     }
 
     private fun filledLogin(vm: LoginViewModel) {
@@ -107,14 +112,14 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun toggleRecoveryModeArmsRecoveryAndClearsPasswordAndMessages() = runTest(testDispatcher) {
+    fun startForgotArmsRequestModeAndClearsPassword() = runTest(testDispatcher) {
         val vm = LoginViewModel(FakeAuthRepository())
         vm.onAction(LoginIntent.PasswordChanged("secret"))
 
-        vm.onAction(LoginIntent.ToggleRecoveryMode)
+        vm.onAction(LoginIntent.StartForgot)
 
-        assertTrue(vm.state.recoveryMode)
-        assertEquals("", vm.state.password, "switching modes wipes the half-typed password")
+        assertEquals(LoginMode.FORGOT_REQUEST, vm.state.mode)
+        assertEquals("", vm.state.password, "switching to forgot wipes the half-typed password")
     }
 
     @Test
@@ -157,19 +162,47 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun recoverySubmitSuccessShowsInfoAndLeavesRecoveryMode() = runTest(testDispatcher) {
-        val repo = FakeAuthRepository(recoverResult = DataResult.Success(Unit))
+    fun forgotFlowRequestsCodeThenResetsAndReturnsToLogin() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Success))
         val vm = LoginViewModel(repo)
-        vm.onAction(LoginIntent.ToggleRecoveryMode)
+        vm.onAction(LoginIntent.StartForgot)
         vm.onAction(LoginIntent.UsernameChanged("admin"))
-        vm.onAction(LoginIntent.RecoveryCodeChanged("ABCD-1234"))
-        vm.onAction(LoginIntent.PasswordChanged("newpass"))
 
+        // Step 1: request the emailed code.
+        vm.onAction(LoginIntent.Submit)
+        advanceUntilIdle()
+        assertEquals(1, repo.forgotCalls)
+        assertEquals(LoginMode.FORGOT_ENTER, vm.state.mode)
+        assertEquals(UiText.Res(StringKey.LOGIN_CODE_SENT), vm.state.infoMessage)
+
+        // Step 2: enter the 6-digit code + a new password, reset.
+        vm.onAction(LoginIntent.CodeChanged("123456"))
+        vm.onAction(LoginIntent.NewPasswordChanged("newpass"))
         vm.onAction(LoginIntent.Submit)
         advanceUntilIdle()
 
-        assertEquals(1, repo.recoverCalls, "recovery mode routes Submit to recoverPassword")
+        assertEquals(1, repo.resetCalls)
+        assertEquals(LoginMode.LOGIN, vm.state.mode, "success drops back to the normal login form")
         assertEquals(UiText.Res(StringKey.LOGIN_RESET_DONE), vm.state.infoMessage)
-        assertFalse(vm.state.recoveryMode, "success drops back to the normal login form")
+    }
+
+    @Test
+    fun wrongCodeWithLockArmsCountdownAndBlocksSubmit() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Invalid(retryAfterSeconds = 10)))
+        val vm = LoginViewModel(repo)
+        vm.onAction(LoginIntent.StartForgot)
+        vm.onAction(LoginIntent.UsernameChanged("admin"))
+        vm.onAction(LoginIntent.Submit)
+        advanceUntilIdle()
+
+        vm.onAction(LoginIntent.CodeChanged("123456"))
+        vm.onAction(LoginIntent.NewPasswordChanged("newpass"))
+        // No advanceUntilIdle: the countdown would tick down to zero. Assert the
+        // state right after the wrong code lands.
+        vm.onAction(LoginIntent.Submit)
+
+        assertEquals(UiText.Res(StringKey.LOGIN_RESET_INVALID), vm.state.errorMessage)
+        assertTrue(vm.state.lockSeconds > 0, "a lock arms the countdown")
+        assertFalse(vm.state.canSubmit, "submit is blocked while the lock counts down")
     }
 }

@@ -246,7 +246,13 @@ internal class He : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "איפוס סיסמה"
         StringKey.LOGIN_BUTTON -> "התחברות"
         StringKey.LOGIN_BACK_TO_LOGIN -> "חזרה להתחברות"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "שכחת סיסמה? השתמש בקוד שחזור"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "שכחת את הסיסמה?"
+        StringKey.LOGIN_SEND_CODE -> "שלח קוד"
+        StringKey.LOGIN_CODE_SENT -> "אם החשבון קיים, נשלח קוד לאימייל."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "הזן את הקוד בן 6 הספרות שנשלח לאימייל שלך."
+        StringKey.LOGIN_RESET_INVALID -> "קוד שגוי."
+        StringKey.LOGIN_RESET_LOCKED -> "יותר מדי ניסיונות — המתן {0} שניות."
+        StringKey.LOGIN_RESET_EXPIRED -> "הקוד פג — בקש קוד חדש."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "חשבונות הדגמה"
         // פרטי ההתחברות קבועים; רק התפקידים ({0}-{2}) מתורגמים.
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

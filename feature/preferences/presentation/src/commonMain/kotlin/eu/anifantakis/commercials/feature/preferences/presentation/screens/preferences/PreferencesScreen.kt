@@ -51,7 +51,6 @@ fun PreferencesScreenRoot(
     isAdmin: Boolean,
     onBack: () -> Unit,
     onChangePassword: () -> Unit,
-    onRecoveryCodes: () -> Unit,
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
@@ -67,7 +66,6 @@ fun PreferencesScreenRoot(
             when (navIntent) {
                 PreferencesScreenNavIntent.OnBack -> onBack()
                 PreferencesScreenNavIntent.OnChangePassword -> onChangePassword()
-                PreferencesScreenNavIntent.OnRecoveryCodes -> onRecoveryCodes()
                 PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
@@ -85,7 +83,6 @@ fun PreferencesScreenRoot(
 private sealed interface PreferencesScreenNavIntent {
     data object OnBack : PreferencesScreenNavIntent
     data object OnChangePassword : PreferencesScreenNavIntent
-    data object OnRecoveryCodes : PreferencesScreenNavIntent
     data object OnManageUsers : PreferencesScreenNavIntent
     data object OnMigration : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
@@ -174,7 +171,6 @@ private fun PreferencesScreen(
                         AppText(Strings[StringKey.PREFERENCES_ACCOUNT], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(UIConst.paddingExtraSmall))
                         PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
-                        PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_RECOVERY_CODES], Strings[StringKey.PREFERENCES_RECOVERY_CODES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnRecoveryCodes) }
                     }
                 }
                 Spacer(Modifier.height(UIConst.paddingCompact))

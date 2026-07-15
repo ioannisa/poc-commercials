@@ -5,14 +5,16 @@ import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.data.dto.ChangePasswordDto
+import eu.anifantakis.commercials.feature.auth.data.dto.ForgotPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginRequestDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginResponseDto
-import eu.anifantakis.commercials.feature.auth.data.dto.RecoverPasswordDto
-import eu.anifantakis.commercials.feature.auth.data.dto.RecoveryCodesDto
+import eu.anifantakis.commercials.feature.auth.data.dto.ResetPasswordDto
+import eu.anifantakis.commercials.feature.auth.data.dto.ResetResultDto
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.domain.model.GrantedStation
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
+import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -49,6 +51,7 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
                         token = dto.token,
                         displayName = dto.displayName,
                         isAdmin = dto.isAdmin,
+                        mustChangePassword = dto.mustChangePassword,
                         stations = dto.stations.map {
                             GrantedStation(it.id, it.name, it.role, it.clientCode)
                         },
@@ -86,28 +89,37 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
         else DataResult.Failure(AuthError.Server(response.errorMessage()))
     }
 
-    override suspend fun recoverPassword(
-        username: String,
-        recoveryCode: String,
-        newPassword: String,
-    ): EmptyDataResult<AuthError> = authCall {
-        val response = httpClient.post(url("recover")) {
+    override suspend fun forgotPassword(username: String): EmptyDataResult<AuthError> = authCall {
+        val response = httpClient.post(url("forgot")) {
             contentType(ContentType.Application.Json)
-            setBody(RecoverPasswordDto(username.trim(), recoveryCode.trim(), newPassword))
+            setBody(ForgotPasswordDto(username.trim()))
         }
+        // The server always answers the same (anti-enumeration); only a transport
+        // failure is a real error, which authCall already turns into Network.
         if (response.status.isSuccess()) DataResult.Success(Unit)
         else DataResult.Failure(AuthError.Server(response.errorMessage()))
     }
 
-    override suspend fun regenerateRecoveryCodes(token: String): DataResult<List<String>, AuthError> = authCall {
-        val response = httpClient.post(url("recovery-codes")) {
-            header(HttpHeaders.Authorization, "Bearer $token")
+    override suspend fun resetPassword(
+        username: String,
+        code: String,
+        newPassword: String,
+    ): DataResult<ResetOutcome, AuthError> = authCall {
+        val response = httpClient.post(url("reset")) {
+            contentType(ContentType.Application.Json)
+            setBody(ResetPasswordDto(username.trim(), code.trim(), newPassword))
         }
-        if (response.status.isSuccess()) {
-            val dto: RecoveryCodesDto = response.body()
-            DataResult.Success(dto.codes)
-        } else {
+        if (!response.status.isSuccess()) {
             DataResult.Failure(AuthError.Server(response.errorMessage()))
+        } else {
+            val dto: ResetResultDto = response.body()
+            val outcome = when (dto.status) {
+                "ok" -> ResetOutcome.Success
+                "locked" -> ResetOutcome.Locked(dto.retryAfterSeconds ?: 0L)
+                "expired" -> ResetOutcome.Expired
+                else -> ResetOutcome.Invalid(dto.retryAfterSeconds)   // "invalid_code" and anything unexpected
+            }
+            DataResult.Success(outcome)
         }
     }
 

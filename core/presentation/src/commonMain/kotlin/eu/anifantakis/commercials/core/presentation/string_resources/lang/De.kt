@@ -241,7 +241,13 @@ internal class De : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "Passwort zurücksetzen"
         StringKey.LOGIN_BUTTON -> "Anmelden"
         StringKey.LOGIN_BACK_TO_LOGIN -> "Zurück zur Anmeldung"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "Passwort vergessen? Wiederherstellungscode verwenden"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "Passwort vergessen?"
+        StringKey.LOGIN_SEND_CODE -> "Code senden"
+        StringKey.LOGIN_CODE_SENT -> "Falls das Konto existiert, wurde ein Code per E-Mail gesendet."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "Geben Sie den 6-stelligen Code aus Ihrer E-Mail ein."
+        StringKey.LOGIN_RESET_INVALID -> "Falscher Code."
+        StringKey.LOGIN_RESET_LOCKED -> "Zu viele Versuche — warten Sie {0}s."
+        StringKey.LOGIN_RESET_EXPIRED -> "Code abgelaufen — fordern Sie einen neuen an."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Testkonten"
         // Die Zugangsdaten sind fest; nur die Rollen ({0}-{2}) werden übersetzt.
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

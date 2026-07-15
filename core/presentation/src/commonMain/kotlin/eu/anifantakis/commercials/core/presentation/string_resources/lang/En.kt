@@ -241,7 +241,13 @@ internal class En : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "Reset password"
         StringKey.LOGIN_BUTTON -> "Login"
         StringKey.LOGIN_BACK_TO_LOGIN -> "Back to login"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "Forgot password? Use a recovery code"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "Forgot your password?"
+        StringKey.LOGIN_SEND_CODE -> "Send code"
+        StringKey.LOGIN_CODE_SENT -> "If the account exists, a code was emailed."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "Enter the 6-digit code sent to your email."
+        StringKey.LOGIN_RESET_INVALID -> "Wrong code."
+        StringKey.LOGIN_RESET_LOCKED -> "Too many attempts — wait {0}s."
+        StringKey.LOGIN_RESET_EXPIRED -> "Code expired — request a new one."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Demo accounts"
         // The credentials are fixed; only the roles ({0}-{2}) are translated.
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

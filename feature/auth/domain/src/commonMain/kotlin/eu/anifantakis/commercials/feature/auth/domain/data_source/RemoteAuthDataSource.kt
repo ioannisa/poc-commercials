@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
+import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 
 /**
  * Network side of /api/auth - the only class that touches the HTTP client.
@@ -23,11 +24,13 @@ interface RemoteAuthDataSource {
         newPassword: String,
     ): EmptyDataResult<AuthError>
 
-    suspend fun recoverPassword(
-        username: String,
-        recoveryCode: String,
-        newPassword: String,
-    ): EmptyDataResult<AuthError>
+    /** Requests an emailed 6-digit reset code. */
+    suspend fun forgotPassword(username: String): EmptyDataResult<AuthError>
 
-    suspend fun regenerateRecoveryCodes(token: String): DataResult<List<String>, AuthError>
+    /** Completes the reset with the emailed code; the [ResetOutcome] distinguishes wrong/locked/expired. */
+    suspend fun resetPassword(
+        username: String,
+        code: String,
+        newPassword: String,
+    ): DataResult<ResetOutcome, AuthError>
 }

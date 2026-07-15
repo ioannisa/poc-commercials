@@ -241,7 +241,13 @@ internal class Fr : LanguageStrings {
         StringKey.LOGIN_RESET_PASSWORD -> "Réinitialiser le mot de passe"
         StringKey.LOGIN_BUTTON -> "Connexion"
         StringKey.LOGIN_BACK_TO_LOGIN -> "Retour à la connexion"
-        StringKey.LOGIN_FORGOT_PASSWORD -> "Mot de passe oublié ? Utilisez un code de récupération"
+        StringKey.LOGIN_FORGOT_PASSWORD -> "Mot de passe oublié ?"
+        StringKey.LOGIN_SEND_CODE -> "Envoyer le code"
+        StringKey.LOGIN_CODE_SENT -> "Si le compte existe, un code a été envoyé par e-mail."
+        StringKey.LOGIN_ENTER_CODE_HINT -> "Saisissez le code à 6 chiffres reçu par e-mail."
+        StringKey.LOGIN_RESET_INVALID -> "Code incorrect."
+        StringKey.LOGIN_RESET_LOCKED -> "Trop de tentatives — attendez {0}s."
+        StringKey.LOGIN_RESET_EXPIRED -> "Code expiré — demandez-en un nouveau."
         StringKey.LOGIN_DEMO_ACCOUNTS -> "Comptes de démonstration"
         // Les identifiants sont fixes ; seuls les rôles ({0}-{2}) sont traduits.
         StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->

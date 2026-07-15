@@ -19,6 +19,7 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppFormColumn
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppOtpField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppPasswordField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
@@ -33,10 +34,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * Login gate shown before any data is loaded. On success the session
- * (token, stations, roles) has been stored by the repository; [onLoggedIn]
- * then swaps the navigation stack to the main app. Also hosts the "forgot
- * password" flow (username + ONE unused recovery code sets a new password).
+ * Login gate shown before any data is loaded. On success the session (token,
+ * stations, roles) has been stored by the repository; [onLoggedIn] then swaps
+ * the navigation stack to the main app. Also hosts the two-step "forgot
+ * password" flow: request an emailed 6-digit code, then enter it with a new password.
  */
 @Composable
 fun LoginScreenRoot(
@@ -60,13 +61,14 @@ private fun LoginScreen(
     state: LoginState,
     onIntent: (LoginIntent) -> Unit,
 ) {
+    val forgot = state.mode != LoginMode.LOGIN
     Column(
         modifier = Modifier.fillMaxSize().padding(UIConst.paddingAverage),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // 420 is this card's own geometry (narrower than the platform form
-        // cap on purpose - a login card, not a settings form).
+        // 420 is this card's own geometry (narrower than the platform form cap
+        // on purpose - a login card, not a settings form).
         AppFormColumn(maxWidth = 420.dp) {
             AppCard {
                 Column(
@@ -79,7 +81,7 @@ private fun LoginScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     AppText(
-                        if (state.recoveryMode) Strings[StringKey.LOGIN_RECOVERY_TITLE] else Strings[StringKey.LOGIN_SIGN_IN_TITLE],
+                        Strings[if (forgot) StringKey.LOGIN_RECOVERY_TITLE else StringKey.LOGIN_SIGN_IN_TITLE],
                         AppTextStyle.BODY,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -91,33 +93,57 @@ private fun LoginScreen(
                         onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
                         label = Strings[StringKey.LOGIN_USERNAME],
                         leadingIcon = AppIcons.person,
-                        enabled = !state.isLoading,
+                        // Once a code is requested the username is fixed - it is who the code is for.
+                        enabled = !state.isLoading && state.mode != LoginMode.FORGOT_ENTER,
                     )
 
-                    if (state.recoveryMode) {
-                        Spacer(Modifier.height(UIConst.paddingCompact))
-                        AppTextField(
-                            value = state.recoveryCode,
-                            onValueChange = { onIntent(LoginIntent.RecoveryCodeChanged(it)) },
-                            label = Strings[StringKey.LOGIN_RECOVERY_CODE],
-                            placeholder = "XXXX-XXXX-XXXX-XXXX",
-                            leadingIcon = AppIcons.key,
-                            enabled = !state.isLoading,
-                        )
+                    when (state.mode) {
+                        LoginMode.LOGIN -> {
+                            Spacer(Modifier.height(UIConst.paddingCompact))
+                            AppPasswordField(
+                                value = state.password,
+                                onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
+                                label = Strings[StringKey.LOGIN_PASSWORD],
+                                visible = state.passwordVisible,
+                                onToggleVisibility = { onIntent(LoginIntent.TogglePasswordVisibility) },
+                                leadingIcon = AppIcons.lock,
+                                enabled = !state.isLoading,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            )
+                        }
+
+                        LoginMode.FORGOT_REQUEST -> Unit   // username only
+
+                        LoginMode.FORGOT_ENTER -> {
+                            Spacer(Modifier.height(UIConst.paddingCompact))
+                            AppText(Strings[StringKey.LOGIN_ENTER_CODE_HINT], AppTextStyle.NOTE)
+                            Spacer(Modifier.height(UIConst.paddingSmall))
+                            AppOtpField(
+                                value = state.code,
+                                onValueChange = { onIntent(LoginIntent.CodeChanged(it)) },
+                                enabled = !state.isLoading,
+                                isError = state.errorMessage != null,
+                            )
+                            Spacer(Modifier.height(UIConst.paddingCompact))
+                            AppPasswordField(
+                                value = state.newPassword,
+                                onValueChange = { onIntent(LoginIntent.NewPasswordChanged(it)) },
+                                label = Strings[StringKey.LOGIN_NEW_PASSWORD],
+                                visible = state.passwordVisible,
+                                onToggleVisibility = { onIntent(LoginIntent.TogglePasswordVisibility) },
+                                leadingIcon = AppIcons.lock,
+                                enabled = !state.isLoading,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            )
+                            if (state.lockSeconds > 0) {
+                                Spacer(Modifier.height(UIConst.paddingCompact))
+                                AppText(
+                                    Strings[StringKey.LOGIN_RESET_LOCKED].withArgs(listOf(state.lockSeconds)),
+                                    AppTextStyle.ERROR_NOTE,
+                                )
+                            }
+                        }
                     }
-
-                    Spacer(Modifier.height(UIConst.paddingCompact))
-
-                    AppPasswordField(
-                        value = state.password,
-                        onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
-                        label = Strings[if (state.recoveryMode) StringKey.LOGIN_NEW_PASSWORD else StringKey.LOGIN_PASSWORD],
-                        visible = state.passwordVisible,
-                        onToggleVisibility = { onIntent(LoginIntent.TogglePasswordVisibility) },
-                        leadingIcon = AppIcons.lock,
-                        enabled = !state.isLoading,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    )
 
                     state.errorMessage?.let { message ->
                         Spacer(Modifier.height(UIConst.paddingCompact))
@@ -131,7 +157,13 @@ private fun LoginScreen(
                     Spacer(Modifier.height(UIConst.paddingAverage))
 
                     AppButton(
-                        text = Strings[if (state.recoveryMode) StringKey.LOGIN_RESET_PASSWORD else StringKey.LOGIN_BUTTON],
+                        text = Strings[
+                            when (state.mode) {
+                                LoginMode.LOGIN -> StringKey.LOGIN_BUTTON
+                                LoginMode.FORGOT_REQUEST -> StringKey.LOGIN_SEND_CODE
+                                LoginMode.FORGOT_ENTER -> StringKey.LOGIN_RESET_PASSWORD
+                            }
+                        ],
                         onClick = { onIntent(LoginIntent.Submit) },
                         enabled = state.canSubmit,
                         busy = state.isLoading,
@@ -141,13 +173,12 @@ private fun LoginScreen(
                     Spacer(Modifier.height(UIConst.paddingSmall))
 
                     AppButton(
-                        text = Strings[if (state.recoveryMode) StringKey.LOGIN_BACK_TO_LOGIN
-                        else StringKey.LOGIN_FORGOT_PASSWORD],
-                        onClick = { onIntent(LoginIntent.ToggleRecoveryMode) },
+                        text = Strings[if (forgot) StringKey.LOGIN_BACK_TO_LOGIN else StringKey.LOGIN_FORGOT_PASSWORD],
+                        onClick = { onIntent(if (forgot) LoginIntent.BackToLogin else LoginIntent.StartForgot) },
                         variant = AppButtonVariant.TEXT,
                     )
 
-                    if (!state.recoveryMode) {
+                    if (state.mode == LoginMode.LOGIN) {
                         Spacer(Modifier.height(UIConst.paddingRegular))
                         // Demo accounts - one per access layer (demo convenience)
                         AppText(
@@ -173,29 +204,21 @@ private fun LoginScreen(
 }
 
 // ── previews ────────────────────────────────────────────────────────────────
-// The four states this card can actually be in. The happy path alone would hide
-// the three that are worth looking at: a disabled/busy submit, the error note
-// pushing the buttons down, and recovery mode (an EXTRA field, a different title
-// and different button labels - a layout the idle preview never renders).
+// The states this card actually lives in: idle sign-in, busy submit, the error
+// note, and the "enter code" step (OTP boxes + new password - a layout the idle
+// preview never renders).
 
 @Preview
 @Composable
 private fun LoginScreenPreview() = AppPreview(padded = false) {
-    LoginScreen(
-        state = LoginState(username = "maria.k"),
-        onIntent = {},
-    )
+    LoginScreen(state = LoginState(username = "maria.k"), onIntent = {})
 }
 
 @Preview
 @Composable
 private fun LoginScreenLoadingPreview() = AppPreview(padded = false) {
     LoginScreen(
-        state = LoginState(
-            username = "maria.k",
-            password = "secret-pass",
-            isLoading = true,
-        ),
+        state = LoginState(username = "maria.k", password = "secret-pass", isLoading = true),
         onIntent = {},
     )
 }
@@ -215,13 +238,13 @@ private fun LoginScreenErrorPreview() = AppPreview(padded = false) {
 
 @Preview
 @Composable
-private fun LoginScreenRecoveryPreview() = AppPreview(padded = false) {
+private fun LoginScreenEnterCodePreview() = AppPreview(padded = false) {
     LoginScreen(
         state = LoginState(
             username = "maria.k",
-            recoveryCode = "7QF3-2K9D-8ZP4-1XR6",
-            password = "new-secret-pass",
-            recoveryMode = true,
+            code = "1234",
+            newPassword = "new-secret-pass",
+            mode = LoginMode.FORGOT_ENTER,
             passwordVisible = true,
         ),
         onIntent = {},
