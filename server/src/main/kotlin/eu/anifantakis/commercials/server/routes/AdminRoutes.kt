@@ -1,10 +1,13 @@
 package eu.anifantakis.commercials.server.routes
 
+import eu.anifantakis.commercials.mailer.renderTempPasswordEmail
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.requireAdmin
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
+import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -28,12 +31,17 @@ data class AdminUserDto(
 data class CreateUserRequest(
     val username: String,
     val displayName: String,
-    val password: String,
+    val email: String? = null,
     val grants: List<GrantDto> = emptyList()
 )
 
+/**
+ * The one-time temp password to show the admin (copyable), from a create or a
+ * reset. [emailSent] is whether a notice was also dispatched to the user - the
+ * password is on screen regardless, so the admin can relay it if mail is down.
+ */
 @Serializable
-data class ResetPasswordRequest(val newPassword: String)
+data class TempPasswordResponse(val id: Long, val tempPassword: String, val emailSent: Boolean)
 
 @Serializable
 data class SetGrantsRequest(val grants: List<GrantDto>)
@@ -43,7 +51,7 @@ data class SetGrantsRequest(val grants: List<GrantDto>)
  * from server.yaml). Validation failures (bad username/password/grants,
  * duplicates, protected super-admin row) surface as 400 via StatusPages.
  */
-fun Route.adminRoutes(authDb: AuthDb) {
+fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
     route("/api/admin/users") {
 
         get {
@@ -60,26 +68,50 @@ fun Route.adminRoutes(authDb: AuthDb) {
             })
         }
 
+        // Create: the system mints a TEMP password (not admin-chosen). It is
+        // returned once for the admin to copy, and emailed to the user if an
+        // address was given; either way the new account must change it at first login.
         post {
             if (!call.requireAdmin()) return@post
             val request = call.receive<CreateUserRequest>()
-            val id = withContext(Dispatchers.IO) {
-                authDb.createUser(
+            val created = withContext(Dispatchers.IO) {
+                authDb.createUserWithTempPassword(
                     username = request.username.trim(),
                     displayName = request.displayName.trim(),
-                    password = request.password,
-                    grants = request.grants.toGrants()
+                    email = request.email?.trim(),
+                    grants = request.grants.toGrants(),
                 )
             }
-            call.respond(HttpStatusCode.Created, mapOf("id" to id))
+            created.email?.let { email ->
+                call.application.sendAuthMail(
+                    registry = registry,
+                    intendedTo = email,
+                    subject = "Ο λογαριασμός σας δημιουργήθηκε",
+                    html = renderTempPasswordEmail(request.username.trim(), created.tempPassword, newAccount = true),
+                )
+            }
+            call.respond(
+                HttpStatusCode.Created,
+                TempPasswordResponse(created.id, created.tempPassword, created.email != null),
+            )
         }
 
-        put("/{id}/password") {
-            if (!call.requireAdmin()) return@put
-            val userId = call.userIdParam() ?: return@put
-            val request = call.receive<ResetPasswordRequest>()
-            withContext(Dispatchers.IO) { authDb.resetPassword(userId, request.newPassword) }
-            call.respond(mapOf("status" to "password reset - the user's sessions were revoked"))
+        // Admin reset: mint a TEMP password (returned for the admin to copy, and
+        // emailed to the user), force a change at next login, clear any lockout,
+        // revoke all sessions. The mail-server-independent break-glass path.
+        post("/{id}/reset") {
+            if (!call.requireAdmin()) return@post
+            val userId = call.userIdParam() ?: return@post
+            val temp = withContext(Dispatchers.IO) { authDb.adminResetPassword(userId) }
+            temp.email?.let { email ->
+                call.application.sendAuthMail(
+                    registry = registry,
+                    intendedTo = email,
+                    subject = "Ο κωδικός σας μηδενίστηκε",
+                    html = renderTempPasswordEmail(temp.username, temp.password, newAccount = false),
+                )
+            }
+            call.respond(TempPasswordResponse(userId, temp.password, temp.email != null))
         }
 
         put("/{id}/grants") {

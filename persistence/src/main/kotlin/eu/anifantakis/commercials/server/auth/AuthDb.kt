@@ -11,6 +11,9 @@ import java.sql.Connection
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
+/** How long an emailed reset code stays valid. Public so a route can tell the user. */
+const val PASSWORD_RESET_TTL_SECONDS = 15L * 60
+
 /**
  * Application users + bearer tokens + per-station grants + email password-reset
  * codes, all in the server's CENTRAL database. Users are server-level accounts;
@@ -57,7 +60,6 @@ class AuthDb(
         /** Email password-reset code: six digits, no letters (so it is language-
          *  and keyboard-agnostic - a Greek/English layout can't mistype it). */
         const val RESET_CODE_DIGITS = 6
-        const val RESET_CODE_TTL_SECONDS = 15L * 60
         /** Wrong tries allowed with no delay before the escalating lock kicks in. */
         const val RESET_FREE_ATTEMPTS = 5
         /** First lock after the free tries are spent; each further wrong try ×3. */
@@ -550,16 +552,6 @@ class AuthDb(
         }
     }
 
-    /** Admin-driven password reset (no current-password check). */
-    fun resetPassword(userId: Long, newPassword: String) {
-        validatePassword(newPassword)
-        db.connection().use { c ->
-            val row = selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            require(!row.isAdmin) { "The super admin password is managed in server.yaml, not via the API" }
-            updatePassword(c, userId, newPassword)
-        }
-    }
-
     /**
      * A user-chosen password change/reset: clears must_change_password (they
      * picked it themselves) and revokes all sessions (log in again).
@@ -604,8 +596,8 @@ class AuthDb(
         data object NoRequest : ResetOutcome
     }
 
-    /** A generated temporary password plus the address to email it to (if any). */
-    data class TempPassword(val password: String, val email: String?)
+    /** A generated temporary password, the account it is for, and where to email it (if any). */
+    data class TempPassword(val password: String, val username: String, val email: String?)
 
     /**
      * Starts a "forgot password" flow: mints a fresh [RESET_CODE_DIGITS]-digit
@@ -633,7 +625,7 @@ class AuthDb(
             ).use { ps ->
                 ps.setLong(1, row.id)
                 ps.setString(2, tokenHash(code))
-                ps.setLong(3, RESET_CODE_TTL_SECONDS)
+                ps.setLong(3, PASSWORD_RESET_TTL_SECONDS)
                 ps.executeUpdate()
             }
             return ResetRequest(code, email)
@@ -730,7 +722,7 @@ class AuthDb(
             setPassword(c, userId, temp, mustChange = true)
             deletePasswordReset(c, userId)
             revokeAllTokens(c, userId)
-            return TempPassword(temp, selectEmail(c, userId)?.takeIf { it.isNotBlank() })
+            return TempPassword(temp, row.username, selectEmail(c, userId)?.takeIf { it.isNotBlank() })
         }
     }
 
@@ -860,6 +852,25 @@ class AuthDb(
                 c.autoCommit = true
             }
         }
+    }
+
+    /** A newly created user: id + the RAW temp password (shown once) + email (if set). */
+    data class CreatedUser(val id: Long, val tempPassword: String, val email: String?)
+
+    /**
+     * Admin create: makes a user with a generated TEMP password (must be changed
+     * at first login) and returns it RAW so the admin can relay it and it can be
+     * emailed. Delegates to [createUser] for all validation.
+     */
+    fun createUserWithTempPassword(
+        username: String,
+        displayName: String,
+        email: String?,
+        grants: List<StationGrant>,
+    ): CreatedUser {
+        val temp = generateTempPassword()
+        val id = createUser(username, displayName, temp, grants, email = email, mustChangePassword = true)
+        return CreatedUser(id, temp, email?.takeIf { it.isNotBlank() })
     }
 
     /** Replaces a user's grants wholesale. Refused for the super admin (its access is implicit). */

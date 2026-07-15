@@ -1,7 +1,9 @@
 package eu.anifantakis.commercials.server.routes
 
+import eu.anifantakis.commercials.mailer.renderPasswordResetEmail
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.AuthUser
+import eu.anifantakis.commercials.server.auth.PASSWORD_RESET_TTL_SECONDS
 import eu.anifantakis.commercials.server.plugins.AUTH_BEARER
 import eu.anifantakis.commercials.server.plugins.authUser
 import eu.anifantakis.commercials.server.stations.StationRegistry
@@ -65,6 +67,20 @@ data class SessionInfoResponse(
 @Serializable
 data class ChangePasswordRequest(val currentPassword: String, val newPassword: String)
 
+@Serializable
+data class ForgotPasswordRequest(val username: String)
+
+@Serializable
+data class ResetPasswordWithCodeRequest(val username: String, val code: String, val newPassword: String)
+
+/**
+ * The reset outcome as a machine-readable [status] the client switches on:
+ * "ok" | "invalid_code" | "locked" | "expired". [retryAfterSeconds] is set when
+ * the escalating lock is armed ("invalid_code") or already active ("locked").
+ */
+@Serializable
+data class ResetResultResponse(val status: String, val retryAfterSeconds: Long? = null)
+
 /** The raw bearer value, as the client holds it (the DB only ever sees its hash). */
 private fun ApplicationCall.bearerToken(): String? =
     request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer")?.trim()?.ifEmpty { null }
@@ -110,6 +126,45 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     stations = registry.accessFor(user),
                 )
             )
+        }
+
+        // Open: start a "forgot password" flow. A 6-digit code is emailed to the
+        // account's address (fire-and-forget). The response is ALWAYS the same -
+        // it never reveals whether the username exists or has an email on file.
+        post("/forgot") {
+            val username = call.receive<ForgotPasswordRequest>().username.trim()
+            val reset = withContext(Dispatchers.IO) { authDb.createPasswordReset(username) }
+            reset?.let {
+                call.application.sendAuthMail(
+                    registry = registry,
+                    intendedTo = it.email,
+                    subject = "Επαναφορά κωδικού πρόσβασης",
+                    html = renderPasswordResetEmail(it.code, (PASSWORD_RESET_TTL_SECONDS / 60).toInt()),
+                )
+            }
+            call.respond(mapOf("status" to "if the account exists with an email on file, a reset code was sent"))
+        }
+
+        // Open: complete the flow with the emailed code. Enforces the escalating
+        // lockout (see AuthDb.resetPasswordWithCode). A wrong username / expired /
+        // absent request all read as "invalid_code" - never revealing which.
+        post("/reset") {
+            val request = call.receive<ResetPasswordWithCodeRequest>()
+            val outcome = withContext(Dispatchers.IO) {
+                authDb.resetPasswordWithCode(request.username.trim(), request.code.trim(), request.newPassword)
+            }
+            when (outcome) {
+                AuthDb.ResetOutcome.Success ->
+                    call.respond(ResetResultResponse("ok"))
+                is AuthDb.ResetOutcome.Locked ->
+                    call.respond(HttpStatusCode.TooManyRequests, ResetResultResponse("locked", outcome.retryAfterSeconds))
+                is AuthDb.ResetOutcome.InvalidCode ->
+                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("invalid_code", outcome.retryAfterSeconds))
+                AuthDb.ResetOutcome.Expired ->
+                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("expired"))
+                AuthDb.ResetOutcome.NoRequest ->
+                    call.respond(HttpStatusCode.BadRequest, ResetResultResponse("invalid_code"))
+            }
         }
 
         authenticate(AUTH_BEARER) {

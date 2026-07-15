@@ -42,7 +42,7 @@ fun Application.configureRouting() {
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
             // User management + legacy migration (super administrator only)
-            adminRoutes(authDb)
+            adminRoutes(authDb, registry)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })
             stationAdminRoutes(registry, authDb)
 
