@@ -20,6 +20,10 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.kotlinSerialization)
+    // OpenAPI metadata generation for THIS module's routes (/api/admin/migration):
+    // the compiler plugin only runs where it is applied, so the host server can't
+    // infer these routes' docs on its behalf.
+    alias(libs.plugins.ktor)
 }
 
 group = "eu.anifantakis.commercials"
@@ -30,6 +34,7 @@ dependencies {
 
     // The module contributes its own routes; the host installs them
     implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.routing.openapi)   // runtime support for the generated OpenAPI metadata
     implementation(libs.kotlinx.serialization.json)
 
     // server.yaml surgery re-parses its own output before writing it (StationsYaml)
@@ -41,5 +46,12 @@ dependencies {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_21)
+    }
+}
+
+ktor {
+    openApi {
+        enabled = true
+        codeInferenceEnabled = true
     }
 }

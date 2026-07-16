@@ -26,37 +26,59 @@ import java.io.File
 fun Route.reportRoutes(registry: StationRegistry) {
     route("/api/reports") {
 
-        // Generate a batch of reports as ONE PDF, in order (e.g. a month of
-        // daily reports). Static segment, so it wins over the {reportId}
-        // match below - "batch" is therefore reserved as a report id.
+        /**
+         * Generate a batch of reports as one downloadable PDF, in order (e.g. a month of daily reports).
+         *
+         * Static segment, so it wins over the {reportId} match below - "batch"
+         * is therefore reserved as a report id.
+         *
+         * Tag: Reports
+         */
         post("/batch") {
             call.generateBatch(registry, ContentDisposition.Attachment)
         }
+        /**
+         * Generate a batch of reports as one PDF and return it inline for in-browser preview.
+         *
+         * Tag: Reports
+         */
         post("/batch/preview") {
             call.generateBatch(registry, ContentDisposition.Inline)
         }
 
-        // Generate a PDF report for download
+        /**
+         * Generate a PDF for the given report id and return it as a file download.
+         *
+         * Tag: Reports
+         */
         post("/{reportId}") {
             call.generateReport(registry, ContentDisposition.Attachment)
         }
 
-        // Preview endpoint - returns PDF inline (for browser viewing)
+        /**
+         * Generate a PDF for the given report id and return it inline for browser preview.
+         *
+         * Tag: Reports
+         */
         post("/{reportId}/preview") {
             call.generateReport(registry, ContentDisposition.Inline)
         }
 
-        // THE STATION'S LOGO, AS BYTES.
-        //
-        // server.yaml holds a PATH, and a path is meaningless to a client on
-        // another machine - which the desktop app usually is, and it renders its
-        // reports IN-PROCESS. So the path never leaves the server: the image
-        // does. The desktop caches these bytes to a file of its own and hands
-        // Jasper that (see StationLogoCache).
-        //
-        // 404 for a station with no logo, or one whose configured file has gone
-        // missing - the caller then prints the placeholder. It is a report logo,
-        // not an error condition.
+        /**
+         * Return the granted station's report logo as image bytes, or 404 when it has none.
+         *
+         * server.yaml holds a PATH, and a path is meaningless to a client on
+         * another machine - which the desktop app usually is, and it renders its
+         * reports IN-PROCESS. So the path never leaves the server: the image
+         * does. The desktop caches these bytes to a file of its own and hands
+         * Jasper that (see StationLogoCache).
+         *
+         * 404 for a station with no logo, or one whose configured file has gone
+         * missing - the caller then prints the placeholder. It is a report logo,
+         * not an error condition.
+         *
+         * Tag: Reports
+         */
         get("/logo") {
             // A token is not enough: this must be a station the caller is
             // granted. (403/400 answered inside.)
@@ -78,7 +100,11 @@ fun Route.reportRoutes(registry: StationRegistry) {
             )
         }
 
-        // Health check for reports
+        /**
+         * Report reports subsystem health, confirming JasperReports is available.
+         *
+         * Tag: Reports
+         */
         get("/status") {
             call.respond(
                 mapOf(

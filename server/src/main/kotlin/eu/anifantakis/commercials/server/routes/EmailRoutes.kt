@@ -100,6 +100,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
     // the neutral path is the canonical one; /api/email/schedule/customers
     // below remains as the historical alias.
     route("/api/parties") {
+        /**
+         * Search parties (customers or traders) with airings by substring query (min 3 chars).
+         *
+         * Tag: Emails
+         */
         get("/search") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val byTrader = call.byTraderOrRespond() ?: return@get
@@ -123,10 +128,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
 
     route("/api/email/schedule") {
 
-        // With thousands of customers a full list is useless - the client
-        // sends `q` (min 3 chars, debounced) and gets the matching parties
-        // across ALL time, busiest first; the month is picked afterwards
-        // from /activity.
+        /**
+         * Search customers/traders with airings by query (min 3 chars, debounced), busiest first.
+         *
+         * Tag: Emails
+         */
         get("/customers") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val byTrader = call.byTraderOrRespond() ?: return@get
@@ -151,8 +157,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             call.respond(customers)
         }
 
-        // The party's active months, newest first - drives the year/month
-        // drill-down under the selected party.
+        /**
+         * Return a party's active months (year/month/placement count), newest first.
+         *
+         * Tag: Emails
+         */
         get("/activity") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val byTrader = call.byTraderOrRespond() ?: return@get
@@ -169,6 +178,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             call.respond(activity)
         }
 
+        /**
+         * List a party's spots (creatives) with placement counts for a given month.
+         *
+         * Tag: Emails
+         */
         get("/spots") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val (year, month) = call.yearMonthOrRespond() ?: return@get
@@ -187,6 +201,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             call.respond(spots)
         }
 
+        /**
+         * Render the schedule email HTML preview for a party/month without sending.
+         *
+         * Tag: Emails
+         */
         get("/preview") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val (year, month) = call.yearMonthOrRespond() ?: return@get
@@ -213,6 +232,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             call.respondText(renderScheduleEmail(data), ContentType.Text.Html)
         }
 
+        /**
+         * Render and send a customer's monthly schedule email via the station's SMTP, logging the attempt.
+         *
+         * Tag: Emails
+         */
         post("/send") {
             val access = call.staffAccessOrRespond(registry) ?: return@post
             val operator = call.authUser().username
@@ -307,11 +331,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             }
         }
 
-        // Connectivity smoke test: send a tiny email through the resolved SMTP,
-        // WITHOUT touching any customer or month. Goes to `emailRedirectTo` if set,
-        // else to a `?to=` address. Proves the server.yaml `smtp:` block actually
-        // reaches the mail server and authenticates - the failure message is the
-        // provider's own (e.g. Office 365's "SmtpClientAuthentication is disabled").
+        /**
+         * Send a standalone smoke-test email through the resolved SMTP to verify connectivity.
+         *
+         * Tag: Emails
+         */
         post("/test-smtp") {
             val access = call.staffAccessOrRespond(registry) ?: return@post
             val smtp = registry.smtpFor(access.grant.stationId)
@@ -342,6 +366,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
         }
 
         // ── audit trail ─────────────────────────────────────────────────
+        /**
+         * List recent schedule-email audit log entries, optionally filtered by client.
+         *
+         * Tag: Emails
+         */
         get("/log") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
@@ -356,7 +385,11 @@ fun Route.emailRoutes(registry: StationRegistry) {
             })
         }
 
-        // Re-view a logged email exactly as delivered.
+        /**
+         * Re-view a logged email's archived HTML body exactly as delivered.
+         *
+         * Tag: Emails
+         */
         get("/log/{id}") {
             val access = call.staffAccessOrRespond(registry) ?: return@get
             val id = call.parameters["id"]?.toLongOrNull()

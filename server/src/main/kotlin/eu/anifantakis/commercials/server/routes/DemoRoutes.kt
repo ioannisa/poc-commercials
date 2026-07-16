@@ -21,8 +21,12 @@ data class DemoUserDto(val username: String, val password: String)
  */
 fun Route.demoRoutes(db: CentralDb) {
     route("/api/demo") {
+        /**
+         * Return a raw demo user row from test.user to prove server-to-MySQL connectivity (admins only).
+         *
+         * Tag: Health
+         */
         get("/user") {
-            // Exposes a raw DB row - admins only (NORMAL_USER on any station)
             if (!call.requireRoleAnywhere(UserRole.NORMAL_USER)) return@get
 
             val user = withContext(Dispatchers.IO) {

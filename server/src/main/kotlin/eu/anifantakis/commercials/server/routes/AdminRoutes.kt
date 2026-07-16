@@ -76,6 +76,11 @@ data class SetGrantsRequest(val grants: List<GrantDto>)
 fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
     route("/api/admin/users") {
 
+        /**
+         * List all users with their display info, admin flag, and station grants.
+         *
+         * Tag: Admin
+         */
         get {
             if (!call.requireAdmin()) return@get
             val users = withContext(Dispatchers.IO) { authDb.listUsers() }
@@ -91,9 +96,13 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             })
         }
 
-        // Create: the system mints a TEMP password (not admin-chosen). It is
-        // returned once for the admin to copy, and emailed to the user if an
-        // address was given; either way the new account must change it at first login.
+        /**
+         * Create a user with a system-minted one-time temp password, returned to the
+         * admin to copy and emailed to the user if an address was given; the account
+         * must change it at first login.
+         *
+         * Tag: Admin
+         */
         post {
             if (!call.requireAdmin()) return@post
             val request = call.receive<CreateUserRequest>()
@@ -119,9 +128,13 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             )
         }
 
-        // Admin reset: mint a TEMP password (returned for the admin to copy, and
-        // emailed to the user), force a change at next login, clear any lockout,
-        // revoke all sessions. The mail-server-independent break-glass path.
+        /**
+         * Admin-reset a user's password to a one-time temp (returned to copy and
+         * emailed), forcing a change at next login while clearing lockout and revoking
+         * all sessions.
+         *
+         * Tag: Admin
+         */
         post("/{id}/reset") {
             if (!call.requireAdmin()) return@post
             val userId = call.userIdParam() ?: return@post
@@ -137,6 +150,11 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             call.respond(TempPasswordResponse(userId, temp.password, temp.email != null))
         }
 
+        /**
+         * Replace a user's station grants with the supplied set.
+         *
+         * Tag: Admin
+         */
         put("/{id}/grants") {
             if (!call.requireAdmin()) return@put
             val userId = call.userIdParam() ?: return@put
@@ -145,6 +163,11 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             call.respond(mapOf("status" to "grants updated"))
         }
 
+        /**
+         * Delete a user by id.
+         *
+         * Tag: Admin
+         */
         delete("/{id}") {
             if (!call.requireAdmin()) return@delete
             val userId = call.userIdParam() ?: return@delete
@@ -156,6 +179,11 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
     // Admin oversight of MCP/API personal access tokens: see every workstation's
     // token + its owner's role, revoke any, or repoint one to another user.
     route("/api/admin/api-tokens") {
+        /**
+         * List every workstation MCP/API token with its owner's username and role.
+         *
+         * Tag: MCP
+         */
         get {
             if (!call.requireAdmin()) return@get
             val (tokens, users) = withContext(Dispatchers.IO) {
@@ -176,9 +204,13 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
                 }
             )
         }
-        // Change role: repoint a workstation's token to another user WITHOUT
-        // changing the secret - the machine's config stays valid, only the identity
-        // (and thus grants/role) behind the token changes.
+        /**
+         * Repoint a workstation's token to another user without changing the secret,
+         * so the machine's config stays valid while the identity, grants, and role
+         * behind the token change.
+         *
+         * Tag: MCP
+         */
         post("/reassign") {
             if (!call.requireAdmin()) return@post
             val req = call.receive<ReassignApiTokenRequest>()
@@ -199,6 +231,11 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             )
             call.respond(mapOf("status" to "reassigned"))
         }
+        /**
+         * Revoke a workstation MCP/API token by id.
+         *
+         * Tag: MCP
+         */
         delete("/{id}") {
             if (!call.requireAdmin()) return@delete
             val id = call.userIdParam() ?: return@delete
@@ -210,12 +247,22 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
 
     // The global MCP kill switch + a token-count status.
     route("/api/admin/mcp-settings") {
+        /**
+         * Return the global MCP enabled flag and the active token count.
+         *
+         * Tag: MCP
+         */
         get {
             if (!call.requireAdmin()) return@get
             val enabled = withContext(Dispatchers.IO) { authDb.isMcpEnabled() }
             val count = withContext(Dispatchers.IO) { authDb.apiTokenCount() }
             call.respond(McpSettingsDto(enabled, count))
         }
+        /**
+         * Toggle the global MCP kill switch on or off.
+         *
+         * Tag: MCP
+         */
         put {
             if (!call.requireAdmin()) return@put
             val request = call.receive<SetMcpEnabledRequest>()

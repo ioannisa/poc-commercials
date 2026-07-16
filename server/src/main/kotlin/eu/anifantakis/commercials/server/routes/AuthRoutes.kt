@@ -124,7 +124,12 @@ private fun StationRegistry.accessFor(user: AuthUser): List<StationAccessDto> =
 fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
     route("/api/auth") {
 
-        // Open: this is how you GET a token
+        /**
+         * Log in with username and password to obtain a bearer token.
+         * Open endpoint (no auth): this is how a client GETs a token.
+         *
+         * Tag: Auth
+         */
         post("/login") {
             val request = call.receive<LoginRequest>()
 
@@ -149,9 +154,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
             )
         }
 
-        // Open: start a "forgot password" flow. A 6-digit code is emailed to the
-        // account's address (fire-and-forget). The response is ALWAYS the same -
-        // it never reveals whether the username exists or has an email on file.
+        /**
+         * Start a forgot-password flow; email a 6-digit reset code (reply never reveals if the account exists).
+         *
+         * Tag: Auth
+         */
         post("/forgot") {
             val username = call.receive<ForgotPasswordRequest>().username.trim()
             val reset = withContext(Dispatchers.IO) { authDb.createPasswordReset(username) }
@@ -166,9 +173,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
             call.respond(mapOf("status" to "if the account exists with an email on file, a reset code was sent"))
         }
 
-        // Open: complete the flow with the emailed code. Enforces the escalating
-        // lockout (see AuthDb.resetPasswordWithCode). A wrong username / expired /
-        // absent request all read as "invalid_code" - never revealing which.
+        /**
+         * Complete a password reset with the emailed code, enforcing the escalating lockout.
+         *
+         * Tag: Auth
+         */
         post("/reset") {
             val request = call.receive<ResetPasswordWithCodeRequest>()
             val outcome = withContext(Dispatchers.IO) {
@@ -220,6 +229,8 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
              *
              * So the lifetime measures how long the app may be CLOSED, not how long
              * it may be open.
+             *
+             * Tag: Auth
              */
             get("/session") {
                 val expiresIn = call.bearerToken()?.let {
@@ -238,8 +249,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                 )
             }
 
-            // Logout = revocation: delete the row and the token is dead on the
-            // very next request, window or no window.
+            /**
+             * Log out by revoking the caller's token so it dies on the next request.
+             *
+             * Tag: Auth
+             */
             post("/logout") {
                 call.bearerToken()?.let { token ->
                     withContext(Dispatchers.IO) { authDb.deleteToken(token) }
@@ -247,8 +261,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                 call.respond(mapOf("status" to "logged out"))
             }
 
-            // Self-service password change; revokes ALL of the user's
-            // sessions, so the client should return to the login screen.
+            /**
+             * Change the caller's own password, revoking all of their sessions.
+             *
+             * Tag: Auth
+             */
             post("/password") {
                 val request = call.receive<ChangePasswordRequest>()
                 val user = call.authUser()
@@ -264,14 +281,21 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
             // expiring until revoked here or replaced by a new mint for the same
             // workstation. At most one token exists per workstation.
             route("/api-tokens") {
+                /**
+                 * List the caller's personal access tokens (at most one per workstation).
+                 *
+                 * Tag: MCP
+                 */
                 get {
                     val user = call.authUser()
                     val tokens = withContext(Dispatchers.IO) { authDb.listApiTokens(user.id) }
                     call.respond(tokens.map { ApiTokenDto(it.id, it.workstationName, it.createdAt, it.lastUsedAt) })
                 }
-                // Availability of a workstation name from THIS caller's view: FREE,
-                // MINE, or OTHER (owner kept private - the self-service check never
-                // names who holds a workstation).
+                /**
+                 * Report a workstation name's availability to the caller as FREE, MINE, or OTHER.
+                 *
+                 * Tag: MCP
+                 */
                 get("/availability") {
                     val user = call.authUser()
                     val workstation = call.request.queryParameters["workstation"].orEmpty().trim()
@@ -282,6 +306,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     val status = withContext(Dispatchers.IO) { authDb.apiTokenWorkstationStatus(workstation, user.id) }
                     call.respond(WorkstationAvailabilityDto(status.name))
                 }
+                /**
+                 * Mint a personal access token for a workstation; requires confirmTakeover to seize an OTHER-owned name.
+                 *
+                 * Tag: MCP
+                 */
                 post {
                     val user = call.authUser()
                     val req = call.receive<CreateApiTokenRequest>()
@@ -300,6 +329,11 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     val raw = withContext(Dispatchers.IO) { authDb.createApiToken(user.id, workstation) }
                     call.respond(HttpStatusCode.Created, CreateApiTokenResponse(raw))
                 }
+                /**
+                 * Revoke one of the caller's personal access tokens by its numeric id.
+                 *
+                 * Tag: MCP
+                 */
                 delete("/{id}") {
                     val user = call.authUser()
                     val id = call.parameters["id"]?.toLongOrNull()

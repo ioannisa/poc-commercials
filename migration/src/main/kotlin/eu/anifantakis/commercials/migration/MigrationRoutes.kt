@@ -138,17 +138,28 @@ fun Route.migrationRoutes(
 ) {
     route("/api/admin/migration") {
 
+        /**
+         * Return the current migration state, log, progress, flows, summary and available target groups.
+         *
+         * Tag: Migration
+         */
         get("/status") {
             if (!call.requireAdmin()) return@get
             call.respond(migration.snapshot().toDto())
         }
 
-        // Server-side file browser backing the "Browse" buttons: the dump and
-        // the SEN export folder live on the SERVER's filesystem, so that's
-        // what gets browsed - works identically from web and desktop clients.
-        // Read-only listing of directories, .sql dumps and .csv/.tsv exports,
-        // super admin only (the same trust level as the migration itself,
-        // which reads arbitrary paths).
+        /**
+         * Browse a server-side directory, listing subfolders and .sql/.csv/.tsv dump/export files.
+         *
+         * Server-side file browser backing the "Browse" buttons: the dump and
+         * the SEN export folder live on the SERVER's filesystem, so that's
+         * what gets browsed - works identically from web and desktop clients.
+         * Read-only listing of directories, .sql dumps and .csv/.tsv exports,
+         * super admin only (the same trust level as the migration itself,
+         * which reads arbitrary paths).
+         *
+         * Tag: Migration
+         */
         get("/browse") {
             if (!call.requireAdmin()) return@get
             val requested = call.request.queryParameters["path"]
@@ -166,6 +177,11 @@ fun Route.migrationRoutes(
             call.respond(BrowseDto(path = dir.absolutePath, parent = dir.absoluteFile.parent, entries = entries))
         }
 
+        /**
+         * Start a legacy-dump migration into the target group from the given MySQL dump.
+         *
+         * Tag: Migration
+         */
         post("/start") {
             if (!call.requireAdmin()) return@post
             val req = call.receive<MigrationStartDto>()
@@ -188,6 +204,11 @@ fun Route.migrationRoutes(
             call.respond(migration.snapshot().toDto())
         }
 
+        /**
+         * Apply the legacy flow-to-station mapping and continue the migration run.
+         *
+         * Tag: Migration
+         */
         post("/flow") {
             if (!call.requireAdmin()) return@post
             val req = call.receive<MigrationMappingDto>()
@@ -209,6 +230,11 @@ fun Route.migrationRoutes(
             call.respond(migration.snapshot().toDto())
         }
 
+        /**
+         * Reset the migration back to its idle initial state.
+         *
+         * Tag: Migration
+         */
         post("/reset") {
             if (!call.requireAdmin()) return@post
             migration.reset()

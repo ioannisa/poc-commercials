@@ -161,6 +161,8 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          * resolved here rather than on the client: its rule, the zone colours,
          * and the station's `emptyRowsFrom` all live server-side, and splitting
          * them would put the same `when(hour)` in two codebases again.
+         *
+         * Tag: Schedule
          */
         get("/breaks") {
             val year = call.request.queryParameters["year"]?.toIntOrNull()
@@ -202,6 +204,8 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          * 7.79 MB of JSON to paint 1,295 boxes on the busiest month; the boxes
          * never read a single one. Whoever actually wants an airing asks for it:
          * `/schedule/commercials` below.
+         *
+         * Tag: Schedule
          */
         get("/schedule") {
             val year = call.request.queryParameters["year"]?.toIntOrNull()
@@ -271,6 +275,8 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          * (neither).
          *
          * Same customer scoping as the grid.
+         *
+         * Tag: Schedule
          */
         get("/schedule/commercials") {
             val year = call.request.queryParameters["year"]?.toIntOrNull()
@@ -331,8 +337,11 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
         // ── spot finder (the legacy "Εύρεση" Details Console) ───────────
         // Editing tools: NORMAL_USER only, like the email routes.
 
-        // The party's contract lines ("products" - ERP identity pending,
-        // presented by contract number + line no with computed stats)
+        /**
+         * List a party's contract lines ("products") by contract number and line no with computed stats.
+         *
+         * Tag: Schedule
+         */
         get("/finder/contracts") {
             val access = call.editorAccessOrRespond(registry) ?: return@get
             val byTrader = when (call.request.queryParameters["kind"] ?: "customer") {
@@ -360,7 +369,11 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             call.respond(lines)
         }
 
-        // The spots (creatives) of one contract line
+        /**
+         * List the spots (creatives) of one contract line, with placement stats.
+         *
+         * Tag: Schedule
+         */
         get("/finder/spots") {
             val access = call.editorAccessOrRespond(registry) ?: return@get
             val lineId = call.request.queryParameters["lineId"]?.toLongOrNull()
@@ -378,12 +391,11 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
 
         // ── placement editing (the grid's 'a'/'r' keys) ─────────────────
 
-        // Appends the spot at the end of the (time, date) cell; responds
-        // with the new placement in the same shape the month grid serves -
-        // CommercialDto.id IS the placement id the client passes to DELETE.
-        //
-        // The time need not already have a break: airing a spot there IS what
-        // creates one, so this is also the "add a new break" endpoint.
+        /**
+         * Append a spot to the (time, date) cell, creating the break when the time has none yet.
+         *
+         * Tag: Schedule
+         */
         post("/schedule/placements") {
             val access = call.editorAccessOrRespond(registry) ?: return@post
             val req = call.receive<AddPlacementRequest>()
@@ -418,8 +430,11 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             )
         }
 
-        // Persists the ordering the operator arranged in the break detail
-        // screen - list indexes become positions.
+        /**
+         * Persist the operator's spot ordering for a cell - list indexes become positions.
+         *
+         * Tag: Schedule
+         */
         put("/schedule/placements/order") {
             val access = call.editorAccessOrRespond(registry) ?: return@put
             val req = call.receive<ReorderPlacementsRequest>()
@@ -443,6 +458,11 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             )
         }
 
+        /**
+         * Delete a placement by id, removing that spot from its break.
+         *
+         * Tag: Schedule
+         */
         delete("/schedule/placements/{id}") {
             val access = call.editorAccessOrRespond(registry) ?: return@delete
             val id = call.parameters["id"]?.toLongOrNull()

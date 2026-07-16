@@ -78,6 +78,11 @@ data class DeleteStationResponse(
 fun Route.stationAdminRoutes(registry: StationRegistry, authDb: AuthDb) {
     route("/api/admin/stations") {
 
+        /**
+         * List all hosted stations with placement stats, group, and sibling stations.
+         *
+         * Tag: Admin
+         */
         get {
             if (!call.requireAdmin()) return@get
             val stations = withContext(Dispatchers.IO) {
@@ -102,6 +107,11 @@ fun Route.stationAdminRoutes(registry: StationRegistry, authDb: AuthDb) {
             call.respond(stations)
         }
 
+        /**
+         * Delete a station by id: safe-unhost, purge its rows, or drop the whole group database.
+         *
+         * Tag: Admin
+         */
         post("/{id}/delete") {
             if (!call.requireAdmin()) return@post
             val id = call.parameters["id"] ?: return@post call.respond(HttpStatusCode.BadRequest)
