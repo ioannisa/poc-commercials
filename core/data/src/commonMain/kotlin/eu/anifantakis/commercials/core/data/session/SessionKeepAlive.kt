@@ -21,8 +21,12 @@ import kotlin.time.Duration.Companion.seconds
 interface SessionCredentialStore {
     val isLoggedIn: Boolean
 
-    /** Adopts the server's current station list (see [SessionKeepAlive.knock]). */
-    suspend fun refreshStations(stations: List<StationAccess>)
+    /**
+     * Adopts the server's current session facts (station list + the Swagger
+     * toggle), refreshed on every [SessionKeepAlive.knock] - so a running client
+     * that skipped login (persisted token) still tracks server.yaml changes.
+     */
+    suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean)
 }
 
 /**
@@ -146,7 +150,7 @@ class SessionKeepAlive(
     internal suspend fun knock(): Duration? =
         when (val result = api.get<SessionInfoDto>("/api/auth/session")) {
             is DataResult.Success -> {
-                session.refreshStations(result.data.stations)
+                session.refreshFromSession(result.data.stations, result.data.swaggerEnabled)
                 result.data.expiresInSeconds.toInterval()
             }
             is DataResult.Failure -> null
@@ -168,4 +172,5 @@ class SessionKeepAlive(
 private data class SessionInfoDto(
     val expiresInSeconds: Long? = null,
     val stations: List<StationAccess> = emptyList(),
+    val swaggerEnabled: Boolean = false,
 )

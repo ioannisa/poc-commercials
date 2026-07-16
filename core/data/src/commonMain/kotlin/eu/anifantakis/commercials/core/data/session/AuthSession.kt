@@ -213,8 +213,10 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
     }
 
     /**
-     * Replaces the station list with the server's CURRENT one (the keep-alive
-     * brings it on every knock), without touching the token or the identity.
+     * Adopts the server's CURRENT session facts - the station list AND the Swagger
+     * toggle - on every keep-alive knock, without touching the token or the
+     * identity. The first knock is at launch, so a returning client that skipped
+     * login (persisted token) still tracks a server.yaml `swagger` change.
      *
      * This is what makes a station added AFTER sign-in appear: the list used to be
      * written once, at login, and nothing ever refreshed it - so a group migrated
@@ -226,13 +228,14 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
      * user can no longer reach would 403 on every request. No-op when nothing
      * changed, so the revision does not churn on every keep-alive tick.
      */
-    override suspend fun refreshStations(stations: List<StationAccess>) {
+    override suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean) {
         if (!isLoggedIn) return
-        if (stations == stored.stations) return
+        if (stations == stored.stations && swaggerEnabled == stored.swaggerEnabled) return
 
         val keepSelected = stations.any { it.id == stored.selectedStationId }
         val session = stored.copy(
             stations = stations,
+            swaggerEnabled = swaggerEnabled,
             selectedStationId =
                 if (keepSelected) stored.selectedStationId else stations.firstOrNull()?.id ?: "",
         )

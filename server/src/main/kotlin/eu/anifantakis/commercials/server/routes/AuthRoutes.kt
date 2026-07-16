@@ -65,6 +65,9 @@ data class LoginResponse(
 data class SessionInfoResponse(
     val expiresInSeconds: Long? = null,
     val stations: List<StationAccessDto> = emptyList(),
+    /** Server-wide Swagger toggle, carried on every keep-alive knock so a running
+     *  client that skipped login (persisted token) tracks a server.yaml change. */
+    val swaggerEnabled: Boolean = false,
 )
 
 @Serializable
@@ -230,6 +233,7 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     SessionInfoResponse(
                         expiresInSeconds = expiresIn,
                         stations = user?.let { registry.accessFor(it) }.orEmpty(),
+                        swaggerEnabled = registry.swaggerEnabled,
                     )
                 )
             }

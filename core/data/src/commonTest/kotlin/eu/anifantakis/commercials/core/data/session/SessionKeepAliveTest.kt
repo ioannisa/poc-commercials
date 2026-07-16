@@ -41,9 +41,12 @@ class SessionKeepAliveTest {
         /** Null = never told. Distinguishes "adopted an empty list" from "not called". */
         var stations: List<StationAccess>? = null
             private set
+        var swaggerEnabled: Boolean? = null
+            private set
 
-        override suspend fun refreshStations(stations: List<StationAccess>) {
+        override suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean) {
             this.stations = stations
+            this.swaggerEnabled = swaggerEnabled
         }
 
         fun clear() {
@@ -114,6 +117,28 @@ class SessionKeepAliveTest {
             listOf("crete-tv", "radio-984", "test-tv"),
             store.stations?.map { it.id },
         )
+    }
+
+    /**
+     * The Swagger toggle rides the SAME knock as the station list, so a client that
+     * skipped login (persisted token) tracks a server.yaml `swagger` change without
+     * re-login - the exact staleness a login-only flag would leave behind.
+     */
+    @Test
+    fun knock_adopts_the_servers_swagger_flag() = runTest {
+        val store = FakeStore()
+        val engine = MockEngine { request ->
+            seen += request.url.encodedPath
+            respond(
+                """{"expiresInSeconds":3600,"stations":[],"swaggerEnabled":true}""",
+                HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+        keepAlive(store, engine).knock()
+
+        assertEquals(true, store.swaggerEnabled)
     }
 
     /**
