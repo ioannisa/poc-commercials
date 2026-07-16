@@ -329,6 +329,7 @@ internal class De : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "MCP-Server-URL"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Konfiguration kopieren (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "Claude-Desktop-Konfiguration anzeigen"
         StringKey.MCP_TOKENS_WORKSTATION -> "Arbeitsplatzname (z. B. Giannis — Büro)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "Ein aktives Token. Gib den Gerätenamen ein und erzeuge es."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "Verfügbar"

@@ -22,6 +22,8 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.design_system.components.rememberClipboardCopy
+import eu.anifantakis.commercials.core.presentation.files.mcpClientConfigPath
+import eu.anifantakis.commercials.core.presentation.files.revealInFileManager
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
@@ -222,6 +224,16 @@ private fun ApiTokensDialog(
                 onClick = { copy(mcpConfigSnippet(created)) },
                 variant = AppButtonVariant.SECONDARY,
             )
+            // Desktop only: jump straight to the MCP client's config file so the
+            // token can be pasted in. Null (hidden) on web/mobile - no local file.
+            mcpClientConfigPath?.let { cfgPath ->
+                AppButton(
+                    text = Strings[StringKey.MCP_TOKENS_REVEAL_CONFIG],
+                    onClick = { revealInFileManager(cfgPath) },
+                    variant = AppButtonVariant.SECONDARY,
+                )
+                AppText(cfgPath, AppTextStyle.TINY)
+            }
         } else {
             // One token per account (single slot). The create field appears only
             // when there is NO token; once one exists you see it + Revoke, so you

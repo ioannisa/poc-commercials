@@ -329,6 +329,7 @@ internal class En : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "MCP server URL"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Copy config (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "Reveal Claude Desktop config"
         StringKey.MCP_TOKENS_WORKSTATION -> "Workstation name (e.g. Giannis — Office)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "One active token at a time. Enter the machine name and generate."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "Available"

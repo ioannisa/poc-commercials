@@ -329,6 +329,7 @@ internal class Fr : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Jeton"
         StringKey.MCP_TOKENS_URL_LABEL -> "URL du serveur MCP"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Copier la config (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "Afficher la config Claude Desktop"
         StringKey.MCP_TOKENS_WORKSTATION -> "Nom du poste (ex. Giannis — Bureau)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "Un seul jeton actif. Saisissez le nom de la machine et générez-le."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "Disponible"

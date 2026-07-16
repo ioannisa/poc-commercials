@@ -329,6 +329,7 @@ internal class It : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "URL del server MCP"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Copia config (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "Mostra config Claude Desktop"
         StringKey.MCP_TOKENS_WORKSTATION -> "Nome postazione (es. Giannis — Ufficio)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "Un solo token attivo. Inserisci il nome della macchina e generalo."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "Disponibile"

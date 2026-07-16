@@ -334,6 +334,7 @@ internal class He : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "אסימון"
         StringKey.MCP_TOKENS_URL_LABEL -> "כתובת שרת MCP"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "העתק תצורה (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "פתיחת תצורת Claude Desktop"
         StringKey.MCP_TOKENS_WORKSTATION -> "שם עמדה (למשל יאניס — משרד)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "טוקן פעיל אחד בכל פעם. הזן את שם המכשיר וצור אותו."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "זמין"

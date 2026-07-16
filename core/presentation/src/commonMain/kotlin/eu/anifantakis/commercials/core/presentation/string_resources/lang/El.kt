@@ -329,6 +329,7 @@ internal class El : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "URL του MCP server"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Αντιγραφή config (JSON)"
+        StringKey.MCP_TOKENS_REVEAL_CONFIG -> "Άνοιγμα φακέλου (Claude Desktop config)"
         StringKey.MCP_TOKENS_WORKSTATION -> "Όνομα workstation (π.χ. Γιάννης — Γραφείο)"
         StringKey.MCP_TOKENS_WORKSTATION_HINT -> "Ένα ενεργό token τη φορά. Γράψε το όνομα του μηχανήματος και πάτησε Δημιουργία."
         StringKey.MCP_TOKENS_AVAIL_FREE -> "Διαθέσιμο"
