@@ -4,14 +4,24 @@ An MCP (Model Context Protocol) server that exposes the Commercials Manager
 backend to LLM clients (Claude and any MCP client). Kotlin-native, built on the
 official SDK `io.modelcontextprotocol:kotlin-sdk-server` **0.14.0**.
 
+> **Update (Phase 5, 2026-07-16): `:mcp-stdio` has been REMOVED.** The only
+> transport is now **SSE at `/mcp`** in the Ktor server, authenticated with a
+> per-user **personal access token (PAT)**. Every section below that mentions
+> `:mcp-stdio`, `COMMERCIALS_MCP_TOKEN`, or a stdio launcher binary is
+> **historical** — kept for the build record, not as instructions. For current
+> client and deployment setup, see **[`docs/MCP.md`](../docs/MCP.md)**. A
+> stdio-only client (e.g. Claude Desktop's config file) reaches the SSE endpoint
+> through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge.
+
 Two decisive design facts:
 
 - **Both use-cases live in the backend — the Compose app is NOT involved.** The
   report engine (`reportcore.ReportEngine`, JasperReports) and the data
   (`persistence.StationDb`) are already server-side, so reports are produced
   headlessly.
-- **One tool core, two transports.** Tool logic is written once in `:mcp` and
-  bound to a transport by each host, with the SAME per-station grant/role checks.
+- **One tool core, one transport.** Tool logic is written once in `:mcp` and
+  mounted by the Ktor server at `/mcp` over SSE, with per-station grant/role
+  checks identical to the REST API (the caller is the SSE call's bearer principal).
 
 This document is a review checklist: every file created or changed, why, and how
 to run/verify.

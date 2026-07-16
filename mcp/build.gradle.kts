@@ -2,8 +2,8 @@
  * MCP tool core - the transport-agnostic Model Context Protocol server for the
  * Commercials Manager backend. Exposes the station data (queries), report
  * generation and (guarded) mutations as MCP tools, reusing the existing
- * persistence + reportcore + mailer modules. Its hosts bind it to a transport:
- * the Ktor `server` (HTTP/SSE, bearer-auth) and `:mcp-stdio` (Claude Desktop).
+ * persistence + reportcore + mailer modules. The Ktor `server` binds it to its
+ * transport: HTTP/SSE at `/mcp`, bearer-auth (a personal access token).
  *
  * JVM-only (persistence is JVM-only). The MCP Kotlin SDK types (Server, Tool)
  * and the persistence types (StationRegistry, AuthUser) appear in this module's
@@ -41,8 +41,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.slf4j.api)
 
-    // This module owns its own Koin module (di/McpModule.kt): BOTH backend entry
-    // points (the Ktor server and :mcp-stdio) load it, so the bindings cannot drift.
+    // This module owns its own Koin module (di/McpModule.kt): the Ktor server
+    // loads it when it mounts /mcp, keeping the tool bindings in one place.
     implementation(libs.koin.core)
 
     testImplementation(libs.kotlin.test)

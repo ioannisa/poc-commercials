@@ -25,7 +25,7 @@ data class StationInfo(val id: String, val name: String, val role: String, val c
 /**
  * The backend surface the MCP tools call. Centralises station resolution and
  * authorization, mirroring the server's `Security.stationAccessOrRespond` and
- * role checks so the HTTP and stdio transports enforce the SAME rules.
+ * role checks so the MCP tools enforce the SAME rules as the REST API.
  *
  * It ORGANIZES the ports (McpPorts.kt) and performs no I/O of its own — no JDBC,
  * no report engine, no filesystem, no SMTP. That is what lets the tools be
@@ -165,7 +165,7 @@ class McpToolServices(
 /**
  * Mutation kill switch: mutations are OFF unless `COMMERCIALS_MCP_MUTATIONS` is
  * truthy. Default-deny so a hosted, network-reachable MCP server is read-only
- * unless the operator explicitly opts in (e.g. a trusted stdio dev setup).
+ * unless the operator explicitly opts in (e.g. a trusted local dev setup).
  */
 fun mcpMutationsEnabled(): Boolean =
     System.getenv("COMMERCIALS_MCP_MUTATIONS")?.trim()?.lowercase() in setOf("1", "true", "yes", "on")

@@ -18,9 +18,9 @@ import org.koin.dsl.module
  * The MCP tool backend's Koin bindings — one file, one module, per the DI
  * conventions.
  *
- * It lives in `:mcp` rather than in a single entry point's `di/` package because
- * BOTH backend entry points need it: the Ktor server (which mounts `/mcp`) and
- * the `:mcp-stdio` launcher. Each entry point supplies the
+ * It lives in `:mcp` rather than in the server's `di/` package because the tool
+ * backend is transport-owned here: the Ktor server (which mounts `/mcp` over SSE)
+ * loads it and supplies the
  * [StationRegistry][eu.anifantakis.commercials.server.stations.StationRegistry]
  * these bindings resolve with `get()`.
  *
