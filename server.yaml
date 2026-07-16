@@ -102,7 +102,7 @@ smtp:
   host: smtp.office365.com
   port: 587
   username: noreply@cretetv.gr
-  password: "D/391154566324uq"
+  password: "xxxxxxxxxxxxxx"
   from: "No Reply Cretetv <noreply@cretetv.gr>"
   startTls: true
 
