@@ -61,7 +61,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * 1:1 (predictable, collision-free); the semantic meaning of a use lives in
  * each call site's localized `contentDescription`.
  */
-object AppIcons {
+object AppDrawableRepo {
 
     // ── Material AutoMirrored (flip in RTL) ────────────────────────────────
     val arrowBack: ImageVector @Composable get() = Icons.AutoMirrored.Filled.ArrowBack

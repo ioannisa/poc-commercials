@@ -11,7 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import androidx.compose.ui.tooling.preview.Preview
 
@@ -55,15 +55,15 @@ fun AppIconButton(
 @Composable
 private fun AppIconButtonPreview() = AppPreview {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(label = "Edit spot", icon = AppIcons.edit, onClick = {})
-        AppIconButton(label = "Edit spot", icon = AppIcons.edit, onClick = {}, enabled = false)
+        AppIconButton(label = "Edit spot", icon = AppDrawableRepo.edit, onClick = {})
+        AppIconButton(label = "Edit spot", icon = AppDrawableRepo.edit, onClick = {}, enabled = false)
         AppIconButton(
             label = "Delete break",
-            icon = AppIcons.delete,
+            icon = AppDrawableRepo.delete,
             onClick = {},
             tint = MaterialTheme.colorScheme.error,
         )
-        AppIconButton(label = "More actions", icon = AppIcons.moreVert, onClick = {})
+        AppIconButton(label = "More actions", icon = AppDrawableRepo.moreVert, onClick = {})
     }
 }
 
@@ -71,8 +71,8 @@ private fun AppIconButtonPreview() = AppPreview {
 @Composable
 private fun AppIconButtonSizesPreview() = AppPreview {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        AppIconButton(label = "Refresh schedule", icon = AppIcons.refresh, onClick = {}, size = AppIconSize.SMALL)
-        AppIconButton(label = "Refresh schedule", icon = AppIcons.refresh, onClick = {}, size = AppIconSize.MEDIUM)
-        AppIconButton(label = "Refresh schedule", icon = AppIcons.refresh, onClick = {}, size = AppIconSize.LARGE)
+        AppIconButton(label = "Refresh schedule", icon = AppDrawableRepo.refresh, onClick = {}, size = AppIconSize.SMALL)
+        AppIconButton(label = "Refresh schedule", icon = AppDrawableRepo.refresh, onClick = {}, size = AppIconSize.MEDIUM)
+        AppIconButton(label = "Refresh schedule", icon = AppDrawableRepo.refresh, onClick = {}, size = AppIconSize.LARGE)
     }
 }

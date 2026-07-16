@@ -1,6 +1,6 @@
 package eu.anifantakis.commercials.feature.preferences.presentation.screens.preferences
 
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,7 +119,7 @@ private fun PreferencesScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AppIconButton(
                     label = Strings[StringKey.COMMON_BACK],
-                    icon = AppIcons.arrowBack,
+                    icon = AppDrawableRepo.arrowBack,
                     onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) },
                 )
                 AppText(Strings[StringKey.PREFERENCES_TITLE], AppTextStyle.SCREEN_TITLE)
@@ -183,8 +183,8 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(UIConst.paddingRegular)) {
                         AppText(Strings[StringKey.PREFERENCES_ACCOUNT], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(UIConst.paddingExtraSmall))
-                        PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
-                        PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_MCP], Strings[StringKey.PREFERENCES_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnApiTokens) }
+                        PreferenceEntry(AppDrawableRepo.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
+                        PreferenceEntry(AppDrawableRepo.key, Strings[StringKey.PREFERENCES_MCP], Strings[StringKey.PREFERENCES_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnApiTokens) }
                     }
                 }
                 Spacer(Modifier.height(UIConst.paddingCompact))
@@ -196,11 +196,11 @@ private fun PreferencesScreen(
                     Column(Modifier.padding(UIConst.paddingRegular)) {
                         AppText(Strings[StringKey.PREFERENCES_MAINTENANCE], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(UIConst.paddingExtraSmall))
-                        PreferenceEntry(AppIcons.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
-                        PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_ADMIN_MCP], Strings[StringKey.PREFERENCES_ADMIN_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAdminMcp) }
-                        PreferenceEntry(AppIcons.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
-                        PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
-                        PreferenceEntry(AppIcons.openInNew, Strings[StringKey.PREFERENCES_OPEN_SWAGGER], Strings[StringKey.PREFERENCES_OPEN_SWAGGER_DESC], enabled = swaggerEnabled) { onNavIntent(PreferencesScreenNavIntent.OnOpenSwagger) }
+                        PreferenceEntry(AppDrawableRepo.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
+                        PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_ADMIN_MCP], Strings[StringKey.PREFERENCES_ADMIN_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAdminMcp) }
+                        PreferenceEntry(AppDrawableRepo.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
+                        PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
+                        PreferenceEntry(AppDrawableRepo.openInNew, Strings[StringKey.PREFERENCES_OPEN_SWAGGER], Strings[StringKey.PREFERENCES_OPEN_SWAGGER_DESC], enabled = swaggerEnabled) { onNavIntent(PreferencesScreenNavIntent.OnOpenSwagger) }
                     }
                 }
             }

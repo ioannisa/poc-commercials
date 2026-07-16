@@ -15,7 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -160,7 +160,7 @@ fun AppPasswordField(
                 if (visible) StringKey.COMMON_CD_HIDE_PASSWORD
                 else StringKey.COMMON_CD_SHOW_PASSWORD,
             ],
-            icon = if (visible) AppIcons.visibilityOff else AppIcons.visibility,
+            icon = if (visible) AppDrawableRepo.visibilityOff else AppDrawableRepo.visibility,
             onClick = onToggleVisibility,
             enabled = enabled,
         )
@@ -190,14 +190,14 @@ private fun AppWireframeFieldPreview() = AppPreview {
             value = "Summer campaign 30s",
             onValueChange = {},
             label = "Spot title",
-            trailingIcon = { AppIcon(AppIcons.clear, contentDescription = null) },
+            trailingIcon = { AppIcon(AppDrawableRepo.clear, contentDescription = null) },
         )
         AppWireframeField(
             value = "Crete TV",
             onValueChange = {},
             label = "Station",
             readOnly = true,
-            leadingIcon = AppIcons.dns,
+            leadingIcon = AppDrawableRepo.dns,
         )
         AppWireframeField(
             value = "Two spots moved out of the 21:00 break at the customer's request.",
@@ -219,13 +219,13 @@ private fun AppTextFieldPreview() = AppPreview {
             onValueChange = {},
             label = "Customer",
             placeholder = "Aegean Foods",
-            leadingIcon = AppIcons.person,
+            leadingIcon = AppDrawableRepo.person,
         )
         AppTextField(
             value = "CTV-2026-014",
             onValueChange = {},
             label = "Contract number",
-            leadingIcon = AppIcons.numbers,
+            leadingIcon = AppDrawableRepo.numbers,
         )
         AppTextField(
             value = "25:00",
@@ -233,14 +233,14 @@ private fun AppTextFieldPreview() = AppPreview {
             label = "Break time",
             isError = true,
             errorText = "Not a valid time of day",
-            leadingIcon = AppIcons.timer,
+            leadingIcon = AppDrawableRepo.timer,
         )
         AppTextField(
             value = "Radio 984",
             onValueChange = {},
             label = "Station",
             enabled = false,
-            leadingIcon = AppIcons.dns,
+            leadingIcon = AppDrawableRepo.dns,
         )
     }
 }
@@ -257,7 +257,7 @@ private fun AppPasswordFieldPreview() = AppPreview {
             label = "Password",
             visible = false,
             onToggleVisibility = {},
-            leadingIcon = AppIcons.lock,
+            leadingIcon = AppDrawableRepo.lock,
         )
         AppPasswordField(
             value = "traffic-desk-2026",
@@ -265,7 +265,7 @@ private fun AppPasswordFieldPreview() = AppPreview {
             label = "Password",
             visible = true,
             onToggleVisibility = {},
-            leadingIcon = AppIcons.lock,
+            leadingIcon = AppDrawableRepo.lock,
         )
         AppPasswordField(
             value = "wrong",
@@ -275,7 +275,7 @@ private fun AppPasswordFieldPreview() = AppPreview {
             onToggleVisibility = {},
             isError = true,
             errorText = "Wrong password for this station account",
-            leadingIcon = AppIcons.lock,
+            leadingIcon = AppDrawableRepo.lock,
         )
         AppPasswordField(
             value = "traffic-desk-2026",
@@ -284,7 +284,7 @@ private fun AppPasswordFieldPreview() = AppPreview {
             visible = false,
             onToggleVisibility = {},
             enabled = false,
-            leadingIcon = AppIcons.lock,
+            leadingIcon = AppDrawableRepo.lock,
         )
     }
 }

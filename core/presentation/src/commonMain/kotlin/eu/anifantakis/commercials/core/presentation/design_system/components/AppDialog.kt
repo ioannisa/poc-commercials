@@ -12,7 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.window.DialogProperties
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -90,7 +90,7 @@ private fun AppDialogPreview() = AppPreview {
         confirmText = "Send",
         onConfirm = {},
         dismissText = "Cancel",
-        icon = AppIcons.email,
+        icon = AppDrawableRepo.email,
     ) {
         AppText("Crete TV - Wednesday 15 July", AppTextStyle.BODY_STRONG)
         AppText("14 breaks, 38 spots. The traffic desk gets one email per station.", AppTextStyle.BODY)
@@ -107,7 +107,7 @@ private fun AppDialogDestructivePreview() = AppPreview {
         onConfirm = {},
         dismissText = "Keep it",
         destructive = true,
-        icon = AppIcons.delete,
+        icon = AppDrawableRepo.delete,
     ) {
         AppText("The break on Radio 984 holds 4 spots from 2 contracts.", AppTextStyle.BODY)
         AppText("Deleting it releases those spots back to the pool.", AppTextStyle.NOTE)

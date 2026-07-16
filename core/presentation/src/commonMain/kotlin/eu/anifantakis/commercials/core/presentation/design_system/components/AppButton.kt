@@ -21,7 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -181,12 +181,12 @@ private fun AppButtonStatesPreview() = AppPreview {
         AppButton(text = "Send schedule", onClick = {}, enabled = false)
         // Busy: the spinner replaces the leading icon and the click is locked.
         AppButton(text = "Sending to Crete TV", onClick = {}, busy = true)
-        AppButton(text = "New customer", onClick = {}, leadingIcon = AppIcons.add)
+        AppButton(text = "New customer", onClick = {}, leadingIcon = AppDrawableRepo.add)
         AppButton(
             text = "Radio 984",
             onClick = {},
             variant = AppButtonVariant.SECONDARY,
-            trailingIcon = AppIcons.arrowDropDown,
+            trailingIcon = AppDrawableRepo.arrowDropDown,
         )
         AppButton(text = "Confirm booking", onClick = {}, fillMaxWidth = true)
     }
@@ -207,7 +207,7 @@ private fun AppButtonContentSlotPreview() = AppPreview {
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.width(UIConst.paddingExtraSmall))
-            AppIcon(AppIcons.arrowDropDown, contentDescription = null, size = AppIconSize.SMALL)
+            AppIcon(AppDrawableRepo.arrowDropDown, contentDescription = null, size = AppIconSize.SMALL)
         }
         AppButton(onClick = {}, variant = AppButtonVariant.SECONDARY, enabled = false) {
             AppText("No station selected", AppTextStyle.BUTTON)

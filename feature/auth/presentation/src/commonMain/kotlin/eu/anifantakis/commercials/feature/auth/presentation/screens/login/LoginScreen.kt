@@ -13,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
@@ -92,7 +92,7 @@ private fun LoginScreen(
                         value = state.username,
                         onValueChange = { onIntent(LoginIntent.UsernameChanged(it)) },
                         label = Strings[StringKey.LOGIN_USERNAME],
-                        leadingIcon = AppIcons.person,
+                        leadingIcon = AppDrawableRepo.person,
                         // Once a code is requested the username is fixed - it is who the code is for.
                         enabled = !state.isLoading && state.mode != LoginMode.FORGOT_ENTER,
                     )
@@ -106,7 +106,7 @@ private fun LoginScreen(
                                 label = Strings[StringKey.LOGIN_PASSWORD],
                                 visible = state.passwordVisible,
                                 onToggleVisibility = { onIntent(LoginIntent.TogglePasswordVisibility) },
-                                leadingIcon = AppIcons.lock,
+                                leadingIcon = AppDrawableRepo.lock,
                                 enabled = !state.isLoading,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             )
@@ -131,7 +131,7 @@ private fun LoginScreen(
                                 label = Strings[StringKey.LOGIN_NEW_PASSWORD],
                                 visible = state.passwordVisible,
                                 onToggleVisibility = { onIntent(LoginIntent.TogglePasswordVisibility) },
-                                leadingIcon = AppIcons.lock,
+                                leadingIcon = AppDrawableRepo.lock,
                                 enabled = !state.isLoading,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             )

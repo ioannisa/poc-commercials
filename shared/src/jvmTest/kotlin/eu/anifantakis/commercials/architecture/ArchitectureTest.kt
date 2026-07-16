@@ -100,7 +100,7 @@ class ArchitectureTest {
      */
     @Test
     fun `every icon is referenced through a single-door catalog`() {
-        val catalogs = setOf("AppIcons.kt", "GridIcons.kt", "ReportIcons.kt")
+        val catalogs = setOf("AppDrawableRepo.kt", "GridIcons.kt", "ReportIcons.kt")
         val rawIcon = Regex("(?<![A-Za-z])Icons\\.")
         val offenders = uiRoots.flatMap { it.ktFiles() }
             .filter { it.name !in catalogs }

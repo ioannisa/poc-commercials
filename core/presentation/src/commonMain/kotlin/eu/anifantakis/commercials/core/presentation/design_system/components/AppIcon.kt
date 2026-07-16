@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -62,9 +62,9 @@ private fun AppIconPreview() = AppPreview {
         horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(AppIcons.dns, contentDescription = null, size = AppIconSize.SMALL)
-        AppIcon(AppIcons.dns, contentDescription = null, size = AppIconSize.MEDIUM)
-        AppIcon(AppIcons.dns, contentDescription = null, size = AppIconSize.LARGE)
+        AppIcon(AppDrawableRepo.dns, contentDescription = null, size = AppIconSize.SMALL)
+        AppIcon(AppDrawableRepo.dns, contentDescription = null, size = AppIconSize.MEDIUM)
+        AppIcon(AppDrawableRepo.dns, contentDescription = null, size = AppIconSize.LARGE)
     }
 }
 
@@ -76,14 +76,14 @@ private fun AppIconTintedPreview() = AppPreview {
         horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(AppIcons.timer, contentDescription = null)
+        AppIcon(AppDrawableRepo.timer, contentDescription = null)
         AppIcon(
-            AppIcons.check,
+            AppDrawableRepo.check,
             contentDescription = "Spot aired",
             tint = MaterialTheme.colorScheme.primary,
         )
         AppIcon(
-            AppIcons.delete,
+            AppDrawableRepo.delete,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error,
         )

@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isUnspecified
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -50,9 +50,9 @@ fun AppFormColumn(
 private fun AppFormColumnPreview() = AppPreview {
     AppFormColumn(verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
         AppText("Book a spot", AppTextStyle.SECTION_TITLE)
-        AppTextField(value = "Aegean Foods", onValueChange = {}, label = "Customer", leadingIcon = AppIcons.person)
-        AppTextField(value = "Crete TV", onValueChange = {}, label = "Station", leadingIcon = AppIcons.dns)
-        AppTextField(value = "21:00", onValueChange = {}, label = "Break", leadingIcon = AppIcons.timer)
+        AppTextField(value = "Aegean Foods", onValueChange = {}, label = "Customer", leadingIcon = AppDrawableRepo.person)
+        AppTextField(value = "Crete TV", onValueChange = {}, label = "Station", leadingIcon = AppDrawableRepo.dns)
+        AppTextField(value = "21:00", onValueChange = {}, label = "Break", leadingIcon = AppDrawableRepo.timer)
         AppButton(text = "Confirm booking", onClick = {}, fillMaxWidth = true)
     }
 }
@@ -66,14 +66,14 @@ private fun AppFormColumnNarrowPreview() = AppPreview {
         verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
     ) {
         AppText("Sign in", AppTextStyle.SECTION_TITLE)
-        AppTextField(value = "traffic@crete-tv.example", onValueChange = {}, label = "Email", leadingIcon = AppIcons.email)
+        AppTextField(value = "traffic@crete-tv.example", onValueChange = {}, label = "Email", leadingIcon = AppDrawableRepo.email)
         AppPasswordField(
             value = "traffic-desk-2026",
             onValueChange = {},
             label = "Password",
             visible = false,
             onToggleVisibility = {},
-            leadingIcon = AppIcons.lock,
+            leadingIcon = AppDrawableRepo.lock,
         )
         AppButton(text = "Sign in", onClick = {}, fillMaxWidth = true)
     }

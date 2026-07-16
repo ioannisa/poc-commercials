@@ -7,7 +7,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.LocalLangua
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
@@ -165,7 +165,7 @@ private fun CommercialDetailScreen(
                         // dense reorder column, so the touch floor is opted out.
                         AppIconButton(
                             label = Strings[StringKey.DETAIL_CD_MOVE_UP],
-                            icon = AppIcons.keyboardArrowUp,
+                            icon = AppDrawableRepo.keyboardArrowUp,
                             onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index - 1)) },
                             enabled = index > 0,
                             modifier = Modifier.size(24.dp),
@@ -174,7 +174,7 @@ private fun CommercialDetailScreen(
                         )
                         AppIconButton(
                             label = Strings[StringKey.DETAIL_CD_MOVE_DOWN],
-                            icon = AppIcons.keyboardArrowDown,
+                            icon = AppDrawableRepo.keyboardArrowDown,
                             onClick = { onIntent(CommercialDetailIntent.MoveRow(index, index + 1)) },
                             enabled = index < commercials.size - 1,
                             modifier = Modifier.size(24.dp),
@@ -340,7 +340,7 @@ private fun CommercialDetailScreen(
                     // Print this break's program flow
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
-                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.print, size = AppIconSize.SMALL) },
                         enabled = commercials.isNotEmpty()
                     ) {
                         onIntent(CommercialDetailIntent.PrintBreak)
@@ -352,7 +352,7 @@ private fun CommercialDetailScreen(
                     // Edit action
                     ContextMenuEntry.Item(
                         label = StringKey.DETAIL_MENU_EDIT_COMMERCIAL.localized(),
-                        icon = { AppIcon(AppIcons.edit, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.edit, size = AppIconSize.SMALL) },
                         shortcut = "⌘E",
                         enabled = canEdit
                     ) {
@@ -365,26 +365,26 @@ private fun CommercialDetailScreen(
                     // Clipboard submenu
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_CLIPBOARD.localized(),
-                        icon = { AppIcon(AppIcons.contentCopy, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.contentCopy, size = AppIconSize.SMALL) },
                         enabled = canEdit,
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_COPY.localized(),
-                                icon = { AppIcon(AppIcons.contentCopy, size = AppIconSize.SMALL) },
+                                icon = { AppIcon(AppDrawableRepo.contentCopy, size = AppIconSize.SMALL) },
                                 shortcut = "⌘C"
                             ) {
                                 println("Copy: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_CUT.localized(),
-                                icon = { AppIcon(AppIcons.contentCut, size = AppIconSize.SMALL) },
+                                icon = { AppIcon(AppDrawableRepo.contentCut, size = AppIconSize.SMALL) },
                                 shortcut = "⌘X"
                             ) {
                                 println("Cut: ${item.clientName}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.COMMON_PASTE.localized(),
-                                icon = { AppIcon(AppIcons.contentPaste, size = AppIconSize.SMALL) },
+                                icon = { AppIcon(AppDrawableRepo.contentPaste, size = AppIconSize.SMALL) },
                                 shortcut = "⌘V"
                             ) {
                                 println("Paste at index $rowIndex")
@@ -395,21 +395,21 @@ private fun CommercialDetailScreen(
                     // Move submenu
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_MOVE.localized(),
-                        icon = { AppIcon(AppIcons.keyboardArrowUp, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.keyboardArrowUp, size = AppIconSize.SMALL) },
                         enabled = canEdit,
                         items = listOf(
                             // The guards below only DISABLE the entries; the
                             // ViewModel re-validates every MoveRow anyway.
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_UP.localized(),
-                                icon = { AppIcon(AppIcons.keyboardArrowUp, size = AppIconSize.SMALL) },
+                                icon = { AppIcon(AppDrawableRepo.keyboardArrowUp, size = AppIconSize.SMALL) },
                                 enabled = rowIndex > 0
                             ) {
                                 onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex - 1))
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_MOVE_DOWN.localized(),
-                                icon = { AppIcon(AppIcons.keyboardArrowDown, size = AppIconSize.SMALL) },
+                                icon = { AppIcon(AppDrawableRepo.keyboardArrowDown, size = AppIconSize.SMALL) },
                                 enabled = rowIndex < commercials.size - 1
                             ) {
                                 onIntent(CommercialDetailIntent.MoveRow(rowIndex, rowIndex + 1))
@@ -436,7 +436,7 @@ private fun CommercialDetailScreen(
                     // Delete action
                     ContextMenuEntry.Item(
                         label = StringKey.COMMON_DELETE.localized(),
-                        icon = { AppIcon(AppIcons.delete, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.delete, size = AppIconSize.SMALL) },
                         shortcut = "⌫",
                         enabled = canEdit
                     ) {
@@ -449,24 +449,24 @@ private fun CommercialDetailScreen(
                     // More options
                     ContextMenuEntry.SubMenu(
                         label = StringKey.DETAIL_MENU_MORE.localized(),
-                        icon = { AppIcon(AppIcons.moreVert, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.moreVert, size = AppIconSize.SMALL) },
                         items = listOf(
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_PREVIEW.localized(),
-                                icon = { AppIcon(AppIcons.playArrow, size = AppIconSize.SMALL) }
+                                icon = { AppIcon(AppDrawableRepo.playArrow, size = AppIconSize.SMALL) }
                             ) {
                                 println("Preview: ${item.message}")
                             },
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_HISTORY.localized(),
-                                icon = { AppIcon(AppIcons.history, size = AppIconSize.SMALL) }
+                                icon = { AppIcon(AppDrawableRepo.history, size = AppIconSize.SMALL) }
                             ) {
                                 println("History for: ${item.clientName}")
                             },
                             ContextMenuEntry.Separator,
                             ContextMenuEntry.Item(
                                 label = StringKey.DETAIL_MENU_DETAILS.localized(),
-                                icon = { AppIcon(AppIcons.info, size = AppIconSize.SMALL) }
+                                icon = { AppIcon(AppDrawableRepo.info, size = AppIconSize.SMALL) }
                             ) {
                                 println("Details: Client=${item.clientCode}, Duration=${item.durationSeconds}s, Contract=${item.contract}")
                             }
@@ -521,7 +521,7 @@ private fun DetailHeader(
                     ) {
                         AppIconButton(
                             label = Strings[StringKey.COMMON_BACK],
-                            icon = AppIcons.arrowBack,
+                            icon = AppDrawableRepo.arrowBack,
                             onClick = onBack,
                         )
 
@@ -617,7 +617,7 @@ private fun DetailHeader(
                             onClick = { onPrevious?.invoke() },
                             variant = AppButtonVariant.SECONDARY,
                             enabled = onPrevious != null,
-                            leadingIcon = AppIcons.arrowBack,
+                            leadingIcon = AppDrawableRepo.arrowBack,
                         )
 
                         AppButton(
@@ -625,7 +625,7 @@ private fun DetailHeader(
                             onClick = { onNext?.invoke() },
                             variant = AppButtonVariant.SECONDARY,
                             enabled = onNext != null,
-                            trailingIcon = AppIcons.arrowForward,
+                            trailingIcon = AppDrawableRepo.arrowForward,
                         )
                     }
                 }

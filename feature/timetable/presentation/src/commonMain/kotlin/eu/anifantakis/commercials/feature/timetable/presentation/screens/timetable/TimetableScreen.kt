@@ -7,7 +7,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toStringKey
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
@@ -221,7 +221,7 @@ private fun TimetableScreen(
                         color = LocalContentColor.current,
                         maxLines = 1,
                     )
-                    AppIcon(AppIcons.arrowDropDown)
+                    AppIcon(AppDrawableRepo.arrowDropDown)
                 }
                 DropdownMenu(expanded = spotMenu, onDismissRequest = { spotMenu = false }) {
                     finder.spots.forEach { spot ->
@@ -237,7 +237,7 @@ private fun TimetableScreen(
                 if (finder.selectedParty != null) {
                     AppIconButton(
                         label = Strings[StringKey.TIMETABLE_CD_CLEAR_FINDER],
-                        icon = AppIcons.clear,
+                        icon = AppDrawableRepo.clear,
                         onClick = { onIntent(TimetableIntent.ClearFinder) },
                     )
                 }
@@ -306,7 +306,7 @@ private fun TimetableScreen(
                     // Open/View details
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_OPEN_DETAILS.localized(),
-                        icon = { AppIcon(AppIcons.openInNew, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.openInNew, size = AppIconSize.SMALL) },
                         shortcut = "Enter",
                         enabled = spotCount > 0
                     ) {
@@ -322,7 +322,7 @@ private fun TimetableScreen(
                     // Print the whole day this cell belongs to
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
-                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.print, size = AppIconSize.SMALL) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         onIntent(TimetableIntent.PrintDay(date))
@@ -331,7 +331,7 @@ private fun TimetableScreen(
                     // Print this break's commercials
                     add(ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK.localized(),
-                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.print, size = AppIconSize.SMALL) },
                         enabled = spotCount > 0
                     ) {
                         onIntent(TimetableIntent.PrintBreak(breakSlot.time, date))
@@ -344,7 +344,7 @@ private fun TimetableScreen(
                         label = (if (showSpotTimes) StringKey.TIMETABLE_MENU_SHOW_COUNTS else StringKey.TIMETABLE_MENU_SHOW_TIMES).localized(),
                         icon = {
                             AppIcon(
-                                if (showSpotTimes) AppIcons.numbers else AppIcons.timer,
+                                if (showSpotTimes) AppDrawableRepo.numbers else AppDrawableRepo.timer,
                                 size = AppIconSize.SMALL,
                             )
                         }
@@ -361,13 +361,13 @@ private fun TimetableScreen(
                         // keys drive (add needs a spot armed via Εύρεση)
                         add(ContextMenuEntry.SubMenu(
                             label = StringKey.TIMETABLE_MENU_EDIT.localized(),
-                            icon = { AppIcon(AppIcons.edit, size = AppIconSize.SMALL) },
+                            icon = { AppIcon(AppDrawableRepo.edit, size = AppIconSize.SMALL) },
                             items = listOf(
                                 ContextMenuEntry.Item(
                                     label = finder.selectedSpot
                                         ?.let { StringKey.TIMETABLE_ADD_SPOT_NAMED.localized().withArgs(listOf(it.description.take(30))) }
                                         ?: StringKey.TIMETABLE_ADD_SPOT_HINT.localized(),
-                                    icon = { AppIcon(AppIcons.add, size = AppIconSize.SMALL) },
+                                    icon = { AppIcon(AppDrawableRepo.add, size = AppIconSize.SMALL) },
                                     shortcut = "A",
                                     enabled = finder.selectedSpot != null
                                 ) {
@@ -375,7 +375,7 @@ private fun TimetableScreen(
                                 },
                                 ContextMenuEntry.Item(
                                     label = StringKey.TIMETABLE_MENU_REMOVE_LAST.localized(),
-                                    icon = { AppIcon(AppIcons.delete, size = AppIconSize.SMALL) },
+                                    icon = { AppIcon(AppDrawableRepo.delete, size = AppIconSize.SMALL) },
                                     shortcut = "R",
                                     enabled = (state.addedCounts[key] ?: 0) > 0
                                 ) {
@@ -390,7 +390,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_DAY.localized().withArgs(listOf(dayMenuLabel(date))),
-                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) },
+                        icon = { AppIcon(AppDrawableRepo.print, size = AppIconSize.SMALL) },
                         enabled = cellData.any { it.key.date == date && it.value.spotCount > 0 }
                     ) {
                         onIntent(TimetableIntent.PrintDay(date))
@@ -403,7 +403,7 @@ private fun TimetableScreen(
                 listOf(
                     ContextMenuEntry.Item(
                         label = StringKey.TIMETABLE_MENU_PRINT_BREAK_MONTH.localized().withArgs(listOf(label)),
-                        icon = { AppIcon(AppIcons.print, size = AppIconSize.SMALL) }
+                        icon = { AppIcon(AppDrawableRepo.print, size = AppIconSize.SMALL) }
                     ) {
                         onIntent(TimetableIntent.PrintBreakMonth(breakSlot.time))
                     }
@@ -441,7 +441,7 @@ private fun StationSelector(
                     color = MaterialTheme.colorScheme.primary
                 )
                 AppIcon(
-                    AppIcons.arrowDropDown,
+                    AppDrawableRepo.arrowDropDown,
                     contentDescription = Strings[StringKey.TIMETABLE_CD_SWITCH_STATION],
                     tint = MaterialTheme.colorScheme.primary
                 )
@@ -452,7 +452,7 @@ private fun StationSelector(
                         text = { AppText(station.name, AppTextStyle.BUTTON) },
                         leadingIcon = {
                             if (station.id == current.id) {
-                                AppIcon(AppIcons.check, size = AppIconSize.SMALL)
+                                AppIcon(AppDrawableRepo.check, size = AppIconSize.SMALL)
                             } else {
                                 Spacer(Modifier.size(16.dp))
                             }
@@ -498,7 +498,7 @@ private fun KeyboardEnabledHeader(
                 // Month navigation
                 AppIconButton(
                     label = Strings[StringKey.TIMETABLE_CD_PREV_MONTH],
-                    icon = AppIcons.arrowBack,
+                    icon = AppDrawableRepo.arrowBack,
                     onClick = { onIntent(TimetableIntent.PreviousMonth) },
                 )
 
@@ -512,7 +512,7 @@ private fun KeyboardEnabledHeader(
 
                 AppIconButton(
                     label = Strings[StringKey.TIMETABLE_CD_NEXT_MONTH],
-                    icon = AppIcons.arrowForward,
+                    icon = AppDrawableRepo.arrowForward,
                     onClick = { onIntent(TimetableIntent.NextMonth) },
                 )
 
@@ -559,7 +559,7 @@ private fun KeyboardEnabledHeader(
                 // icon shows the mode you'll switch TO)
                 AppIconButton(
                     label = Strings[if (state.showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES],
-                    icon = if (state.showSpotTimes) AppIcons.numbers else AppIcons.timer,
+                    icon = if (state.showSpotTimes) AppDrawableRepo.numbers else AppDrawableRepo.timer,
                     onClick = { onIntent(TimetableIntent.ToggleShowTimes) },
                 )
 
@@ -577,7 +577,7 @@ private fun KeyboardEnabledHeader(
                 if (state.canEdit) {
                     AppIconButton(
                         label = Strings[StringKey.TIMETABLE_CD_EMAIL_SCHEDULE],
-                        icon = AppIcons.email,
+                        icon = AppDrawableRepo.email,
                         onClick = { onNavIntent(TimetableScreenNavIntent.OnOpenEmailDialog) },
                     )
                 }
@@ -592,12 +592,12 @@ private fun KeyboardEnabledHeader(
                 )
                 AppIconButton(
                     label = Strings[StringKey.TIMETABLE_CD_PREFERENCES],
-                    icon = AppIcons.settings,
+                    icon = AppDrawableRepo.settings,
                     onClick = { onNavIntent(TimetableScreenNavIntent.OnPreferences) },
                 )
                 AppIconButton(
                     label = Strings[StringKey.TIMETABLE_CD_LOGOUT],
-                    icon = AppIcons.logout,
+                    icon = AppDrawableRepo.logout,
                     onClick = { onNavIntent(TimetableScreenNavIntent.OnLogout) },
                     tint = MaterialTheme.colorScheme.error,
                 )

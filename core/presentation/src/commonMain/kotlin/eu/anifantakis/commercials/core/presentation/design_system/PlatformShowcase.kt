@@ -7,9 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +35,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -252,8 +249,8 @@ private fun Samples() {
                 AppButton("Disabled", onClick = {}, enabled = false)
                 var busy by remember { mutableStateOf(false) }
                 AppButton("Busy", onClick = { busy = !busy }, busy = busy)
-                AppButton("Icon", onClick = {}, leadingIcon = AppIcons.add)
-                AppIconButton(label = "Settings", icon = AppIcons.settings, onClick = {})
+                AppButton("Icon", onClick = {}, leadingIcon = AppDrawableRepo.add)
+                AppIconButton(label = "Settings", icon = AppDrawableRepo.settings, onClick = {})
             }
         }
 
@@ -263,13 +260,13 @@ private fun Samples() {
                 verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
             ) {
                 var name by remember { mutableStateOf("") }
-                AppTextField(name, { name = it }, label = "Username", leadingIcon = AppIcons.person)
+                AppTextField(name, { name = it }, label = "Username", leadingIcon = AppDrawableRepo.person)
                 var pw by remember { mutableStateOf("hunter2") }
                 var pwVisible by remember { mutableStateOf(false) }
                 AppPasswordField(
                     pw, { pw = it }, label = "Password",
                     visible = pwVisible, onToggleVisibility = { pwVisible = !pwVisible },
-                    leadingIcon = AppIcons.lock,
+                    leadingIcon = AppDrawableRepo.lock,
                 )
                 var err by remember { mutableStateOf("bad value") }
                 AppTextField(err, { err = it }, label = "With error", isError = true, errorText = "This is the error line")
@@ -286,7 +283,7 @@ private fun Samples() {
                     confirmText = "Confirm",
                     onConfirm = { open = false },
                     dismissText = "Cancel",
-                    icon = AppIcons.info,
+                    icon = AppDrawableRepo.info,
                 ) {
                     AppText(
                         "Full-bleed on COMPACT, token width elsewhere, platform corner + tonal depth.",
@@ -390,10 +387,10 @@ private fun SpikeField(label: String, heightOverride: Int?, decorated: Boolean =
         modifier = Modifier.widthIn(max = 360.dp).fillMaxWidth()
             .then(heightOverride?.let { Modifier.heightIn(min = it.dp) } ?: Modifier),
         leadingIcon = if (decorated) {
-            { Icon(AppIcons.person, null, Modifier.size(t.iconMedium)) }
+            { Icon(AppDrawableRepo.person, null, Modifier.size(t.iconMedium)) }
         } else null,
         trailingIcon = if (decorated) {
-            { Icon(AppIcons.visibility, null, Modifier.size(t.iconMedium)) }
+            { Icon(AppDrawableRepo.visibility, null, Modifier.size(t.iconMedium)) }
         } else null,
         isError = decorated,
         supportingText = if (decorated) {

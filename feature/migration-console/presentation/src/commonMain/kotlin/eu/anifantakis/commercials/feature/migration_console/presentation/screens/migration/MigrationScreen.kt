@@ -4,7 +4,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
@@ -127,7 +127,7 @@ private fun MigrationScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(
                 label = Strings[StringKey.COMMON_BACK],
-                icon = AppIcons.arrowBack,
+                icon = AppDrawableRepo.arrowBack,
                 onClick = { onNavIntent(MigrationScreenNavIntent.OnBack) },
             )
             AppText(Strings[StringKey.PREFERENCES_MIGRATION], AppTextStyle.SCREEN_TITLE)
@@ -492,7 +492,7 @@ private fun ServerFileBrowserDialog(
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AppIcon(AppIcons.folder, size = AppIconSize.SMALL)
+                        AppIcon(AppDrawableRepo.folder, size = AppIconSize.SMALL)
                         Spacer(Modifier.width(UIConst.paddingSmall))
                         AppText("..", AppTextStyle.BODY_STRONG)
                     }
@@ -514,7 +514,7 @@ private fun ServerFileBrowserDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AppIcon(
-                        if (entry.isDir) AppIcons.folder else AppIcons.description,
+                        if (entry.isDir) AppDrawableRepo.folder else AppDrawableRepo.description,
                         size = AppIconSize.SMALL,
                         tint = if (entry.isDir) MaterialTheme.colorScheme.primary
                                else MaterialTheme.colorScheme.onSurface

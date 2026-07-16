@@ -5,7 +5,7 @@ import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
@@ -91,7 +91,7 @@ private fun UserManagementScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(
                 label = Strings[StringKey.COMMON_BACK],
-                icon = AppIcons.arrowBack,
+                icon = AppDrawableRepo.arrowBack,
                 onClick = { onNavIntent(UserManagementScreenNavIntent.OnBack) },
             )
             AppText(Strings[StringKey.USER_MGMT_TITLE], AppTextStyle.SCREEN_TITLE)
@@ -99,7 +99,7 @@ private fun UserManagementScreen(
             AppButton(
                 text = Strings[StringKey.USER_MGMT_NEW_USER],
                 onClick = { onIntent(UserManagementIntent.ShowCreate) },
-                leadingIcon = AppIcons.add,
+                leadingIcon = AppDrawableRepo.add,
             )
         }
 
@@ -141,17 +141,17 @@ private fun UserManagementScreen(
                         if (!user.isAdmin) {
                             AppIconButton(
                                 label = Strings[StringKey.USER_MGMT_CD_RESET_PASSWORD],
-                                icon = AppIcons.lockReset,
+                                icon = AppDrawableRepo.lockReset,
                                 onClick = { onIntent(UserManagementIntent.ResetRequested(user)) },
                             )
                             AppIconButton(
                                 label = Strings[StringKey.USER_MGMT_CD_EDIT_GRANTS],
-                                icon = AppIcons.edit,
+                                icon = AppDrawableRepo.edit,
                                 onClick = { onIntent(UserManagementIntent.EditGrantsRequested(user)) },
                             )
                             AppIconButton(
                                 label = Strings[StringKey.USER_MGMT_CD_DELETE_USER],
-                                icon = AppIcons.delete,
+                                icon = AppDrawableRepo.delete,
                                 onClick = { onIntent(UserManagementIntent.DeleteRequested(user)) },
                                 tint = MaterialTheme.colorScheme.error,
                             )

@@ -3,7 +3,7 @@ package eu.anifantakis.commercials.feature.databases.presentation.screens.databa
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.design_system.AppIcons
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
@@ -80,14 +80,14 @@ private fun DatabasesScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppIconButton(
                 label = Strings[StringKey.COMMON_BACK],
-                icon = AppIcons.arrowBack,
+                icon = AppDrawableRepo.arrowBack,
                 onClick = { onNavIntent(DatabasesScreenNavIntent.OnBack) },
             )
             AppText(Strings[StringKey.PREFERENCES_DATABASES], AppTextStyle.SCREEN_TITLE)
             Spacer(Modifier.weight(1f))
             AppIconButton(
                 label = Strings[StringKey.DATABASES_CD_RELOAD],
-                icon = AppIcons.refresh,
+                icon = AppDrawableRepo.refresh,
                 onClick = { onIntent(DatabasesIntent.Reload) },
             )
         }
@@ -131,7 +131,7 @@ private fun DatabasesScreen(
                         }
                         AppIconButton(
                             label = Strings[StringKey.DATABASES_CD_DELETE],
-                            icon = AppIcons.delete,
+                            icon = AppDrawableRepo.delete,
                             onClick = { onIntent(DatabasesIntent.DeleteRequested(station)) },
                             tint = MaterialTheme.colorScheme.error,
                         )
