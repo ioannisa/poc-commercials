@@ -3,10 +3,16 @@ package eu.anifantakis.commercials.feature.auth.domain.model
 /** A personal access token as its owner lists it - never the secret itself. */
 data class ApiToken(
     val id: Long,
-    val name: String,
+    val workstationName: String,
     val createdAt: String,
     val lastUsedAt: String?,
 )
+
+/**
+ * Whether a workstation name is unclaimed, already the caller's, or held by
+ * ANOTHER user - the self-service availability check. OTHER never names who.
+ */
+enum class WorkstationAvailability { FREE, MINE, OTHER }
 
 /**
  * A freshly minted token: the RAW secret (shown ONCE) plus the MCP SSE URL the

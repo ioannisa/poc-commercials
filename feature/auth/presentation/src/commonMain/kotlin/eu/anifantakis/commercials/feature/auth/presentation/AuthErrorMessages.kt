@@ -15,6 +15,9 @@ fun AuthError.toUiText(): UiText = when (this) {
     AuthError.NotLoggedIn -> UiText.Res(StringKey.AUTH_NOT_LOGGED_IN)
     // Terminal: retrying cannot conjure WebCrypto. The message names the fix.
     AuthError.SessionNotPersisted -> UiText.Res(StringKey.AUTH_SESSION_NOT_PERSISTED)
+    // Handled inline by the token dialog (turned into a takeover prompt); the
+    // generic text is a fallback if it ever surfaces as a plain error.
+    AuthError.Conflict -> UiText.Res(StringKey.MCP_TOKENS_TAKEOVER_NEEDED)
     is AuthError.Server -> UiText.Dynamic(message)
     is AuthError.Network -> UiText.Res(StringKey.AUTH_NETWORK_UNREACHABLE)
 }

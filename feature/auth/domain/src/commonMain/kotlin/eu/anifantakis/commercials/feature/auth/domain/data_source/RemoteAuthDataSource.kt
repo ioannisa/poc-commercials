@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
+import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 
 /**
  * Network side of /api/auth - the only class that touches the HTTP client.
@@ -38,7 +39,13 @@ interface RemoteAuthDataSource {
 
     suspend fun listApiTokens(token: String): DataResult<List<ApiToken>, AuthError>
 
-    suspend fun createApiToken(token: String, name: String): DataResult<CreatedApiToken, AuthError>
+    suspend fun checkWorkstation(token: String, workstation: String): DataResult<WorkstationAvailability, AuthError>
+
+    suspend fun createApiToken(
+        token: String,
+        workstation: String,
+        confirmTakeover: Boolean,
+    ): DataResult<CreatedApiToken, AuthError>
 
     suspend fun revokeApiToken(token: String, id: Long): EmptyDataResult<AuthError>
 }

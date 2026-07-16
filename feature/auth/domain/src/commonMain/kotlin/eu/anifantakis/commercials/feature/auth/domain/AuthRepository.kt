@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
+import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 
 /**
  * Authentication operations. Implementations own the session persistence:
@@ -27,11 +28,18 @@ interface AuthRepository {
     /** Step 2: complete the reset with the emailed code; the outcome distinguishes wrong/locked/expired. */
     suspend fun resetPassword(username: String, code: String, newPassword: String): DataResult<ResetOutcome, AuthError>
 
-    /** The caller's own MCP/API personal access tokens. */
+    /** The caller's own MCP/API personal access tokens (one per workstation). */
     suspend fun listApiTokens(): DataResult<List<ApiToken>, AuthError>
 
-    /** Mints a NON-EXPIRING personal access token; the raw secret + MCP URL come back ONCE. */
-    suspend fun createApiToken(name: String): DataResult<CreatedApiToken, AuthError>
+    /** Whether [workstation] is FREE, MINE, or held by another user (OTHER). */
+    suspend fun checkWorkstation(workstation: String): DataResult<WorkstationAvailability, AuthError>
+
+    /**
+     * Mints a NON-EXPIRING token bound to [workstation]; the raw secret + MCP URL
+     * come back ONCE. Replaces any existing token for that workstation - taking
+     * over ANOTHER user's requires [confirmTakeover].
+     */
+    suspend fun createApiToken(workstation: String, confirmTakeover: Boolean): DataResult<CreatedApiToken, AuthError>
 
     /** Revokes one of the caller's own tokens. */
     suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError>

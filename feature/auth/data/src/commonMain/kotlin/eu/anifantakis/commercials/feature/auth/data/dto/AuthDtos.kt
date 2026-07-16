@@ -36,10 +36,13 @@ internal data class ResetPasswordDto(val username: String, val code: String, val
 internal data class ResetResultDto(val status: String, val retryAfterSeconds: Long? = null)
 
 @Serializable
-internal data class ApiTokenDto(val id: Long, val name: String, val createdAt: String, val lastUsedAt: String? = null)
+internal data class ApiTokenDto(val id: Long, val workstationName: String, val createdAt: String, val lastUsedAt: String? = null)
 
 @Serializable
-internal data class CreateApiTokenRequestDto(val name: String)
+internal data class CreateApiTokenRequestDto(val workstation: String, val confirmTakeover: Boolean = false)
 
 @Serializable
 internal data class CreateApiTokenResponseDto(val token: String)
+
+@Serializable
+internal data class WorkstationAvailabilityDto(val status: String)

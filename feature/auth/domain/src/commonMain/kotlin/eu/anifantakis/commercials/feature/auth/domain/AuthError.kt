@@ -29,6 +29,13 @@ sealed interface AuthError : Error {
      * that rather than invite another attempt.
      */
     data object SessionNotPersisted : AuthError
+
+    /**
+     * A minting request hit a workstation held by ANOTHER user and takeover was
+     * not confirmed (server 409). The UI turns this into an explicit "take over?"
+     * prompt rather than a plain error.
+     */
+    data object Conflict : AuthError
     data class Server(val message: String) : AuthError
     data class Network(val error: DataError.Network) : AuthError
 }

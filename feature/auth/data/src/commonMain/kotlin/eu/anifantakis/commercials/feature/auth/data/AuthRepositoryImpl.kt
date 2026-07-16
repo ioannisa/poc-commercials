@@ -10,6 +10,7 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import kotlinx.coroutines.CancellationException
 
@@ -108,9 +109,14 @@ class AuthRepositoryImpl(
         return remoteDataSource.listApiTokens(token)
     }
 
-    override suspend fun createApiToken(name: String): DataResult<CreatedApiToken, AuthError> {
+    override suspend fun checkWorkstation(workstation: String): DataResult<WorkstationAvailability, AuthError> {
         val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
-        return remoteDataSource.createApiToken(token, name)
+        return remoteDataSource.checkWorkstation(token, workstation)
+    }
+
+    override suspend fun createApiToken(workstation: String, confirmTakeover: Boolean): DataResult<CreatedApiToken, AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.createApiToken(token, workstation, confirmTakeover)
     }
 
     override suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError> {
