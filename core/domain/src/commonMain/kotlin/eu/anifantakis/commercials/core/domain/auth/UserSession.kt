@@ -23,6 +23,8 @@ interface UserSession {
      * without a recomposer.
      */
     val revision: StateFlow<Int>
+    /** Whether a session currently exists (a non-empty token). */
+    val isLoggedIn: Boolean
     val displayName: String
     /** Config-managed super administrator (may manage users). */
     val isAdmin: Boolean

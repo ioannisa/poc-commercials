@@ -330,6 +330,7 @@ class FakeUserSession(
     override val displayName: String = "Tester",
     override val isAdmin: Boolean = false,
     override val stations: List<StationAccess> = emptyList(),
+    override val isLoggedIn: Boolean = true,
 ) : UserSession {
     private val _revision = MutableStateFlow(0)
     override val revision: StateFlow<Int> = _revision.asStateFlow()

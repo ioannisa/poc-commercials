@@ -245,7 +245,15 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         _revision.value++
     }
 
+    /**
+     * Logout / 401. IDEMPOTENT: if there is no session, do nothing - do NOT bump
+     * the revision. A 401 handler calls this, and a revision bump makes every
+     * session observer re-run; an observer that refetches (Timetable) would 401
+     * again (no token), clear again, bump again - an infinite loop that spams the
+     * "session expired" snackbar. Bumping only on a real transition breaks it.
+     */
     fun clear() {
+        if (!isLoggedIn) return
         stored = StoredSession()
         _revision.value++
     }

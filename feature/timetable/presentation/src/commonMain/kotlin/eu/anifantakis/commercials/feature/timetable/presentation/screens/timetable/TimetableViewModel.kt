@@ -255,7 +255,11 @@ class TimetableViewModel(
         viewModelScope.launch {
             session.revision.collectIndexed { index, _ ->
                 _state.update { it.withSessionFacts() }
-                if (index > 0) reload()
+                // Only refetch for a change that still HAS a session. A logout /
+                // 401 also bumps the revision, but reloading then would fire an
+                // authenticated call with no token, 401, and (before clear() was
+                // made idempotent) spin a feedback loop. The app routes to Login.
+                if (index > 0 && session.isLoggedIn) reload()
             }
         }
     }
