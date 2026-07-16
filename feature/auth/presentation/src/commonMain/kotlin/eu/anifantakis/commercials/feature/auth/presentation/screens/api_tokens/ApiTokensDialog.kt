@@ -223,52 +223,55 @@ private fun ApiTokensDialog(
                 variant = AppButtonVariant.SECONDARY,
             )
         } else {
-            AppText(Strings[StringKey.MCP_TOKENS_WORKSTATION_HINT], AppTextStyle.NOTE)
+            // One token per account (single slot). The create field appears only
+            // when there is NO token; once one exists you see it + Revoke, so you
+            // can never accumulate a pile - to change it, revoke and mint again.
             if (state.tokens.isEmpty()) {
-                AppText(Strings[StringKey.MCP_TOKENS_EMPTY], AppTextStyle.NOTE)
+                AppText(Strings[StringKey.MCP_TOKENS_WORKSTATION_HINT], AppTextStyle.NOTE)
+                AppTextField(
+                    value = state.workstation,
+                    onValueChange = { onIntent(ApiTokensIntent.WorkstationChanged(it)) },
+                    label = Strings[StringKey.MCP_TOKENS_WORKSTATION],
+                    enabled = !state.busy,
+                )
+                availabilityLabel(state)?.let { AppText(it, AppTextStyle.NOTE) }
+
+                if (state.pendingTakeover) {
+                    AppText(Strings[StringKey.MCP_TOKENS_TAKEOVER_CONFIRM], AppTextStyle.ERROR_NOTE)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+                    ) {
+                        AppButton(
+                            text = Strings[StringKey.MCP_TOKENS_TAKEOVER],
+                            onClick = { onIntent(ApiTokensIntent.ConfirmTakeover) },
+                            busy = state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AppButton(
+                            text = Strings[StringKey.COMMON_CANCEL],
+                            onClick = { onIntent(ApiTokensIntent.CancelTakeover) },
+                            variant = AppButtonVariant.SECONDARY,
+                            enabled = !state.busy,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
+                    AppButton(
+                        text = generateLabel(state.availability),
+                        onClick = { onIntent(ApiTokensIntent.Generate) },
+                        enabled = state.canGenerate,
+                        busy = state.busy,
+                        fillMaxWidth = true,
+                    )
+                }
             } else {
                 Column {
                     state.tokens.forEach { token ->
                         TokenRow(token = token, enabled = !state.busy, onRevoke = { onIntent(ApiTokensIntent.Revoke(token.id)) })
                     }
                 }
-            }
-            AppTextField(
-                value = state.workstation,
-                onValueChange = { onIntent(ApiTokensIntent.WorkstationChanged(it)) },
-                label = Strings[StringKey.MCP_TOKENS_WORKSTATION],
-                enabled = !state.busy,
-            )
-            availabilityLabel(state)?.let { AppText(it, AppTextStyle.NOTE) }
-
-            if (state.pendingTakeover) {
-                AppText(Strings[StringKey.MCP_TOKENS_TAKEOVER_CONFIRM], AppTextStyle.ERROR_NOTE)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
-                ) {
-                    AppButton(
-                        text = Strings[StringKey.MCP_TOKENS_TAKEOVER],
-                        onClick = { onIntent(ApiTokensIntent.ConfirmTakeover) },
-                        busy = state.busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                    AppButton(
-                        text = Strings[StringKey.COMMON_CANCEL],
-                        onClick = { onIntent(ApiTokensIntent.CancelTakeover) },
-                        variant = AppButtonVariant.SECONDARY,
-                        enabled = !state.busy,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            } else {
-                AppButton(
-                    text = generateLabel(state.availability),
-                    onClick = { onIntent(ApiTokensIntent.Generate) },
-                    enabled = state.canGenerate,
-                    busy = state.busy,
-                    fillMaxWidth = true,
-                )
+                AppText(Strings[StringKey.MCP_TOKENS_HAVE_ONE], AppTextStyle.NOTE)
             }
         }
         state.error?.let {
