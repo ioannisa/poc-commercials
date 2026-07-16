@@ -35,10 +35,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
         androidMain.dependencies {
-            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
         }
         jvmMain.dependencies {
-            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
         }
         // js + wasmJs share sources (AppConfig fetches /config over HTTP);
         // the webMain intermediate comes from the convention plugin's

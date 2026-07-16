@@ -72,7 +72,7 @@ kotlin {
             implementation(libs.androidx.ui.text.google.fonts)
 
             // Ktor client engine for Android
-            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
         }
         commonMain.dependencies {
             implementation(projects.core.domain)
@@ -155,7 +155,7 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
 
             // Ktor client engine for JVM (desktop)
-            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
 
         }
 

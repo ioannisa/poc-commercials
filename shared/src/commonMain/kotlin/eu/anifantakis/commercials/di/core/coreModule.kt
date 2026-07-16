@@ -15,6 +15,7 @@ import eu.anifantakis.commercials.core.domain.party_search.data_source.RemotePar
 import eu.anifantakis.commercials.core.domain.preferences.AppLanguageStore
 import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
+import io.ktor.client.engine.HttpClientEngine
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.module
@@ -42,9 +43,11 @@ val coreModule = module {
     singleOf(::KSafeAppLanguageStore).bind<AppLanguageStore>()
 
     // ONE client per backend personality (CommonHttpClient subclasses):
-    // authenticated + station-stamped for the app API, plain for login/recovery
-    single { ApiHttpClient(session = get<AuthSession>()) }
-    single { PlainJsonHttpClient() }
+    // authenticated + station-stamped for the app API, plain for login/recovery.
+    // The HttpClientEngine is bound per platform (platformModule): OkHttp on
+    // desktop/Android, Js on web, Darwin on iOS.
+    single { ApiHttpClient(session = get<AuthSession>(), engine = get<HttpClientEngine>()) }
+    single { PlainJsonHttpClient(engine = get<HttpClientEngine>()) }
 
     // Rotates the token at launch and beats while the app is open, so a session
     // can only lapse while the app is CLOSED. Driven from App.kt.

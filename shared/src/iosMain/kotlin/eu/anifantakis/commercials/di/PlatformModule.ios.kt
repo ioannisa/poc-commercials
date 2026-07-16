@@ -7,12 +7,17 @@ import eu.anifantakis.commercials.reports.NoStationLogoCache
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.StationLogoCache
 import eu.anifantakis.commercials.reports.ServerReportService
+import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.engine.darwin.Darwin
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 
 actual val platformModule: Module = module {
+    // Ktor client engine, per-platform: Darwin (NSURLSession) on Apple targets.
+    single<HttpClientEngine> { Darwin.create() }
+
     // Reports render server-side (same path as the browsers); the sink turns
     // the bytes into native save/open/share. All five platforms report now.
     singleOf(::ReportApiClient)
