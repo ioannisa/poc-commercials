@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.mcp.tools.feature.AddPlacementTool
 import eu.anifantakis.commercials.mcp.tools.feature.ContractSpotsTool
 import eu.anifantakis.commercials.mcp.tools.feature.ContractStatusTool
 import eu.anifantakis.commercials.mcp.tools.feature.DeletePlacementTool
+import eu.anifantakis.commercials.mcp.tools.feature.GetCustomerContactTool
 import eu.anifantakis.commercials.mcp.tools.feature.generate_break_report.GenerateBreakReportTool
 import eu.anifantakis.commercials.mcp.tools.feature.generate_day_report.GenerateDayReportTool
 import eu.anifantakis.commercials.mcp.tools.feature.ListBreaksTool
@@ -37,6 +38,7 @@ val ALL_MCP_TOOLS: List<McpTool> = listOf(
     ListBreaksTool,
     SpotsInBreakTool,
     StationFootprintTool,
+    GetCustomerContactTool,
     // -- reports --
     GenerateBreakReportTool,
     GenerateDayReportTool,
