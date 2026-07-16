@@ -1,10 +1,14 @@
 package eu.anifantakis.commercials.feature.auth.data.data_source
 
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
+import eu.anifantakis.commercials.feature.auth.data.dto.ApiTokenDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ChangePasswordDto
+import eu.anifantakis.commercials.feature.auth.data.dto.CreateApiTokenRequestDto
+import eu.anifantakis.commercials.feature.auth.data.dto.CreateApiTokenResponseDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ForgotPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginRequestDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginResponseDto
@@ -12,10 +16,14 @@ import eu.anifantakis.commercials.feature.auth.data.dto.ResetPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ResetResultDto
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
+import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.GrantedStation
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -121,6 +129,43 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
             }
             DataResult.Success(outcome)
         }
+    }
+
+    override suspend fun listApiTokens(token: String): DataResult<List<ApiToken>, AuthError> = authCall {
+        val response = httpClient.get(url("api-tokens")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) {
+            val dtos: List<ApiTokenDto> = response.body()
+            DataResult.Success(dtos.map { ApiToken(it.id, it.name, it.createdAt, it.lastUsedAt) })
+        } else {
+            DataResult.Failure(AuthError.Server(response.errorMessage()))
+        }
+    }
+
+    override suspend fun createApiToken(token: String, name: String): DataResult<CreatedApiToken, AuthError> = authCall {
+        val response = httpClient.post(url("api-tokens")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(CreateApiTokenRequestDto(name.trim()))
+        }
+        if (response.status.isSuccess()) {
+            val dto: CreateApiTokenResponseDto = response.body()
+            // The MCP SSE endpoint the client should point at, built from the same
+            // base URL this data source already talks to.
+            val mcpUrl = AppConfig.require().serverBaseUrl.trimEnd('/') + "/mcp"
+            DataResult.Success(CreatedApiToken(dto.token, mcpUrl))
+        } else {
+            DataResult.Failure(AuthError.Server(response.errorMessage()))
+        }
+    }
+
+    override suspend fun revokeApiToken(token: String, id: Long): EmptyDataResult<AuthError> = authCall {
+        val response = httpClient.delete(url("api-tokens/$id")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) DataResult.Success(Unit)
+        else DataResult.Failure(AuthError.Server(response.errorMessage()))
     }
 
     /** Transport failures become [AuthError.Network]; cancellation rethrows. */

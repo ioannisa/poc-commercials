@@ -8,6 +8,8 @@ import eu.anifantakis.commercials.core.domain.util.onSuccess
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
+import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import kotlinx.coroutines.CancellationException
 
@@ -100,4 +102,19 @@ class AuthRepositoryImpl(
         newPassword: String,
     ): DataResult<ResetOutcome, AuthError> =
         remoteDataSource.resetPassword(username, code, newPassword)
+
+    override suspend fun listApiTokens(): DataResult<List<ApiToken>, AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.listApiTokens(token)
+    }
+
+    override suspend fun createApiToken(name: String): DataResult<CreatedApiToken, AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.createApiToken(token, name)
+    }
+
+    override suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.revokeApiToken(token, id)
+    }
 }

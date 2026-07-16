@@ -34,3 +34,12 @@ internal data class ResetPasswordDto(val username: String, val code: String, val
 /** status: "ok" | "invalid_code" | "locked" | "expired"; retryAfterSeconds set on a lock. */
 @Serializable
 internal data class ResetResultDto(val status: String, val retryAfterSeconds: Long? = null)
+
+@Serializable
+internal data class ApiTokenDto(val id: Long, val name: String, val createdAt: String, val lastUsedAt: String? = null)
+
+@Serializable
+internal data class CreateApiTokenRequestDto(val name: String)
+
+@Serializable
+internal data class CreateApiTokenResponseDto(val token: String)

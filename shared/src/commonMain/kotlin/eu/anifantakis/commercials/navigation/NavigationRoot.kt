@@ -36,6 +36,7 @@ import eu.anifantakis.commercials.core.presentation.navigation.Navigator
 import eu.anifantakis.commercials.core.presentation.scaffold.ApplicationScaffold
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.presentation.AuthNavType
+import eu.anifantakis.commercials.feature.auth.presentation.screens.api_tokens.ApiTokensDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
@@ -106,6 +107,10 @@ fun NavigationRoot() {
     var showChangePassword by remember { mutableStateOf(false) }
     if (showChangePassword) {
         ChangePasswordDialogRoot(onDismiss = { showChangePassword = false })
+    }
+    var showApiTokens by remember { mutableStateOf(false) }
+    if (showApiTokens) {
+        ApiTokensDialogRoot(onDismiss = { showApiTokens = false })
     }
     // Temp-password login (admin reset / fresh account): trap the user on a
     // mandatory, non-escapable change-password dialog until they set their own.
@@ -190,6 +195,7 @@ fun NavigationRoot() {
                     navigator = navigator,
                     isAdmin = { authSession.isAdmin },
                     onChangePassword = { showChangePassword = true },
+                    onApiTokens = { showApiTokens = true },
                     onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
                     onMigration = { navigator.navigate(MigrationNavType.Migration) },
                     onDatabases = { navigator.navigate(DatabasesNavType.Databases) },

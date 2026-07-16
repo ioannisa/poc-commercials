@@ -2,6 +2,8 @@ package eu.anifantakis.commercials.feature.auth.domain
 
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
+import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 
 /**
@@ -24,4 +26,13 @@ interface AuthRepository {
 
     /** Step 2: complete the reset with the emailed code; the outcome distinguishes wrong/locked/expired. */
     suspend fun resetPassword(username: String, code: String, newPassword: String): DataResult<ResetOutcome, AuthError>
+
+    /** The caller's own MCP/API personal access tokens. */
+    suspend fun listApiTokens(): DataResult<List<ApiToken>, AuthError>
+
+    /** Mints a NON-EXPIRING personal access token; the raw secret + MCP URL come back ONCE. */
+    suspend fun createApiToken(name: String): DataResult<CreatedApiToken, AuthError>
+
+    /** Revokes one of the caller's own tokens. */
+    suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError>
 }

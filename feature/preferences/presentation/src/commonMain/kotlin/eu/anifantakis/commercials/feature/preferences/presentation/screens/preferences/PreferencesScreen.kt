@@ -51,6 +51,7 @@ fun PreferencesScreenRoot(
     isAdmin: Boolean,
     onBack: () -> Unit,
     onChangePassword: () -> Unit,
+    onApiTokens: () -> Unit,
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
@@ -66,6 +67,7 @@ fun PreferencesScreenRoot(
             when (navIntent) {
                 PreferencesScreenNavIntent.OnBack -> onBack()
                 PreferencesScreenNavIntent.OnChangePassword -> onChangePassword()
+                PreferencesScreenNavIntent.OnApiTokens -> onApiTokens()
                 PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
@@ -83,6 +85,7 @@ fun PreferencesScreenRoot(
 private sealed interface PreferencesScreenNavIntent {
     data object OnBack : PreferencesScreenNavIntent
     data object OnChangePassword : PreferencesScreenNavIntent
+    data object OnApiTokens : PreferencesScreenNavIntent
     data object OnManageUsers : PreferencesScreenNavIntent
     data object OnMigration : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
@@ -171,6 +174,7 @@ private fun PreferencesScreen(
                         AppText(Strings[StringKey.PREFERENCES_ACCOUNT], AppTextStyle.SECTION_TITLE)
                         Spacer(Modifier.height(UIConst.paddingExtraSmall))
                         PreferenceEntry(AppIcons.lock, Strings[StringKey.PREFERENCES_CHANGE_PASSWORD], Strings[StringKey.PREFERENCES_CHANGE_PASSWORD_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnChangePassword) }
+                        PreferenceEntry(AppIcons.key, Strings[StringKey.PREFERENCES_MCP], Strings[StringKey.PREFERENCES_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnApiTokens) }
                     }
                 }
                 Spacer(Modifier.height(UIConst.paddingCompact))

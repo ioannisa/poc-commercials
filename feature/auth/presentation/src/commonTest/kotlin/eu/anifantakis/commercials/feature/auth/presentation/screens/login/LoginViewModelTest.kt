@@ -7,6 +7,8 @@ import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -81,6 +83,11 @@ class LoginViewModelTest {
             resetCalls++
             return resetResult
         }
+
+        override suspend fun listApiTokens(): DataResult<List<ApiToken>, AuthError> = DataResult.Success(emptyList())
+        override suspend fun createApiToken(name: String): DataResult<CreatedApiToken, AuthError> =
+            DataResult.Success(CreatedApiToken("tok", "http://localhost/mcp"))
+        override suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError> = DataResult.Success(Unit)
     }
 
     private fun filledLogin(vm: LoginViewModel) {

@@ -81,6 +81,16 @@ data class ResetPasswordWithCodeRequest(val username: String, val code: String, 
 @Serializable
 data class ResetResultResponse(val status: String, val retryAfterSeconds: Long? = null)
 
+@Serializable
+data class CreateApiTokenRequest(val name: String)
+
+/** The raw personal access token - returned ONCE, at creation; only its hash is stored. */
+@Serializable
+data class CreateApiTokenResponse(val token: String)
+
+@Serializable
+data class ApiTokenDto(val id: Long, val name: String, val createdAt: String, val lastUsedAt: String? = null)
+
 /** The raw bearer value, as the client holds it (the DB only ever sees its hash). */
 private fun ApplicationCall.bearerToken(): String? =
     request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer")?.trim()?.ifEmpty { null }
@@ -234,6 +244,34 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     authDb.changePassword(user.id, request.currentPassword, request.newPassword)
                 }
                 call.respond(mapOf("status" to "password changed - please log in again"))
+            }
+
+            // Self-service personal access tokens (for MCP / API clients). Each
+            // authenticates AS this user, so it carries the user's OWN per-station
+            // grants and role - and never expires until revoked here.
+            route("/api-tokens") {
+                get {
+                    val user = call.authUser()
+                    val tokens = withContext(Dispatchers.IO) { authDb.listApiTokens(user.id) }
+                    call.respond(tokens.map { ApiTokenDto(it.id, it.name, it.createdAt, it.lastUsedAt) })
+                }
+                post {
+                    val user = call.authUser()
+                    val name = call.receive<CreateApiTokenRequest>().name
+                    val raw = withContext(Dispatchers.IO) { authDb.createApiToken(user.id, name) }
+                    call.respond(HttpStatusCode.Created, CreateApiTokenResponse(raw))
+                }
+                delete("/{id}") {
+                    val user = call.authUser()
+                    val id = call.parameters["id"]?.toLongOrNull()
+                    if (id == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Numeric token id required"))
+                        return@delete
+                    }
+                    val revoked = withContext(Dispatchers.IO) { authDb.revokeApiToken(user.id, id) }
+                    if (revoked) call.respond(mapOf("status" to "revoked"))
+                    else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such token"))
+                }
             }
         }
     }

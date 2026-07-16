@@ -3,6 +3,8 @@ package eu.anifantakis.commercials.feature.auth.domain.data_source
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
+import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 
@@ -33,4 +35,10 @@ interface RemoteAuthDataSource {
         code: String,
         newPassword: String,
     ): DataResult<ResetOutcome, AuthError>
+
+    suspend fun listApiTokens(token: String): DataResult<List<ApiToken>, AuthError>
+
+    suspend fun createApiToken(token: String, name: String): DataResult<CreatedApiToken, AuthError>
+
+    suspend fun revokeApiToken(token: String, id: Long): EmptyDataResult<AuthError>
 }
