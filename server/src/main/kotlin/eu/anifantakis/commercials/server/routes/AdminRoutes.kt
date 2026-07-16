@@ -47,11 +47,17 @@ data class TempPasswordResponse(val id: Long, val tempPassword: String, val emai
 @Serializable
 data class AdminApiTokenDto(
     val id: Long,
-    val name: String,
+    val workstationName: String,
+    val userId: Long,
     val username: String,
+    val userRole: String,
     val createdAt: String,
     val lastUsedAt: String? = null,
 )
+
+/** Admin "change role": repoint a workstation's token to another user (same secret). */
+@Serializable
+data class ReassignApiTokenRequest(val workstation: String, val targetUserId: Long)
 
 @Serializable
 data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
@@ -147,12 +153,51 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
         }
     }
 
-    // Admin oversight of MCP/API personal access tokens: see all, revoke any.
+    // Admin oversight of MCP/API personal access tokens: see every workstation's
+    // token + its owner's role, revoke any, or repoint one to another user.
     route("/api/admin/api-tokens") {
         get {
             if (!call.requireAdmin()) return@get
-            val tokens = withContext(Dispatchers.IO) { authDb.listAllApiTokens() }
-            call.respond(tokens.map { AdminApiTokenDto(it.id, it.name, it.username, it.createdAt, it.lastUsedAt) })
+            val (tokens, users) = withContext(Dispatchers.IO) {
+                authDb.listAllApiTokens() to authDb.listUsers()
+            }
+            val roleByUserId = users.associate { it.id to roleSummary(it) }
+            call.respond(
+                tokens.map {
+                    AdminApiTokenDto(
+                        id = it.id,
+                        workstationName = it.workstationName,
+                        userId = it.userId,
+                        username = it.username,
+                        userRole = roleByUserId[it.userId] ?: "-",
+                        createdAt = it.createdAt,
+                        lastUsedAt = it.lastUsedAt,
+                    )
+                }
+            )
+        }
+        // Change role: repoint a workstation's token to another user WITHOUT
+        // changing the secret - the machine's config stays valid, only the identity
+        // (and thus grants/role) behind the token changes.
+        post("/reassign") {
+            if (!call.requireAdmin()) return@post
+            val req = call.receive<ReassignApiTokenRequest>()
+            if (req.workstation.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "workstation must not be blank"))
+                return@post
+            }
+            val previousOwner = withContext(Dispatchers.IO) {
+                authDb.reassignApiToken(req.workstation, req.targetUserId)
+            }
+            if (previousOwner == null) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to "No token for that workstation"))
+                return@post
+            }
+            call.application.log.info(
+                "MCP token for workstation '{}' reassigned from user {} to user {} by admin",
+                req.workstation, previousOwner, req.targetUserId,
+            )
+            call.respond(mapOf("status" to "reassigned"))
         }
         delete("/{id}") {
             if (!call.requireAdmin()) return@delete
@@ -183,6 +228,13 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
 /** UserRole.valueOf throws IllegalArgumentException -> 400 via StatusPages. */
 private fun List<GrantDto>.toGrants(): List<StationGrant> =
     map { StationGrant(it.stationId, UserRole.valueOf(it.role), it.clientCode?.takeIf { c -> c.isNotBlank() }) }
+
+/** A compact role label for the admin token table: super admin, or the distinct grant roles. */
+private fun roleSummary(u: AuthDb.UserSummary): String = when {
+    u.isAdmin -> "SUPER_ADMIN"
+    u.grants.isEmpty() -> "-"
+    else -> u.grants.map { it.role.name }.distinct().joinToString(", ")
+}
 
 private suspend fun io.ktor.server.application.ApplicationCall.userIdParam(): Long? {
     val id = parameters["id"]?.toLongOrNull()

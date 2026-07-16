@@ -82,14 +82,18 @@ data class ResetPasswordWithCodeRequest(val username: String, val code: String, 
 data class ResetResultResponse(val status: String, val retryAfterSeconds: Long? = null)
 
 @Serializable
-data class CreateApiTokenRequest(val name: String)
+data class CreateApiTokenRequest(val workstation: String, val confirmTakeover: Boolean = false)
 
 /** The raw personal access token - returned ONCE, at creation; only its hash is stored. */
 @Serializable
 data class CreateApiTokenResponse(val token: String)
 
 @Serializable
-data class ApiTokenDto(val id: Long, val name: String, val createdAt: String, val lastUsedAt: String? = null)
+data class ApiTokenDto(val id: Long, val workstationName: String, val createdAt: String, val lastUsedAt: String? = null)
+
+/** A workstation name's availability for the caller: FREE, MINE, or OTHER. */
+@Serializable
+data class WorkstationAvailabilityDto(val status: String)
 
 /** The raw bearer value, as the client holds it (the DB only ever sees its hash). */
 private fun ApplicationCall.bearerToken(): String? =
@@ -246,19 +250,46 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                 call.respond(mapOf("status" to "password changed - please log in again"))
             }
 
-            // Self-service personal access tokens (for MCP / API clients). Each
-            // authenticates AS this user, so it carries the user's OWN per-station
-            // grants and role - and never expires until revoked here.
+            // Self-service personal access tokens (for MCP / API clients). Each is
+            // bound to a WORKSTATION (the machine label) and authenticates AS this
+            // user, carrying the user's OWN per-station grants and role - never
+            // expiring until revoked here or replaced by a new mint for the same
+            // workstation. At most one token exists per workstation.
             route("/api-tokens") {
                 get {
                     val user = call.authUser()
                     val tokens = withContext(Dispatchers.IO) { authDb.listApiTokens(user.id) }
-                    call.respond(tokens.map { ApiTokenDto(it.id, it.name, it.createdAt, it.lastUsedAt) })
+                    call.respond(tokens.map { ApiTokenDto(it.id, it.workstationName, it.createdAt, it.lastUsedAt) })
+                }
+                // Availability of a workstation name from THIS caller's view: FREE,
+                // MINE, or OTHER (owner kept private - the self-service check never
+                // names who holds a workstation).
+                get("/availability") {
+                    val user = call.authUser()
+                    val workstation = call.request.queryParameters["workstation"].orEmpty().trim()
+                    if (workstation.isBlank()) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "workstation query parameter required"))
+                        return@get
+                    }
+                    val status = withContext(Dispatchers.IO) { authDb.apiTokenWorkstationStatus(workstation, user.id) }
+                    call.respond(WorkstationAvailabilityDto(status.name))
                 }
                 post {
                     val user = call.authUser()
-                    val name = call.receive<CreateApiTokenRequest>().name
-                    val raw = withContext(Dispatchers.IO) { authDb.createApiToken(user.id, name) }
+                    val req = call.receive<CreateApiTokenRequest>()
+                    val workstation = req.workstation.trim()
+                    if (workstation.isBlank()) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "workstation must not be blank"))
+                        return@post
+                    }
+                    // Taking over ANOTHER user's workstation needs an explicit confirm
+                    // (the UI warns first). Guard it here too, not just client-side.
+                    val status = withContext(Dispatchers.IO) { authDb.apiTokenWorkstationStatus(workstation, user.id) }
+                    if (status == AuthDb.WorkstationStatus.OTHER && !req.confirmTakeover) {
+                        call.respond(HttpStatusCode.Conflict, WorkstationAvailabilityDto(status.name))
+                        return@post
+                    }
+                    val raw = withContext(Dispatchers.IO) { authDb.createApiToken(user.id, workstation) }
                     call.respond(HttpStatusCode.Created, CreateApiTokenResponse(raw))
                 }
                 delete("/{id}") {

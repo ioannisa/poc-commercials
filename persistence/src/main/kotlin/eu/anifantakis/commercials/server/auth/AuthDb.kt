@@ -158,10 +158,12 @@ class AuthDb(
                         token_hash VARCHAR(64) NOT NULL UNIQUE,
                         user_id BIGINT NOT NULL,
                         name VARCHAR(128) NOT NULL,
+                        workstation_name VARCHAR(128) NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         last_used_at TIMESTAMP NULL DEFAULT NULL,
                         CONSTRAINT fk_apitokens_user FOREIGN KEY (user_id)
-                            REFERENCES users(id) ON DELETE CASCADE
+                            REFERENCES users(id) ON DELETE CASCADE,
+                        UNIQUE KEY uq_api_tokens_workstation (workstation_name)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -178,6 +180,7 @@ class AuthDb(
             ensureExpiresAtColumn(c)
             ensureColumn(c, "users", "email", "VARCHAR(255) NULL")
             ensureColumn(c, "users", "must_change_password", "BOOLEAN NOT NULL DEFAULT FALSE")
+            ensureApiTokenWorkstationColumn(c)
             // Recovery codes were retired in favour of email + admin reset; drop
             // the legacy table so a leaked backup can't be replayed as a credential.
             c.createStatement().use { it.executeUpdate("DROP TABLE IF EXISTS recovery_codes") }
@@ -269,6 +272,51 @@ class AuthDb(
             ps.setString(1, table); ps.setString(2, column)
             ps.executeQuery().use { it.next() }
         }
+
+    private fun indexExists(c: Connection, table: String, index: String): Boolean =
+        c.prepareStatement(
+            """
+            SELECT 1 FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+            LIMIT 1
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, table); ps.setString(2, index)
+            ps.executeQuery().use { it.next() }
+        }
+
+    /**
+     * Migration to the workstation-scoped token model: every api_token carries a
+     * UNIQUE `workstation_name` (the machine label the user typed) and at most one
+     * token exists per workstation. Pre-existing rows are backfilled from the
+     * legacy free-text `name`; any duplicates on a name are collapsed to the
+     * newest before the UNIQUE index goes on.
+     */
+    private fun ensureApiTokenWorkstationColumn(c: Connection) {
+        if (!columnExists(c, "api_tokens", "workstation_name")) {
+            c.createStatement().use {
+                it.executeUpdate("ALTER TABLE api_tokens ADD COLUMN workstation_name VARCHAR(128) NULL")
+            }
+            c.createStatement().use {
+                it.executeUpdate(
+                    "UPDATE api_tokens SET workstation_name = name " +
+                        "WHERE workstation_name IS NULL OR workstation_name = ''"
+                )
+            }
+        }
+        if (!indexExists(c, "api_tokens", "uq_api_tokens_workstation")) {
+            // one token per workstation: drop older duplicates before the unique index
+            c.createStatement().use {
+                it.executeUpdate(
+                    "DELETE a FROM api_tokens a JOIN api_tokens b " +
+                        "ON a.workstation_name = b.workstation_name AND a.id < b.id"
+                )
+            }
+            c.createStatement().use {
+                it.executeUpdate("CREATE UNIQUE INDEX uq_api_tokens_workstation ON api_tokens(workstation_name)")
+            }
+        }
+    }
 
     /**
      * Upserts the users row for the YAML-managed super admin. The DB holds
@@ -817,38 +865,95 @@ class AuthDb(
     /** A personal access token as its owner/admin lists it - never the secret itself. */
     data class ApiTokenInfo(
         val id: Long,
-        val name: String,
+        val workstationName: String,
+        val userId: Long,
         val username: String,
         val createdAt: String,
         val lastUsedAt: String?,
     )
 
+    /** A workstation name's availability from a given caller's perspective. */
+    enum class WorkstationStatus { FREE, MINE, OTHER }
+
     /**
-     * Mints a NON-EXPIRING personal access token for [userId] and returns it RAW,
-     * once - only its SHA-256 is stored. It authenticates AS that user, so the same
-     * per-station grants and role apply (an MCP client inherits the user's exact
-     * restrictions). Revoked only by [revokeApiToken] / [revokeApiTokenById].
+     * Whether [workstation] is unclaimed, already the caller's, or held by ANOTHER
+     * user - WITHOUT revealing who (the self-service check keeps other users
+     * private; admins learn the owner from the oversight list instead).
      */
-    fun createApiToken(userId: Long, name: String): String {
-        require(name.isNotBlank()) { "Token name must not be blank" }
+    fun apiTokenWorkstationStatus(workstation: String, callerUserId: Long): WorkstationStatus =
+        db.connection().use { c ->
+            c.prepareStatement("SELECT user_id FROM api_tokens WHERE workstation_name = ? LIMIT 1").use { ps ->
+                ps.setString(1, workstation.trim())
+                ps.executeQuery().use { rs ->
+                    when {
+                        !rs.next() -> WorkstationStatus.FREE
+                        rs.getLong("user_id") == callerUserId -> WorkstationStatus.MINE
+                        else -> WorkstationStatus.OTHER
+                    }
+                }
+            }
+        }
+
+    /**
+     * Mints a NON-EXPIRING personal access token for [userId], bound to
+     * [workstation] (the machine label). At most ONE token exists per workstation,
+     * so any token already on that workstation - the caller's own OR another user's
+     * (an explicit takeover, confirmed in the UI) - is REPLACED. Returns the raw
+     * token ONCE; only its SHA-256 is stored. It authenticates AS [userId],
+     * inheriting that user's exact per-station grants and role.
+     */
+    fun createApiToken(userId: Long, workstation: String): String {
+        require(workstation.isNotBlank()) { "Workstation name must not be blank" }
+        val name = workstation.trim()
         val token = randomBytes(32).toHex()
         db.connection().use { c ->
             selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
-            c.prepareStatement("INSERT INTO api_tokens(token_hash, user_id, name) VALUES(?,?,?)").use { ps ->
+            // one token per workstation: the new mint replaces whoever held this name
+            c.prepareStatement("DELETE FROM api_tokens WHERE workstation_name = ?").use { ps ->
+                ps.setString(1, name); ps.executeUpdate()
+            }
+            c.prepareStatement(
+                "INSERT INTO api_tokens(token_hash, user_id, name, workstation_name) VALUES(?,?,?,?)"
+            ).use { ps ->
                 ps.setString(1, tokenHash(token))
                 ps.setLong(2, userId)
-                ps.setString(3, name.trim())
+                ps.setString(3, name)
+                ps.setString(4, name)
                 ps.executeUpdate()
             }
         }
         return token
     }
 
+    /**
+     * Admin "change role": repoints the token on [workstation] to [newUserId]
+     * WITHOUT changing the secret - the machine's config stays valid, only the
+     * identity (and thus grants/role) behind the token changes. Returns the
+     * previous owner's user id if a token existed, else null.
+     */
+    fun reassignApiToken(workstation: String, newUserId: Long): Long? =
+        db.connection().use { c ->
+            selectUserById(c, newUserId) ?: throw IllegalArgumentException("Unknown user")
+            val name = workstation.trim()
+            val previousOwner = c.prepareStatement(
+                "SELECT user_id FROM api_tokens WHERE workstation_name = ?"
+            ).use { ps ->
+                ps.setString(1, name)
+                ps.executeQuery().use { if (it.next()) it.getLong("user_id") else null }
+            } ?: return@use null
+            c.prepareStatement("UPDATE api_tokens SET user_id = ? WHERE workstation_name = ?").use { ps ->
+                ps.setLong(1, newUserId); ps.setString(2, name)
+                ps.executeUpdate()
+            }
+            previousOwner
+        }
+
     /** The caller's OWN tokens (self-service list). */
     fun listApiTokens(userId: Long): List<ApiTokenInfo> =
         db.connection().use { c ->
             c.prepareStatement(
-                "SELECT a.id, a.name, u.username, a.created_at, a.last_used_at " +
+                "SELECT a.id, COALESCE(a.workstation_name, a.name) AS workstation_name, a.user_id, u.username, " +
+                    "a.created_at, a.last_used_at " +
                     "FROM api_tokens a JOIN users u ON u.id = a.user_id " +
                     "WHERE a.user_id = ? ORDER BY a.created_at DESC"
             ).use { ps ->
@@ -862,7 +967,8 @@ class AuthDb(
         db.connection().use { c ->
             c.createStatement().use { s ->
                 s.executeQuery(
-                    "SELECT a.id, a.name, u.username, a.created_at, a.last_used_at " +
+                    "SELECT a.id, COALESCE(a.workstation_name, a.name) AS workstation_name, a.user_id, u.username, " +
+                        "a.created_at, a.last_used_at " +
                         "FROM api_tokens a JOIN users u ON u.id = a.user_id ORDER BY a.created_at DESC"
                 ).use { rs -> rs.toApiTokenList() }
             }
@@ -891,7 +997,8 @@ class AuthDb(
             add(
                 ApiTokenInfo(
                     id = getLong("id"),
-                    name = getString("name"),
+                    workstationName = getString("workstation_name"),
+                    userId = getLong("user_id"),
                     username = getString("username"),
                     createdAt = getString("created_at"),
                     lastUsedAt = getString("last_used_at"),
