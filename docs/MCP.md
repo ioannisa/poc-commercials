@@ -23,20 +23,34 @@ that user and mint a token from their account.
 
 ## 2. Point a client at it
 
-Connect to the SSE endpoint with the token as a bearer header:
+The endpoint speaks the **SSE transport** and authenticates with a **static
+bearer token** (the PAT). Wire a config-file client (Claude Desktop, Cursor, …)
+with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) — in Claude Desktop's
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
-{
-  "url": "https://<server-host>/mcp",
-  "headers": { "Authorization": "Bearer <your-token>" }
+"commercials-manager": {
+  "command": "npx",
+  "args": [
+    "-y", "mcp-remote",
+    "https://<server-host>/mcp",
+    "--transport", "sse-only",
+    "--header", "Authorization:${AUTH_HEADER}"
+  ],
+  "env": { "AUTH_HEADER": "Bearer <your-token>" }
 }
 ```
 
-- **Claude Desktop / Claude.ai** — add a *custom connector* with that URL; supply
-  the `Authorization: Bearer …` header.
-- **Other clients** — use their remote/SSE MCP option with the same URL + header.
-- **stdio-only clients** — bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
-  pointed at the SSE URL; no local build is needed.
+- `--transport sse-only` is **required**: without it `mcp-remote` tries Streamable
+  HTTP first and fails with `sessionId not provided`, because this server exposes
+  the classic SSE transport.
+- The `Authorization:${AUTH_HEADER}` + `env` split lets `mcp-remote` inject the
+  token (a bare `Bearer x` in the arg trips its header parsing on the space).
+
+**Native remote connectors** (Claude's *Add custom connector*) currently require
+an `https://` URL **and OAuth** — they do not accept a plain-HTTP host or a static
+bearer header. Use `mcp-remote` for local/dev or PAT auth; a native connector
+fits an HTTPS deployment that adds its own OAuth layer.
 
 ## 3. Deployment (server operators)
 
