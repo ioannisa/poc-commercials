@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import kotlinx.coroutines.Dispatchers
@@ -55,11 +56,13 @@ class UserManagementViewModelTest {
     private class FakeUserManagementRepository(
         var users: List<ManagedUser> = emptyList(),
         var listResult: DataResult<List<ManagedUser>, RemoteError>? = null,
-        var createResult: DataResult<Unit, RemoteError> = DataResult.Success(Unit),
+        var createResult: DataResult<TempPasswordResult, RemoteError> =
+            DataResult.Success(TempPasswordResult("TMP-ABC123", emailSent = false)),
         var deleteResult: DataResult<Unit, RemoteError> = DataResult.Success(Unit),
     ) : UserManagementRepository {
         var createdGrants: List<UserGrant>? = null
-        var lastCreate: Triple<String, String, String>? = null
+        var lastCreate: Triple<String, String, String?>? = null
+        var resetId: Long? = null
         var deletedId: Long? = null
 
         override suspend fun listUsers(): DataResult<List<ManagedUser>, RemoteError> =
@@ -68,16 +71,18 @@ class UserManagementViewModelTest {
         override suspend fun createUser(
             username: String,
             displayName: String,
-            password: String,
+            email: String?,
             grants: List<UserGrant>,
-        ): DataResult<Unit, RemoteError> {
-            lastCreate = Triple(username, displayName, password)
+        ): DataResult<TempPasswordResult, RemoteError> {
+            lastCreate = Triple(username, displayName, email)
             createdGrants = grants
             return createResult
         }
 
-        override suspend fun resetPassword(userId: Long, newPassword: String): DataResult<Unit, RemoteError> =
-            DataResult.Success(Unit)
+        override suspend fun resetPassword(userId: Long): DataResult<TempPasswordResult, RemoteError> {
+            resetId = userId
+            return DataResult.Success(TempPasswordResult("TMP-RESET", emailSent = true))
+        }
 
         override suspend fun setGrants(userId: Long, grants: List<UserGrant>): DataResult<Unit, RemoteError> =
             DataResult.Success(Unit)
@@ -107,41 +112,56 @@ class UserManagementViewModelTest {
     }
 
     @Test
-    fun confirmCreateWithShortPasswordIsANoOp() = runTest(testDispatcher) {
+    fun confirmCreateWithBlankDisplayNameIsANoOp() = runTest(testDispatcher) {
         val repo = FakeUserManagementRepository()
         val vm = UserManagementViewModel(repo)
 
         vm.onAction(UserManagementIntent.ShowCreate)
-        vm.onAction(UserManagementIntent.CreateUsernameChanged("bob"))
-        vm.onAction(UserManagementIntent.CreateDisplayNameChanged("Bob"))
-        vm.onAction(UserManagementIntent.CreatePasswordChanged("short"))   // 5 chars < 6
+        vm.onAction(UserManagementIntent.CreateUsernameChanged("bob"))   // no display name
         vm.onAction(UserManagementIntent.ConfirmCreate)
         advanceUntilIdle()
 
-        assertNull(repo.lastCreate, "the 6-char password rule gates the create call")
+        assertNull(repo.lastCreate, "username + display name are required before the create call")
     }
 
     @Test
-    fun confirmCreateSendsTrimmedFieldsPrunesNoAccessGrantsThenClosesAndReloads() = runTest(testDispatcher) {
+    fun confirmCreateSendsTrimmedFieldsPrunesNoAccessGrantsThenShowsTempPassword() = runTest(testDispatcher) {
         val repo = FakeUserManagementRepository(users = emptyList())
         val vm = UserManagementViewModel(repo)
 
         vm.onAction(UserManagementIntent.ShowCreate)
         vm.onAction(UserManagementIntent.CreateUsernameChanged("bob"))
         vm.onAction(UserManagementIntent.CreateDisplayNameChanged("Bob"))
-        vm.onAction(UserManagementIntent.CreatePasswordChanged("secret"))
+        vm.onAction(UserManagementIntent.CreateEmailChanged("bob@acme.gr"))
         vm.onAction(UserManagementIntent.CreateGrantRoleChanged("crete-tv", "NORMAL_USER"))
         vm.onAction(UserManagementIntent.CreateGrantRoleChanged("radio-984", NO_ACCESS))
         vm.onAction(UserManagementIntent.ConfirmCreate)
         advanceUntilIdle()
 
-        assertEquals(Triple("bob", "Bob", "secret"), repo.lastCreate)
+        assertEquals(Triple("bob", "Bob", "bob@acme.gr"), repo.lastCreate)
         assertEquals(
             listOf(UserGrant("crete-tv", "NORMAL_USER")),
             repo.createdGrants,
             "NO_ACCESS rows are dropped - only real grants are sent",
         )
         assertNull(vm.state.create, "the dialog closes on success")
+        assertEquals("TMP-ABC123", vm.state.tempPassword?.tempPassword, "the temp password is shown once")
+    }
+
+    @Test
+    fun confirmResetShowsTheTempPasswordForThatUser() = runTest(testDispatcher) {
+        val repo = FakeUserManagementRepository(users = listOf(user))
+        val vm = UserManagementViewModel(repo)
+        advanceUntilIdle()
+
+        vm.onAction(UserManagementIntent.ResetRequested(user))
+        vm.onAction(UserManagementIntent.ConfirmReset)
+        advanceUntilIdle()
+
+        assertEquals(7L, repo.resetId)
+        assertNull(vm.state.reset, "the reset dialog closes")
+        assertEquals("TMP-RESET", vm.state.tempPassword?.tempPassword)
+        assertEquals("bob", vm.state.tempPassword?.username)
     }
 
     @Test
@@ -152,7 +172,6 @@ class UserManagementViewModelTest {
         vm.onAction(UserManagementIntent.ShowCreate)
         vm.onAction(UserManagementIntent.CreateUsernameChanged("bob"))
         vm.onAction(UserManagementIntent.CreateDisplayNameChanged("Bob"))
-        vm.onAction(UserManagementIntent.CreatePasswordChanged("secret"))
         vm.onAction(UserManagementIntent.ConfirmCreate)
         advanceUntilIdle()
 

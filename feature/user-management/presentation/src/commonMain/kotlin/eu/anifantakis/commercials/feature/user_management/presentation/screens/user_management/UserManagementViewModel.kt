@@ -46,23 +46,32 @@ data class GrantsSelection(
 data class CreateUserDialogState(
     val username: String = "",
     val displayName: String = "",
-    val password: String = "",
+    val email: String = "",
     val grants: GrantsSelection = GrantsSelection(),
     val busy: Boolean = false,
     val error: UiText? = null,
 ) {
-    val canSubmit: Boolean get() = !busy && username.isNotBlank() && displayName.isNotBlank() && password.length >= 6
+    // No password: the server mints a temp one. Email is optional (without it the
+    // temp password can't be mailed - the admin relays it from the result dialog).
+    val canSubmit: Boolean get() = !busy && username.isNotBlank() && displayName.isNotBlank()
 }
 
 @Immutable
 data class ResetPasswordDialogState(
     val user: ManagedUser,
-    val password: String = "",
     val busy: Boolean = false,
     val error: UiText? = null,
 ) {
-    val canSubmit: Boolean get() = !busy && password.length >= 6
+    val canSubmit: Boolean get() = !busy
 }
+
+/** Shown once after a create/reset: the temp password to copy + relay. */
+@Immutable
+data class TempPasswordResultState(
+    val username: String,
+    val tempPassword: String,
+    val emailSent: Boolean,
+)
 
 @Immutable
 data class EditGrantsDialogState(
@@ -78,6 +87,7 @@ data class UserManagementState(
     val message: UiText? = null,
     val create: CreateUserDialogState? = null,
     val reset: ResetPasswordDialogState? = null,
+    val tempPassword: TempPasswordResultState? = null,
     val editGrants: EditGrantsDialogState? = null,
     val delete: ManagedUser? = null,
 )
@@ -88,16 +98,18 @@ sealed interface UserManagementIntent {
     data object ShowCreate : UserManagementIntent
     data class CreateUsernameChanged(val value: String) : UserManagementIntent
     data class CreateDisplayNameChanged(val value: String) : UserManagementIntent
-    data class CreatePasswordChanged(val value: String) : UserManagementIntent
+    data class CreateEmailChanged(val value: String) : UserManagementIntent
     data class CreateGrantRoleChanged(val stationId: String, val role: String) : UserManagementIntent
     data class CreateClientCodeChanged(val stationId: String, val code: String) : UserManagementIntent
     data object ConfirmCreate : UserManagementIntent
     data object DismissCreate : UserManagementIntent
 
     data class ResetRequested(val user: ManagedUser) : UserManagementIntent
-    data class ResetPasswordChanged(val value: String) : UserManagementIntent
     data object ConfirmReset : UserManagementIntent
     data object DismissReset : UserManagementIntent
+
+    /** Dismiss the one-time temp-password result dialog. */
+    data object DismissTempPassword : UserManagementIntent
 
     data class EditGrantsRequested(val user: ManagedUser) : UserManagementIntent
     data class GrantRoleChanged(val stationId: String, val role: String) : UserManagementIntent
@@ -130,8 +142,8 @@ class UserManagementViewModel(
                 _state.update { it.copy(create = it.create?.copy(username = intent.value)) }
             is UserManagementIntent.CreateDisplayNameChanged ->
                 _state.update { it.copy(create = it.create?.copy(displayName = intent.value)) }
-            is UserManagementIntent.CreatePasswordChanged ->
-                _state.update { it.copy(create = it.create?.copy(password = intent.value)) }
+            is UserManagementIntent.CreateEmailChanged ->
+                _state.update { it.copy(create = it.create?.copy(email = intent.value)) }
             is UserManagementIntent.CreateGrantRoleChanged -> _state.update {
                 it.copy(create = it.create?.copy(grants = it.create.grants.withRole(intent.stationId, intent.role)))
             }
@@ -144,11 +156,11 @@ class UserManagementViewModel(
 
             is UserManagementIntent.ResetRequested ->
                 _state.update { it.copy(reset = ResetPasswordDialogState(intent.user)) }
-            is UserManagementIntent.ResetPasswordChanged ->
-                _state.update { it.copy(reset = it.reset?.copy(password = intent.value)) }
             UserManagementIntent.ConfirmReset -> confirmReset()
             UserManagementIntent.DismissReset ->
                 _state.update { if (it.reset?.busy == true) it else it.copy(reset = null) }
+
+            UserManagementIntent.DismissTempPassword -> _state.update { it.copy(tempPassword = null) }
 
             is UserManagementIntent.EditGrantsRequested -> _state.update {
                 it.copy(
@@ -200,11 +212,23 @@ class UserManagementViewModel(
         _state.update { it.copy(create = dialog.copy(busy = true, error = null)) }
         viewModelScope.launch {
             val result = repository.createUser(
-                dialog.username.trim(), dialog.displayName.trim(), dialog.password, dialog.grants.collect(),
+                dialog.username.trim(),
+                dialog.displayName.trim(),
+                dialog.email.trim().takeIf { it.isNotEmpty() },
+                dialog.grants.collect(),
             )
             when (result) {
                 is DataResult.Success -> {
-                    _state.update { it.copy(create = null) }
+                    _state.update {
+                        it.copy(
+                            create = null,
+                            tempPassword = TempPasswordResultState(
+                                username = dialog.username.trim(),
+                                tempPassword = result.data.tempPassword,
+                                emailSent = result.data.emailSent,
+                            ),
+                        )
+                    }
                     reload()
                 }
                 is DataResult.Failure -> _state.update {
@@ -219,9 +243,18 @@ class UserManagementViewModel(
         if (!dialog.canSubmit) return
         _state.update { it.copy(reset = dialog.copy(busy = true, error = null)) }
         viewModelScope.launch {
-            when (val result = repository.resetPassword(dialog.user.id, dialog.password)) {
+            when (val result = repository.resetPassword(dialog.user.id)) {
                 is DataResult.Success -> {
-                    _state.update { it.copy(reset = null) }
+                    _state.update {
+                        it.copy(
+                            reset = null,
+                            tempPassword = TempPasswordResultState(
+                                username = dialog.user.username,
+                                tempPassword = result.data.tempPassword,
+                                emailSent = result.data.emailSent,
+                            ),
+                        )
+                    }
                     reload()
                 }
                 is DataResult.Failure -> _state.update {

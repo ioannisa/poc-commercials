@@ -14,10 +14,10 @@ interface RemoteUserManagementDataSource {
     suspend fun createUser(
         username: String,
         displayName: String,
-        password: String,
+        email: String?,
         grants: List<UserGrant>,
-    ): DataResult<Unit, RemoteError>
-    suspend fun resetPassword(userId: Long, newPassword: String): DataResult<Unit, RemoteError>
+    ): DataResult<TempPasswordResult, RemoteError>
+    suspend fun resetPassword(userId: Long): DataResult<TempPasswordResult, RemoteError>
     suspend fun setGrants(userId: Long, grants: List<UserGrant>): DataResult<Unit, RemoteError>
     suspend fun deleteUser(userId: Long): DataResult<Unit, RemoteError>
 }

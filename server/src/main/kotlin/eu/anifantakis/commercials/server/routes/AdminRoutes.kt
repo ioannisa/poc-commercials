@@ -23,6 +23,7 @@ data class AdminUserDto(
     val id: Long,
     val username: String,
     val displayName: String,
+    val email: String? = null,
     val isAdmin: Boolean,
     val grants: List<GrantDto>
 )
@@ -62,6 +63,7 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
                     id = user.id,
                     username = user.username,
                     displayName = user.displayName,
+                    email = user.email,
                     isAdmin = user.isAdmin,
                     grants = user.grants.map { GrantDto(it.stationId, it.role.name, it.clientCode) }
                 )

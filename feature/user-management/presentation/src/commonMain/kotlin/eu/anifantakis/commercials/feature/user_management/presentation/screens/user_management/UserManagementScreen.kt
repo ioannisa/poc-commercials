@@ -15,7 +15,7 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppWireframeField
+import eu.anifantakis.commercials.core.presentation.design_system.components.rememberClipboardCopy
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,7 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
@@ -167,6 +168,9 @@ private fun UserManagementScreen(
     state.reset?.let { dialog ->
         ResetPasswordDialog(dialog = dialog, onIntent = onIntent)
     }
+    state.tempPassword?.let { result ->
+        TempPasswordResultDialog(result = result, onIntent = onIntent)
+    }
     state.editGrants?.let { dialog ->
         EditGrantsDialog(dialog = dialog, stationChoices = stationChoices, onIntent = onIntent)
     }
@@ -258,12 +262,13 @@ private fun CreateUserDialog(
             label = Strings[StringKey.USER_MGMT_DISPLAY_NAME],
             enabled = !dialog.busy,
         )
-        // Always-masked (no reveal toggle by design - admin sets a throwaway).
-        AppWireframeField(
-            value = dialog.password,
-            onValueChange = { onIntent(UserManagementIntent.CreatePasswordChanged(it)) },
-            label = Strings[StringKey.USER_MGMT_INITIAL_PASSWORD],
-            visualTransformation = PasswordVisualTransformation(),
+        // Optional: where the auto-generated temp password gets mailed. No email
+        // -> the admin relays the temp password from the result dialog instead.
+        AppTextField(
+            value = dialog.email,
+            onValueChange = { onIntent(UserManagementIntent.CreateEmailChanged(it)) },
+            label = Strings[StringKey.USER_MGMT_EMAIL],
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             enabled = !dialog.busy,
         )
         AppText(Strings[StringKey.USER_MGMT_STATION_ACCESS], AppTextStyle.BODY_STRONG)
@@ -294,15 +299,44 @@ private fun ResetPasswordDialog(
         confirmBusy = dialog.busy,
     ) {
         AppText(Strings[StringKey.USER_MGMT_RESET_INFO], AppTextStyle.BODY)
-        AppTextField(
-            value = dialog.password,
-            onValueChange = { onIntent(UserManagementIntent.ResetPasswordChanged(it)) },
-            label = Strings[StringKey.USER_MGMT_NEW_PASSWORD_MIN],
-            enabled = !dialog.busy,
-        )
         dialog.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
+    }
+}
+
+/**
+ * The one-time temp password after a create/reset: shown ONCE, copyable, so the
+ * admin can relay it even if the email didn't go out (or no email was on file).
+ */
+@Composable
+private fun TempPasswordResultDialog(
+    result: TempPasswordResultState,
+    onIntent: (UserManagementIntent) -> Unit,
+) {
+    val copy = rememberClipboardCopy()
+    AppDialog(
+        title = Strings[StringKey.USER_MGMT_TEMP_TITLE],
+        onDismiss = { onIntent(UserManagementIntent.DismissTempPassword) },
+        confirmText = Strings[StringKey.COMMON_CLOSE],
+        onConfirm = { onIntent(UserManagementIntent.DismissTempPassword) },
+    ) {
+        AppText(Strings[StringKey.USER_MGMT_TEMP_INFO].withArgs(listOf(result.username)), AppTextStyle.BODY)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = UIConst.paddingSmall),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppText(result.tempPassword, AppTextStyle.MONO, modifier = Modifier.weight(1f))
+            AppButton(
+                text = Strings[StringKey.COMMON_COPY],
+                onClick = { copy(result.tempPassword) },
+                variant = AppButtonVariant.SECONDARY,
+            )
+        }
+        AppText(
+            Strings[if (result.emailSent) StringKey.USER_MGMT_TEMP_EMAILED else StringKey.USER_MGMT_TEMP_NOT_EMAILED],
+            AppTextStyle.NOTE,
+        )
     }
 }
 

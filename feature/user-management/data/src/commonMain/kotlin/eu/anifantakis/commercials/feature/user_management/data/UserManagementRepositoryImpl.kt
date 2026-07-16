@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.user_management.data
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import eu.anifantakis.commercials.feature.user_management.domain.data_source.RemoteUserManagementDataSource
@@ -18,12 +19,12 @@ class UserManagementRepositoryImpl(
     override suspend fun createUser(
         username: String,
         displayName: String,
-        password: String,
+        email: String?,
         grants: List<UserGrant>,
-    ): DataResult<Unit, RemoteError> = remoteDataSource.createUser(username, displayName, password, grants)
+    ): DataResult<TempPasswordResult, RemoteError> = remoteDataSource.createUser(username, displayName, email, grants)
 
-    override suspend fun resetPassword(userId: Long, newPassword: String): DataResult<Unit, RemoteError> =
-        remoteDataSource.resetPassword(userId, newPassword)
+    override suspend fun resetPassword(userId: Long): DataResult<TempPasswordResult, RemoteError> =
+        remoteDataSource.resetPassword(userId)
 
     override suspend fun setGrants(userId: Long, grants: List<UserGrant>): DataResult<Unit, RemoteError> =
         remoteDataSource.setGrants(userId, grants)
