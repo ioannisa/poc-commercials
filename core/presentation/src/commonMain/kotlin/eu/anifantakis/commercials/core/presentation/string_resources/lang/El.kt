@@ -314,6 +314,7 @@ internal class El : LanguageStrings {
         StringKey.CHPASS_CURRENT -> "Τρέχων κωδικός"
         StringKey.CHPASS_REPEAT -> "Επανάληψη νέου κωδικού"
         StringKey.CHPASS_CHANGE -> "Αλλαγή"
+        StringKey.CHPASS_MANDATORY_NOTE -> "Πρέπει να ορίσετε νέο κωδικό πριν συνεχίσετε."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Μετά την αλλαγή αποσυνδέονται όλες οι συνεδρίες - συνδεθείτε ξανά με τον νέο κωδικό."
         StringKey.RECOVERY_TITLE -> "Κωδικοί ανάκτησης"

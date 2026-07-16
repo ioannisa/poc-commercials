@@ -319,6 +319,7 @@ internal class He : LanguageStrings {
         StringKey.CHPASS_CURRENT -> "סיסמה נוכחית"
         StringKey.CHPASS_REPEAT -> "חזרה על הסיסמה החדשה"
         StringKey.CHPASS_CHANGE -> "שינוי"
+        StringKey.CHPASS_MANDATORY_NOTE -> "עליך להגדיר סיסמה חדשה לפני שתמשיך."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "לאחר השינוי כל הסשנים ינותקו - התחבר מחדש עם הסיסמה החדשה."
         StringKey.RECOVERY_TITLE -> "קודי שחזור"

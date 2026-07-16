@@ -90,6 +90,7 @@ class ChangePasswordViewModel(
 @Composable
 fun ChangePasswordDialogRoot(
     onDismiss: () -> Unit,
+    mandatory: Boolean = false,
     viewModel: ChangePasswordViewModel = koinViewModel(),
 ) {
     ObserveEffects(viewModel.events) { effect ->
@@ -97,7 +98,12 @@ fun ChangePasswordDialogRoot(
             ChangePasswordEffect.Done -> onDismiss()   // session cleared -> Login screen
         }
     }
-    ChangePasswordDialog(state = viewModel.state, onIntent = viewModel::onAction, onDismiss = onDismiss)
+    ChangePasswordDialog(
+        state = viewModel.state,
+        onIntent = viewModel::onAction,
+        onDismiss = onDismiss,
+        mandatory = mandatory,
+    )
 }
 
 @Composable
@@ -105,16 +111,23 @@ private fun ChangePasswordDialog(
     state: ChangePasswordState,
     onIntent: (ChangePasswordIntent) -> Unit,
     onDismiss: () -> Unit,
+    mandatory: Boolean = false,
 ) {
     AppDialog(
         title = Strings[StringKey.CHPASS_TITLE],
-        onDismiss = onDismiss,
+        // Mandatory (temp-password login): NOT escapable - no cancel, backdrop and
+        // back are no-ops. Only a successful change leaves (it clears the session,
+        // and the session-revision observer routes to Login).
+        onDismiss = if (mandatory) ({}) else onDismiss,
         confirmText = Strings[StringKey.CHPASS_CHANGE],
         onConfirm = { onIntent(ChangePasswordIntent.Submit) },
-        dismissText = Strings[StringKey.COMMON_CANCEL],
+        dismissText = if (mandatory) null else Strings[StringKey.COMMON_CANCEL],
         confirmEnabled = state.canSubmit,
         confirmBusy = state.busy,
     ) {
+        if (mandatory) {
+            AppText(Strings[StringKey.CHPASS_MANDATORY_NOTE], AppTextStyle.BODY_STRONG)
+        }
         // Always-masked fields (no reveal toggle by design - three in a row).
         AppWireframeField(
             value = state.current,

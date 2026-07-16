@@ -24,6 +24,9 @@ data class StoredSession(
     val isAdmin: Boolean = false,
     val stations: List<StationAccess> = emptyList(),
     val selectedStationId: String = "",
+    /** Logged in with a temp password: the app traps the user on a mandatory
+     *  change-password screen until they set their own. */
+    val mustChangePassword: Boolean = false,
 )
 
 /**
@@ -96,6 +99,10 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
     val token: String? get() = stored.token.ifEmpty { null }
     override val displayName: String get() = stored.displayName
     override val isAdmin: Boolean get() = stored.isAdmin
+
+    /** True until the temp-password user sets their own; drives the mandatory
+     *  change-password trap in the navigation root. */
+    val mustChangePassword: Boolean get() = stored.mustChangePassword
 
     /** All stations this user may access, in server order. */
     override val stations: List<StationAccess> get() = stored.stations
@@ -172,13 +179,20 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
      * guard waits for a disk emission that never comes. The exception is the only
      * honest signal.
      */
-    suspend fun store(token: String, displayName: String, isAdmin: Boolean, stations: List<StationAccess>) {
+    suspend fun store(
+        token: String,
+        displayName: String,
+        isAdmin: Boolean,
+        stations: List<StationAccess>,
+        mustChangePassword: Boolean = false,
+    ) {
         val session = StoredSession(
             token = token,
             displayName = displayName,
             isAdmin = isAdmin,
             stations = stations,
-            selectedStationId = stations.firstOrNull()?.id ?: ""
+            selectedStationId = stations.firstOrNull()?.id ?: "",
+            mustChangePassword = mustChangePassword,
         )
         // Refuse here too, not only at the caller's preflight: a session written
         // where encryption cannot run is a session that is already gone, and no

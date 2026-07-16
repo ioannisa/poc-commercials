@@ -107,6 +107,14 @@ fun NavigationRoot() {
     if (showChangePassword) {
         ChangePasswordDialogRoot(onDismiss = { showChangePassword = false })
     }
+    // Temp-password login (admin reset / fresh account): trap the user on a
+    // mandatory, non-escapable change-password dialog until they set their own.
+    // A successful change clears the session and the revision observer above
+    // routes to Login; logging in again arrives with the flag cleared.
+    val mustChangePassword = remember(authRevision) { authSession.isLoggedIn && authSession.mustChangePassword }
+    if (mustChangePassword) {
+        ChangePasswordDialogRoot(onDismiss = {}, mandatory = true)
+    }
 
     // Critical-loading back-block (golden-standard AppLoadingIndicator rule):
     // while an uninterruptible operation shows the overlay, swallow back

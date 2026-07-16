@@ -314,6 +314,7 @@ internal class De : LanguageStrings {
         StringKey.CHPASS_CURRENT -> "Aktuelles Passwort"
         StringKey.CHPASS_REPEAT -> "Neues Passwort wiederholen"
         StringKey.CHPASS_CHANGE -> "Ändern"
+        StringKey.CHPASS_MANDATORY_NOTE -> "Sie müssen ein neues Passwort festlegen, bevor Sie fortfahren."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Nach der Änderung werden alle Sitzungen abgemeldet - melden Sie sich mit dem neuen Passwort an."
         StringKey.RECOVERY_TITLE -> "Wiederherstellungscodes"

@@ -58,6 +58,7 @@ class AuthRepositoryImpl(
                             stations = login.stations.map {
                                 StationAccess(it.id, it.name, it.role, it.clientCode)
                             },
+                            mustChangePassword = login.mustChangePassword,
                         )
                         DataResult.Success(Unit)
                     } catch (e: CancellationException) {

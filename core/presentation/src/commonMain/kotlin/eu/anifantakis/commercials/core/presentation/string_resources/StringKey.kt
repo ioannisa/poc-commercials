@@ -338,6 +338,7 @@ enum class StringKey(val json: String = "") {
     CHPASS_REPEAT,
     CHPASS_CHANGE,
     CHPASS_SIGNOUT_NOTE,
+    CHPASS_MANDATORY_NOTE,
     RECOVERY_TITLE,
     RECOVERY_GENERATE,
     RECOVERY_SAVED,
