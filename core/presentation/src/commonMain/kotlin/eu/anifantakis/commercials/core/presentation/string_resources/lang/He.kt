@@ -334,6 +334,12 @@ internal class He : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "אסימון"
         StringKey.MCP_TOKENS_URL_LABEL -> "כתובת שרת MCP"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "העתק תצורה (JSON)"
+        StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
+        StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
+        StringKey.ADMIN_MCP_TITLE -> "פיקוח MCP"
+        StringKey.ADMIN_MCP_ENABLED -> "גישת MCP / API מופעלת"
+        StringKey.ADMIN_MCP_TOKENS_HEADER -> "אסימונים פעילים: {0}"
+        StringKey.ADMIN_MCP_NO_TOKENS -> "אין אסימונים"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "לאחר השינוי כל הסשנים ינותקו - התחבר מחדש עם הסיסמה החדשה."
         StringKey.RECOVERY_TITLE -> "קודי שחזור"

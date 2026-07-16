@@ -2,7 +2,9 @@ package eu.anifantakis.commercials.feature.user_management.data
 
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
+import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.McpSettings
 import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
@@ -31,4 +33,16 @@ class UserManagementRepositoryImpl(
 
     override suspend fun deleteUser(userId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.deleteUser(userId)
+
+    override suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError> =
+        remoteDataSource.listAllApiTokens()
+
+    override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> =
+        remoteDataSource.revokeApiToken(tokenId)
+
+    override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> =
+        remoteDataSource.getMcpSettings()
+
+    override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
+        remoteDataSource.setMcpEnabled(enabled)
 }

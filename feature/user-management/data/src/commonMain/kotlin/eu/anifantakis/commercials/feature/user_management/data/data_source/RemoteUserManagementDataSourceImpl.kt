@@ -4,7 +4,9 @@ import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
+import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.McpSettings
 import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.data_source.RemoteUserManagementDataSource
@@ -34,6 +36,23 @@ private data class CreateUserDto(
 /** The server's create/reset reply: the one-time temp password. */
 @Serializable
 private data class TempPasswordResponseDto(val id: Long, val tempPassword: String, val emailSent: Boolean)
+
+@Serializable
+private data class AdminApiTokenDto(
+    val id: Long,
+    val name: String,
+    val username: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+)
+
+@Serializable
+private data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
+
+@Serializable
+private data class SetMcpEnabledDto(val enabled: Boolean)
+
+private fun AdminApiTokenDto.toDomain() = AdminApiToken(id, name, username, createdAt, lastUsedAt)
 
 @Serializable
 private data class SetGrantsDto(val grants: List<GrantDto>)
@@ -68,4 +87,16 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
 
     override suspend fun deleteUser(userId: Long): DataResult<Unit, RemoteError> =
         api.deleteRemoteEmpty("/api/admin/users/$userId")
+
+    override suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError> =
+        api.getRemote<List<AdminApiTokenDto>>("/api/admin/api-tokens").map { list -> list.map { it.toDomain() } }
+
+    override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> =
+        api.deleteRemoteEmpty("/api/admin/api-tokens/$tokenId")
+
+    override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> =
+        api.getRemote<McpSettingsDto>("/api/admin/mcp-settings").map { McpSettings(it.enabled, it.tokenCount) }
+
+    override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
+        api.putRemoteEmpty("/api/admin/mcp-settings", SetMcpEnabledDto(enabled))
 }

@@ -329,6 +329,12 @@ internal class En : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "MCP server URL"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Copy config (JSON)"
+        StringKey.PREFERENCES_ADMIN_MCP -> "MCP oversight"
+        StringKey.PREFERENCES_ADMIN_MCP_DESC -> "All tokens + the global switch"
+        StringKey.ADMIN_MCP_TITLE -> "MCP oversight"
+        StringKey.ADMIN_MCP_ENABLED -> "MCP / API access enabled"
+        StringKey.ADMIN_MCP_TOKENS_HEADER -> "Active tokens: {0}"
+        StringKey.ADMIN_MCP_NO_TOKENS -> "No tokens"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "After the change every session is signed out - log in with the new password."
         StringKey.RECOVERY_TITLE -> "Recovery codes"

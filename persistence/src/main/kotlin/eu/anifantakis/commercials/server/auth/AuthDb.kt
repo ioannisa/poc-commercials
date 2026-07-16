@@ -165,6 +165,14 @@ class AuthDb(
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
+                s.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_settings (
+                        setting_key VARCHAR(64) PRIMARY KEY,
+                        setting_value VARCHAR(255) NOT NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
             }
             ensureIsAdminColumn(c)
             ensureExpiresAtColumn(c)
@@ -513,6 +521,9 @@ class AuthDb(
      * minute so a chatty MCP client does not hammer the row.
      */
     private fun findByApiToken(c: Connection, hash: String): AuthUser? {
+        // Global kill switch: when MCP/API access is disabled, PATs stop resolving
+        // everywhere (REST + /mcp). App session tokens are unaffected.
+        if (!mcpEnabled(c)) return null
         val row = c.prepareStatement(
             """
             SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
@@ -888,6 +899,39 @@ class AuthDb(
             )
         }
     }
+
+    /** Count of all personal access tokens (admin status readout). */
+    fun apiTokenCount(): Int =
+        db.connection().use { c ->
+            c.createStatement().use { s ->
+                s.executeQuery("SELECT COUNT(*) FROM api_tokens").use { rs -> rs.next(); rs.getInt(1) }
+            }
+        }
+
+    // ────────────────────────────────────────────────────────── app settings ──
+
+    /** The global MCP/API kill switch (default ON when unset). */
+    fun isMcpEnabled(): Boolean = db.connection().use { mcpEnabled(it) }
+
+    fun setMcpEnabled(enabled: Boolean) {
+        db.connection().use { c ->
+            c.prepareStatement(
+                "INSERT INTO app_settings(setting_key, setting_value) VALUES('mcp_enabled', ?) AS new " +
+                    "ON DUPLICATE KEY UPDATE setting_value = new.setting_value"
+            ).use { ps ->
+                ps.setString(1, enabled.toString())
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    private fun mcpEnabled(c: Connection): Boolean = getSetting(c, "mcp_enabled") != "false"
+
+    private fun getSetting(c: Connection, key: String): String? =
+        c.prepareStatement("SELECT setting_value FROM app_settings WHERE setting_key = ?").use { ps ->
+            ps.setString(1, key)
+            ps.executeQuery().use { if (it.next()) it.getString(1) else null }
+        }
 
     // ───────────────────────────────────────────────────── user management ──
 

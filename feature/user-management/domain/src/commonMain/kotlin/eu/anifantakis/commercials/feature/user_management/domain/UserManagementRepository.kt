@@ -22,6 +22,18 @@ data class ManagedUser(
  */
 data class TempPasswordResult(val tempPassword: String, val emailSent: Boolean)
 
+/** A personal access token as the admin oversees it (whose it is, when last used). */
+data class AdminApiToken(
+    val id: Long,
+    val name: String,
+    val username: String,
+    val createdAt: String,
+    val lastUsedAt: String?,
+)
+
+/** The global MCP state: the kill-switch [enabled] flag + how many tokens exist. */
+data class McpSettings(val enabled: Boolean, val tokenCount: Int)
+
 /**
  * Super-admin user management: list, create, reset password, edit
  * per-station grants, delete. Only the super administrator gets non-403
@@ -42,4 +54,15 @@ interface UserManagementRepository {
     suspend fun resetPassword(userId: Long): DataResult<TempPasswordResult, RemoteError>
     suspend fun setGrants(userId: Long, grants: List<UserGrant>): DataResult<Unit, RemoteError>
     suspend fun deleteUser(userId: Long): DataResult<Unit, RemoteError>
+
+    /** Admin MCP oversight: every user's personal access tokens. */
+    suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError>
+
+    /** Admin revoke of any token by id. */
+    suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError>
+
+    /** The global MCP kill switch + token count. */
+    suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError>
+
+    suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError>
 }

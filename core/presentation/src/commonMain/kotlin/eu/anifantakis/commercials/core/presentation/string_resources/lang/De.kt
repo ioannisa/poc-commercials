@@ -329,6 +329,12 @@ internal class De : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "MCP-Server-URL"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Konfiguration kopieren (JSON)"
+        StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
+        StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
+        StringKey.ADMIN_MCP_TITLE -> "MCP-Übersicht"
+        StringKey.ADMIN_MCP_ENABLED -> "MCP-/API-Zugriff aktiviert"
+        StringKey.ADMIN_MCP_TOKENS_HEADER -> "Aktive Tokens: {0}"
+        StringKey.ADMIN_MCP_NO_TOKENS -> "Keine Tokens"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Nach der Änderung werden alle Sitzungen abgemeldet - melden Sie sich mit dem neuen Passwort an."
         StringKey.RECOVERY_TITLE -> "Wiederherstellungscodes"

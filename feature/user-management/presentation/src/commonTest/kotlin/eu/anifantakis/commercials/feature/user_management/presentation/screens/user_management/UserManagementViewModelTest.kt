@@ -4,7 +4,9 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
+import eu.anifantakis.commercials.feature.user_management.domain.McpSettings
 import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
 import eu.anifantakis.commercials.feature.user_management.domain.UserGrant
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
@@ -91,6 +93,11 @@ class UserManagementViewModelTest {
             deletedId = userId
             return deleteResult
         }
+
+        override suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError> = DataResult.Success(emptyList())
+        override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
+        override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> = DataResult.Success(McpSettings(true, 0))
+        override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
     }
 
     @Test

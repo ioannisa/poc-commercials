@@ -329,6 +329,12 @@ internal class Fr : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Jeton"
         StringKey.MCP_TOKENS_URL_LABEL -> "URL du serveur MCP"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Copier la config (JSON)"
+        StringKey.PREFERENCES_ADMIN_MCP -> "Supervision MCP"
+        StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tous les jetons + l'interrupteur global"
+        StringKey.ADMIN_MCP_TITLE -> "Supervision MCP"
+        StringKey.ADMIN_MCP_ENABLED -> "Accès MCP / API activé"
+        StringKey.ADMIN_MCP_TOKENS_HEADER -> "Jetons actifs : {0}"
+        StringKey.ADMIN_MCP_NO_TOKENS -> "Aucun jeton"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Après ce changement, toutes les sessions seront déconnectées - reconnectez-vous avec le nouveau mot de passe."
         StringKey.RECOVERY_TITLE -> "Codes de récupération"

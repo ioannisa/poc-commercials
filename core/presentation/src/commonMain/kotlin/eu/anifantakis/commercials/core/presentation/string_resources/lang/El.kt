@@ -329,6 +329,12 @@ internal class El : LanguageStrings {
         StringKey.MCP_TOKENS_TOKEN_LABEL -> "Token"
         StringKey.MCP_TOKENS_URL_LABEL -> "URL του MCP server"
         StringKey.MCP_TOKENS_COPY_CONFIG -> "Αντιγραφή config (JSON)"
+        StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
+        StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
+        StringKey.ADMIN_MCP_TITLE -> "Εποπτεία MCP"
+        StringKey.ADMIN_MCP_ENABLED -> "Η πρόσβαση MCP / API είναι ενεργή"
+        StringKey.ADMIN_MCP_TOKENS_HEADER -> "Ενεργά tokens: {0}"
+        StringKey.ADMIN_MCP_NO_TOKENS -> "Κανένα token"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Μετά την αλλαγή αποσυνδέονται όλες οι συνεδρίες - συνδεθείτε ξανά με τον νέο κωδικό."
         StringKey.RECOVERY_TITLE -> "Κωδικοί ανάκτησης"

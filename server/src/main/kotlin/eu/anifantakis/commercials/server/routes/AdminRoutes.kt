@@ -45,6 +45,21 @@ data class CreateUserRequest(
 data class TempPasswordResponse(val id: Long, val tempPassword: String, val emailSent: Boolean)
 
 @Serializable
+data class AdminApiTokenDto(
+    val id: Long,
+    val name: String,
+    val username: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+)
+
+@Serializable
+data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
+
+@Serializable
+data class SetMcpEnabledRequest(val enabled: Boolean)
+
+@Serializable
 data class SetGrantsRequest(val grants: List<GrantDto>)
 
 /**
@@ -129,6 +144,38 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             val userId = call.userIdParam() ?: return@delete
             withContext(Dispatchers.IO) { authDb.deleteUser(userId) }
             call.respond(mapOf("status" to "user deleted"))
+        }
+    }
+
+    // Admin oversight of MCP/API personal access tokens: see all, revoke any.
+    route("/api/admin/api-tokens") {
+        get {
+            if (!call.requireAdmin()) return@get
+            val tokens = withContext(Dispatchers.IO) { authDb.listAllApiTokens() }
+            call.respond(tokens.map { AdminApiTokenDto(it.id, it.name, it.username, it.createdAt, it.lastUsedAt) })
+        }
+        delete("/{id}") {
+            if (!call.requireAdmin()) return@delete
+            val id = call.userIdParam() ?: return@delete
+            val revoked = withContext(Dispatchers.IO) { authDb.revokeApiTokenById(id) }
+            if (revoked) call.respond(mapOf("status" to "revoked"))
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such token"))
+        }
+    }
+
+    // The global MCP kill switch + a token-count status.
+    route("/api/admin/mcp-settings") {
+        get {
+            if (!call.requireAdmin()) return@get
+            val enabled = withContext(Dispatchers.IO) { authDb.isMcpEnabled() }
+            val count = withContext(Dispatchers.IO) { authDb.apiTokenCount() }
+            call.respond(McpSettingsDto(enabled, count))
+        }
+        put {
+            if (!call.requireAdmin()) return@put
+            val request = call.receive<SetMcpEnabledRequest>()
+            withContext(Dispatchers.IO) { authDb.setMcpEnabled(request.enabled) }
+            call.respond(mapOf("status" to "updated"))
         }
     }
 }
