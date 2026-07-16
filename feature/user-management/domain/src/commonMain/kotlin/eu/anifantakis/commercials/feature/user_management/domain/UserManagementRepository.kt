@@ -22,11 +22,16 @@ data class ManagedUser(
  */
 data class TempPasswordResult(val tempPassword: String, val emailSent: Boolean)
 
-/** A personal access token as the admin oversees it (whose it is, when last used). */
+/**
+ * A workstation's token as the admin oversees it: which machine, whose identity
+ * it runs as ([username] + [userRole] summary), and when it was last used.
+ */
 data class AdminApiToken(
     val id: Long,
-    val name: String,
+    val workstationName: String,
+    val userId: Long,
     val username: String,
+    val userRole: String,
     val createdAt: String,
     val lastUsedAt: String?,
 )
@@ -60,6 +65,13 @@ interface UserManagementRepository {
 
     /** Admin revoke of any token by id. */
     suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError>
+
+    /**
+     * Admin "change role": repoint the token on [workstation] to [targetUserId]
+     * WITHOUT changing the secret, so the machine keeps working under the new
+     * identity/role and needs no local reconfiguration.
+     */
+    suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError>
 
     /** The global MCP kill switch + token count. */
     suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError>

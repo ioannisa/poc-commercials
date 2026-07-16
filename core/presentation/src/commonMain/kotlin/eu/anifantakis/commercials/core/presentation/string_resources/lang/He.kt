@@ -349,6 +349,9 @@ internal class He : LanguageStrings {
         StringKey.ADMIN_MCP_ENABLED -> "גישת MCP / API מופעלת"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "אסימונים פעילים: {0}"
         StringKey.ADMIN_MCP_NO_TOKENS -> "אין אסימונים"
+        StringKey.ADMIN_MCP_CHANGE_ROLE -> "שינוי תפקיד"
+        StringKey.ADMIN_MCP_PICK_USER -> "הקצאת ‏«{0}»‏ למשתמש:"
+        StringKey.ADMIN_MCP_ASSIGN -> "הקצאה"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "לאחר השינוי כל הסשנים ינותקו - התחבר מחדש עם הסיסמה החדשה."
         StringKey.RECOVERY_TITLE -> "קודי שחזור"

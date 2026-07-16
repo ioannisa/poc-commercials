@@ -40,6 +40,9 @@ class UserManagementRepositoryImpl(
     override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.revokeApiToken(tokenId)
 
+    override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> =
+        remoteDataSource.reassignApiToken(workstation, targetUserId)
+
     override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> =
         remoteDataSource.getMcpSettings()
 

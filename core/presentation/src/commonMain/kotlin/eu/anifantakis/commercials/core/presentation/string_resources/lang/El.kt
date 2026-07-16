@@ -344,6 +344,9 @@ internal class El : LanguageStrings {
         StringKey.ADMIN_MCP_ENABLED -> "Η πρόσβαση MCP / API είναι ενεργή"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Ενεργά tokens: {0}"
         StringKey.ADMIN_MCP_NO_TOKENS -> "Κανένα token"
+        StringKey.ADMIN_MCP_CHANGE_ROLE -> "Αλλαγή ρόλου"
+        StringKey.ADMIN_MCP_PICK_USER -> "Ανάθεση «{0}» σε χρήστη:"
+        StringKey.ADMIN_MCP_ASSIGN -> "Ανάθεση"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Μετά την αλλαγή αποσυνδέονται όλες οι συνεδρίες - συνδεθείτε ξανά με τον νέο κωδικό."
         StringKey.RECOVERY_TITLE -> "Κωδικοί ανάκτησης"

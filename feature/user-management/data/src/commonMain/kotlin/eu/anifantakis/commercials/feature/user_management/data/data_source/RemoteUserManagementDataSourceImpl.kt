@@ -40,11 +40,16 @@ private data class TempPasswordResponseDto(val id: Long, val tempPassword: Strin
 @Serializable
 private data class AdminApiTokenDto(
     val id: Long,
-    val name: String,
+    val workstationName: String,
+    val userId: Long,
     val username: String,
+    val userRole: String,
     val createdAt: String,
     val lastUsedAt: String? = null,
 )
+
+@Serializable
+private data class ReassignApiTokenDto(val workstation: String, val targetUserId: Long)
 
 @Serializable
 private data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
@@ -52,7 +57,8 @@ private data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
 @Serializable
 private data class SetMcpEnabledDto(val enabled: Boolean)
 
-private fun AdminApiTokenDto.toDomain() = AdminApiToken(id, name, username, createdAt, lastUsedAt)
+private fun AdminApiTokenDto.toDomain() =
+    AdminApiToken(id, workstationName, userId, username, userRole, createdAt, lastUsedAt)
 
 @Serializable
 private data class SetGrantsDto(val grants: List<GrantDto>)
@@ -93,6 +99,9 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
 
     override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> =
         api.deleteRemoteEmpty("/api/admin/api-tokens/$tokenId")
+
+    override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> =
+        api.postRemoteEmpty("/api/admin/api-tokens/reassign", ReassignApiTokenDto(workstation, targetUserId))
 
     override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> =
         api.getRemote<McpSettingsDto>("/api/admin/mcp-settings").map { McpSettings(it.enabled, it.tokenCount) }

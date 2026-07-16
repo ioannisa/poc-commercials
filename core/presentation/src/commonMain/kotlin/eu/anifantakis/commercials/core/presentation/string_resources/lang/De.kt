@@ -344,6 +344,9 @@ internal class De : LanguageStrings {
         StringKey.ADMIN_MCP_ENABLED -> "MCP-/API-Zugriff aktiviert"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Aktive Tokens: {0}"
         StringKey.ADMIN_MCP_NO_TOKENS -> "Keine Tokens"
+        StringKey.ADMIN_MCP_CHANGE_ROLE -> "Rolle ändern"
+        StringKey.ADMIN_MCP_PICK_USER -> "„{0}“ einem Benutzer zuweisen:"
+        StringKey.ADMIN_MCP_ASSIGN -> "Zuweisen"
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Nach der Änderung werden alle Sitzungen abgemeldet - melden Sie sich mit dem neuen Passwort an."
         StringKey.RECOVERY_TITLE -> "Wiederherstellungscodes"
