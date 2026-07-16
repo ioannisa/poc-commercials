@@ -17,6 +17,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
@@ -49,6 +50,7 @@ import kotlin.math.roundToInt
 @Composable
 fun PreferencesScreenRoot(
     isAdmin: Boolean,
+    swaggerEnabled: Boolean,
     onBack: () -> Unit,
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
@@ -56,6 +58,7 @@ fun PreferencesScreenRoot(
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
+    onOpenSwagger: () -> Unit,
     viewModel: PreferencesViewModel = koinViewModel(),
 ) {
     PreferencesScreen(
@@ -63,6 +66,7 @@ fun PreferencesScreenRoot(
         fontSize = viewModel.fontSize,
         language = LocalLanguage.current ?: Language.FALLBACK,
         isAdmin = isAdmin,
+        swaggerEnabled = swaggerEnabled,
         onIntent = viewModel::onAction,
         onNavIntent = { navIntent ->
             when (navIntent) {
@@ -73,6 +77,7 @@ fun PreferencesScreenRoot(
                 PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
+                PreferencesScreenNavIntent.OnOpenSwagger -> onOpenSwagger()
             }
         },
     )
@@ -92,6 +97,7 @@ private sealed interface PreferencesScreenNavIntent {
     data object OnManageUsers : PreferencesScreenNavIntent
     data object OnMigration : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
+    data object OnOpenSwagger : PreferencesScreenNavIntent
 }
 
 @Composable
@@ -100,6 +106,7 @@ private fun PreferencesScreen(
     fontSize: FontSizePreference,
     language: Language,
     isAdmin: Boolean,
+    swaggerEnabled: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
     onNavIntent: (PreferencesScreenNavIntent) -> Unit,
 ) {
@@ -193,6 +200,7 @@ private fun PreferencesScreen(
                         PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_ADMIN_MCP], Strings[StringKey.PREFERENCES_ADMIN_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAdminMcp) }
                         PreferenceEntry(AppIcons.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
                         PreferenceEntry(AppIcons.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
+                        PreferenceEntry(AppIcons.openInNew, Strings[StringKey.PREFERENCES_OPEN_SWAGGER], Strings[StringKey.PREFERENCES_OPEN_SWAGGER_DESC], enabled = swaggerEnabled) { onNavIntent(PreferencesScreenNavIntent.OnOpenSwagger) }
                     }
                 }
             }
@@ -253,10 +261,15 @@ private fun PreferenceEntry(
     icon: ImageVector,
     label: String,
     description: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    // Disabled (e.g. Swagger off on this server): greyed and non-clickable.
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = UIConst.paddingSmall),
+        modifier = Modifier.fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.38f)
+            .padding(vertical = UIConst.paddingSmall),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(UIConst.paddingCompact)
     ) {
@@ -283,6 +296,7 @@ private fun PreferencesScreenPreview() = AppPreview(padded = false) {
         fontSize = FontSizePreference.MEDIUM,
         language = Language.EN,
         isAdmin = false,
+        swaggerEnabled = true,
         onIntent = {},
         onNavIntent = {},
     )
@@ -296,6 +310,8 @@ private fun PreferencesScreenAdminPreview() = AppPreview(padded = false) {
         fontSize = FontSizePreference.MEDIUM,
         language = Language.EN,
         isAdmin = true,
+        // Preview the disabled state (server with `swagger: false`).
+        swaggerEnabled = false,
         onIntent = {},
         onNavIntent = {},
     )
@@ -309,6 +325,7 @@ private fun PreferencesScreenLargeFontPreview() = AppPreview(padded = false) {
         fontSize = FontSizePreference.XLARGE,
         language = Language.EN,
         isAdmin = false,
+        swaggerEnabled = true,
         onIntent = {},
         onNavIntent = {},
     )

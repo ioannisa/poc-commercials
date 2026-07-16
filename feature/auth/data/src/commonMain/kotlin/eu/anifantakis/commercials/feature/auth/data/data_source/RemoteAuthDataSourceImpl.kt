@@ -62,6 +62,7 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
                         token = dto.token,
                         displayName = dto.displayName,
                         isAdmin = dto.isAdmin,
+                        swaggerEnabled = dto.swaggerEnabled,
                         mustChangePassword = dto.mustChangePassword,
                         stations = dto.stations.map {
                             GrantedStation(it.id, it.name, it.role, it.clientCode)

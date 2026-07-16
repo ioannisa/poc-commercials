@@ -30,6 +30,10 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.sse)   // SSE transport for the MCP endpoint
+    // OpenAPI/Swagger UI: compiler-generated spec (dev-only, gated in Routing.kt).
+    // routing-openapi provides the generation + .describe {}; swagger serves the UI.
+    implementation(libs.ktor.server.swagger)
+    implementation(libs.ktor.server.routing.openapi)
     implementation(libs.ktor.serialization.json)
 
     // Kotlinx Serialization
@@ -73,6 +77,14 @@ tasks.withType<JavaExec>().matching { it.name == "run" }.configureEach {
 ktor {
     fatJar {
         archiveFileName.set("server.jar")
+    }
+    // Generate OpenAPI metadata from the routing code at compile time; the
+    // Swagger UI (served dev-only in Routing.kt) renders it. codeInferenceEnabled
+    // lets the plugin infer params/bodies/responses from handler code; annotate
+    // explicitly with .describe {} where inference falls short.
+    openApi {
+        enabled = true
+        codeInferenceEnabled = true
     }
 }
 

@@ -19,16 +19,19 @@ sealed interface PreferencesNavType : NavKey {
 fun EntryProviderScope<NavKey>.preferencesEntries(
     navigator: Navigator,
     isAdmin: () -> Boolean,
+    swaggerEnabled: () -> Boolean,
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
     onAdminMcp: () -> Unit,
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
+    onOpenSwagger: () -> Unit,
 ) {
     entry<PreferencesNavType.Preferences> {
         PreferencesScreenRoot(
             isAdmin = isAdmin(),
+            swaggerEnabled = swaggerEnabled(),
             onBack = { navigator.goBack() },
             onChangePassword = onChangePassword,
             onApiTokens = onApiTokens,
@@ -36,6 +39,7 @@ fun EntryProviderScope<NavKey>.preferencesEntries(
             onManageUsers = onManageUsers,
             onMigration = onMigration,
             onDatabases = onDatabases,
+            onOpenSwagger = onOpenSwagger,
         )
     }
 }

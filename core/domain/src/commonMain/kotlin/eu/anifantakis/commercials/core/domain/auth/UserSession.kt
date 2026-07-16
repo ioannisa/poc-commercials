@@ -28,6 +28,9 @@ interface UserSession {
     val displayName: String
     /** Config-managed super administrator (may manage users). */
     val isAdmin: Boolean
+    /** Server-wide: whether the server serves the OpenAPI/Swagger UI (server.yaml
+     *  `swagger`). Reflects the server this session logged into. */
+    val swaggerEnabled: Boolean
     /** The user's role ON THE CURRENTLY SELECTED STATION. */
     val role: AppRole
     /** All stations this user may access, in server order. */

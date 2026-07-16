@@ -342,6 +342,8 @@ internal class Fr : LanguageStrings {
         StringKey.MCP_TOKENS_HAVE_ONE -> "Vous avez déjà un jeton. Révoquez-le pour en créer un autre."
         StringKey.PREFERENCES_ADMIN_MCP -> "Supervision MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tous les jetons + l'interrupteur global"
+        StringKey.PREFERENCES_OPEN_SWAGGER -> "Doc API (Swagger)"
+        StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Ouvrir la page OpenAPI du serveur dans le navigateur"
         StringKey.ADMIN_MCP_TITLE -> "Supervision MCP"
         StringKey.ADMIN_MCP_ENABLED -> "Accès MCP / API activé"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Jetons actifs : {0}"

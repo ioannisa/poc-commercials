@@ -34,6 +34,9 @@ data class LoginResponse(
     val token: String,
     val displayName: String,
     val isAdmin: Boolean = false,
+    /** Server-wide: whether this server serves the OpenAPI/Swagger UI (server.yaml
+     *  `swagger`). The super-admin "API Docs" link is disabled when this is false. */
+    val swaggerEnabled: Boolean = false,
     /** After an admin reset / on a fresh account: the client must trap the user
      *  on a change-password screen until they pick a new one. */
     val mustChangePassword: Boolean = false,
@@ -136,6 +139,7 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     token = token,
                     displayName = user.displayName,
                     isAdmin = user.isAdmin,
+                    swaggerEnabled = registry.swaggerEnabled,
                     mustChangePassword = user.mustChangePassword,
                     stations = registry.accessFor(user),
                 )

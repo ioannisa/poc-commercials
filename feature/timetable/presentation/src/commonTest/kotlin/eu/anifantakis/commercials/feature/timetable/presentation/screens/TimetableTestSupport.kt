@@ -329,6 +329,7 @@ class FakeUserSession(
     override val role: AppRole = AppRole.NORMAL_USER,
     override val displayName: String = "Tester",
     override val isAdmin: Boolean = false,
+    override val swaggerEnabled: Boolean = false,
     override val stations: List<StationAccess> = emptyList(),
     override val isLoggedIn: Boolean = true,
 ) : UserSession {

@@ -342,6 +342,8 @@ internal class El : LanguageStrings {
         StringKey.MCP_TOKENS_HAVE_ONE -> "Έχεις ήδη token. Κάνε Revoke για να φτιάξεις άλλο."
         StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
+        StringKey.PREFERENCES_OPEN_SWAGGER -> "Τεκμηρίωση API (Swagger)"
+        StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Άνοιγμα της σελίδας OpenAPI του server στον browser"
         StringKey.ADMIN_MCP_TITLE -> "Εποπτεία MCP"
         StringKey.ADMIN_MCP_ENABLED -> "Η πρόσβαση MCP / API είναι ενεργή"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Ενεργά tokens: {0}"

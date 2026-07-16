@@ -342,6 +342,8 @@ internal class En : LanguageStrings {
         StringKey.MCP_TOKENS_HAVE_ONE -> "You already have a token. Revoke it to create a different one."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP oversight"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "All tokens + the global switch"
+        StringKey.PREFERENCES_OPEN_SWAGGER -> "API Docs (Swagger)"
+        StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Open the server's OpenAPI page in the browser"
         StringKey.ADMIN_MCP_TITLE -> "MCP oversight"
         StringKey.ADMIN_MCP_ENABLED -> "MCP / API access enabled"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Active tokens: {0}"

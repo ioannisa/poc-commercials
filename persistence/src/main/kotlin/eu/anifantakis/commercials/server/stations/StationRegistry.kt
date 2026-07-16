@@ -209,6 +209,13 @@ data class HostingConfig(
      * the guard mitigates.
      */
     val mcpAllowedHosts: List<String>? = null,
+    /**
+     * Serve the interactive OpenAPI/Swagger UI at `/swagger` (default false).
+     * A per-deployment toggle, independent of developmentMode. When true the
+     * API SHAPE (incl. admin routes) is browsable by anyone who can reach the
+     * server; executing authenticated routes still requires a bearer token.
+     */
+    val swagger: Boolean = false,
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -367,6 +374,9 @@ class StationRegistry(@Provided hosting: HostingConfig) {
     /** Public host(s) for the MCP SSE endpoint; null keeps the SDK's localhost defaults. */
     val mcpAllowedHosts: List<String>? =
         hosting.mcpAllowedHosts?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() }
+
+    /** Serve the OpenAPI/Swagger UI at /swagger (server.yaml `swagger: true`). */
+    val swaggerEnabled: Boolean = hosting.swagger
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

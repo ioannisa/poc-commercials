@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -23,6 +24,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.presentation.commands.AppCommand
 import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
@@ -80,6 +82,9 @@ fun NavigationRoot() {
     val scope = rememberCoroutineScope()
     val authSession = koinInject<AuthSession>()
     val authRepository = koinInject<AuthRepository>()
+    // Opens external URLs in the system browser (desktop) / a new tab (web) -
+    // Compose's cross-platform handler, no expect/actual needed.
+    val uriHandler = LocalUriHandler.current
 
     // Token persists (no expiry), so a returning user skips the login screen
     val backStack = rememberNavBackStack(
@@ -199,12 +204,21 @@ fun NavigationRoot() {
                 preferencesEntries(
                     navigator = navigator,
                     isAdmin = { authSession.isAdmin },
+                    swaggerEnabled = { authSession.swaggerEnabled },
                     onChangePassword = { showChangePassword = true },
                     onApiTokens = { showApiTokens = true },
                     onAdminMcp = { showAdminMcp = true },
                     onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
                     onMigration = { navigator.navigate(MigrationNavType.Migration) },
                     onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
+                    // Swagger UI on whatever backend this build points at: derive
+                    // it from the SAME base URL the API client uses (mirrors the
+                    // "/mcp" sibling-URL pattern), so it follows the environment.
+                    onOpenSwagger = {
+                        uriHandler.openUri(
+                            AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
+                        )
+                    },
                 )
 
                 userManagementEntries(

@@ -342,6 +342,8 @@ internal class De : LanguageStrings {
         StringKey.MCP_TOKENS_HAVE_ONE -> "Du hast bereits ein Token. Widerrufe es, um ein anderes zu erstellen."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
+        StringKey.PREFERENCES_OPEN_SWAGGER -> "API-Doku (Swagger)"
+        StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "OpenAPI-Seite des Servers im Browser öffnen"
         StringKey.ADMIN_MCP_TITLE -> "MCP-Übersicht"
         StringKey.ADMIN_MCP_ENABLED -> "MCP-/API-Zugriff aktiviert"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "Aktive Tokens: {0}"

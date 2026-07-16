@@ -347,6 +347,8 @@ internal class He : LanguageStrings {
         StringKey.MCP_TOKENS_HAVE_ONE -> "כבר יש לך טוקן. בטל אותו כדי ליצור אחר."
         StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
+        StringKey.PREFERENCES_OPEN_SWAGGER -> "תיעוד API (Swagger)"
+        StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "פתח את דף ה-OpenAPI של השרת בדפדפן"
         StringKey.ADMIN_MCP_TITLE -> "פיקוח MCP"
         StringKey.ADMIN_MCP_ENABLED -> "גישת MCP / API מופעלת"
         StringKey.ADMIN_MCP_TOKENS_HEADER -> "אסימונים פעילים: {0}"

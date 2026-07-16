@@ -22,6 +22,8 @@ data class StoredSession(
     val displayName: String = "",
     /** Config-managed super administrator (may manage users). */
     val isAdmin: Boolean = false,
+    /** Server-wide: whether the server serves the Swagger UI (server.yaml `swagger`). */
+    val swaggerEnabled: Boolean = false,
     val stations: List<StationAccess> = emptyList(),
     val selectedStationId: String = "",
     /** Logged in with a temp password: the app traps the user on a mandatory
@@ -99,6 +101,7 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
     val token: String? get() = stored.token.ifEmpty { null }
     override val displayName: String get() = stored.displayName
     override val isAdmin: Boolean get() = stored.isAdmin
+    override val swaggerEnabled: Boolean get() = stored.swaggerEnabled
 
     /** True until the temp-password user sets their own; drives the mandatory
      *  change-password trap in the navigation root. */
@@ -185,11 +188,13 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         isAdmin: Boolean,
         stations: List<StationAccess>,
         mustChangePassword: Boolean = false,
+        swaggerEnabled: Boolean = false,
     ) {
         val session = StoredSession(
             token = token,
             displayName = displayName,
             isAdmin = isAdmin,
+            swaggerEnabled = swaggerEnabled,
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: "",
             mustChangePassword = mustChangePassword,

@@ -18,6 +18,7 @@ internal data class LoginResponseDto(
     val token: String,
     val displayName: String,
     val isAdmin: Boolean = false,
+    val swaggerEnabled: Boolean = false,
     val mustChangePassword: Boolean = false,
     val stations: List<StationAccessDto> = emptyList(),
 )

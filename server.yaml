@@ -95,6 +95,12 @@ session:
   days: 3            # token lifetime in days when expiration is enabled
   sliding: true      # true = window slides forward on use (idle timeout); false = fixed from login
 
+# Serve the interactive OpenAPI/Swagger UI at /swagger (default off). Per-deployment
+# toggle; the super-admin "API Docs" link in the app opens it. When on, the API SHAPE
+# (incl. admin routes) is browsable to anyone who can reach this server; executing
+# authenticated routes still needs a bearer token.
+swagger: true
+
 # File-wide SMTP for customer schedule emails (a station/group block may override).
 # Office 365 requires the From to be the authenticated mailbox; the display name is
 # allowed. STARTTLS on 587. NOTE: real credential below - do NOT commit this file.

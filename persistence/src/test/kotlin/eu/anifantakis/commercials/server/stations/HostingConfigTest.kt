@@ -112,6 +112,34 @@ class HostingConfigTest {
     }
 
     /**
+     * The Swagger UI toggle: OFF unless server.yaml opts in, so no deployment
+     * exposes the API surface at /swagger by accident.
+     */
+    @Test
+    fun swaggerDefaultsOffAndParsesWhenSet() {
+        val base = """
+            superAdmin:
+              username: root-admin
+              password: test-admin-pass
+            central:
+              jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
+              username: test
+              password: test
+            groups:
+              - id: crete-group
+                jdbcUrl: "jdbc:mysql://localhost:3306/commercials_crete"
+                username: test
+                password: test
+                stations:
+                  - id: crete-tv
+                    name: "Crete TV"
+        """.trimIndent()
+
+        withStationsYaml(base) { assertEquals(false, loadHostingConfig().swagger) }
+        withStationsYaml("swagger: true\n$base") { assertTrue(loadHostingConfig().swagger) }
+    }
+
+    /**
      * A station id is the key of a user's grant and the value of `?station=`, so
      * it must be unique across the WHOLE file - not merely inside its group.
      */

@@ -58,6 +58,7 @@ class AuthRepositoryImpl(
                             token = login.token,
                             displayName = login.displayName,
                             isAdmin = login.isAdmin,
+                            swaggerEnabled = login.swaggerEnabled,
                             stations = login.stations.map {
                                 StationAccess(it.id, it.name, it.role, it.clientCode)
                             },
