@@ -25,6 +25,8 @@ kotlinx-datetime = "0.8.0"
 kotlinx-collections-immutable = "0.5.1"
 kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
+coil3 = "3.5.0"
+androidxCollection = "1.5.0"
 mcpKotlinSdk = "0.14.0"
 logback = "1.5.38"
 mysql-connector = "9.7.0"
@@ -119,6 +121,14 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 ktor-client-encoding = { module = "io.ktor:ktor-client-encoding", version.ref = "ktor" }
+
+# AppText rich-text: process-wide LRU for parsed HTML (androidx.collection is KMP)
+androidx-collection = { module = "androidx.collection:collection", version.ref = "androidxCollection" }
+
+# Coil 3 (AppAsyncImage: remote images; ktor3 fetcher rides the existing client engines)
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3" }
+coil-svg = { module = "io.coil-kt.coil3:coil-svg", version.ref = "coil3" }
+coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
 
 # Kotlinx Serialization
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }

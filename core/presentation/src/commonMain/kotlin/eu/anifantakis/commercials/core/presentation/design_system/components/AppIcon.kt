@@ -24,7 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 enum class AppIconSize { SMALL, MEDIUM, LARGE }
 
 /**
- * The design-system icon. Vectors come from AppIcons (single-door rule).
+ * The design-system icon. Vectors come from AppDrawableRepo (single-door rule).
  *
  * [contentDescription] defaults to null ON PURPOSE: a decorative icon must
  * NOT carry a label, or screen readers announce it twice and litter the

@@ -15,6 +15,13 @@ kotlin {
             // Res.font.* for the design system's bundled Roboto family
             // (and the Noto faces that cover what Roboto cannot - FontFallback.kt)
             implementation(libs.compose.components.resources)
+            // AppAsyncImage: Coil 3 remote images + SVG; the ktor3 fetcher uses
+            // the platform client engines the app already ships (OkHttp/Js/Darwin)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.svg)
+            implementation(libs.coil.network.ktor3)
+            // AppText rich-text: LRU cache for parsed HTML (KMP artifact)
+            implementation(libs.androidx.collection)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

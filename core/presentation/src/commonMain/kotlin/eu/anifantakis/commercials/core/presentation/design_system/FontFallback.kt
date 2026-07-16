@@ -11,8 +11,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -173,11 +175,17 @@ fun FallbackText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
     fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified,
     textAlign: TextAlign? = null,
     textDecoration: TextDecoration? = null,
+    softWrap: Boolean = true,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     style: TextStyle = LocalTextStyle.current,
 ) {
     val fallback = LocalGlyphFallback.current
@@ -185,14 +193,20 @@ fun FallbackText(
     if (annotated == null) {
         Text(
             text = text, modifier = modifier, color = color, fontSize = fontSize,
-            fontWeight = fontWeight, textAlign = textAlign, textDecoration = textDecoration,
-            maxLines = maxLines, overflow = overflow, style = style,
+            fontStyle = fontStyle, fontWeight = fontWeight, fontFamily = fontFamily,
+            letterSpacing = letterSpacing, lineHeight = lineHeight,
+            textAlign = textAlign, textDecoration = textDecoration, softWrap = softWrap,
+            maxLines = maxLines, overflow = overflow, onTextLayout = onTextLayout ?: {},
+            style = style,
         )
     } else {
         Text(
             text = annotated, modifier = modifier, color = color, fontSize = fontSize,
-            fontWeight = fontWeight, textAlign = textAlign, textDecoration = textDecoration,
-            maxLines = maxLines, overflow = overflow, style = style,
+            fontStyle = fontStyle, fontWeight = fontWeight, fontFamily = fontFamily,
+            letterSpacing = letterSpacing, lineHeight = lineHeight,
+            textAlign = textAlign, textDecoration = textDecoration, softWrap = softWrap,
+            maxLines = maxLines, overflow = overflow, onTextLayout = onTextLayout ?: {},
+            style = style,
         )
     }
 }
