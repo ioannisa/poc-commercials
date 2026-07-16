@@ -151,6 +151,20 @@ class AuthDb(
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
+                s.executeUpdate(
+                    """
+                    CREATE TABLE IF NOT EXISTS api_tokens (
+                        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        token_hash VARCHAR(64) NOT NULL UNIQUE,
+                        user_id BIGINT NOT NULL,
+                        name VARCHAR(128) NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        last_used_at TIMESTAMP NULL DEFAULT NULL,
+                        CONSTRAINT fk_apitokens_user FOREIGN KEY (user_id)
+                            REFERENCES users(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """.trimIndent()
+                )
             }
             ensureIsAdminColumn(c)
             ensureExpiresAtColumn(c)
@@ -449,42 +463,76 @@ class AuthDb(
     fun findUserByToken(token: String): AuthUser? {
         if (token.isBlank()) return null
         val hash = tokenHash(token)
-        // No-expiry policy ignores the window entirely (any live token row is
-        // valid); an expiring policy rejects lapsed tokens (NULL never lapses).
-        val expiryClause = if (expiryEnabled) " AND (t.expires_at IS NULL OR t.expires_at > NOW())" else ""
         return db.connection().use { c ->
-            val row = c.prepareStatement(
-                """
-                SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
-                       u.must_change_password
-                FROM auth_tokens t, users u
-                WHERE u.id = t.user_id
-                  AND t.token_hash = ?$expiryClause
-                """.trimIndent()
-            ).use { ps ->
-                ps.setString(1, hash)
-                ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
-            } ?: return null
-
-            // Sliding renewal, throttled: extend only when the token has
-            // already consumed at least half its life (expires_at within the
-            // next half-TTL). A freshly-renewed (or NULL / no-expiry) token
-            // fails the WHERE and the statement is a no-op.
-            if (expiryEnabled && slidingEnabled) {
-                c.prepareStatement(
-                    "UPDATE auth_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) " +
-                        "WHERE token_hash = ? AND expires_at IS NOT NULL " +
-                        "AND expires_at < DATE_ADD(NOW(), INTERVAL ? SECOND)"
-                ).use { ps ->
-                    ps.setLong(1, tokenTtlSeconds)
-                    ps.setString(2, hash)
-                    ps.setLong(3, tokenTtlSeconds / 2)
-                    ps.executeUpdate()
-                }
-            }
-
-            toAuthUser(c, row)
+            // A short-lived SESSION token (auth_tokens, expiry + sliding window),
+            // or a PERSONAL ACCESS TOKEN (api_tokens: non-expiring, revocable, for
+            // MCP / programmatic clients). Both resolve to the same user, so the
+            // same per-station grants and role apply either way.
+            findBySessionToken(c, hash) ?: findByApiToken(c, hash)
         }
+    }
+
+    /** Session token: honours the expiry policy and slides the window on use. */
+    private fun findBySessionToken(c: Connection, hash: String): AuthUser? {
+        // No-expiry policy ignores the window entirely; an expiring policy rejects
+        // lapsed tokens (a NULL window never lapses).
+        val expiryClause = if (expiryEnabled) " AND (t.expires_at IS NULL OR t.expires_at > NOW())" else ""
+        val row = c.prepareStatement(
+            """
+            SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
+                   u.must_change_password
+            FROM auth_tokens t, users u
+            WHERE u.id = t.user_id
+              AND t.token_hash = ?$expiryClause
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
+        } ?: return null
+
+        // Sliding renewal, throttled to past-half-life (a freshly-renewed or NULL
+        // window fails the WHERE and the statement is a no-op).
+        if (expiryEnabled && slidingEnabled) {
+            c.prepareStatement(
+                "UPDATE auth_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) " +
+                    "WHERE token_hash = ? AND expires_at IS NOT NULL " +
+                    "AND expires_at < DATE_ADD(NOW(), INTERVAL ? SECOND)"
+            ).use { ps ->
+                ps.setLong(1, tokenTtlSeconds)
+                ps.setString(2, hash)
+                ps.setLong(3, tokenTtlSeconds / 2)
+                ps.executeUpdate()
+            }
+        }
+        return toAuthUser(c, row)
+    }
+
+    /**
+     * Personal access token: NEVER expires (a machine credential); revoked only
+     * by deleting its row. Stamps last_used_at, throttled to at most one write a
+     * minute so a chatty MCP client does not hammer the row.
+     */
+    private fun findByApiToken(c: Connection, hash: String): AuthUser? {
+        val row = c.prepareStatement(
+            """
+            SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
+                   u.must_change_password
+            FROM api_tokens a, users u
+            WHERE u.id = a.user_id AND a.token_hash = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
+        } ?: return null
+
+        c.prepareStatement(
+            "UPDATE api_tokens SET last_used_at = NOW() WHERE token_hash = ? " +
+                "AND (last_used_at IS NULL OR last_used_at < DATE_SUB(NOW(), INTERVAL 60 SECOND))"
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeUpdate()
+        }
+        return toAuthUser(c, row)
     }
 
     /**
@@ -751,6 +799,94 @@ class AuthDb(
         var r = 1L
         repeat(exp) { r *= base }
         return r
+    }
+
+    // ─────────────────────────────────────────── API tokens (MCP / programmatic) ──
+
+    /** A personal access token as its owner/admin lists it - never the secret itself. */
+    data class ApiTokenInfo(
+        val id: Long,
+        val name: String,
+        val username: String,
+        val createdAt: String,
+        val lastUsedAt: String?,
+    )
+
+    /**
+     * Mints a NON-EXPIRING personal access token for [userId] and returns it RAW,
+     * once - only its SHA-256 is stored. It authenticates AS that user, so the same
+     * per-station grants and role apply (an MCP client inherits the user's exact
+     * restrictions). Revoked only by [revokeApiToken] / [revokeApiTokenById].
+     */
+    fun createApiToken(userId: Long, name: String): String {
+        require(name.isNotBlank()) { "Token name must not be blank" }
+        val token = randomBytes(32).toHex()
+        db.connection().use { c ->
+            selectUserById(c, userId) ?: throw IllegalArgumentException("Unknown user")
+            c.prepareStatement("INSERT INTO api_tokens(token_hash, user_id, name) VALUES(?,?,?)").use { ps ->
+                ps.setString(1, tokenHash(token))
+                ps.setLong(2, userId)
+                ps.setString(3, name.trim())
+                ps.executeUpdate()
+            }
+        }
+        return token
+    }
+
+    /** The caller's OWN tokens (self-service list). */
+    fun listApiTokens(userId: Long): List<ApiTokenInfo> =
+        db.connection().use { c ->
+            c.prepareStatement(
+                "SELECT a.id, a.name, u.username, a.created_at, a.last_used_at " +
+                    "FROM api_tokens a JOIN users u ON u.id = a.user_id " +
+                    "WHERE a.user_id = ? ORDER BY a.created_at DESC"
+            ).use { ps ->
+                ps.setLong(1, userId)
+                ps.executeQuery().use { rs -> rs.toApiTokenList() }
+            }
+        }
+
+    /** Every token across all users (admin oversight). */
+    fun listAllApiTokens(): List<ApiTokenInfo> =
+        db.connection().use { c ->
+            c.createStatement().use { s ->
+                s.executeQuery(
+                    "SELECT a.id, a.name, u.username, a.created_at, a.last_used_at " +
+                        "FROM api_tokens a JOIN users u ON u.id = a.user_id ORDER BY a.created_at DESC"
+                ).use { rs -> rs.toApiTokenList() }
+            }
+        }
+
+    /** Revokes one of the CALLER's own tokens (ownership enforced). True if it existed. */
+    fun revokeApiToken(userId: Long, tokenId: Long): Boolean =
+        db.connection().use { c ->
+            c.prepareStatement("DELETE FROM api_tokens WHERE id = ? AND user_id = ?").use { ps ->
+                ps.setLong(1, tokenId); ps.setLong(2, userId)
+                ps.executeUpdate() == 1
+            }
+        }
+
+    /** Admin revoke of ANY token by id. True if it existed. */
+    fun revokeApiTokenById(tokenId: Long): Boolean =
+        db.connection().use { c ->
+            c.prepareStatement("DELETE FROM api_tokens WHERE id = ?").use { ps ->
+                ps.setLong(1, tokenId)
+                ps.executeUpdate() == 1
+            }
+        }
+
+    private fun java.sql.ResultSet.toApiTokenList(): List<ApiTokenInfo> = buildList {
+        while (next()) {
+            add(
+                ApiTokenInfo(
+                    id = getLong("id"),
+                    name = getString("name"),
+                    username = getString("username"),
+                    createdAt = getString("created_at"),
+                    lastUsedAt = getString("last_used_at"),
+                )
+            )
+        }
     }
 
     // ───────────────────────────────────────────────────── user management ──
