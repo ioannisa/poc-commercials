@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.server.plugins
 import eu.anifantakis.commercials.mcp.McpCaller
 import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.mcp.buildCommercialsMcpServer
+import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
@@ -24,12 +25,17 @@ import org.koin.ktor.ext.inject
  */
 fun Application.configureMcp() {
     val services by inject<McpToolServices>()
+    val registry by inject<StationRegistry>()
 
     install(SSE)
 
     routing {
         authenticate(AUTH_BEARER) {
-            mcp(path = "/mcp") {
+            // allowedHosts = null in dev keeps the SDK's localhost defaults; a
+            // remote deployment lists its public host(s) in server.yaml
+            // (mcpAllowedHosts) so clients can reach /mcp through the DNS-rebinding
+            // guard. Put /mcp behind TLS - the bearer token travels over the wire.
+            mcp(path = "/mcp", allowedHosts = registry.mcpAllowedHosts) {
                 buildCommercialsMcpServer(McpCaller.of(call.authUser()), services)
             }
         }

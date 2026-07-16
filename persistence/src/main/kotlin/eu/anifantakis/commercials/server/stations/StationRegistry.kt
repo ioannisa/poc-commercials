@@ -200,6 +200,15 @@ data class HostingConfig(
      * production; a stray value here silently swallows every real send.
      */
     val emailRedirectTo: String? = null,
+    /**
+     * Hostnames the MCP SSE endpoint (`/mcp`) accepts in the `Host` header - the
+     * SDK's DNS-rebinding guard. LEAVE UNSET for local dev (the SDK defaults to
+     * localhost). For a remote deployment, list the server's public host(s) so
+     * clients can reach `/mcp`, e.g. `["mcp.example.gr"]`. The API is
+     * bearer-authenticated, so this is about REACHABILITY, not the cookie attack
+     * the guard mitigates.
+     */
+    val mcpAllowedHosts: List<String>? = null,
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -354,6 +363,10 @@ class StationRegistry(@Provided hosting: HostingConfig) {
      * both restore normal delivery, never a send to "".
      */
     val emailRedirectTo: String? = hosting.emailRedirectTo?.takeIf { it.isNotBlank() }
+
+    /** Public host(s) for the MCP SSE endpoint; null keeps the SDK's localhost defaults. */
+    val mcpAllowedHosts: List<String>? =
+        hosting.mcpAllowedHosts?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() }
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()
