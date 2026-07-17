@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.server
 
 import eu.anifantakis.commercials.mcp.di.mcpModule
 import eu.anifantakis.commercials.server.auth.AuthDb
+import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
 import eu.anifantakis.commercials.server.di.serverModule
 import eu.anifantakis.commercials.server.plugins.configureCallLogging
@@ -38,11 +39,14 @@ fun Application.module() {
 
     val centralDb by inject<CentralDb>()
     val authDb by inject<AuthDb>()
+    val oauthDb by inject<OAuthDb>()
     val registry by inject<StationRegistry>()
 
     // Central auth tables + demo users/grants + YAML super-admin sync.
     // Station schemas bootstrap lazily on first access (StationRegistry.db).
     authDb.bootstrap()
+    // OAuth AS tables (clients/codes/tokens) + expired-row sweep.
+    oauthDb.bootstrap()
 
     configureCallLogging()
     // Before routing: the month grid ships megabytes of repetitive JSON, and

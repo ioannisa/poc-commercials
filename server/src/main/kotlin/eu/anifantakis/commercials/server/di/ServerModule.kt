@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.server.di
 
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.auth.AuthDb
+import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.config.ServerConfig
 import eu.anifantakis.commercials.server.config.ServerConfigLoader
 import eu.anifantakis.commercials.server.scheduler.CentralDb
@@ -26,6 +27,7 @@ val serverModule = module {
     single<StationRegistry>()
     single<CentralDb>()
     single<AuthDb>()
+    single<OAuthDb>()
 
     single<MigrationService>()
 

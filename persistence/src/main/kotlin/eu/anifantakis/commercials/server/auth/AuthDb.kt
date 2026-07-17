@@ -521,10 +521,12 @@ class AuthDb(
         val hash = tokenHash(token)
         return db.connection().use { c ->
             // A short-lived SESSION token (auth_tokens, expiry + sliding window),
-            // or a PERSONAL ACCESS TOKEN (api_tokens: non-expiring, revocable, for
-            // MCP / programmatic clients). Both resolve to the same user, so the
-            // same per-station grants and role apply either way.
-            findBySessionToken(c, hash) ?: findByApiToken(c, hash)
+            // a PERSONAL ACCESS TOKEN (api_tokens: non-expiring, revocable, for
+            // MCP / programmatic clients), or an OAUTH ACCESS TOKEN (oauth_tokens:
+            // 1h-lived, refresh-rotated, minted by the built-in OAuth AS for
+            // native MCP connectors). All resolve to the same user, so the same
+            // per-station grants and role apply either way.
+            findBySessionToken(c, hash) ?: findByApiToken(c, hash) ?: findByOAuthToken(c, hash)
         }
     }
 
@@ -595,6 +597,37 @@ class AuthDb(
     }
 
     /**
+     * OAuth access token (minted by the built-in AS - see OAuthDb): expires
+     * [OAuthDb]-side (1 h), refresh-rotated by the client. Shares the PAT's
+     * kill switch: disabling MCP access kills OAuth grants too, everywhere
+     * (REST + /mcp + /mcp/http); app session tokens are unaffected. Stamps
+     * last_used_at throttled like the PAT path.
+     */
+    private fun findByOAuthToken(c: Connection, hash: String): AuthUser? {
+        if (!mcpEnabled(c)) return null
+        val row = c.prepareStatement(
+            """
+            SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
+                   u.must_change_password
+            FROM oauth_tokens t, users u
+            WHERE u.id = t.user_id AND t.access_token_hash = ? AND t.access_expires_at > NOW()
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
+        } ?: return null
+
+        c.prepareStatement(
+            "UPDATE oauth_tokens SET last_used_at = NOW() WHERE access_token_hash = ? " +
+                "AND (last_used_at IS NULL OR last_used_at < DATE_SUB(NOW(), INTERVAL 60 SECOND))"
+        ).use { ps ->
+            ps.setString(1, hash)
+            ps.executeUpdate()
+        }
+        return toAuthUser(c, row)
+    }
+
+    /**
      * Seconds of life left in [token], or null when it never lapses (no-expiry
      * policy, or a NULL window). The client's keep-alive uses this to pick its
      * heartbeat interval instead of hard-coding one that a `session:` edit
@@ -630,9 +663,18 @@ class AuthDb(
         }
     }
 
-    /** Revokes every session of a user - called on any password change. */
+    /**
+     * Revokes every session AND OAuth grant of a user - called on any password
+     * change. PATs deliberately survive (they are machine credentials, revoked
+     * explicitly); OAuth grants were minted with the old password, so they die
+     * with it like sessions do.
+     */
     private fun revokeAllTokens(c: Connection, userId: Long) {
         c.prepareStatement("DELETE FROM auth_tokens WHERE user_id = ?").use { ps ->
+            ps.setLong(1, userId)
+            ps.executeUpdate()
+        }
+        c.prepareStatement("DELETE FROM oauth_tokens WHERE user_id = ?").use { ps ->
             ps.setLong(1, userId)
             ps.executeUpdate()
         }
