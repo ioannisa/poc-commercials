@@ -13,6 +13,7 @@ class MutationGuardTest {
     private val readTools = setOf(
         "list_stations", "search_parties", "party_activity", "party_contracts",
         "contract_spots", "contract_status", "list_breaks", "spots_in_break", "station_footprint",
+        "get_customer_contact",
         "generate_break_report", "generate_day_report",
     )
     private val mutationTools = setOf(

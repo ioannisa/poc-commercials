@@ -74,12 +74,20 @@ data class CommercialRow(
      * is deliberately NOT what this row - or any total built from it - reports.
      */
     val durationSeconds: Int,
-    /** PROGRAMME type (programtypes) - printed on the Program Flow report. */
+    /**
+     * PROGRAMME type (programtypes, e.g. ΚΛΕΨΑ / ΞΕΝΗ ΤΑΙΝΙΑ) - a property of
+     * the SLOT, printed on the Program Flow report. It is NOT the spot's Τύπος:
+     * a programme is not a product. Do not render it in the Break Console's
+     * Τύπος column (see [salesItem]).
+     */
     val type: String,
     /**
      * The SALES item of the spot's contract line (ERP STI name, e.g.
-     * 'Διαφ. TV Κρήτη Σ73.002') - the Break Console's Τύπος. Null when the
-     * ERP enrichment has not stamped it; displays fall back to [type].
+     * 'Διαφ. TV Κρήτη Σ73.002') - the Break Console's Τύπος. Null when the ERP
+     * enrichment has not stamped it; a gift then shows the gift marker, else the
+     * cell is blank ("unknown item"). NEVER falls back to [type] - that
+     * category error made the whole column read a programme as the product
+     * (fixed in CommercialDetailScreen and the `spots_in_break` MCP tool).
      */
     val salesItem: String? = null,
     /** The contract number - the Break Console's Σύμβαση (a NUMBER even for gifts). */
