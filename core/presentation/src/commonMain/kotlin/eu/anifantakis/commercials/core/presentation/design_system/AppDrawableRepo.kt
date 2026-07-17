@@ -46,8 +46,15 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import commercials_manager.core.presentation.generated.resources.Res
-import commercials_manager.core.presentation.generated.resources.login_background
+import commercials_manager.core.presentation.generated.resources.login_background_evening
+import commercials_manager.core.presentation.generated.resources.login_background_morning
+import commercials_manager.core.presentation.generated.resources.login_background_night
+import commercials_manager.core.presentation.generated.resources.login_background_noon
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.DrawableResource
+import kotlin.time.Clock
 
 /**
  * The single door for every icon in the app (kmp-developer core-presentation
@@ -115,5 +122,27 @@ object AppDrawableRepo {
 
     // ── Bundled image resources (drawn via AppImage, never AppIcon) ─────────
     /** Login screen background image (composeResources/drawable/login_background.png). */
-    val loginBackground: DrawableResource get() = Res.drawable.login_background
+    val loginBackground: DrawableResource get() {
+        val morningStart = LocalTime(6, 0)
+        val noonStart = LocalTime(10, 0)
+        val eveningStart = LocalTime(15, 0)
+        val nightStart = LocalTime(20, 0)
+
+        val now: LocalTime = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .time
+
+        return when (now) {
+            in morningStart..<noonStart -> Res.drawable.login_background_morning
+
+            // Between 10:00:00 and 14:59:59.999...
+            in noonStart..<eveningStart -> Res.drawable.login_background_noon
+
+            // Between 15:00:00 and 19:59:59.999...
+            in eveningStart..<nightStart -> Res.drawable.login_background_evening
+
+            // Everything else (20:00:00 to 05:59:59.999...) covers the night
+            else -> Res.drawable.login_background_night
+        }
+    }
 }
