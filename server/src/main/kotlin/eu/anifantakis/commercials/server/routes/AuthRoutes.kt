@@ -5,11 +5,13 @@ import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.AuthUser
 import eu.anifantakis.commercials.server.auth.PASSWORD_RESET_TTL_SECONDS
 import eu.anifantakis.commercials.server.plugins.AUTH_BEARER
+import eu.anifantakis.commercials.server.plugins.CREDENTIALS_RATE_LIMIT
 import eu.anifantakis.commercials.server.plugins.authUser
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -124,6 +126,11 @@ private fun StationRegistry.accessFor(user: AuthUser): List<StationAccessDto> =
 fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
     route("/api/auth") {
 
+        // The three OPEN endpoints are the password-guessing surface - per-IP
+        // throttled (10/min; see RateLimiting.kt). The bearer-authed routes
+        // below are not: a valid token already gates them.
+        rateLimit(CREDENTIALS_RATE_LIMIT) {
+
         /**
          * Log in with username and password to obtain a bearer token.
          * Open endpoint (no auth): this is how a client GETs a token.
@@ -195,6 +202,8 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
             }
             call.respond(result)
         }
+
+        }   // end rateLimit(CREDENTIALS_RATE_LIMIT)
 
         authenticate(AUTH_BEARER) {
 

@@ -8,11 +8,13 @@ import eu.anifantakis.commercials.server.di.serverModule
 import eu.anifantakis.commercials.server.plugins.configureCallLogging
 import eu.anifantakis.commercials.server.plugins.configureCompression
 import eu.anifantakis.commercials.server.plugins.configureMcp
+import eu.anifantakis.commercials.server.plugins.configureRateLimiting
 import eu.anifantakis.commercials.server.plugins.configureRouting
 import eu.anifantakis.commercials.server.plugins.configureSecurity
 import eu.anifantakis.commercials.server.plugins.configureSerialization
 import eu.anifantakis.commercials.server.plugins.configureStatusPages
 import eu.anifantakis.commercials.server.plugins.configureCORS
+import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.server.application.*
@@ -48,11 +50,19 @@ fun Application.module() {
     // OAuth AS tables (clients/codes/tokens) + expired-row sweep.
     oauthDb.bootstrap()
 
+    // Only behind a TLS-terminating reverse proxy (server.yaml flag): trust
+    // X-Forwarded-* so rate limiting and logs see the real client IP. Never
+    // installed without one - the headers are client-spoofable otherwise.
+    if (registry.behindReverseProxy) {
+        install(XForwardedHeaders)
+    }
+
     configureCallLogging()
     // Before routing: the month grid ships megabytes of repetitive JSON, and
     // this is the biggest single win on that screen (7.79 MB -> 329 KB).
     configureCompression()
     configureStatusPages()
+    configureRateLimiting()
     configureSecurity()
     configureSerialization()
     configureCORS()

@@ -9,10 +9,13 @@ import eu.anifantakis.commercials.server.oauth.isValidCodeVerifier
 import eu.anifantakis.commercials.server.oauth.redirectUriMatches
 import eu.anifantakis.commercials.server.oauth.renderAuthorizePage
 import eu.anifantakis.commercials.server.oauth.renderOAuthErrorPage
+import eu.anifantakis.commercials.server.plugins.CREDENTIALS_RATE_LIMIT
+import eu.anifantakis.commercials.server.plugins.OAUTH_PROTOCOL_RATE_LIMIT
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.*
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -150,6 +153,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
      *
      * Tag: MCP
      */
+    rateLimit(OAUTH_PROTOCOL_RATE_LIMIT) {
     post("/oauth/register") {
         val req = runCatching { call.receive<DcrRequest>() }.getOrNull()
             ?: return@post call.respondDcrError("invalid_client_metadata", "Body must be a JSON registration request")
@@ -199,6 +203,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
             }
         )
     }
+    }
 
     // ──────────────────────────────────────────────────── authorize ──
 
@@ -238,6 +243,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
      *
      * Tag: MCP
      */
+    rateLimit(CREDENTIALS_RATE_LIMIT) {
     post("/oauth/authorize") {
         val p = runCatching { call.receiveParameters() }.getOrNull()
             ?: return@post call.respondHtmlPage(
@@ -291,6 +297,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
         call.response.headers.append(HttpHeaders.CacheControl, "no-store")
         call.respondRedirect(location)
     }
+    }
 
     // ───────────────────────────────────────────────────────── token ──
 
@@ -303,6 +310,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
      *
      * Tag: MCP
      */
+    rateLimit(OAUTH_PROTOCOL_RATE_LIMIT) {
     post("/oauth/token") {
         call.response.headers.append(HttpHeaders.CacheControl, "no-store")
         call.response.headers.append("Pragma", "no-cache")
@@ -395,6 +403,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
             ?: return@post call.respondOAuthError(HttpStatusCode.BadRequest, "invalid_request", "token is required")
         withContext(Dispatchers.IO) { oauthDb.revokeToken(token, client.clientId) }
         call.respond(HttpStatusCode.OK)
+    }
     }
 }
 
