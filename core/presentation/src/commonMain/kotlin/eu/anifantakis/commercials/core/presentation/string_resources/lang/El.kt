@@ -248,13 +248,6 @@ internal class El : LanguageStrings {
         StringKey.LOGIN_RESET_INVALID -> "Λάθος κωδικός."
         StringKey.LOGIN_RESET_LOCKED -> "Πολλές προσπάθειες — περιμένετε {0}δ."
         StringKey.LOGIN_RESET_EXPIRED -> "Ο κωδικός έληξε — ζητήστε νέον."
-        StringKey.LOGIN_DEMO_ACCOUNTS -> "Δοκιμαστικοί λογαριασμοί"
-        // Τα διαπιστευτήρια είναι σταθερά· μόνο οι ρόλοι ({0}-{2}) μεταφράζονται.
-        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
-            "admin / admin123 — {0}\n" +
-                "viewer / viewer123 — {1}\n" +
-                "customer / customer123 — {2}\n" +
-                "superadmin — δείτε το server.yaml"
 
         StringKey.COMMON_SAVE -> "Αποθήκευση"
         StringKey.USER_MGMT_TITLE -> "Διαχείριση Χρηστών"

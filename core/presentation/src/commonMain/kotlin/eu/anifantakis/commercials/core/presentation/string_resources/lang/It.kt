@@ -248,13 +248,6 @@ internal class It : LanguageStrings {
         StringKey.LOGIN_RESET_INVALID -> "Codice errato."
         StringKey.LOGIN_RESET_LOCKED -> "Troppi tentativi — attendi {0}s."
         StringKey.LOGIN_RESET_EXPIRED -> "Codice scaduto — richiedine uno nuovo."
-        StringKey.LOGIN_DEMO_ACCOUNTS -> "Account demo"
-        // Le credenziali sono fisse; vengono tradotti solo i ruoli ({0}-{2}).
-        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
-            "admin / admin123 — {0}\n" +
-                "viewer / viewer123 — {1}\n" +
-                "customer / customer123 — {2}\n" +
-                "superadmin — vedi server.yaml"
 
         StringKey.COMMON_SAVE -> "Salva"
         StringKey.USER_MGMT_TITLE -> "Gestione utenti"

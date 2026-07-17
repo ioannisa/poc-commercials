@@ -248,13 +248,6 @@ internal class Fr : LanguageStrings {
         StringKey.LOGIN_RESET_INVALID -> "Code incorrect."
         StringKey.LOGIN_RESET_LOCKED -> "Trop de tentatives — attendez {0}s."
         StringKey.LOGIN_RESET_EXPIRED -> "Code expiré — demandez-en un nouveau."
-        StringKey.LOGIN_DEMO_ACCOUNTS -> "Comptes de démonstration"
-        // Les identifiants sont fixes ; seuls les rôles ({0}-{2}) sont traduits.
-        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
-            "admin / admin123 — {0}\n" +
-                "viewer / viewer123 — {1}\n" +
-                "customer / customer123 — {2}\n" +
-                "superadmin — voir server.yaml"
 
         StringKey.COMMON_SAVE -> "Enregistrer"
         StringKey.USER_MGMT_TITLE -> "Gestion des utilisateurs"

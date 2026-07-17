@@ -13,8 +13,11 @@ kotlin {
         commonMain.dependencies {
             api(projects.core.domain)
             // Res.font.* for the design system's bundled Roboto family
-            // (and the Noto faces that cover what Roboto cannot - FontFallback.kt)
-            implementation(libs.compose.components.resources)
+            // (and the Noto faces that cover what Roboto cannot - FontFallback.kt).
+            // api, not implementation: AppImage/AppDrawableRepo expose
+            // DrawableResource on their public surface, so consumer modules
+            // (feature presentations) need the type transitively.
+            api(libs.compose.components.resources)
             // AppAsyncImage: Coil 3 remote images + SVG; the ktor3 fetcher uses
             // the platform client engines the app already ships (OkHttp/Js/Darwin)
             implementation(libs.coil.compose)

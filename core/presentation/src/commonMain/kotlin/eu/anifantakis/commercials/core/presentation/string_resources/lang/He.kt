@@ -253,13 +253,6 @@ internal class He : LanguageStrings {
         StringKey.LOGIN_RESET_INVALID -> "קוד שגוי."
         StringKey.LOGIN_RESET_LOCKED -> "יותר מדי ניסיונות — המתן {0} שניות."
         StringKey.LOGIN_RESET_EXPIRED -> "הקוד פג — בקש קוד חדש."
-        StringKey.LOGIN_DEMO_ACCOUNTS -> "חשבונות הדגמה"
-        // פרטי ההתחברות קבועים; רק התפקידים ({0}-{2}) מתורגמים.
-        StringKey.LOGIN_DEMO_ACCOUNTS_BODY ->
-            "admin / admin123 — {0}\n" +
-                "viewer / viewer123 — {1}\n" +
-                "customer / customer123 — {2}\n" +
-                "superadmin — ראה server.yaml"
 
         StringKey.COMMON_SAVE -> "שמירה"
         StringKey.USER_MGMT_TITLE -> "ניהול משתמשים"

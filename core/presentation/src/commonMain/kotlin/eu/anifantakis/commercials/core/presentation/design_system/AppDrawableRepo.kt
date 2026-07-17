@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import commercials_manager.core.presentation.generated.resources.Res
+import commercials_manager.core.presentation.generated.resources.login_background
+import org.jetbrains.compose.resources.DrawableResource
 
 /**
  * The single door for every icon in the app (kmp-developer core-presentation
@@ -54,10 +57,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * rename, re-theme, or swap every asset; zero scattered icon literals across
  * features.
  *
- * This app is Material-vector-only (no bundled drawables), so there is no
- * `AppIconRes` companion - every entry is an [ImageVector] from the Material
- * Icons library, exposed as a plain `@Composable` property so the call site
- * doesn't care which flavour an asset is. Names mirror the Material leaf name
+ * Most entries are Material [ImageVector]s exposed as plain `@Composable` vals;
+ * bundled image resources (under composeResources/drawable) live here too as
+ * [DrawableResource]s, drawn via `AppImage`. The door is asset-flavour-agnostic
+ * on purpose - one place to see, rename or swap EVERY asset, icon or image.
+ * Icon names mirror the Material leaf name
  * 1:1 (predictable, collision-free); the semantic meaning of a use lives in
  * each call site's localized `contentDescription`.
  */
@@ -108,4 +112,8 @@ object AppDrawableRepo {
     val timer: ImageVector @Composable get() = Icons.Default.Timer
     val visibility: ImageVector @Composable get() = Icons.Default.Visibility
     val visibilityOff: ImageVector @Composable get() = Icons.Default.VisibilityOff
+
+    // ── Bundled image resources (drawn via AppImage, never AppIcon) ─────────
+    /** Login screen background image (composeResources/drawable/login_background.png). */
+    val loginBackground: DrawableResource get() = Res.drawable.login_background
 }
