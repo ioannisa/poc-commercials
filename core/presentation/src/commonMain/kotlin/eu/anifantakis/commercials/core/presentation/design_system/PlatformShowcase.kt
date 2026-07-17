@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,11 +44,14 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckbox
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxColumn
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppDialog
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppPasswordField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadio
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioColumn
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppSelectionOption
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
@@ -322,6 +326,43 @@ private fun Samples() {
             }
             var rowChecked by remember { mutableStateOf(true) }
             AppCheckboxRow(rowChecked, { rowChecked = it }, label = "Labelled row = whole-row target")
+        }
+
+        SampleSection("Selection groups (legacy GroupBox: titled frame + vertical column)") {
+            Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular)) {
+                var mode by remember { mutableStateOf("half") }
+                AppRadioColumn(
+                    title = "View every",
+                    options = listOf(
+                        AppSelectionOption("hour", "1 Hour"),
+                        AppSelectionOption("half", "Half Hour"),
+                        AppSelectionOption("break", "Break"),
+                    ),
+                    selected = mode,
+                    onSelect = { mode = it },
+                )
+                val basis = remember { mutableStateListOf("all", "customer") }
+                AppCheckboxColumn(
+                    title = "Show based on",
+                    options = listOf(
+                        AppSelectionOption("all", "All"),
+                        AppSelectionOption("program", "Programme"),
+                        AppSelectionOption("customer", "Customer"),
+                        AppSelectionOption("contract", "Contract (locked)", enabled = false),
+                    ),
+                    selected = basis.toSet(),
+                    onToggle = { value, checked -> if (checked) basis.add(value) else basis.remove(value) },
+                )
+            }
+        }
+
+        // A stand-in for the Timetable header's legacy grouped-box toolbar, so
+        // its density/frames can be eyeballed here (the real one is behind
+        // login). Mirrors Row A: real Μηνύματα + Προβολή κάθε boxes, "pending"
+        // stubs for the not-yet-migrated features, compacted via the min-target
+        // override just like the header.
+        SampleSection("Legacy toolbar (mock of the Timetable header)") {
+            LegacyToolbarMock()
         }
 
         SampleSection("AppCard (elevation=${t.cardElevation} border=${t.cardBorderWidth})") {

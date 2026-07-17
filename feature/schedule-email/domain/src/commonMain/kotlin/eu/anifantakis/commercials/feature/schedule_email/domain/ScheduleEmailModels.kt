@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.schedule_email.domain
 
+import androidx.compose.runtime.Immutable
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.Error
@@ -41,6 +42,7 @@ data class EmailLogEntry(
  * Everything the preview/send step needs, assembled by the main dialog and
  * handed to the preview screen (what you see is what goes).
  */
+@Immutable
 data class EmailPreviewRequest(
     val year: Int,
     val month: Int,

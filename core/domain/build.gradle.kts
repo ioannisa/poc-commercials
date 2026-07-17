@@ -19,6 +19,12 @@ kotlin {
             // StateFlow appears in the UserSession contract - pure kotlinx, no
             // platform/UI framework, so RULE 1 still holds.
             api(libs.kotlinx.coroutines.core)
+            // Compose-runtime ANNOTATIONS ONLY (@Immutable/@Stable on value
+            // types the chrome renders, e.g. StationAccess). No @Composable, no
+            // compose-compiler plugin here - the annotation makes the IDE AND
+            // the compiler agree these are stable, which a stability-config
+            // entry (invisible to the IDE) could not.
+            implementation(libs.compose.runtime)
         }
     }
 }

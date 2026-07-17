@@ -1,12 +1,15 @@
 package eu.anifantakis.commercials.feature.user_management.domain
 
+import androidx.compose.runtime.Immutable
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 
 /** One user's grant on one station, as managed by the super admin. */
+@Immutable
 data class UserGrant(val stationId: String, val role: String, val clientCode: String? = null)
 
 /** A managed account as listed by the admin endpoints. */
+@Immutable
 data class ManagedUser(
     val id: Long,
     val username: String,
@@ -26,6 +29,7 @@ data class TempPasswordResult(val tempPassword: String, val emailSent: Boolean)
  * A workstation's token as the admin oversees it: which machine, whose identity
  * it runs as ([username] + [userRole] summary), and when it was last used.
  */
+@Immutable
 data class AdminApiToken(
     val id: Long,
     val workstationName: String,

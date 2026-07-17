@@ -95,6 +95,14 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_VIEW_HOURLY,
     TIMETABLE_VIEW_HALF_HOURLY,
     TIMETABLE_VIEW_BREAK,
+    // The Μηνύματα box's consumption labels (whose contract the armed spot spends).
+    TIMETABLE_CONTRACT_LABEL,
+    TIMETABLE_PRODUCT_LABEL,
+    // Legacy top-toolbar group boxes not yet migrated (shown as "pending" stubs).
+    TIMETABLE_ADD_BREAK_TITLE,
+    TIMETABLE_PROGRAM_TYPES_TITLE,
+    TIMETABLE_BREAK_FOR_TITLE,
+    TIMETABLE_VIEW_BASED_ON_TITLE,
     TIMETABLE_MENU_EDIT,
     TIMETABLE_MENU_REMOVE_LAST,
     TIMETABLE_ADD_SPOT_NAMED,

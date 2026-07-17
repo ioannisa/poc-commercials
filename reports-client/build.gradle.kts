@@ -24,6 +24,17 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
 }
 
+composeCompiler {
+    stabilityConfigurationFiles.add(
+        rootProject.layout.projectDirectory.file("compose_compiler_config.conf")
+    )
+    if (providers.gradleProperty("composeReports").isPresent) {
+        val dir = layout.buildDirectory.dir("compose_reports")
+        reportsDestination.set(dir)
+        metricsDestination.set(dir)
+    }
+}
+
 kotlin {
     android {
         namespace = "eu.anifantakis.commercials.reportsclient"

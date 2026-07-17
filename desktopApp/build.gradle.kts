@@ -52,6 +52,18 @@ tasks.register<JavaExec>("runShowcase") {
     workingDir = rootProject.projectDir
 }
 
+// Dev-only: render the legacy toolbar mock offscreen to PNGs (no window, no
+// login), for reviewing the design. ./gradlew :desktopApp:renderToolbar
+tasks.register<JavaExec>("renderToolbar") {
+    group = "application"
+    description = "Renders the legacy toolbar mock to PNGs (offscreen)"
+    dependsOn("classes")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("eu.anifantakis.commercials.ToolbarRenderMainKt")
+    workingDir = rootProject.projectDir
+    systemProperty("java.awt.headless", "true")
+}
+
 compose.desktop {
     application {
         mainClass = "eu.anifantakis.commercials.MainKt"

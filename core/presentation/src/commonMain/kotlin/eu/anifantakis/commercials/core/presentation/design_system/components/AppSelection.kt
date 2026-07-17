@@ -9,11 +9,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
@@ -81,6 +87,122 @@ fun AppCheckboxRow(
     }
 }
 
+/**
+ * One entry of an [AppRadioColumn] / [AppCheckboxColumn]. [value] is the
+ * identity the group compares and reports; [label] is what the row shows;
+ * [enabled] locks a SINGLE option without disabling the whole group.
+ */
+@Immutable
+data class AppSelectionOption<out T>(
+    val value: T,
+    val label: String,
+    val enabled: Boolean = true,
+)
+
+/**
+ * A single-choice group as the legacy GROUP BOX: the [AppGroupBox] frame
+ * (caption on the border) over a DENSE vertical stack of radio rows - the
+ * shape the old console groups its radios into ("Προβολή κάθε", "Break για…",
+ * "Προβολή Βάσει…"). Deliberately denser than [AppRadioRow]: the legacy
+ * toolbar packs ~20dp per option, so rows here drop the list-item padding,
+ * label with NOTE, and shrink the control itself (see [DenseSelectionRow]).
+ *
+ * The box wraps its widest option (compact, like the original); give the whole
+ * group a width via [modifier] if a fixed column is wanted.
+ */
+@Composable
+fun <T> AppRadioColumn(
+    options: List<AppSelectionOption<T>>,
+    selected: T?,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    enabled: Boolean = true,
+    /** How the rows sit when the box is taller than them (e.g. a stretched band). */
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+) {
+    AppGroupBox(title = title, enabled = enabled, verticalArrangement = verticalArrangement, modifier = modifier) {
+        options.forEach { option ->
+            val rowEnabled = enabled && option.enabled
+            DenseSelectionRow(
+                selected = option.value == selected,
+                onActivate = { onSelect(option.value) },
+                label = option.label,
+                enabled = rowEnabled,
+                role = Role.RadioButton,
+            ) { RadioButton(selected = option.value == selected, onClick = null, enabled = rowEnabled) }
+        }
+    }
+}
+
+/**
+ * The multi-choice sibling of [AppRadioColumn]: the same titled group box, but
+ * checkboxes over a [selected] set. [onToggle] reports the option and its new
+ * checked state; the caller owns the set.
+ */
+@Composable
+fun <T> AppCheckboxColumn(
+    options: List<AppSelectionOption<T>>,
+    selected: Set<T>,
+    onToggle: (value: T, checked: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    enabled: Boolean = true,
+    /** How the rows sit when the box is taller than them (e.g. a stretched band). */
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+) {
+    AppGroupBox(title = title, enabled = enabled, verticalArrangement = verticalArrangement, modifier = modifier) {
+        options.forEach { option ->
+            val rowEnabled = enabled && option.enabled
+            val checked = option.value in selected
+            DenseSelectionRow(
+                selected = checked,
+                onActivate = { onToggle(option.value, !checked) },
+                label = option.label,
+                enabled = rowEnabled,
+                role = Role.Checkbox,
+            ) { Checkbox(checked = checked, onCheckedChange = null, enabled = rowEnabled) }
+        }
+    }
+}
+
+/**
+ * One dense group-box row: whole-row target (proper semantics [role]), but at
+ * the legacy toolbar's pitch. Three density levers vs the labelled-row
+ * components: no min interactive floor (desktop is mouse-first), the M3
+ * control scaled to ~3/4 via a reduced [LocalDensity] (its 20dp glyph has no
+ * size parameter - density is the clean lever, fontScale untouched), and
+ * hairline vertical padding.
+ */
+@Composable
+private fun DenseSelectionRow(
+    selected: Boolean,
+    onActivate: () -> Unit,
+    label: String,
+    enabled: Boolean,
+    role: Role,
+    control: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Row(
+            modifier = Modifier
+                .selectable(selected = selected, onClick = onActivate, enabled = enabled, role = role)
+                .padding(vertical = UIConst.paddingHairline),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val density = LocalDensity.current
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density * DENSE_CONTROL_SCALE, density.fontScale),
+            ) { control() }
+            Spacer(Modifier.width(UIConst.paddingExtraSmall))
+            AppText(label, AppTextStyle.NOTE)
+        }
+    }
+}
+
+/** 20dp M3 control glyph × 0.75 ≈ the legacy console's ~14px radios. */
+private const val DENSE_CONTROL_SCALE = 0.75f
+
 // The BARE controls: on/off x enabled/disabled. Four states, and the disabled
 // -checked one is the one that goes wrong.
 @Preview
@@ -134,4 +256,52 @@ private fun AppCheckboxRowPreview() = AppPreview {
             enabled = false,
         )
     }
+}
+
+// The legacy grouped boxes: a titled frame over a vertical radio column
+// (single-choice) beside a titled checkbox column (multi-choice) - the shape
+// the old console's top toolbar is built from.
+@Preview
+@Composable
+private fun AppSelectionColumnsPreview() = AppPreview {
+    Row(horizontalArrangement = Arrangement.spacedBy(UIConst.paddingRegular)) {
+        AppRadioColumn(
+            title = "View every",
+            options = listOf(
+                AppSelectionOption("hour", "1 Hour"),
+                AppSelectionOption("half", "Half Hour"),
+                AppSelectionOption("break", "Break"),
+            ),
+            selected = "half",
+            onSelect = {},
+        )
+        AppCheckboxColumn(
+            title = "Show based on",
+            options = listOf(
+                AppSelectionOption("all", "All"),
+                AppSelectionOption("program", "Programme"),
+                AppSelectionOption("customer", "Customer"),
+                AppSelectionOption("contract", "Contract (none on this station)", enabled = false),
+            ),
+            selected = setOf("all", "customer"),
+            onToggle = { _, _ -> },
+        )
+    }
+}
+
+// The frame is the whole point, and a hairline outline reads completely
+// differently on the dark palette - previewing only the light one hides that.
+@Preview
+@Composable
+private fun AppSelectionColumnsDarkPreview() = AppPreview(dark = true) {
+    AppRadioColumn(
+        title = "View every",
+        options = listOf(
+            AppSelectionOption("hour", "1 Hour"),
+            AppSelectionOption("half", "Half Hour"),
+            AppSelectionOption("break", "Break"),
+        ),
+        selected = "break",
+        onSelect = {},
+    )
 }

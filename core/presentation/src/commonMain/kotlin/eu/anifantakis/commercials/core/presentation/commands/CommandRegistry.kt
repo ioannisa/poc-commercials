@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.core.presentation.commands
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +32,13 @@ interface CommandRegistration {
  * - LIFO ownership: the most recently registered LIVE owner wins (a dialog
  *   temporarily overrides its parent); on dispose the previous registration
  *   becomes active again. Deterministic, not accidental.
+ *
+ * `@Stable`: a DI singleton whose identity never changes for the app's life;
+ * all observable change flows through [commandStates], not the instance itself.
+ * The annotation keeps [RegisterAppCommand] from treating it as an unstable
+ * param.
  */
+@Stable
 class CommandRegistry {
 
     private class Entry(

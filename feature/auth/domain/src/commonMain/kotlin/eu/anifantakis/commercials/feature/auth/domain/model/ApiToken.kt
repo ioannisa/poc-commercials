@@ -1,6 +1,9 @@
 package eu.anifantakis.commercials.feature.auth.domain.model
 
+import androidx.compose.runtime.Immutable
+
 /** A personal access token as its owner lists it - never the secret itself. */
+@Immutable
 data class ApiToken(
     val id: Long,
     val workstationName: String,

@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.core.domain.auth
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 /**
@@ -10,7 +11,11 @@ import kotlinx.serialization.Serializable
  * Domain vocabulary: it appears in the session contract [UserSession] that the
  * presentation layer depends on, and the data layer persists it inside its
  * `StoredSession` (hence `@Serializable` - a pure-Kotlin, non-platform trait).
+ *
+ * `@Immutable`: a read-only value class the chrome renders directly, so the
+ * annotation lets Compose (and the IDE) treat it as stable / skippable.
  */
+@Immutable
 @Serializable
 data class StationAccess(
     val id: String,

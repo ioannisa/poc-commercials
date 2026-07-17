@@ -6,6 +6,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(projects.core.domain)
+            // Compose-runtime annotations only (@Immutable on
+            // EmailPreviewRequest); no @Composable / compose-compiler here.
+            implementation(libs.compose.runtime)
         }
     }
 }
