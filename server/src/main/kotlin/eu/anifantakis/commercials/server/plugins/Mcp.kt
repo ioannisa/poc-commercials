@@ -12,16 +12,27 @@ import io.modelcontextprotocol.kotlin.sdk.server.mcp
 import org.koin.ktor.ext.inject
 
 /**
- * Mounts the Model Context Protocol server at `/mcp` over SSE, INSIDE the
- * bearer-auth block: each MCP session runs as the authenticated user, so every
- * tool is grant-scoped exactly like the REST routes. [buildCommercialsMcpServer]
- * is called per session with the caller identity taken from the SSE call's
- * bearer principal.
+ * Mounts the Model Context Protocol server INSIDE the bearer-auth block, on
+ * two transports sharing the one tool core:
+ *
+ * - `/mcp` - classic SSE (the original mount). Serves `mcp-remote` bridges and
+ *   any static-PAT client; unchanged behaviour.
+ * - `/mcp/http` - Streamable HTTP (see McpStreamable.kt). The transport native
+ *   connectors (claude.ai, ChatGPT, Gemini, ...) speak; works with a PAT
+ *   directly or with an OAuth token once `publicBaseUrl` enables the AS.
+ *
+ * Each MCP session runs as the authenticated user, so every tool is
+ * grant-scoped exactly like the REST routes. [buildCommercialsMcpServer] is
+ * called per session with the caller identity taken from the bearer principal.
  *
  * DNS-rebinding protection stays on with the SDK's localhost defaults (fine for
- * local/dev clients such as the MCP Inspector). A remote deployment should pass
- * its public host via `allowedHosts` - or disable it, since this API is
- * bearer-authenticated and the cookie-based attack it mitigates does not apply.
+ * local/dev clients such as the MCP Inspector). A remote deployment lists its
+ * public host(s) in server.yaml (mcpAllowedHosts). Put both endpoints behind
+ * TLS - the bearer token travels over the wire.
+ *
+ * Both subtrees carry [McpAuthChallenge]: when `publicBaseUrl` is set, their
+ * 401s advertise the RFC 9728 resource metadata that native connectors need to
+ * discover the OAuth server (no-op otherwise).
  */
 fun Application.configureMcp() {
     val services by inject<McpToolServices>()
@@ -31,13 +42,17 @@ fun Application.configureMcp() {
 
     routing {
         authenticate(AUTH_BEARER) {
-            // allowedHosts = null in dev keeps the SDK's localhost defaults; a
-            // remote deployment lists its public host(s) in server.yaml
-            // (mcpAllowedHosts) so clients can reach /mcp through the DNS-rebinding
-            // guard. Put /mcp behind TLS - the bearer token travels over the wire.
-            mcp(path = "/mcp", allowedHosts = registry.mcpAllowedHosts) {
-                buildCommercialsMcpServer(McpCaller.of(call.authUser()), services)
+            route("/mcp") {
+                install(McpAuthChallenge) {
+                    resourceMetadataUrl = registry.publicBaseUrl
+                        ?.let { "$it/.well-known/oauth-protected-resource/mcp" }
+                }
+                mcp(allowedHosts = registry.mcpAllowedHosts) {
+                    buildCommercialsMcpServer(McpCaller.of(call.authUser()), services)
+                }
             }
+
+            mcpStreamableRoutes("/mcp/http", services, registry, McpStreamableSessions())
         }
     }
 }
