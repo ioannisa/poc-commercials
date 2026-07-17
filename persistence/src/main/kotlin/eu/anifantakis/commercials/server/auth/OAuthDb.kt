@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.server.auth
 
 import eu.anifantakis.commercials.server.scheduler.CentralDb
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.sql.Connection
 
@@ -159,6 +160,19 @@ class OAuthDb(private val db: CentralDb) {
             }
         }
         return RegisteredClient(clientId, clientSecret)
+    }
+
+    /**
+     * Constant-time check of a presented `client_secret` against [client]'s
+     * stored hash. Lives here (not the route layer) because [tokenHash] is
+     * persistence-internal - hashing stays in one module.
+     */
+    fun clientSecretMatches(client: OAuthClient, presentedSecret: String): Boolean {
+        val stored = client.secretHash ?: return false
+        return MessageDigest.isEqual(
+            tokenHash(presentedSecret).encodeToByteArray(),
+            stored.encodeToByteArray(),
+        )
     }
 
     fun findClient(clientId: String): OAuthClient? =

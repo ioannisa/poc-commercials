@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.server.routes
 
 import eu.anifantakis.commercials.mailer.renderTempPasswordEmail
 import eu.anifantakis.commercials.server.auth.AuthDb
+import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.requireAdmin
@@ -60,7 +61,24 @@ data class AdminApiTokenDto(
 data class ReassignApiTokenRequest(val workstation: String, val targetUserId: Long)
 
 @Serializable
-data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int)
+data class McpSettingsDto(
+    val enabled: Boolean,
+    val tokenCount: Int,
+    /** Live OAuth grants (native-connector logins), counted separately from PATs. */
+    val oauthGrantCount: Int = 0,
+)
+
+/** One OAuth grant (a native MCP connector a user logged in from), for admin oversight. */
+@Serializable
+data class AdminOAuthTokenDto(
+    val id: Long,
+    val userId: Long,
+    val username: String,
+    val clientName: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+    val refreshExpiresAt: String,
+)
 
 @Serializable
 data class SetMcpEnabledRequest(val enabled: Boolean)
@@ -73,7 +91,7 @@ data class SetGrantsRequest(val grants: List<GrantDto>)
  * from server.yaml). Validation failures (bad username/password/grants,
  * duplicates, protected super-admin row) surface as 400 via StatusPages.
  */
-fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
+fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry) {
     route("/api/admin/users") {
 
         /**
@@ -245,10 +263,50 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
         }
     }
 
+    // Admin oversight of OAuth grants: every native-connector login (which
+    // user, which client app, when last used), each revocable. The kill
+    // switch below covers these too - findByOAuthToken shares the gate.
+    route("/api/admin/oauth-tokens") {
+        /**
+         * List every OAuth grant with its owner and the client application's name.
+         *
+         * Tag: MCP
+         */
+        get {
+            if (!call.requireAdmin()) return@get
+            val grants = withContext(Dispatchers.IO) { oauthDb.listAllTokens() }
+            call.respond(
+                grants.map {
+                    AdminOAuthTokenDto(
+                        id = it.id,
+                        userId = it.userId,
+                        username = it.username,
+                        clientName = it.clientName,
+                        createdAt = it.createdAt,
+                        lastUsedAt = it.lastUsedAt,
+                        refreshExpiresAt = it.refreshExpiresAt,
+                    )
+                }
+            )
+        }
+        /**
+         * Revoke an OAuth grant by id (the connector must re-authenticate).
+         *
+         * Tag: MCP
+         */
+        delete("/{id}") {
+            if (!call.requireAdmin()) return@delete
+            val id = call.userIdParam() ?: return@delete
+            val revoked = withContext(Dispatchers.IO) { oauthDb.revokeTokenById(id) }
+            if (revoked) call.respond(mapOf("status" to "revoked"))
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such grant"))
+        }
+    }
+
     // The global MCP kill switch + a token-count status.
     route("/api/admin/mcp-settings") {
         /**
-         * Return the global MCP enabled flag and the active token count.
+         * Return the global MCP enabled flag and the active PAT + OAuth grant counts.
          *
          * Tag: MCP
          */
@@ -256,7 +314,8 @@ fun Route.adminRoutes(authDb: AuthDb, registry: StationRegistry) {
             if (!call.requireAdmin()) return@get
             val enabled = withContext(Dispatchers.IO) { authDb.isMcpEnabled() }
             val count = withContext(Dispatchers.IO) { authDb.apiTokenCount() }
-            call.respond(McpSettingsDto(enabled, count))
+            val oauthCount = withContext(Dispatchers.IO) { oauthDb.oauthTokenCount() }
+            call.respond(McpSettingsDto(enabled, count, oauthCount))
         }
         /**
          * Toggle the global MCP kill switch on or off.

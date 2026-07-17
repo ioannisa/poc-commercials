@@ -1,10 +1,12 @@
 package eu.anifantakis.commercials.server.plugins
 
 import eu.anifantakis.commercials.server.auth.AuthDb
+import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.migration.migrationRoutes
 import eu.anifantakis.commercials.server.routes.authRoutes
+import eu.anifantakis.commercials.server.routes.oAuthRoutes
 import eu.anifantakis.commercials.server.routes.emailRoutes
 import eu.anifantakis.commercials.server.routes.stationAdminRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
@@ -49,6 +51,7 @@ fun Application.configureRouting() {
     // route functions stay plain and easy to test with fakes.
     val centralDb by inject<CentralDb>()
     val authDb by inject<AuthDb>()
+    val oauthDb by inject<OAuthDb>()
     val registry by inject<StationRegistry>()
     val migrationService by inject<MigrationService>()
 
@@ -97,10 +100,17 @@ fun Application.configureRouting() {
 
         authRoutes(authDb, registry)
 
+        // The built-in OAuth 2.1 AS for native MCP connectors - mounted only
+        // when server.yaml sets publicBaseUrl (it is the issuer). Open routes
+        // by protocol design: discovery + registration + the login page.
+        if (registry.publicBaseUrl != null) {
+            oAuthRoutes(oauthDb, authDb, registry)
+        }
+
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
             // User management + legacy migration (super administrator only)
-            adminRoutes(authDb, registry)
+            adminRoutes(authDb, oauthDb, registry)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })
             stationAdminRoutes(registry, authDb)
 
