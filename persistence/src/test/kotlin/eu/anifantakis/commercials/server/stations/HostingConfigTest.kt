@@ -284,4 +284,61 @@ class HostingConfigTest {
     ) {
         assertFailsWith<IllegalArgumentException> { loadHostingConfig() }
     }
+
+    // ─────────────────────────────────────── publicBaseUrl (OAuth issuer) ──
+
+    @Test
+    fun publicBaseUrlDefaultsToNullWhichKeepsOAuthOff() = withStationsYaml(
+        """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
+        central:
+          jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
+          username: test
+          password: test
+        """.trimIndent()
+    ) {
+        val cfg = loadHostingConfig()
+        assertNull(cfg.publicBaseUrl)
+        assertEquals(false, cfg.behindReverseProxy)
+        assertNull(StationRegistry(cfg).publicBaseUrl)
+    }
+
+    /** The registry exposure is the issuer - a trailing slash would leak into every derived endpoint URL. */
+    @Test
+    fun publicBaseUrlIsTrimmedOfTrailingSlash() = withStationsYaml(
+        """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
+        central:
+          jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
+          username: test
+          password: test
+        publicBaseUrl: "https://mcp.example.gr/"
+        behindReverseProxy: true
+        """.trimIndent()
+    ) {
+        val cfg = loadHostingConfig()
+        val registry = StationRegistry(cfg)
+        assertEquals("https://mcp.example.gr", registry.publicBaseUrl)
+        assertTrue(registry.behindReverseProxy)
+    }
+
+    @Test
+    fun rejectsPublicBaseUrlWithoutHttpScheme() = withStationsYaml(
+        """
+        superAdmin:
+          username: root-admin
+          password: test-admin-pass
+        central:
+          jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central"
+          username: test
+          password: test
+        publicBaseUrl: "mcp.example.gr"
+        """.trimIndent()
+    ) {
+        assertFailsWith<IllegalArgumentException> { loadHostingConfig() }
+    }
 }
