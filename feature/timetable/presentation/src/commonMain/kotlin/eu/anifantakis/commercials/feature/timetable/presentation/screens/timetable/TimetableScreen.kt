@@ -7,7 +7,9 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toStringKey
+import androidx.compose.ui.layout.ContentScale
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppAsyncImage
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
@@ -561,6 +563,18 @@ private fun KeyboardEnabledHeader(
                     label = Strings[if (state.showSpotTimes) StringKey.TIMETABLE_CD_SHOW_COUNTS else StringKey.TIMETABLE_CD_SHOW_TIMES],
                     icon = if (state.showSpotTimes) AppDrawableRepo.numbers else AppDrawableRepo.timer,
                     onClick = { onIntent(TimetableIntent.ToggleShowTimes) },
+                )
+
+                // The selected station's brand mark (like the legacy console's
+                // top-right logo). The repo entry resolves url + authenticated
+                // transport; the state's selectedStation keeps it in sync with
+                // the selector below. Fixed slot: Fit never crops a wordmark,
+                // and no logo (404) simply leaves the slot empty.
+                AppAsyncImage(
+                    source = state.selectedStation?.let { AppDrawableRepo.stationLogo(it.id) },
+                    contentDescription = state.selectedStation?.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(width = 132.dp, height = 34.dp),
                 )
 
                 // Station switcher (dropdown only when the user can access

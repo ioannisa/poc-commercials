@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import eu.anifantakis.commercials.core.presentation.design_system.components.LocalAuthImageHttpClient
+import eu.anifantakis.commercials.core.presentation.design_system.components.LocalServerBaseUrl
+import eu.anifantakis.commercials.core.presentation.design_system.components.RemoteImage
 import commercials_manager.core.presentation.generated.resources.Res
 import commercials_manager.core.presentation.generated.resources.login_background_evening
 import commercials_manager.core.presentation.generated.resources.login_background_morning
@@ -71,6 +74,21 @@ import kotlin.time.Clock
  * Icon names mirror the Material leaf name
  * 1:1 (predictable, collision-free); the semantic meaning of a use lives in
  * each call site's localized `contentDescription`.
+ *
+ * Entries are MINI-REPOSITORIES: an entry may embed selection logic and decide
+ * WHICH asset answers a semantic name (the time-of-day [loginBackground]).
+ * Two wings, one door, split by what an entry can PROMISE:
+ *
+ * - LOCAL wing - sync + total + dependency-free: returns [ImageVector] /
+ *   [DrawableResource], drawn via `AppIcon` / `AppImage`. Can never load,
+ *   fail, or be absent - which is exactly what those renderers assume.
+ * - REMOTE wing - anything fetched over the network (auth or not), which can
+ *   therefore be loading / missing / failed: a `@Composable fun` returning
+ *   [RemoteImage] (absolute url + transport, resolved from
+ *   [LocalServerBaseUrl] / [LocalAuthImageHttpClient]), rendered via
+ *   `AppAsyncImage(source = …)` whose placeholder slots own those states.
+ *   NEVER a url string pretending to be a drawable - the type says which
+ *   renderer (and which failure model) an entry belongs to.
  */
 object AppDrawableRepo {
 
@@ -145,4 +163,25 @@ object AppDrawableRepo {
             else -> Res.drawable.login_background_night
         }
     }
+
+    // ── Remote entries (rendered via AppAsyncImage, never AppIcon/AppImage) ─
+
+    /**
+     * The logo the server keeps for [stationId] (`/api/reports/logo`, an
+     * auth-gated endpoint: bearer + station grant) - or null until the app
+     * root has provided [LocalServerBaseUrl]. The id is embedded IN the url
+     * on purpose: Coil keys its cache by the url string, so the embedded id
+     * is what gives every station its own cache entry (the client's
+     * auto-stamped `?station=` lands after the key is computed - too late).
+     * The authenticated client rides along from [LocalAuthImageHttpClient];
+     * an `AppAsyncImage` call site may still override it.
+     */
+    @Composable
+    fun stationLogo(stationId: String): RemoteImage? =
+        LocalServerBaseUrl.current?.let { base ->
+            RemoteImage(
+                url = base.trimEnd('/') + "/api/reports/logo?station=" + stationId,
+                httpClient = LocalAuthImageHttpClient.current,
+            )
+        }
 }

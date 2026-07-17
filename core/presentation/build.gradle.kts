@@ -23,6 +23,10 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.svg)
             implementation(libs.coil.network.ktor3)
+            // api, not implementation: AppAsyncImage's optional authenticated
+            // loading takes an HttpClient on its public signature, so feature
+            // presentations need the type to pass their client through.
+            api(libs.ktor.client.core)
             // AppText rich-text: LRU cache for parsed HTML (KMP artifact)
             implementation(libs.androidx.collection)
         }

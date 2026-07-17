@@ -29,8 +29,12 @@ import eu.anifantakis.commercials.grids.LocalGridTextAnnotator
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import eu.anifantakis.commercials.core.data.config.AppConfig
+import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.data.session.SessionKeepAlive
+import eu.anifantakis.commercials.core.presentation.design_system.components.LocalAuthImageHttpClient
+import eu.anifantakis.commercials.core.presentation.design_system.components.LocalServerBaseUrl
 
 @Composable
 fun App() {
@@ -106,12 +110,21 @@ fun App() {
                     // the JVM - nothing promises that on wasm, and a window resize
                     // recomposes this. Pin the instance and the question goes away.
                     val annotate = remember(glyphFallback) { glyphFallback::annotateOrNull }
+                    // First-party TRANSPORT FACTS, DIP-without-DI: presentation
+                    // declared the slots (LocalAuthImageHttpClient / LocalServerBaseUrl);
+                    // the app shell - the one layer that sees the data layer - fills
+                    // them, once. WHAT lives at which endpoint is deliberately NOT
+                    // this file's business: image urls are decided by
+                    // AppDrawableRepo's remote entries. Nothing enters Koin for this.
+                    val apiHttpClient = koinInject<ApiHttpClient>()
                     CompositionLocalProvider(
                         LocalGridInput provides GridInputConfig(
                             minScale = if (interaction.supportsTouchGestures) 1.3f else 1f,
                             handleSlop = if (interaction.supportsTouchGestures) 14.dp else 0.dp,
                         ),
                         LocalGridTextAnnotator provides annotate,
+                        LocalAuthImageHttpClient provides apiHttpClient.client,
+                        LocalServerBaseUrl provides AppConfig.require().serverBaseUrl,
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             NavigationRoot()
