@@ -216,6 +216,23 @@ data class HostingConfig(
      * server; executing authenticated routes still requires a bearer token.
      */
     val swagger: Boolean = false,
+    /**
+     * Public origin of this server (e.g. `"https://mcp.example.gr"`) - the
+     * OAuth 2.1 `issuer`. Setting it MOUNTS the OAuth endpoints (under
+     * `/oauth` and the `/.well-known` discovery documents) and the 401
+     * challenge header that native MCP connectors (claude.ai, ChatGPT,
+     * Gemini, ...) need. LEAVE UNSET to keep OAuth off entirely - PAT access
+     * still works. For local testing set `"http://localhost:8080"`.
+     * No trailing slash.
+     */
+    val publicBaseUrl: String? = null,
+    /**
+     * Set true ONLY when a reverse proxy terminates TLS in front of this
+     * server: installs XForwardedHeaders so rate limiting and logs see the
+     * real client IP instead of the proxy's. NEVER enable it without a proxy -
+     * forwarding headers are client-spoofable when nothing strips them.
+     */
+    val behindReverseProxy: Boolean = false,
 ) {
     /** The super admin, guaranteed by [loadHostingConfig]'s validation. */
     val admin: SuperAdminConfig get() = requireNotNull(superAdmin) { "superAdmin missing - config not loaded via loadHostingConfig?" }
@@ -276,6 +293,15 @@ fun loadHostingConfig(): HostingConfig {
         "session.days must be > 0 in '${file.path}' when session.expiration is enabled (was ${parsed.session.days})"
     }
 
+    // publicBaseUrl is the OAuth issuer - it must be an http(s) origin, and a
+    // trailing slash would leak into every derived endpoint URL (trimmed in
+    // StationRegistry, but reject junk outright here).
+    parsed.publicBaseUrl?.let { url ->
+        require(url.startsWith("http://") || url.startsWith("https://")) {
+            "publicBaseUrl must start with http:// or https:// in '${file.path}' (was '$url')"
+        }
+    }
+
     val duplicateGroups = parsed.groups.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicateGroups.isEmpty()) { "Duplicate group ids in '${file.path}': $duplicateGroups" }
 
@@ -322,7 +348,9 @@ fun loadHostingConfig(): HostingConfig {
     }
     log.info(
         "Hosting config from '${file.path}': central=$centralTarget (maxPool=$centralPool), " +
-            "$sessionPolicy, ${parsed.groups.size} group(s) " +
+            "$sessionPolicy, " +
+            (parsed.publicBaseUrl?.let { "publicBaseUrl=$it (OAuth on), " } ?: "OAuth off (no publicBaseUrl), ") +
+            "${parsed.groups.size} group(s) " +
             parsed.groups.joinToString(prefix = "[", postfix = "]") { g ->
                 "${g.id}(maxPool=${resolveMaxPoolSize(g.maxPoolSize, parsed.maxPoolSize, DEFAULT_GROUP_MAX_POOL)}, " +
                     "stations=${g.stations.joinToString("/") { it.id }})"
@@ -377,6 +405,15 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** Serve the OpenAPI/Swagger UI at /swagger (server.yaml `swagger: true`). */
     val swaggerEnabled: Boolean = hosting.swagger
+
+    /**
+     * The OAuth issuer / public origin (server.yaml `publicBaseUrl`), trailing
+     * slash trimmed. Null = OAuth endpoints are not mounted (PATs still work).
+     */
+    val publicBaseUrl: String? = hosting.publicBaseUrl?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+
+    /** Install XForwardedHeaders (server.yaml `behindReverseProxy: true`). */
+    val behindReverseProxy: Boolean = hosting.behindReverseProxy
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

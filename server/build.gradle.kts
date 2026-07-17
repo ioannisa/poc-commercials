@@ -30,6 +30,10 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.sse)   // SSE transport for the MCP endpoint
+    // Internet hardening: per-IP throttling on auth/OAuth endpoints + real
+    // client IPs when TLS terminates at a reverse proxy (gated in server.yaml)
+    implementation(libs.ktor.server.rate.limit)
+    implementation(libs.ktor.server.forwarded.header)
     // OpenAPI/Swagger UI: compiler-generated spec (dev-only, gated in Routing.kt).
     // routing-openapi provides the generation + .describe {}; swagger serves the UI.
     implementation(libs.ktor.server.swagger)
