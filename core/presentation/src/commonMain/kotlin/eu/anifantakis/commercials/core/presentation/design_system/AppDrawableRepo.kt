@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
@@ -102,6 +103,8 @@ object AppDrawableRepo {
     val keyboardArrowRight: ImageVector @Composable get() = Icons.AutoMirrored.Filled.KeyboardArrowRight
     val logout: ImageVector @Composable get() = Icons.AutoMirrored.Filled.Logout
     val openInNew: ImageVector @Composable get() = Icons.AutoMirrored.Filled.OpenInNew
+    /** "Dock back into the app" - the AI window's attach action. */
+    val closeFullscreen: ImageVector @Composable get() = Icons.Default.CloseFullscreen
 
     // ── Material Filled ────────────────────────────────────────────────────
     val add: ImageVector @Composable get() = Icons.Default.Add

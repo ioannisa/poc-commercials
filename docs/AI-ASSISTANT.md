@@ -61,13 +61,16 @@ user holding full (NORMAL_USER) access on it - viewer roles never see the
 mutation tools at all. Every execution goes through the same audit log as
 the MCP transports.
 
-The chat is a **companion**: on Desktop it opens as a separate, resizable,
-**always-on-top OS window** (the main window keeps its full width - a small
-display never squeezes the schedule, and the chat can live on a second
-monitor); on the Web it docks as a drag-resizable side panel whose width is
-capped so the main content never drops below its working minimum. Either way
-the schedule stays visible and live beside it, and the conversation survives
-closing/reopening the companion and navigating. It is toggled by the **sparkles
+The chat is a **companion** hosted as a slide-over OVERLAY: it covers part
+of the app instead of squeezing it, so the content never reflows and
+whatever the panel does not cover keeps taking clicks. Drag its inner edge
+to resize (width persists), use the **collapse** chevron to park it into a
+slim mid-edge tab (one click re-expands exactly where it was), or close it
+with the X (the sparkles toolbar button re-opens it). On **Desktop** a
+"detach" header action additionally moves the chat into a separate,
+resizable, always-on-top OS window - park it on a second monitor - and the
+window's "attach" action docks it back; the choice persists. The
+conversation survives every hop, collapse and navigation. It is toggled by the **sparkles
 button** in the main-screen toolbar (next to the Preferences gear) or opened
 from Preferences → Assistant - both visible ONLY when the server has at least
 one provider key. **Enter sends** (Shift+Enter inserts a newline). Assistant

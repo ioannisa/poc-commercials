@@ -12,6 +12,9 @@ interface AiChatPreferences {
     var model: String
     var panelWidthDp: Int
 
+    /** DESKTOP: the companion lives in its own OS window (detached) vs the in-app overlay. */
+    var detached: Boolean
+
     companion object {
         const val DEFAULT_PANEL_WIDTH_DP = 400
     }

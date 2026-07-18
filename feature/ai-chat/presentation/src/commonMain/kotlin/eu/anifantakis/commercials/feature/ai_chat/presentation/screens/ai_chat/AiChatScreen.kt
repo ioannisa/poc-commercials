@@ -418,11 +418,25 @@ fun AiChatScreenRoot(
     providers: () -> List<AiChatProviderOption>,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Overlay hosting: slide the panel away, keeping a re-expand tab. */
+    onCollapse: (() -> Unit)? = null,
+    /** Desktop overlay: move the chat into its own OS window. */
+    onDetach: (() -> Unit)? = null,
+    /** Desktop window: dock the chat back into the in-app overlay. */
+    onAttach: (() -> Unit)? = null,
     viewModel: AiChatViewModel = koinViewModel(),
 ) {
     val catalog = providers()
     LaunchedEffect(catalog) { viewModel.onAction(AiChatIntent.Init(catalog)) }
-    AiChatScreen(state = viewModel.state, onIntent = viewModel::onAction, onClose = onClose, modifier = modifier)
+    AiChatScreen(
+        state = viewModel.state,
+        onIntent = viewModel::onAction,
+        onClose = onClose,
+        modifier = modifier,
+        onCollapse = onCollapse,
+        onDetach = onDetach,
+        onAttach = onAttach,
+    )
 }
 
 @Composable
@@ -431,6 +445,9 @@ private fun AiChatScreen(
     onIntent: (AiChatIntent) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onCollapse: (() -> Unit)? = null,
+    onDetach: (() -> Unit)? = null,
+    onAttach: (() -> Unit)? = null,
 ) {
     val listState = rememberLazyListState()
     // Keep the newest turn in view as the conversation grows.
@@ -446,6 +463,20 @@ private fun AiChatScreen(
             horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
         ) {
             AppText(Strings[StringKey.AI_CHAT_TITLE], AppTextStyle.SECTION_TITLE, modifier = Modifier.weight(1f))
+            onDetach?.let {
+                AppIconButton(
+                    label = Strings[StringKey.AI_CHAT_DETACH],
+                    icon = AppDrawableRepo.openInNew,
+                    onClick = it,
+                )
+            }
+            onAttach?.let {
+                AppIconButton(
+                    label = Strings[StringKey.AI_CHAT_ATTACH],
+                    icon = AppDrawableRepo.closeFullscreen,
+                    onClick = it,
+                )
+            }
             AppIconButton(
                 label = Strings[StringKey.AI_CHAT_HISTORY],
                 icon = AppDrawableRepo.history,
@@ -457,6 +488,13 @@ private fun AiChatScreen(
                 variant = AppButtonVariant.TEXT,
                 enabled = !state.busy && state.messages.isNotEmpty(),
             )
+            onCollapse?.let {
+                AppIconButton(
+                    label = Strings[StringKey.AI_CHAT_COLLAPSE],
+                    icon = AppDrawableRepo.keyboardArrowRight,
+                    onClick = it,
+                )
+            }
             AppIconButton(
                 label = Strings[StringKey.COMMON_CLOSE],
                 icon = AppDrawableRepo.close,

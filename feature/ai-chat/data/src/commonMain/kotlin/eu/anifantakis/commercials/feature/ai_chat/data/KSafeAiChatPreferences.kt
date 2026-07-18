@@ -14,4 +14,5 @@ class KSafeAiChatPreferences(private val ksafe: KSafe) : AiChatPreferences {
     override var provider: String by ksafe("", key = "ai_chat_provider")
     override var model: String by ksafe("", key = "ai_chat_model")
     override var panelWidthDp: Int by ksafe(AiChatPreferences.DEFAULT_PANEL_WIDTH_DP, key = "ai_chat_panel_width")
+    override var detached: Boolean by ksafe(false, key = "ai_chat_detached")
 }

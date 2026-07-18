@@ -5,9 +5,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -176,9 +174,10 @@ fun NavigationRoot() {
     }
 
     ApplicationScaffold { scaffoldPadding ->
+        // The AI companion OVERLAYS the content (Box layering) instead of
+        // squeezing it: the app below never reflows, and whatever the panel
+        // does not cover keeps taking clicks.
         BoxWithConstraints(Modifier.padding(scaffoldPadding)) {
-        Row {
-            Box(Modifier.weight(1f)) {
         NavDisplay(
             backStack = navigator.backStack,
             onBack = {
@@ -247,19 +246,18 @@ fun NavigationRoot() {
                 databasesEntries(navigator)
             }
         )
-            }
 
-            // The companion: an always-on-top OS window on desktop, a docked
-            // side panel on the web (see AiChatCompanionHost). Catalog emptied
-            // by a server.yaml change or logout hides it even while open.
-            val aiAvailable = remember(authRevision) { authSession.isLoggedIn && authSession.aiChatProviders.isNotEmpty() }
-            AiChatCompanionHost(
-                visible = showAiChat && aiAvailable,
-                windowWidth = this@BoxWithConstraints.maxWidth,
-                providers = { authSession.aiChatProviders },
-                onClose = { showAiChat = false },
-            )
-        }
+        // The companion, as the TOP layer: an in-app slide-over on every
+        // platform, plus detach-to-OS-window on desktop (AiChatCompanionHost).
+        // Catalog emptied by a server.yaml change or logout hides it even
+        // while open.
+        val aiAvailable = remember(authRevision) { authSession.isLoggedIn && authSession.aiChatProviders.isNotEmpty() }
+        AiChatCompanionHost(
+            visible = showAiChat && aiAvailable,
+            windowWidth = this@BoxWithConstraints.maxWidth,
+            providers = { authSession.aiChatProviders },
+            onClose = { showAiChat = false },
+        )
         }
     }
 }

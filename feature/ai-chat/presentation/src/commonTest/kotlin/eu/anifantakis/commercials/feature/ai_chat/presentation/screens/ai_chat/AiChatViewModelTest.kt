@@ -115,6 +115,7 @@ class AiChatViewModelTest {
         override var provider: String = "",
         override var model: String = "",
         override var panelWidthDp: Int = AiChatPreferences.DEFAULT_PANEL_WIDTH_DP,
+        override var detached: Boolean = false,
     ) : AiChatPreferences
 
     private class FakeAiChatRepository(

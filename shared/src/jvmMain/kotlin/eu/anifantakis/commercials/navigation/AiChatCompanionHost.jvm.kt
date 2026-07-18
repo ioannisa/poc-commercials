@@ -4,7 +4,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -20,19 +23,14 @@ import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.A
 import org.koin.compose.koinInject
 
 /**
- * Desktop: the companion is a REAL, resizable, always-on-top OS window - the
- * main window keeps its full width (a small display never squeezes the
- * schedule), and the chat can be parked anywhere, second monitor included.
- *
- * [DialogWindow] (not `Window`) deliberately: it is composable from INSIDE
- * the app's composition, so the theme/locale/Koin CompositionLocals - and
- * crucially the ViewModelStoreOwner - flow straight in: the conversation is
- * the SAME one the docked variant would show, and it survives closing the
- * window. Width is seeded from (and persisted to) the same silent preference
- * the docked panel uses. [windowWidth] is unused here - the OS window does
- * not take space from the main content.
+ * Desktop: BOTH companion forms, the user's pick persisted. Default is the
+ * in-app OVERLAY (same as the web) with a "detach" header action; detaching
+ * moves the chat into a separate, resizable, always-on-top, MODELESS OS
+ * window (the main window stays fully interactive), whose "attach" action
+ * docks it back. The conversation survives every hop - the ViewModel lives
+ * at root scope, both hosts render the same one.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 internal actual fun AiChatCompanionHost(
     visible: Boolean,
@@ -40,8 +38,23 @@ internal actual fun AiChatCompanionHost(
     providers: () -> List<AiChatProviderOption>,
     onClose: () -> Unit,
 ) {
-    if (!visible) return
     val prefs = koinInject<AiChatPreferences>()
+    var detached by remember { mutableStateOf(prefs.detached) }
+
+    if (!detached) {
+        OverlayAiChatPanel(
+            visible = visible,
+            windowWidth = windowWidth,
+            providers = providers,
+            onClose = onClose,
+            onDetach = {
+                detached = true
+                prefs.detached = true
+            },
+        )
+        return
+    }
+    if (!visible) return
     val state = rememberDialogState(size = DpSize(prefs.panelWidthDp.dp, 700.dp))
     DialogWindow(
         onCloseRequest = {
@@ -61,6 +74,11 @@ internal actual fun AiChatCompanionHost(
                 providers = providers,
                 onClose = onClose,
                 modifier = Modifier.fillMaxSize(),
+                onAttach = {
+                    state.size.width.value.toInt().takeIf { it > 0 }?.let { prefs.panelWidthDp = it }
+                    detached = false
+                    prefs.detached = false
+                },
             )
         }
     }

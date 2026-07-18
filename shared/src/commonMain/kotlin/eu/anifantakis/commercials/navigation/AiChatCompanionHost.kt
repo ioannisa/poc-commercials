@@ -1,21 +1,29 @@
 package eu.anifantakis.commercials.navigation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -24,8 +32,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
+import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
 import eu.anifantakis.commercials.core.presentation.design_system.mediumSpec
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.AiChatScreenRoot
 import org.koin.compose.koinInject
@@ -33,15 +45,17 @@ import org.koin.compose.koinInject
 /**
  * HOW the AI companion is hosted is a platform decision:
  *
- * - **Desktop (jvm)**: a separate, resizable, ALWAYS-ON-TOP OS window. The
- *   main window keeps its full width - on a small display the schedule is
- *   never squeezed, and the chat can sit on a second monitor.
- * - **Web (and the compile-only mobile targets)**: a docked, drag-resizable
- *   side panel - browsers have no OS windows to give us.
+ * - **Web (and the compile-only mobile targets)**: an OVERLAY panel that
+ *   slides in over the content from the end edge - it COVERS instead of
+ *   squeezing, so the app never reflows; the uncovered part stays fully
+ *   interactive, and a collapse chevron parks the panel into a slim
+ *   re-expand tab without losing anything.
+ * - **Desktop (jvm)**: the same overlay by default, PLUS a "detach" header
+ *   action that moves the chat into a separate, resizable, always-on-top OS
+ *   window (and "attach" brings it back). The choice persists.
  *
- * Rendered from [NavigationRoot]'s content row; [windowWidth] is that row's
- * max width, which the docked variant uses to cap its own width so the main
- * content never drops below its working minimum.
+ * Rendered as the TOP layer of [NavigationRoot]'s content box; [windowWidth]
+ * caps the drag-resize so some app is always visible beside the panel.
  */
 @Composable
 internal expect fun AiChatCompanionHost(
@@ -51,69 +65,103 @@ internal expect fun AiChatCompanionHost(
     onClose: () -> Unit,
 )
 
-/** The docked variant's drag-resize bounds. */
+/** The overlay's drag-resize bounds. */
 internal val AI_PANEL_MIN_WIDTH = 320.dp
-internal val AI_PANEL_MAX_WIDTH = 720.dp
+
+/** How much of the app must stay visible (and clickable) beside the overlay. */
+internal val AI_PANEL_MIN_UNCOVERED = 240.dp
 
 /**
- * The width the MAIN CONTENT keeps before the docked panel stops growing.
- * Sized for the timetable's legacy toolbar, whose fixed group boxes overflow
- * (and clip the account/preferences cluster) when squeezed much below this.
- */
-internal val AI_PANEL_MIN_CONTENT = 1360.dp
-
-/**
- * The docked side-panel variant: animated, drag-resizable from its inner
- * edge, width silently persisted and clamped against the CURRENT window on
- * every render - a stored-wide panel reopening in a smaller window still
- * leaves the content its minimum.
+ * The in-app OVERLAY companion: slides over the content from the end edge
+ * (start edge under RTL, for free via [Alignment.CenterEnd]), drag-resizable
+ * from its inner edge, width silently persisted. Collapse parks it into a
+ * slim mid-edge tab - one click re-expands to exactly where it was. The
+ * content underneath neither moves nor reflows, and everything the panel
+ * does not cover keeps taking clicks.
  */
 @Composable
-internal fun DockedAiChatPanel(
+internal fun OverlayAiChatPanel(
     visible: Boolean,
     windowWidth: Dp,
     providers: () -> List<AiChatProviderOption>,
     onClose: () -> Unit,
+    onDetach: (() -> Unit)? = null,
 ) {
+    if (!visible) return
+    val prefs = koinInject<AiChatPreferences>()
+    var preferredWidth by remember { mutableStateOf(prefs.panelWidthDp.dp) }
+    var collapsed by remember { mutableStateOf(false) }
+    val ceiling = (windowWidth - AI_PANEL_MIN_UNCOVERED).coerceAtLeast(AI_PANEL_MIN_WIDTH)
+    val panelWidth = preferredWidth.coerceIn(AI_PANEL_MIN_WIDTH, ceiling)
+    val density = LocalDensity.current
     val motion = AppTheme.visualTokens.motion
     val a11y = AppTheme.a11y
-    val ceiling = (windowWidth - AI_PANEL_MIN_CONTENT)
-        .coerceAtMost(AI_PANEL_MAX_WIDTH)
-        .coerceAtLeast(AI_PANEL_MIN_WIDTH)
-    AnimatedVisibility(
-        visible = visible,
-        enter = expandHorizontally(motion.mediumSpec(a11y), expandFrom = Alignment.Start),
-        exit = shrinkHorizontally(motion.mediumSpec(a11y), shrinkTowards = Alignment.Start),
-    ) {
-        val prefs = koinInject<AiChatPreferences>()
-        var preferredWidth by remember { mutableStateOf(prefs.panelWidthDp.dp) }
-        val panelWidth = preferredWidth.coerceIn(AI_PANEL_MIN_WIDTH, ceiling)
-        val density = LocalDensity.current
-        // Dragging the handle AWAY from the panel grows it: the handle is on
-        // the panel's inner edge, which mirrors under RTL.
-        val grow = if (LocalLayoutDirection.current == LayoutDirection.Rtl) 1 else -1
-        Row(Modifier.fillMaxHeight()) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .width(8.dp)
-                    .draggable(
-                        orientation = Orientation.Horizontal,
-                        state = rememberDraggableState { delta ->
-                            val d = with(density) { delta.toDp() }
-                            preferredWidth = (panelWidth + d * grow).coerceIn(AI_PANEL_MIN_WIDTH, ceiling)
-                        },
-                        onDragStopped = { prefs.panelWidthDp = preferredWidth.value.toInt() },
-                    ),
-                contentAlignment = Alignment.Center,
+    // Slide offsets are raw x pixels - mirror them by hand under RTL, where
+    // the END edge (and therefore the panel) is on the LEFT.
+    val edge = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
+    // Dragging the handle AWAY from the panel grows it.
+    val grow = -edge
+
+    Box(Modifier.fillMaxSize()) {
+        // The parked state: a slim tab on the edge, one click to re-expand.
+        AnimatedVisibility(
+            visible = collapsed,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            enter = fadeIn(motion.mediumSpec(a11y)),
+            exit = fadeOut(motion.mediumSpec(a11y)),
+        ) {
+            Surface(
+                shadowElevation = 8.dp,
+                tonalElevation = 2.dp,
+                shape = RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp),
+                modifier = Modifier
+                    .width(28.dp)
+                    .height(88.dp)
+                    .clickable { collapsed = false },
             ) {
-                VerticalDivider()
+                Box(contentAlignment = Alignment.Center) {
+                    AppIcon(
+                        AppDrawableRepo.keyboardArrowLeft,
+                        contentDescription = Strings[StringKey.AI_CHAT_EXPAND],
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
-            AiChatScreenRoot(
-                providers = providers,
-                onClose = onClose,
-                modifier = Modifier.width(panelWidth).fillMaxHeight(),
-            )
+        }
+
+        AnimatedVisibility(
+            visible = !collapsed,
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            enter = slideInHorizontally(motion.mediumSpec(a11y)) { it * edge },
+            exit = slideOutHorizontally(motion.mediumSpec(a11y)) { it * edge },
+        ) {
+            Row(Modifier.fillMaxHeight()) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width(8.dp)
+                        .draggable(
+                            orientation = Orientation.Horizontal,
+                            state = rememberDraggableState { delta ->
+                                val d = with(density) { delta.toDp() }
+                                preferredWidth = (panelWidth + d * grow).coerceIn(AI_PANEL_MIN_WIDTH, ceiling)
+                            },
+                            onDragStopped = { prefs.panelWidthDp = preferredWidth.value.toInt() },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    VerticalDivider()
+                }
+                Surface(shadowElevation = 12.dp, tonalElevation = 2.dp) {
+                    AiChatScreenRoot(
+                        providers = providers,
+                        onClose = onClose,
+                        modifier = Modifier.width(panelWidth).fillMaxHeight(),
+                        onCollapse = { collapsed = true },
+                        onDetach = onDetach,
+                    )
+                }
+            }
         }
     }
 }
