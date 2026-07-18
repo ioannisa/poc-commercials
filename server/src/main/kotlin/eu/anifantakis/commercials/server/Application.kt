@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.server.plugins.configureMcp
 import eu.anifantakis.commercials.server.plugins.configureRateLimiting
 import eu.anifantakis.commercials.server.plugins.configureRouting
 import eu.anifantakis.commercials.server.plugins.configureSecurity
+import eu.anifantakis.commercials.server.plugins.configureSecurityHeaders
 import eu.anifantakis.commercials.server.plugins.configureSerialization
 import eu.anifantakis.commercials.server.plugins.configureStatusPages
 import eu.anifantakis.commercials.server.plugins.configureCORS
@@ -64,6 +65,7 @@ fun Application.module() {
     // this is the biggest single win on that screen (7.79 MB -> 329 KB).
     configureCompression()
     configureStatusPages()
+    configureSecurityHeaders()
     configureRateLimiting()
     configureSecurity()
     configureSerialization()
