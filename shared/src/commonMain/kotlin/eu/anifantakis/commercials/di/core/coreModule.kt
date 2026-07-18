@@ -11,6 +11,8 @@ import eu.anifantakis.commercials.core.data.party_search.data_source.RemoteParty
 import eu.anifantakis.commercials.core.data.preferences.KSafeAppLanguageStore
 import eu.anifantakis.commercials.core.data.preferences.createKSafe
 import eu.anifantakis.commercials.core.data.session.AuthSession
+import eu.anifantakis.commercials.core.data.session.createBrowserCredentials
+import eu.anifantakis.commercials.core.domain.auth.BrowserCredentials
 import eu.anifantakis.commercials.core.data.session.SessionKeepAlive
 import eu.anifantakis.commercials.core.domain.auth.SessionRefresher
 import eu.anifantakis.commercials.core.domain.auth.UserSession
@@ -46,6 +48,10 @@ val coreModule = module {
 
     // Biometric prompt seam (KSafe biometrics) - login opt-in + startup gate.
     singleOf(::KSafeBiometricAuth).bind<BiometricAuth>()
+
+    // Browser password-manager seam (Credential Management API) - real on the
+    // wasmJs client, no-op everywhere else.
+    single<BrowserCredentials> { createBrowserCredentials() }
 
     // Command router between app chrome (desktop MenuBar/shortcuts) and the
     // screen that currently owns each action. Bound on every platform - it

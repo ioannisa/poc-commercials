@@ -7,6 +7,8 @@ import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.core.domain.auth.BiometricAuth
+import eu.anifantakis.commercials.core.domain.auth.BrowserCredential
+import eu.anifantakis.commercials.core.domain.auth.BrowserCredentials
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
@@ -62,6 +64,24 @@ class LoginViewModelTest {
         override suspend fun available(): Boolean = isAvailable
         override suspend fun verify(reason: String): Boolean = verifies
     }
+
+    private class FakeBrowserCredentials(
+        var saved: BrowserCredential? = null,
+    ) : BrowserCredentials {
+        var storeCalls = 0
+        var lastStored: BrowserCredential? = null
+        override suspend fun store(username: String, password: String) {
+            storeCalls++
+            lastStored = BrowserCredential(username, password)
+        }
+        override suspend fun retrieve(): BrowserCredential? = saved
+    }
+
+    private fun vm(
+        repo: AuthRepository = FakeAuthRepository(),
+        biometrics: BiometricAuth = FakeBiometricAuth(),
+        credentials: BrowserCredentials = FakeBrowserCredentials(),
+    ) = LoginViewModel(repo, biometrics, credentials)
 
     private class FakeAuthRepository(
         var loginResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
@@ -126,7 +146,7 @@ class LoginViewModelTest {
 
     @Test
     fun fieldIntentsUpdateStateAndGateCanSubmit() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
+        val vm = vm()
         assertFalse(vm.state.canSubmit, "blank form can't submit")
 
         vm.onAction(LoginIntent.UsernameChanged("admin"))
@@ -139,7 +159,7 @@ class LoginViewModelTest {
 
     @Test
     fun togglePasswordVisibilityFlips() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
+        val vm = vm()
         assertFalse(vm.state.passwordVisible)
 
         vm.onAction(LoginIntent.TogglePasswordVisibility)
@@ -149,7 +169,7 @@ class LoginViewModelTest {
 
     @Test
     fun startForgotArmsRequestModeAndClearsPassword() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
+        val vm = vm()
         vm.onAction(LoginIntent.PasswordChanged("secret"))
 
         vm.onAction(LoginIntent.StartForgot)
@@ -161,7 +181,7 @@ class LoginViewModelTest {
     @Test
     fun submitWithBlankFieldsIsANoOp() = runTest(testDispatcher) {
         val repo = FakeAuthRepository()
-        val vm = LoginViewModel(repo, FakeBiometricAuth())
+        val vm = vm(repo)
 
         vm.onAction(LoginIntent.Submit)
         advanceUntilIdle()
@@ -171,7 +191,7 @@ class LoginViewModelTest {
 
     @Test
     fun successfulLoginEmitsLoggedInAndStopsLoading() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Success(Unit)), FakeBiometricAuth())
+        val vm = vm(FakeAuthRepository(loginResult = DataResult.Success(Unit)))
         filledLogin(vm)
 
         val effects = mutableListOf<LoginEffect>()
@@ -188,7 +208,7 @@ class LoginViewModelTest {
     @Test
     fun rememberMeGatesTheBiometricOptionAndTheLoginFlags() = runTest(testDispatcher) {
         val repo = FakeAuthRepository(loginResult = DataResult.Success(Unit))
-        val vm = LoginViewModel(repo, FakeBiometricAuth(isAvailable = true))
+        val vm = vm(repo, biometrics = FakeBiometricAuth(isAvailable = true))
         // probe landed in state
         assertEquals(true, vm.state.biometricsAvailable)
 
@@ -209,7 +229,7 @@ class LoginViewModelTest {
 
     @Test
     fun failedLoginShowsTheMappedErrorAndClearsLoading() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Failure(AuthError.InvalidCredentials)), FakeBiometricAuth())
+        val vm = vm(FakeAuthRepository(loginResult = DataResult.Failure(AuthError.InvalidCredentials)))
         filledLogin(vm)
 
         vm.onAction(LoginIntent.Submit)
@@ -222,7 +242,7 @@ class LoginViewModelTest {
     @Test
     fun forgotFlowRequestsCodeThenResetsAndReturnsToLogin() = runTest(testDispatcher) {
         val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Success))
-        val vm = LoginViewModel(repo, FakeBiometricAuth())
+        val vm = vm(repo)
         vm.onAction(LoginIntent.StartForgot)
         vm.onAction(LoginIntent.UsernameChanged("admin"))
 
@@ -247,7 +267,7 @@ class LoginViewModelTest {
     @Test
     fun wrongCodeWithLockArmsCountdownAndBlocksSubmit() = runTest(testDispatcher) {
         val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Invalid(retryAfterSeconds = 10)))
-        val vm = LoginViewModel(repo, FakeBiometricAuth())
+        val vm = vm(repo)
         vm.onAction(LoginIntent.StartForgot)
         vm.onAction(LoginIntent.UsernameChanged("admin"))
         vm.onAction(LoginIntent.Submit)
@@ -262,5 +282,40 @@ class LoginViewModelTest {
         assertEquals(UiText.Res(StringKey.LOGIN_RESET_INVALID), vm.state.errorMessage)
         assertTrue(vm.state.lockSeconds > 0, "a lock arms the countdown")
         assertFalse(vm.state.canSubmit, "submit is blocked while the lock counts down")
+    }
+
+    @Test
+    fun savedBrowserCredentialPrefillsTheEmptyForm() = runTest(testDispatcher) {
+        val vm = vm(credentials = FakeBrowserCredentials(saved = BrowserCredential("saved-user", "saved-pass")))
+        advanceUntilIdle()
+
+        assertEquals("saved-user", vm.state.username)
+        assertEquals("saved-pass", vm.state.password)
+        assertTrue(vm.state.canSubmit, "a prefilled form is submittable as-is")
+    }
+
+    @Test
+    fun successfulLoginOffersTheCredentialToTheBrowser() = runTest(testDispatcher) {
+        val credentials = FakeBrowserCredentials()
+        val vm = vm(FakeAuthRepository(loginResult = DataResult.Success(Unit)), credentials = credentials)
+        filledLogin(vm)
+
+        vm.onAction(LoginIntent.Submit)
+        advanceUntilIdle()
+
+        assertEquals(1, credentials.storeCalls)
+        assertEquals(BrowserCredential("admin", "admin123"), credentials.lastStored)
+    }
+
+    @Test
+    fun failedLoginStoresNothingInTheBrowser() = runTest(testDispatcher) {
+        val credentials = FakeBrowserCredentials()
+        val vm = vm(FakeAuthRepository(loginResult = DataResult.Failure(AuthError.InvalidCredentials)), credentials = credentials)
+        filledLogin(vm)
+
+        vm.onAction(LoginIntent.Submit)
+        advanceUntilIdle()
+
+        assertEquals(0, credentials.storeCalls, "wrong credentials must never reach the password manager")
     }
 }

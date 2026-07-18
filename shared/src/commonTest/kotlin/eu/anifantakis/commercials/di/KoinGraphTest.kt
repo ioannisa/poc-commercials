@@ -35,6 +35,7 @@ class KoinGraphTest {
         assertNotNull(koin.get<DatabasesRepository>())
         assertNotNull(koin.get<ReportService>())
         assertNotNull(koin.get<eu.anifantakis.commercials.core.presentation.commands.CommandRegistry>())
+        assertNotNull(koin.get<eu.anifantakis.commercials.core.domain.auth.BrowserCredentials>())
 
         app.close()
     }

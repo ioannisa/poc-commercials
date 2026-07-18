@@ -9,6 +9,7 @@ import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.domain.auth.BiometricAuth
+import eu.anifantakis.commercials.core.domain.auth.BrowserCredentials
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.presentation.toUiText
@@ -75,6 +76,7 @@ sealed interface LoginEffect {
 class LoginViewModel(
     private val repository: AuthRepository,
     private val biometricAuth: BiometricAuth,
+    private val browserCredentials: BrowserCredentials,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
@@ -85,6 +87,17 @@ class LoginViewModel(
         viewModelScope.launch {
             val available = runCatching { biometricAuth.available() }.getOrDefault(false)
             _state.update { it.copy(biometricsAvailable = available) }
+        }
+        // Ask the browser's password manager for a saved credential (web only;
+        // null elsewhere). Prefill, never submit - the user stays in control -
+        // and never clobber anything already typed while the picker was open.
+        viewModelScope.launch {
+            val saved = runCatching { browserCredentials.retrieve() }.getOrNull() ?: return@launch
+            _state.update {
+                if (it.mode == LoginMode.LOGIN && it.username.isBlank() && it.password.isBlank())
+                    it.copy(username = saved.username, password = saved.password)
+                else it
+            }
         }
     }
 
@@ -134,7 +147,13 @@ class LoginViewModel(
                 remember = s.rememberMe,
                 biometricLogin = s.rememberMe && s.biometricLogin,
             )) {
-                is DataResult.Success -> eventChannel.send(LoginEffect.LoggedIn)
+                is DataResult.Success -> {
+                    // Offer the pair to the browser's password manager (its own
+                    // "Save password?" bubble; web only, no-op elsewhere). Never
+                    // let a JS hiccup break an otherwise successful login.
+                    runCatching { browserCredentials.store(s.username, s.password) }
+                    eventChannel.send(LoginEffect.LoggedIn)
+                }
                 is DataResult.Failure -> _state.update { it.copy(errorMessage = result.error.toUiText()) }
             }
             _state.update { it.copy(isLoading = false) }
