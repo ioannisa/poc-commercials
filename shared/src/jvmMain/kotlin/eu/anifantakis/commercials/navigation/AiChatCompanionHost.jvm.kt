@@ -20,6 +20,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.AiChatScreenRoot
+import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.AiChatViewModel
+import org.koin.compose.viewmodel.koinViewModel
 import org.koin.compose.koinInject
 
 /**
@@ -40,6 +42,13 @@ internal actual fun AiChatCompanionHost(
 ) {
     val prefs = koinInject<AiChatPreferences>()
     var detached by remember { mutableStateOf(prefs.detached) }
+    // ONE ViewModel, resolved against the MAIN window's store: on desktop
+    // every window carries its OWN ViewModelStoreOwner, so letting each host
+    // resolve its own would give the OS window a fresh, empty conversation.
+    // Handing the same instance to both hosts is what makes detach/attach
+    // carry the transcript - AND a still-running request: the wait lives in
+    // viewModelScope, so it simply keeps rendering wherever the VM shows.
+    val viewModel: AiChatViewModel = koinViewModel()
 
     if (!detached) {
         OverlayAiChatPanel(
@@ -51,6 +60,7 @@ internal actual fun AiChatCompanionHost(
                 detached = true
                 prefs.detached = true
             },
+            viewModel = viewModel,
         )
         return
     }
@@ -74,6 +84,7 @@ internal actual fun AiChatCompanionHost(
                 providers = providers,
                 onClose = onClose,
                 modifier = Modifier.fillMaxSize(),
+                viewModel = viewModel,
                 onAttach = {
                     state.size.width.value.toInt().takeIf { it > 0 }?.let { prefs.panelWidthDp = it }
                     detached = false

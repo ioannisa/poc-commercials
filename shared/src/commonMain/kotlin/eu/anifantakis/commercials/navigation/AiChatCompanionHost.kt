@@ -40,6 +40,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.AiChatScreenRoot
+import eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat.AiChatViewModel
+import org.koin.compose.viewmodel.koinViewModel
 import org.koin.compose.koinInject
 
 /**
@@ -86,6 +88,7 @@ internal fun OverlayAiChatPanel(
     providers: () -> List<AiChatProviderOption>,
     onClose: () -> Unit,
     onDetach: (() -> Unit)? = null,
+    viewModel: AiChatViewModel = koinViewModel(),
 ) {
     if (!visible) return
     val prefs = koinInject<AiChatPreferences>()
@@ -159,6 +162,7 @@ internal fun OverlayAiChatPanel(
                         modifier = Modifier.width(panelWidth).fillMaxHeight(),
                         onCollapse = { collapsed = true },
                         onDetach = onDetach,
+                        viewModel = viewModel,
                     )
                 }
             }
