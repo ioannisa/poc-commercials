@@ -25,7 +25,6 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.origin
-import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.routing.openapi.OpenApiDocSource
@@ -51,6 +50,59 @@ private val API_TAGS = listOf(
 )
 
 private val SPEC_JSON = Json { encodeDefaults = false; explicitNulls = false }
+
+/**
+ * The OpenAPI spec source + base doc, factored out of the (removed) swaggerUI
+ * plugin so we can serve the spec ourselves and render it with Stoplight
+ * Elements instead of Swagger UI (see the /swagger route). The runtime
+ * introspection (routes' compile-inferred + explicit .describe metadata) is
+ * unchanged - only the front-end renderer differs.
+ */
+private val SWAGGER_SPEC_SOURCE = OpenApiDocSource.Routing(
+    contentType = ContentType.Application.Json,
+    serializeModel = { doc -> SPEC_JSON.encodeToString(OpenApiDoc.serializer(), doc.copy(tags = API_TAGS)) },
+)
+private val SWAGGER_BASE_DOC = OpenApiDoc.Builder().apply {
+    info = OpenApiInfo("Commercials Manager API", "1.0.0")
+}.build()
+
+/** Read a bundled Stoplight asset from resources/stoplight/ (vendored, no CDN). */
+private fun swaggerAsset(name: String): ByteArray =
+    object {}.javaClass.classLoader.getResourceAsStream("stoplight/$name")?.readBytes()
+        ?: error("Missing bundled Stoplight asset: stoplight/$name")
+
+/**
+ * Stoplight Elements docs page: three-column layout, live "Try It Out", native
+ * dark mode (follows the OS theme via prefers-color-scheme). Assets are
+ * vendored under /swagger/assets and the spec is read from /swagger/... - all
+ * on the same subtree, so the Basic-auth credentials the browser cached for
+ * this (gated) page are carried to the asset + spec sub-requests automatically.
+ */
+private val STOPLIGHT_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Commercials Manager API</title>
+  <script src="/swagger/assets/web-components.min.js"></script>
+  <link rel="stylesheet" href="/swagger/assets/styles.min.css">
+  <style>html, body { height: 100%; margin: 0; }</style>
+</head>
+<body>
+  <elements-api id="docs" apiDescriptionUrl="/swagger/documentation.yaml" router="hash" layout="sidebar"></elements-api>
+  <script>
+    (function () {
+      var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+      var el = document.getElementById('docs');
+      function apply() { el.setAttribute('appearance', (mq && mq.matches) ? 'dark' : 'light'); }
+      apply();
+      if (mq && mq.addEventListener) mq.addEventListener('change', apply);
+    })();
+  </script>
+</body>
+</html>
+""".trimIndent()
 
 fun Application.configureRouting() {
     // Injected once here and passed to the route builders explicitly -
@@ -103,29 +155,36 @@ fun Application.configureRouting() {
             }
         }
 
-        // Interactive API docs at /swagger, rendered from the compiler-generated
-        // OpenAPI spec (ktor { openApi { enabled } } in build.gradle.kts). Gated by
-        // the `swagger` flag in server.yaml (default off) - a per-deployment toggle,
-        // independent of developmentMode, so the super-admin "API Docs" link works
-        // wherever it is turned on. Guarded by HTTP Basic (AUTH_SWAGGER_BASIC),
-        // accepted only for the super administrator: the full API SHAPE - admin
-        // routes included - must not be browsable by anyone who reaches the public
-        // host. Basic (not bearer) because Swagger UI is a browser navigation with
-        // no Authorization header; the browser answers the 401 with its own login
-        // dialog and carries the credentials to the spec sub-request too.
-        // Covers REST only; /mcp (JSON-RPC over SSE) is outside OpenAPI's scope.
+        // Interactive API docs at /swagger, rendered by Stoplight Elements from
+        // the runtime-generated OpenAPI spec. Gated by the `swagger` flag in
+        // server.yaml (default off) - a per-deployment toggle, so the super-admin
+        // "API Docs" link works wherever it is turned on. Guarded by HTTP Basic
+        // (AUTH_SWAGGER_BASIC), accepted only for the super administrator: the
+        // full API SHAPE - admin routes included - must not be browsable by anyone
+        // who reaches the public host. Basic (not bearer) because a browser
+        // navigation carries no Authorization header; the browser answers the 401
+        // with its own login dialog and carries the credentials to the spec +
+        // asset sub-requests too (all under this same /swagger subtree).
         if (registry.swaggerEnabled) {
             authenticate(AUTH_SWAGGER_BASIC) {
-                swaggerUI("swagger") {
-                    info = OpenApiInfo("Commercials Manager API", "1.0.0")
-                    // Inject the group (tag) descriptions the config DSL can't express:
-                    // serialize the assembled doc ourselves after stamping API_TAGS on it.
-                    source = OpenApiDocSource.Routing(
-                        contentType = ContentType.Application.Json,
-                        serializeModel = { doc ->
-                            SPEC_JSON.encodeToString(OpenApiDoc.serializer(), doc.copy(tags = API_TAGS))
-                        },
-                    )
+                route("/swagger") {
+                    // The generated OpenAPI spec (JSON, at the historical .yaml URL
+                    // Stoplight/tools point at). Runtime introspection of the routes.
+                    get("/documentation.yaml") {
+                        val doc = SWAGGER_SPEC_SOURCE.read(call.application, SWAGGER_BASE_DOC)
+                        call.respondText(doc.content, doc.contentType)
+                    }
+                    // Vendored Stoplight assets (no external CDN dependency).
+                    get("/assets/web-components.min.js") {
+                        call.respondBytes(swaggerAsset("web-components.min.js"), ContentType.Text.JavaScript)
+                    }
+                    get("/assets/styles.min.css") {
+                        call.respondBytes(swaggerAsset("styles.min.css"), ContentType.Text.CSS)
+                    }
+                    // The docs page itself.
+                    get {
+                        call.respondText(STOPLIGHT_HTML, ContentType.Text.Html)
+                    }
                 }
             }
         }
