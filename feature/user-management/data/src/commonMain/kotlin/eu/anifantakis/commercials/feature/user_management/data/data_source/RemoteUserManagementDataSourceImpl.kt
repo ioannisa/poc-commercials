@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
+import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -131,6 +132,11 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
     override suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError> =
         api.getRemote<List<AdminOAuthTokenDto>>("/api/admin/oauth-tokens").map { list -> list.map { it.toDomain() } }
 
+    override suspend fun aiUsage(): DataResult<List<AiUsageEntry>, RemoteError> =
+        api.getRemote<List<AiUsageRowDto>>("/api/ai/usage").map { list ->
+            list.map { AiUsageEntry(it.username, it.provider, it.model, it.requests, it.inputTokens, it.outputTokens) }
+        }
+
     override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
         api.deleteRemoteEmpty("/api/admin/oauth-tokens/$tokenId")
 
@@ -150,3 +156,14 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
     override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
         api.putRemoteEmpty("/api/admin/mcp-settings", SetMcpEnabledDto(enabled))
 }
+
+@Serializable
+internal data class AiUsageRowDto(
+    val username: String,
+    val provider: String,
+    val model: String,
+    val requests: Long = 0,
+    val inputTokens: Long = 0,
+    val outputTokens: Long = 0,
+    val lastUsedEpochMs: Long = 0,
+)

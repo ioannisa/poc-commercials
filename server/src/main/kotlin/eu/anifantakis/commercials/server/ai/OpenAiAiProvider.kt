@@ -77,6 +77,8 @@ class OpenAiAiProvider(
         val steps = mutableListOf<AiToolStep>()
         var previousResponseId: String? = null
         var input: JsonArray = firstInput
+        var inTok = 0L
+        var outTok = 0L
 
         repeat(MAX_TOOL_ROUNDS) {
             val body = buildJsonObject {
@@ -111,11 +113,15 @@ class OpenAiAiProvider(
             }
             previousResponseId = parsed["id"]?.jsonPrimitive?.contentOrNull
                 ?: throw AiProviderException("OpenAI: response without id")
+            (parsed["usage"] as? JsonObject)?.let { u ->
+                inTok += (u["input_tokens"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0
+                outTok += (u["output_tokens"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0
+            }
             val output = parsed["output"]?.jsonArray.orEmpty()
 
             val calls = output.filter { it.jsonObject["type"]?.jsonPrimitive?.contentOrNull == "function_call" }
             if (calls.isEmpty()) {
-                return AiChatReply(outputText(output), steps)
+                return AiChatReply(outputText(output), steps, usage = AiUsage(inTok, outTok))
             }
 
             // Execute this round's calls; the next round sends ONLY their

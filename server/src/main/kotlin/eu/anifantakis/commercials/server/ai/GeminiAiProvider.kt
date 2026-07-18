@@ -68,6 +68,8 @@ class GeminiAiProvider(
         }.toMutableList()
         val steps = mutableListOf<AiToolStep>()
 
+        var inTok = 0L
+        var outTok = 0L
         repeat(MAX_TOOL_ROUNDS) {
             val body = buildJsonObject {
                 putJsonObject("systemInstruction") {
@@ -95,7 +97,13 @@ class GeminiAiProvider(
             if (!response.status.isSuccess()) {
                 throw AiProviderException("Gemini ${response.status.value}: ${errorMessage(text)}")
             }
-            val content = json.parseToJsonElement(text).jsonObject["candidates"]?.jsonArray?.firstOrNull()
+            val root = json.parseToJsonElement(text).jsonObject
+            (root["usageMetadata"] as? JsonObject)?.let { u ->
+                fun n(k: String) = (u[k] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0
+                inTok += n("promptTokenCount")
+                outTok += n("candidatesTokenCount") + n("thoughtsTokenCount")
+            }
+            val content = root["candidates"]?.jsonArray?.firstOrNull()
                 ?.jsonObject?.get("content")?.jsonObject
                 ?: throw AiProviderException("Gemini: empty response")
             val parts = content["parts"]?.jsonArray ?: JsonArray(emptyList())
@@ -105,7 +113,7 @@ class GeminiAiProvider(
                 val answer = parts
                     .mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
                     .joinToString("\n").trim()
-                return AiChatReply(answer, steps)
+                return AiChatReply(answer, steps, usage = AiUsage(inTok, outTok))
             }
 
             contents += content   // echo the model turn (with its functionCall parts) verbatim

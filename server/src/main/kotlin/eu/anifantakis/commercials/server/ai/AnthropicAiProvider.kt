@@ -50,6 +50,8 @@ class AnthropicAiProvider(apiKey: String) : AiChatProvider {
                 .build()
         }.toMutableList()
         val steps = mutableListOf<AiToolStep>()
+        var inTok = 0L
+        var outTok = 0L
 
         repeat(MAX_TOOL_ROUNDS) {
             val params = MessageCreateParams.builder()
@@ -67,12 +69,14 @@ class AnthropicAiProvider(apiKey: String) : AiChatProvider {
                 throw AiProviderException("Anthropic: ${e.message}", e)
             }
 
+            inTok += response.usage().inputTokens()
+            outTok += response.usage().outputTokens()
             val stop = response.stopReason().orElse(null)
             if (stop != StopReason.TOOL_USE) {
                 val text = response.content()
                     .mapNotNull { block -> block.text().map { it.text() }.orElse(null) }
                     .joinToString("\n").trim()
-                return@withContext AiChatReply(text, steps)
+                return@withContext AiChatReply(text, steps, usage = AiUsage(inTok, outTok))
             }
 
             // Echo the assistant turn back verbatim (text + thinking + tool_use),

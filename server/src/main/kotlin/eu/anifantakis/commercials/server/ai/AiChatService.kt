@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.mcp.McpCaller
 import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.mcp.tools.ALL_MCP_TOOLS
 import eu.anifantakis.commercials.mcp.tools.ToolContext
+import eu.anifantakis.commercials.server.aiusage.AiUsageDb
 import eu.anifantakis.commercials.server.auth.AuthUser
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.stations.AiChatConfig
@@ -41,6 +42,7 @@ class AiSelectionException(message: String) : IllegalArgumentException(message)
 class AiChatService(
     private val registry: StationRegistry,
     private val services: McpToolServices,
+    private val usageDb: AiUsageDb? = null,
 ) {
     /** The configured providers, default first - what login/session hand to clients. */
     val catalog: List<AiProviderCatalogEntry> get() = registry.aiChatProviders
@@ -131,8 +133,19 @@ class AiChatService(
             model = model,
             maxTokens = registry.aiChatMaxTokens,
         )
+        // Metering must never break a chat: swallow-and-log on failure.
+        usageDb?.let { db ->
+            runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    db.record(user.username, entry.id, model, reply.usage.inputTokens, reply.usage.outputTokens)
+                }
+            }
+        }
         return reply.copy(proposals = proposals.toList(), clientActions = clientActions.toList())
     }
+
+    /** Admin oversight: every aggregated usage row, most recent first. */
+    fun usage() = usageDb?.all().orEmpty()
 
     /**
      * The one CLIENT-side tool: ask the app to change its ACTIVE station. No

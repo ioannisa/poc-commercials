@@ -372,6 +372,8 @@ internal class En : LanguageStrings {
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Active station switched to {0}.]"
         StringKey.AI_CHAT_HISTORY -> "History"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "No saved conversations yet."
+        StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "AI usage (tokens per user)"
+        StringKey.ADMIN_MCP_NO_AI_USAGE -> "No AI usage recorded yet."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP oversight"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "All tokens + the global switch"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API Docs (Swagger)"

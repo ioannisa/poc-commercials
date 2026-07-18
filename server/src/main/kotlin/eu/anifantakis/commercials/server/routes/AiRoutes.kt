@@ -12,6 +12,7 @@ import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
@@ -59,6 +60,17 @@ data class AiChatResponseDto(
     val steps: List<AiToolStepDto> = emptyList(),
     val proposals: List<AiProposalDto> = emptyList(),
     val clientActions: List<AiClientActionDto> = emptyList(),
+)
+
+@Serializable
+data class AiUsageRowDto(
+    val username: String,
+    val provider: String,
+    val model: String,
+    val requests: Long,
+    val inputTokens: Long,
+    val outputTokens: Long,
+    val lastUsedEpochMs: Long,
 )
 
 @Serializable
@@ -140,6 +152,28 @@ fun Route.aiRoutes(aiChat: AiChatService) {
              *
              * Tag: AI
              */
+            /**
+             * ADMIN oversight: per-user token usage, aggregated per
+             * (user, provider, model), most recently used first.
+             *
+             * Tag: AI
+             */
+            get("/usage") {
+                val user = call.authUser()
+                if (!user.isAdmin) {
+                    call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Admin only"))
+                    return@get
+                }
+                call.respond(
+                    aiChat.usage().map {
+                        AiUsageRowDto(
+                            it.username, it.provider, it.model,
+                            it.requests, it.inputTokens, it.outputTokens, it.lastUsedEpochMs,
+                        )
+                    }
+                )
+            }
+
             post("/execute") {
                 val user = call.authUser()
                 val request = call.receive<AiExecuteRequestDto>()

@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -97,6 +98,9 @@ class UserManagementViewModelTest {
 
         override suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError> = DataResult.Success(emptyList())
         override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
+        override suspend fun aiUsage(): DataResult<List<AiUsageEntry>, RemoteError> =
+            DataResult.Success(emptyList())
+
         override suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError> = DataResult.Success(emptyList())
         override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
         override suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)

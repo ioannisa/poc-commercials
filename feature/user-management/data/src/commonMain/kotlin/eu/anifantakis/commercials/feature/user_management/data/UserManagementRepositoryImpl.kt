@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.user_management.data
 
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
+import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -43,6 +44,9 @@ class UserManagementRepositoryImpl(
 
     override suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError> =
         remoteDataSource.listAllOAuthTokens()
+
+    override suspend fun aiUsage(): DataResult<List<AiUsageEntry>, RemoteError> =
+        remoteDataSource.aiUsage()
 
     override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.revokeOAuthToken(tokenId)

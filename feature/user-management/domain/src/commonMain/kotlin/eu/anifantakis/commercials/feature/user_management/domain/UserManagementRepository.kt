@@ -105,6 +105,9 @@ interface UserManagementRepository {
     /** Admin MCP oversight: every user's OAuth grants (connected AI clients). */
     suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError>
 
+    /** Admin oversight: per-user AI-chat token usage, aggregated per (user, provider, model). */
+    suspend fun aiUsage(): DataResult<List<AiUsageEntry>, RemoteError>
+
     /** Admin revoke of any OAuth grant by id. */
     suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
 
@@ -126,3 +129,14 @@ interface UserManagementRepository {
 
     suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError>
 }
+
+/** One aggregated AI usage row (lifetime totals per user x provider x model). */
+@Immutable
+data class AiUsageEntry(
+    val username: String,
+    val provider: String,
+    val model: String,
+    val requests: Long,
+    val inputTokens: Long,
+    val outputTokens: Long,
+)

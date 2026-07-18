@@ -49,6 +49,8 @@ fun Application.module() {
     authDb.bootstrap()
     // OAuth AS tables (clients/codes/tokens) + expired-row sweep.
     oauthDb.bootstrap()
+    // Per-user AI-chat token metering (aggregated rows, admin oversight).
+    inject<eu.anifantakis.commercials.server.aiusage.AiUsageDb>().value.bootstrap()
 
     // Only behind a TLS-terminating reverse proxy (server.yaml flag): trust
     // X-Forwarded-* so rate limiting and logs see the real client IP. Never

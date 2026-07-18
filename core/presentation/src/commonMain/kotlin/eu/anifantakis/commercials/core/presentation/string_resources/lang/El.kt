@@ -372,6 +372,8 @@ internal class El : LanguageStrings {
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Ο ενεργός σταθμός άλλαξε σε {0}.]"
         StringKey.AI_CHAT_HISTORY -> "Ιστορικό"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "Δεν υπάρχουν αποθηκευμένες συνομιλίες ακόμα."
+        StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "Χρήση AI (tokens ανά χρήστη)"
+        StringKey.ADMIN_MCP_NO_AI_USAGE -> "Δεν έχει καταγραφεί χρήση AI ακόμα."
         StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Τεκμηρίωση API (Swagger)"

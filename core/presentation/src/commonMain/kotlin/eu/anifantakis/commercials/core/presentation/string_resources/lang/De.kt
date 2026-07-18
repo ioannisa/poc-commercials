@@ -372,6 +372,8 @@ internal class De : LanguageStrings {
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Aktiver Sender gewechselt zu {0}.]"
         StringKey.AI_CHAT_HISTORY -> "Verlauf"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "Noch keine gespeicherten Unterhaltungen."
+        StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "KI-Nutzung (Tokens pro Benutzer)"
+        StringKey.ADMIN_MCP_NO_AI_USAGE -> "Noch keine KI-Nutzung erfasst."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API-Doku (Swagger)"

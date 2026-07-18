@@ -60,12 +60,16 @@ data class AiProposal(val tool: String, val arguments: JsonObject, val preview: 
  */
 data class AiClientAction(val action: String, val arguments: JsonObject)
 
+/** Token spend of one request, summed across every model round. */
+data class AiUsage(val inputTokens: Long = 0, val outputTokens: Long = 0)
+
 /** The final answer plus the (name-only) trail of tool calls it took. */
 data class AiChatReply(
     val text: String,
     val steps: List<AiToolStep>,
     val proposals: List<AiProposal> = emptyList(),
     val clientActions: List<AiClientAction> = emptyList(),
+    val usage: AiUsage = AiUsage(),
 )
 
 data class AiToolStep(val tool: String, val isError: Boolean)

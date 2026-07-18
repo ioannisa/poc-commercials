@@ -377,6 +377,8 @@ internal class He : LanguageStrings {
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[התחנה הפעילה הוחלפה ל-{0}.]"
         StringKey.AI_CHAT_HISTORY -> "היסטוריה"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "אין עדיין שיחות שמורות."
+        StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "שימוש ב-AI (אסימונים למשתמש)"
+        StringKey.ADMIN_MCP_NO_AI_USAGE -> "טרם נרשם שימוש ב-AI."
         StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "תיעוד API (Swagger)"

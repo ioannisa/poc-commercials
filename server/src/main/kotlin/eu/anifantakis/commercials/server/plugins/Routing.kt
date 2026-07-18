@@ -58,7 +58,8 @@ fun Application.configureRouting() {
     val registry by inject<StationRegistry>()
     val migrationService by inject<MigrationService>()
     val mcpToolServices by inject<McpToolServices>()
-    val aiChatService = AiChatService(registry, mcpToolServices)
+    val aiUsageDb by inject<eu.anifantakis.commercials.server.aiusage.AiUsageDb>()
+    val aiChatService = AiChatService(registry, mcpToolServices, aiUsageDb)
 
     routing {
         // Interactive API docs at /swagger, rendered from the compiler-generated

@@ -23,6 +23,7 @@ interface RemoteUserManagementDataSource {
     suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError>
     suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError>
     suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError>
+    suspend fun aiUsage(): DataResult<List<AiUsageEntry>, RemoteError>
     suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
     suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
     suspend fun setOauthAdminApproval(required: Boolean): DataResult<Unit, RemoteError>

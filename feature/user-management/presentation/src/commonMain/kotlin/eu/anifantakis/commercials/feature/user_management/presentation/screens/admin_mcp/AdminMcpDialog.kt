@@ -32,6 +32,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toUiText
+import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -54,6 +55,8 @@ data class AdminMcpState(
     val tokens: ImmutableList<AdminApiToken> = persistentListOf(),
     val oauthGrants: ImmutableList<AdminOAuthToken> = persistentListOf(),
     val users: ImmutableList<ManagedUser> = persistentListOf(),
+    /** Per-user AI-chat token usage (aggregated), most recently used first. */
+    val aiUsage: ImmutableList<AiUsageEntry> = persistentListOf(),
     /** When set, the change-role picker is open for this workstation's token. */
     val reassignFor: AdminApiToken? = null,
     /** Revoke is destructive - it arms one of these and a confirm dialog fires it. */
@@ -124,6 +127,10 @@ class AdminMcpViewModel(
             when (val grants = repository.listAllOAuthTokens()) {
                 is DataResult.Success -> _state.update { it.copy(oauthGrants = grants.data.toImmutableList()) }
                 is DataResult.Failure -> _state.update { it.copy(error = grants.error.toUiText()) }
+            }
+            when (val usage = repository.aiUsage()) {
+                is DataResult.Success -> _state.update { it.copy(aiUsage = usage.data.toImmutableList()) }
+                is DataResult.Failure -> _state.update { it.copy(error = usage.error.toUiText()) }
             }
             when (val users = repository.listUsers()) {
                 is DataResult.Success -> _state.update { it.copy(users = users.data.toImmutableList()) }
@@ -281,6 +288,26 @@ private fun AdminMcpDialog(
                             onRevoke = { onIntent(AdminMcpIntent.RequestRevokeOAuth(grant)) },
                             onApprove = { onIntent(AdminMcpIntent.ApproveOAuth(grant.id)) },
                         )
+                    }
+                }
+            }
+
+            // AI-chat token metering: lifetime totals per user x provider x
+            // model - the operator's per-user cost picture.
+            AppText(Strings[StringKey.ADMIN_MCP_AI_USAGE_HEADER], AppTextStyle.BODY_STRONG)
+            if (state.aiUsage.isEmpty()) {
+                AppText(Strings[StringKey.ADMIN_MCP_NO_AI_USAGE], AppTextStyle.NOTE)
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                    items(state.aiUsage, key = { it.username + it.provider + it.model }) { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = UIConst.paddingHairline),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AppText(row.username, AppTextStyle.TABLE_CELL_STRONG, modifier = Modifier.weight(0.9f))
+                            AppText(row.provider + " / " + row.model, AppTextStyle.TABLE_CELL, modifier = Modifier.weight(1.6f))
+                            AppText("in " + row.inputTokens + " | out " + row.outputTokens + " | x" + row.requests, AppTextStyle.TABLE_CELL, modifier = Modifier.weight(1.3f))
+                        }
                     }
                 }
             }
