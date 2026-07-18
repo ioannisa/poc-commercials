@@ -370,6 +370,8 @@ internal class Fr : LanguageStrings {
         StringKey.AI_CHAT_NOTE_DECLINED -> "[L'utilisateur a annulé l'action proposée {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[L'exécution de l'action approuvée {0} a ÉCHOUÉ : {1}]"
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Station active changée : {0}.]"
+        StringKey.AI_CHAT_HISTORY -> "Historique"
+        StringKey.AI_CHAT_HISTORY_EMPTY -> "Aucune conversation enregistrée pour l'instant."
         StringKey.PREFERENCES_ADMIN_MCP -> "Supervision MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tous les jetons + l'interrupteur global"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Doc API (Swagger)"

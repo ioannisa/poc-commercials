@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.ai_chat.presentation.screens.ai_chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.MarkdownTypography
@@ -66,12 +68,16 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toUiText
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatConversation
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatHistoryStore
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatStoredTurn
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiClientAction
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiProposal
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiToolStep
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
@@ -81,7 +87,11 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
+import kotlin.time.Instant
 
 /** A confirmation card's lifecycle after the user acted on it. */
 enum class AiActionStatus { RUNNING, EXECUTED, FAILED, DECLINED }
@@ -102,6 +112,9 @@ data class AiChatState(
     val selectedModel: String? = null,
     /** Per-card execution state, keyed by [AiProposal.id]; absent = still pending. */
     val actionResults: ImmutableMap<String, AiActionState> = persistentMapOf(),
+    /** Saved conversations (newest first) - shown when [showHistory] is on. */
+    val history: ImmutableList<AiChatConversation> = persistentListOf(),
+    val showHistory: Boolean = false,
 ) {
     val selectedProvider: AiChatProviderOption? get() = providers.firstOrNull { it.id == selectedProviderId }
     val canSend: Boolean get() = !busy && input.isNotBlank() && selectedProviderId != null && selectedModel != null
@@ -121,6 +134,10 @@ sealed interface AiChatIntent {
 
     /** The user dismissed a confirmation card. */
     data class DeclineAction(val proposal: AiProposal) : AiChatIntent
+
+    data object ToggleHistory : AiChatIntent
+    data class RestoreConversation(val id: String) : AiChatIntent
+    data class DeleteConversation(val id: String) : AiChatIntent
 }
 
 @Stable
@@ -129,10 +146,14 @@ class AiChatViewModel(
     private val prefs: AiChatPreferences,
     private val refreshBus: DataRefreshBus,
     private val session: UserSession,
+    private val historyStore: AiChatHistoryStore,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
     val state by _state.toComposeState(viewModelScope)
+
+    /** The live conversation's history id; null until its first message. */
+    private var conversationId: String? = null
 
     fun onAction(intent: AiChatIntent) {
         when (intent) {
@@ -141,11 +162,22 @@ class AiChatViewModel(
             is AiChatIntent.SelectModel -> selectModel(intent.model)
             is AiChatIntent.InputChanged -> _state.update { it.copy(input = intent.value, error = null) }
             AiChatIntent.Send -> send()
-            AiChatIntent.Clear -> _state.update {
-                it.copy(messages = persistentListOf(), input = "", error = null, actionResults = persistentMapOf())
+            AiChatIntent.Clear -> {
+                conversationId = null
+                _state.update {
+                    it.copy(messages = persistentListOf(), input = "", error = null, actionResults = persistentMapOf())
+                }
             }
             is AiChatIntent.ConfirmAction -> confirm(intent.proposal)
             is AiChatIntent.DeclineAction -> decline(intent.proposal)
+            AiChatIntent.ToggleHistory -> _state.update {
+                it.copy(showHistory = !it.showHistory, history = historyStore.load().toImmutableList())
+            }
+            is AiChatIntent.RestoreConversation -> restore(intent.id)
+            is AiChatIntent.DeleteConversation -> _state.update {
+                historyStore.delete(intent.id)
+                it.copy(history = historyStore.load().toImmutableList())
+            }
         }
     }
 
@@ -215,13 +247,62 @@ class AiChatViewModel(
                         )
                     }
                     result.data.clientActions.forEach(::handleClientAction)
+                    autosave()
                 }
-                is DataResult.Failure -> _state.update {
-                    it.copy(busy = false, error = result.error.toUiText())
+                is DataResult.Failure -> {
+                    _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+                    autosave()
                 }
             }
         }
     }
+
+    /**
+     * AUTOSAVE the live conversation - called on every appended turn, so
+     * there is no save button to forget. The transcript (incl. NOTE turns,
+     * which carry each card's outcome) is what persists; live cards are not.
+     */
+    private fun autosave() {
+        val messages = _state.value.messages
+        if (messages.isEmpty()) return
+        val id = conversationId ?: newConversationId().also { conversationId = it }
+        val title = messages.firstOrNull { it.role == AiChatRole.USER }?.text?.take(48) ?: "…"
+        historyStore.upsert(
+            AiChatConversation(
+                id = id,
+                title = title,
+                updatedAtEpochMs = nowEpochMs(),
+                turns = messages.map { m ->
+                    AiChatStoredTurn(role = m.role.name, text = m.text, tools = m.steps.map { it.tool })
+                },
+            )
+        )
+    }
+
+    private fun restore(id: String) {
+        val conversation = historyStore.load().firstOrNull { it.id == id } ?: return
+        conversationId = conversation.id
+        _state.update {
+            it.copy(
+                messages = conversation.turns.map { t ->
+                    AiChatMessage(
+                        role = runCatching { AiChatRole.valueOf(t.role) }.getOrDefault(AiChatRole.ASSISTANT),
+                        text = t.text,
+                        steps = t.tools.map { tool -> AiToolStep(tool, isError = false) },
+                    )
+                }.toImmutableList(),
+                input = "",
+                error = null,
+                actionResults = persistentMapOf(),
+                showHistory = false,
+            )
+        }
+    }
+
+    private fun newConversationId(): String =
+        "${nowEpochMs()}-${kotlin.random.Random.nextLong().toULong().toString(16)}"
+
+    private fun nowEpochMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
     /**
      * APPROVE: replay the prepared call server-side (confirm=true there). The
@@ -297,6 +378,7 @@ class AiChatViewModel(
         _state.update {
             it.copy(messages = (it.messages + AiChatMessage(AiChatRole.NOTE, text)).toImmutableList())
         }
+        autosave()
     }
 }
 
@@ -341,6 +423,11 @@ private fun AiChatScreen(
             horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
         ) {
             AppText(Strings[StringKey.AI_CHAT_TITLE], AppTextStyle.SECTION_TITLE, modifier = Modifier.weight(1f))
+            AppIconButton(
+                label = Strings[StringKey.AI_CHAT_HISTORY],
+                icon = AppDrawableRepo.history,
+                onClick = { onIntent(AiChatIntent.ToggleHistory) },
+            )
             AppButton(
                 text = Strings[StringKey.AI_CHAT_CLEAR],
                 onClick = { onIntent(AiChatIntent.Clear) },
@@ -388,7 +475,13 @@ private fun AiChatScreen(
             )
         }
 
-        LazyColumn(
+        if (state.showHistory) {
+            HistoryList(
+                history = state.history,
+                onIntent = onIntent,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = UIConst.paddingSmall),
+            )
+        } else LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = UIConst.paddingSmall),
             verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
@@ -451,6 +544,54 @@ private fun AiChatScreen(
             )
         }
     }
+}
+
+/**
+ * Saved conversations, newest first: click restores (the live conversation is
+ * already autosaved), the trash icon deletes. Titles are the first user
+ * message of each conversation.
+ */
+@Composable
+private fun HistoryList(
+    history: ImmutableList<AiChatConversation>,
+    onIntent: (AiChatIntent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier = modifier, verticalArrangement = Arrangement.spacedBy(UIConst.paddingSmall)) {
+        if (history.isEmpty()) {
+            item { AppText(Strings[StringKey.AI_CHAT_HISTORY_EMPTY], AppTextStyle.NOTE) }
+        }
+        items(history, key = { it.id }) { conversation ->
+            AppCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(UIConst.paddingSmall),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clickable { onIntent(AiChatIntent.RestoreConversation(conversation.id)) },
+                    ) {
+                        AppText(conversation.title, AppTextStyle.BODY_STRONG, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        AppText(formatConversationStamp(conversation.updatedAtEpochMs), AppTextStyle.TINY)
+                    }
+                    AppIconButton(
+                        label = Strings[StringKey.COMMON_DELETE],
+                        icon = AppDrawableRepo.delete,
+                        onClick = { onIntent(AiChatIntent.DeleteConversation(conversation.id)) },
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** dd/MM HH:mm in the device's zone - enough to tell conversations apart. */
+private fun formatConversationStamp(epochMs: Long): String {
+    val dt = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun p(n: Int) = n.toString().padStart(2, '0')
+    return "${p(dt.day)}/${p(dt.month.number)} ${p(dt.hour)}:${p(dt.minute)}"
 }
 
 /**

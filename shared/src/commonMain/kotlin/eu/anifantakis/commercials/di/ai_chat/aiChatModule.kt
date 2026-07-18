@@ -1,8 +1,10 @@
 package eu.anifantakis.commercials.di.ai_chat
 
 import eu.anifantakis.commercials.feature.ai_chat.data.AiChatRepositoryImpl
+import eu.anifantakis.commercials.feature.ai_chat.data.KSafeAiChatHistoryStore
 import eu.anifantakis.commercials.feature.ai_chat.data.KSafeAiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.data.data_source.RemoteAiChatDataSourceImpl
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatHistoryStore
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.data_source.RemoteAiChatDataSource
@@ -16,5 +18,6 @@ val aiChatModule = module {
     singleOf(::RemoteAiChatDataSourceImpl).bind<RemoteAiChatDataSource>()
     singleOf(::AiChatRepositoryImpl).bind<AiChatRepository>()
     singleOf(::KSafeAiChatPreferences).bind<AiChatPreferences>()
+    singleOf(::KSafeAiChatHistoryStore).bind<AiChatHistoryStore>()
     viewModelOf(::AiChatViewModel)
 }
