@@ -15,8 +15,18 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import io.ktor.http.ContentType
+import io.ktor.server.response.respondBytesWriter
+import io.ktor.utils.io.writeStringUtf8
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+/** For hand-built NDJSON stream lines (route-scoped negotiation can't help here). */
+private val StreamJson = Json { encodeDefaults = true }
 
 /** One client-visible conversation turn; role is `user` or `assistant`. */
 @Serializable
@@ -152,6 +162,77 @@ fun Route.aiRoutes(aiChat: AiChatService) {
              *
              * Tag: AI
              */
+            /**
+             * STREAMING chat: same request as /chat, but the response is
+             * NDJSON - one {"type":"step",...} line the moment each tool
+             * starts (the user watches the work happen instead of a blank
+             * spinner), then a final {"type":"reply",...} carrying the full
+             * AiChatResponseDto, or {"type":"error",...}. Errors after the
+             * 200 header can only travel in-band - hence the envelope.
+             *
+             * Tag: AI
+             */
+            post("/chat/stream") {
+                val user = call.authUser()
+                val request = call.receive<AiChatRequestDto>()
+                if (request.messages.isEmpty() || request.messages.size > MAX_TURNS ||
+                    request.messages.any { it.text.length > MAX_TURN_CHARS }
+                ) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "1..$MAX_TURNS messages of up to $MAX_TURN_CHARS chars"))
+                    return@post
+                }
+                val history = request.messages.map {
+                    AiChatTurn(
+                        role = if (it.role.equals("assistant", ignoreCase = true)) AiChatRole.ASSISTANT else AiChatRole.USER,
+                        text = it.text,
+                    )
+                }
+                val station = call.request.queryParameters["station"]?.trim()?.takeIf { it.isNotEmpty() }
+                call.respondBytesWriter(contentType = ContentType.parse("application/x-ndjson")) {
+                    suspend fun line(obj: JsonObject) {
+                        writeStringUtf8(obj.toString() + "\n")
+                        flush()
+                    }
+                    try {
+                        val reply = aiChat.chat(
+                            user, history, request.provider, request.model, station,
+                            screenContext = request.screenContext?.take(300),
+                            onStep = { step ->
+                                line(buildJsonObject {
+                                    put("type", JsonPrimitive("step"))
+                                    put("tool", JsonPrimitive(step.tool))
+                                })
+                            },
+                        )
+                        line(buildJsonObject {
+                            put("type", JsonPrimitive("reply"))
+                            put(
+                                "reply",
+                                StreamJson.encodeToJsonElement(
+                                    AiChatResponseDto.serializer(),
+                                    AiChatResponseDto(
+                                        text = reply.text,
+                                        steps = reply.steps.map { AiToolStepDto(it.tool, it.isError) },
+                                        proposals = reply.proposals.map { AiProposalDto(it.tool, it.arguments, it.preview) },
+                                        clientActions = reply.clientActions.map { AiClientActionDto(it.action, it.arguments) },
+                                    ),
+                                ),
+                            )
+                        })
+                    } catch (e: AiSelectionException) {
+                        line(buildJsonObject {
+                            put("type", JsonPrimitive("error"))
+                            put("message", JsonPrimitive(e.message ?: "invalid provider/model"))
+                        })
+                    } catch (e: AiProviderException) {
+                        line(buildJsonObject {
+                            put("type", JsonPrimitive("error"))
+                            put("message", JsonPrimitive(e.message ?: "AI provider error"))
+                        })
+                    }
+                }
+            }
+
             /**
              * ADMIN oversight: per-user token usage, aggregated per
              * (user, provider, model), most recently used first.

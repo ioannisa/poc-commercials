@@ -139,6 +139,14 @@ class AiChatViewModelTest {
             return result
         }
 
+        override suspend fun sendStreaming(
+            history: List<AiChatMessage>,
+            provider: String,
+            model: String,
+            screenContext: String?,
+            onStep: (String) -> Unit,
+        ): DataResult<AiChatReply, RemoteError> = send(history, provider, model, screenContext)
+
         override suspend fun execute(
             tool: String,
             argumentsJson: String,

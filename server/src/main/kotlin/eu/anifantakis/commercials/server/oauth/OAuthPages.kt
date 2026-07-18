@@ -104,13 +104,13 @@ fun renderAuthorizePage(
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Authorize $safeClient - Commercials Manager</title>
+        <title>Authorize $safeClient - Commercials Manager AI</title>
         <style>$PAGE_STYLE</style>
         </head>
         <body>
         <main class="card">
         <h1>Authorize <span class="client">$safeClient</span></h1>
-        <p class="app">Commercials Manager</p>
+        <p class="app">Commercials Manager AI</p>
         $errorBox
         <form method="post" action="/oauth/authorize" id="auth-form">
             $hiddenInputs

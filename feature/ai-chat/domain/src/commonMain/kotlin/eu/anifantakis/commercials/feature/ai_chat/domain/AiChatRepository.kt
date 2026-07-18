@@ -20,6 +20,19 @@ interface AiChatRepository {
         screenContext: String? = null,
     ): DataResult<AiChatReply, RemoteError>
 
+    /**
+     * Like [send], but STREAMING: [onStep] fires the moment the server starts
+     * each tool call, so the UI can show the work happening live; the full
+     * reply still arrives once, at the end.
+     */
+    suspend fun sendStreaming(
+        history: List<AiChatMessage>,
+        provider: String,
+        model: String,
+        screenContext: String? = null,
+        onStep: (String) -> Unit,
+    ): DataResult<AiChatReply, RemoteError>
+
     /** Execute a proposal the user APPROVED (the server re-validates everything). */
     suspend fun execute(
         tool: String,

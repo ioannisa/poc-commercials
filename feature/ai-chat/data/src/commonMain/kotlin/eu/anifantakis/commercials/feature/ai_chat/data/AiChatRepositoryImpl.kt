@@ -20,6 +20,15 @@ class AiChatRepositoryImpl(
     ): DataResult<AiChatReply, RemoteError> =
         remoteDataSource.send(history, provider, model, screenContext)
 
+    override suspend fun sendStreaming(
+        history: List<AiChatMessage>,
+        provider: String,
+        model: String,
+        screenContext: String?,
+        onStep: (String) -> Unit,
+    ): DataResult<AiChatReply, RemoteError> =
+        remoteDataSource.sendStreaming(history, provider, model, screenContext, onStep)
+
     override suspend fun execute(
         tool: String,
         argumentsJson: String,

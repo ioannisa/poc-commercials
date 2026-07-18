@@ -113,6 +113,8 @@ data class AiChatState(
     val selectedModel: String? = null,
     /** Per-card execution state, keyed by [AiProposal.id]; absent = still pending. */
     val actionResults: ImmutableMap<String, AiActionState> = persistentMapOf(),
+    /** Tools the IN-FLIGHT request has started, streamed live (shown under the spinner). */
+    val liveSteps: ImmutableList<String> = persistentListOf(),
     /** Saved conversations (newest first) - shown when [showHistory] is on. */
     val history: ImmutableList<AiChatConversation> = persistentListOf(),
     val showHistory: Boolean = false,
@@ -233,9 +235,12 @@ class AiChatViewModel(
         val model = s.selectedModel ?: return
         if (text.isBlank() || s.busy) return
         val history = (s.messages + AiChatMessage(AiChatRole.USER, text)).toImmutableList()
-        _state.update { it.copy(messages = history, input = "", busy = true, error = null) }
+        _state.update { it.copy(messages = history, input = "", busy = true, error = null, liveSteps = persistentListOf()) }
         viewModelScope.launch {
-            when (val result = repository.send(history, provider, model, screenContext.current)) {
+            val result = repository.sendStreaming(history, provider, model, screenContext.current) { tool ->
+                _state.update { it.copy(liveSteps = (it.liveSteps + tool).toImmutableList()) }
+            }
+            when (result) {
                 is DataResult.Success -> {
                     _state.update {
                         it.copy(
@@ -245,14 +250,15 @@ class AiChatViewModel(
                                 steps = result.data.steps,
                                 proposals = result.data.proposals,
                             )).toImmutableList(),
-                            busy = false,
+                                busy = false,
+                            liveSteps = persistentListOf(),
                         )
                     }
                     result.data.clientActions.forEach(::handleClientAction)
                     autosave()
                 }
                 is DataResult.Failure -> {
-                    _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+                    _state.update { it.copy(busy = false, error = result.error.toUiText(), liveSteps = persistentListOf()) }
                     autosave()
                 }
             }
@@ -498,13 +504,21 @@ private fun AiChatScreen(
             }
             if (state.busy) {
                 item {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppLoadingIndicator(isLoading = true)
-                        AppText(
-                            Strings[StringKey.AI_CHAT_THINKING],
-                            AppTextStyle.NOTE,
-                            modifier = Modifier.padding(start = UIConst.paddingSmall),
-                        )
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppLoadingIndicator(isLoading = true)
+                            AppText(
+                                Strings[StringKey.AI_CHAT_THINKING],
+                                AppTextStyle.NOTE,
+                                modifier = Modifier.padding(start = UIConst.paddingSmall),
+                            )
+                        }
+                        // The streamed tool trail: each line appears the moment
+                        // the server STARTS that tool - live progress, not a
+                        // blank spinner for 20 seconds.
+                        state.liveSteps.forEach { tool ->
+                            AppText("• $tool", AppTextStyle.TINY, modifier = Modifier.padding(start = UIConst.paddingRegular))
+                        }
                     }
                 }
             }

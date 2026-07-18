@@ -14,6 +14,14 @@ interface RemoteAiChatDataSource {
         screenContext: String?,
     ): DataResult<AiChatReply, RemoteError>
 
+    suspend fun sendStreaming(
+        history: List<AiChatMessage>,
+        provider: String,
+        model: String,
+        screenContext: String?,
+        onStep: (String) -> Unit,
+    ): DataResult<AiChatReply, RemoteError>
+
     suspend fun execute(
         tool: String,
         argumentsJson: String,

@@ -26,9 +26,12 @@ import kotlin.random.Random
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.utils.io.readUTF8Line
 
 class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatDataSource {
 
@@ -60,27 +63,62 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
                     )
                 )
             }.body<AiChatResponseDto>()
-        }.map { dto ->
-            AiChatReply(
-                text = dto.text,
-                steps = dto.steps.map { AiToolStep(it.tool, it.isError) },
-                clientActions = dto.clientActions.map { a ->
-                    AiClientAction(
-                        action = a.action,
-                        station = (a.arguments["station"] as? JsonPrimitive)?.contentOrNull,
-                    )
-                },
-                proposals = dto.proposals.mapIndexed { i, p ->
-                    AiProposal(
-                        // Client-generated card key: unique across the conversation.
-                        id = "${p.tool}#$i@${Random.nextLong().toULong().toString(16)}",
-                        tool = p.tool,
-                        argumentsJson = p.arguments.toString(),
-                        preview = p.preview,
-                    )
-                },
+        }.map { it.toDomain() }
+
+    /**
+     * The NDJSON streaming variant: each `{"type":"step"}` line fires
+     * [onStep] the moment the server STARTS a tool, the final
+     * `{"type":"reply"}` carries the whole response, `{"type":"error"}` is
+     * the in-band error envelope (the 200 header is long gone by then).
+     */
+    override suspend fun sendStreaming(
+        history: List<AiChatMessage>,
+        provider: String,
+        model: String,
+        screenContext: String?,
+        onStep: (String) -> Unit,
+    ): DataResult<AiChatReply, RemoteError> {
+        var reply: AiChatReply? = null
+        var streamError: String? = null
+        val result = remoteCall {
+        api.client.preparePost("/api/ai/chat/stream") {
+            timeout { requestTimeoutMillis = AI_REQUEST_TIMEOUT_MILLIS }
+            contentType(ContentType.Application.Json)
+            setBody(
+                AiChatRequestDto(
+                    messages = history.map {
+                        AiChatTurnDto(
+                            role = if (it.role == AiChatRole.ASSISTANT) "assistant" else "user",
+                            text = it.text,
+                        )
+                    },
+                    provider = provider,
+                    model = model,
+                    screenContext = screenContext,
+                )
             )
+        }.execute { response ->
+            val channel = response.bodyAsChannel()
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                if (line.isBlank()) continue
+                val obj = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: continue
+                when ((obj["type"] as? JsonPrimitive)?.contentOrNull) {
+                    "step" -> (obj["tool"] as? JsonPrimitive)?.contentOrNull?.let(onStep)
+                    "reply" -> reply = obj["reply"]?.let {
+                        StreamJson.decodeFromJsonElement(AiChatResponseDto.serializer(), it).toDomain()
+                    }
+                    "error" -> streamError = (obj["message"] as? JsonPrimitive)?.contentOrNull ?: "AI provider error"
+                }
+            }
         }
+        reply ?: error("stream ended without a reply")
+        }
+        // The in-band error envelope surfaces with the SERVER's message,
+        // exactly like a non-streaming 502 would.
+        streamError?.let { return DataResult.Failure(RemoteError.Server(it)) }
+        return result
+    }
 
     override suspend fun execute(
         tool: String,
@@ -100,8 +138,32 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
             }.body<AiExecuteResponseDto>()
         }.map { AiExecutionOutcome(it.text, it.isError) }
 
+    /** Shared dto->domain mapping (plain and streaming paths). */
+    private fun AiChatResponseDto.toDomain(): AiChatReply = AiChatReply(
+        text = text,
+        steps = steps.map { AiToolStep(it.tool, it.isError) },
+        clientActions = clientActions.map { a ->
+            AiClientAction(
+                action = a.action,
+                station = (a.arguments["station"] as? JsonPrimitive)?.contentOrNull,
+            )
+        },
+        proposals = proposals.mapIndexed { i, p ->
+            AiProposal(
+                // Client-generated card key: unique across the conversation.
+                id = "${p.tool}#$i@${Random.nextLong().toULong().toString(16)}",
+                tool = p.tool,
+                argumentsJson = p.arguments.toString(),
+                preview = p.preview,
+            )
+        },
+    )
+
     private companion object {
         const val AI_REQUEST_TIMEOUT_MILLIS = 180_000L
         const val EXECUTE_TIMEOUT_MILLIS = 60_000L
+
+        /** NDJSON lines are hand-parsed - lenient to unknown fields. */
+        val StreamJson = Json { ignoreUnknownKeys = true }
     }
 }

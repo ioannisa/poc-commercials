@@ -92,6 +92,7 @@ class AiChatService(
         modelId: String?,
         stationId: String? = null,
         screenContext: String? = null,
+        onStep: (suspend (AiToolStep) -> Unit)? = null,
     ): AiChatReply {
         val entries = catalog
         if (entries.isEmpty()) throw AiProviderException("AI assistant is not configured (server.yaml ai:)")
@@ -121,7 +122,7 @@ class AiChatService(
         val proposals = mutableListOf<AiProposal>()
         val clientActions = mutableListOf<AiClientAction>()
         val tools = buildList {
-            addAll(bridgedTools(user, if (mutations) proposals else null))
+            addAll(bridgedTools(user, if (mutations) proposals else null, onStep))
             // Station switching is a pure UI action - only meaningful when an
             // app (not a raw API caller) is on the other end of the pin.
             if (activeStation != null) add(switchStationTool(user, activeStation, clientActions))
@@ -238,10 +239,15 @@ class AiChatService(
      * data), and a successful preview is collected as an [AiProposal] card
      * for the user to approve. The model can therefore never perform a write.
      */
-    private fun bridgedTools(user: AuthUser, proposals: MutableList<AiProposal>?): List<AiBridgedTool> {
+    private fun bridgedTools(
+        user: AuthUser,
+        proposals: MutableList<AiProposal>?,
+        onStep: (suspend (AiToolStep) -> Unit)? = null,
+    ): List<AiBridgedTool> {
         val ctx = ToolContext(McpCaller.of(user), services)
 
         suspend fun run(tool: eu.anifantakis.commercials.mcp.tools.McpTool, args: JsonObject): AiToolOutcome {
+            onStep?.invoke(AiToolStep(tool.name, isError = false))   // announce BEFORE the (possibly slow) call
             val result = tool.handle(ctx, CallToolRequest(CallToolRequestParams(tool.name, args)))
             val text = result.content
                 .filterIsInstance<TextContent>()
