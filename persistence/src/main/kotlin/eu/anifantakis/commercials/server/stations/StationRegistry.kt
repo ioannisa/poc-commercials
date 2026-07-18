@@ -533,6 +533,38 @@ class StationRegistry(@Provided hosting: HostingConfig) {
     val behindReverseProxy: Boolean = hosting.behindReverseProxy
 
     /**
+     * Organisation name for email branding: the hosted groups' display names
+     * (server.yaml group `name`), joined when several are hosted, falling back
+     * to the product name when none carry a name. The installation-wide default.
+     */
+    val brandName: String
+        get() {
+            val names = groupConfigs.mapNotNull { it.name?.trim()?.takeIf(String::isNotEmpty) }.distinct()
+            return if (names.isEmpty()) "Commercials Manager" else names.joinToString(" · ")
+        }
+
+    /** Distinct display names of the groups hosting [stationIds], first-seen order. */
+    fun groupNamesFor(stationIds: Collection<String>): List<String> =
+        stationIds.mapNotNull { group(it)?.name?.trim()?.takeIf(String::isNotEmpty) }.distinct()
+
+    /**
+     * Brand line for a user PLACED on [stationIds]: the names of the groups those
+     * stations belong to - i.e. the groups the user was actually assigned to, not
+     * every group the server hosts. Falls back to the installation-wide [brandName]
+     * when none resolve (a user with no grants, or groups without a `name`).
+     */
+    fun brandNameFor(stationIds: Collection<String>): String =
+        groupNamesFor(stationIds).takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: brandName
+
+    /**
+     * The MCP connector URL clients configure in an AI app (claude.ai, ...):
+     * `https://<first mcpAllowedHosts>/mcp/http`. Null when no public host is
+     * declared, so account emails simply omit the AI-connector guidance.
+     */
+    val mcpConnectorUrl: String?
+        get() = mcpAllowedHosts?.firstOrNull()?.let { "https://$it/mcp/http" }
+
+    /**
      * In-app AI assistant: the providers holding an API key, DEFAULT FIRST
      * (server.yaml `ai:`). Empty = feature off - the chat route stays
      * unmounted and clients hide the entry entirely.

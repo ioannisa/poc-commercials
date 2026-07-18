@@ -313,7 +313,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
             registry = registry,
             intendedTo = connectedAccount,
             subject = "Commercials Manager verification code",
-            html = renderConsentOtpEmail(consent.otp, client.clientName, oauthDb.consentOtpTtlMinutes),
+            html = renderConsentOtpEmail(registry.brandName, consent.otp, client.clientName, oauthDb.consentOtpTtlMinutes),
         )
         call.response.headers.append(HttpHeaders.CacheControl, "no-store")
         call.respondHtmlPage(
@@ -466,6 +466,7 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
                         intendedTo = confirmation.email!!,
                         subject = "Νέα σύνδεση AI - απαιτείται έγκριση",
                         html = renderConnectionApprovalEmail(
+                            orgName = registry.brandName,
                             clientName = client.clientName,
                             connectedAccount = redeemed.connectedAccount ?: "-",
                             ip = redeemed.consentIp,

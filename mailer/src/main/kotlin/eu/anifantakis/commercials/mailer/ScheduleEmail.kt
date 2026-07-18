@@ -15,6 +15,11 @@ import java.time.YearMonth
  */
 data class ScheduleEmailData(
     val stationName: String,
+    /**
+     * The hosting organisation (server.yaml group `name`), shown at the very top
+     * of the masthead above the station. Null keeps the legacy station-only header.
+     */
+    val orgName: String? = null,
     /** Optional link target for the header (the station's site). */
     val stationSiteUrl: String? = null,
     val customerName: String,
@@ -79,9 +84,14 @@ fun renderScheduleEmail(data: ScheduleEmailData): String {
     sb.append("<body style=\"margin:0;padding:16px;background:#F4F5F7;font-family:Arial,Helvetica,sans-serif;\">")
     sb.append("<div style=\"max-width:980px;margin:0 auto;background:#FFFFFF;border:1px solid $BORDER;border-radius:8px;padding:24px;\">")
 
-    // ── header: station identity + automated-mail marker ────────────────
+    // ── header: organisation + station identity + automated-mail marker ──
+    // The hosting group's name leads (server.yaml `name`), the station is named
+    // beneath it since this mail is about one outlet, then the product marker.
     val title = esc(data.stationName)
     sb.append("<div style=\"border-bottom:2px solid $NAVY;padding-bottom:12px;margin-bottom:16px;\">")
+    if (!data.orgName.isNullOrBlank()) {
+        sb.append("<div style=\"font-size:15px;font-weight:bold;color:$NAVY;margin-bottom:2px;\">${esc(data.orgName)}</div>")
+    }
     if (data.stationSiteUrl != null) {
         sb.append("<a href=\"${esc(data.stationSiteUrl)}\" style=\"text-decoration:none;color:$NAVY;\"><span style=\"font-size:22px;font-weight:bold;\">$title</span></a>")
     } else {

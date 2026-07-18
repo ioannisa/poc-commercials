@@ -223,6 +223,7 @@ fun Route.emailRoutes(registry: StationRegistry) {
                     access.db.asScheduleEmailSource(),
                     registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
                     year, month, clientCode, byTrader, spotIds, call.request.queryParameters["personalMessage"],
+                    orgName = registry.group(access.grant.stationId)?.name ?: registry.brandName,
                 )
             }
             if (data == null) {
@@ -282,6 +283,7 @@ fun Route.emailRoutes(registry: StationRegistry) {
                     access.db.asScheduleEmailSource(),
                     registry.config(access.grant.stationId)?.name ?: access.grant.stationId,
                     req.year, req.month, req.clientCode, byTrader, req.spotIds.toSet(), req.personalMessage,
+                    orgName = registry.group(access.grant.stationId)?.name ?: registry.brandName,
                 )
                     ?: return@withContext SendResult(false, "No spots for customer '${req.clientCode}' this month")
 

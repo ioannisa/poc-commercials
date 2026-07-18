@@ -139,6 +139,9 @@ class McpToolServices(
     /** Display name for a station id. */
     fun stationName(stationId: String): String = directory.name(stationId) ?: stationId
 
+    /** Hosting organisation (group) name for a station's emails; null when unset. */
+    fun orgName(stationId: String): String? = directory.groupName(stationId)
+
     /** Deliver an already-rendered schedule email. */
     fun sendEmail(smtp: SmtpConfig, to: String, subject: String, html: String) =
         emailSender.send(smtp, to, subject, html)

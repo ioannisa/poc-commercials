@@ -151,7 +151,18 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
                     registry = registry,
                     intendedTo = email,
                     subject = "Ο λογαριασμός σας δημιουργήθηκε",
-                    html = renderTempPasswordEmail(request.username.trim(), created.tempPassword, newAccount = true),
+                    html = renderTempPasswordEmail(
+                        // The groups the user was actually placed in - resolved from
+                        // the grants just assigned, not every group the server hosts.
+                        orgName = registry.brandNameFor(request.grants.map { it.stationId }),
+                        username = request.username.trim(),
+                        tempPassword = created.tempPassword,
+                        newAccount = true,
+                        // Dynamic per installation: where to sign in on the web
+                        // and how to attach an AI connector, straight from server.yaml.
+                        webUrl = registry.publicBaseUrl,
+                        mcpUrl = registry.mcpConnectorUrl,
+                    ),
                 )
             }
             call.respond(
@@ -176,7 +187,12 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
                     registry = registry,
                     intendedTo = email,
                     subject = "Ο κωδικός σας μηδενίστηκε",
-                    html = renderTempPasswordEmail(temp.username, temp.password, newAccount = false),
+                    html = renderTempPasswordEmail(
+                        orgName = registry.brandNameFor(temp.stationIds),
+                        username = temp.username,
+                        tempPassword = temp.password,
+                        newAccount = false,
+                    ),
                 )
             }
             call.respond(TempPasswordResponse(userId, temp.password, temp.email != null))

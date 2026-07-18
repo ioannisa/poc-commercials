@@ -79,6 +79,7 @@ object SendScheduleEmailTool : McpTool {
                 stationName = services.stationName(access.grant.stationId),
                 year = year, month = month, clientCode = clientCode, byTrader = byTrader,
                 spotIds = spotIds, personalMessage = a.stringOrNull("personalMessage"),
+                orgName = services.orgName(access.grant.stationId),
             ) ?: throw McpToolException(
                 "No spots for '$clientCode' in $month/$year (kind=${if (byTrader) "trader" else "customer"})."
             )

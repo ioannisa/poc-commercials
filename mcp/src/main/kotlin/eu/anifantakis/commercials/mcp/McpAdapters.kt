@@ -59,6 +59,7 @@ class StationDbDataSource(private val db: StationDb) : StationDataSource {
 class StationRegistryDirectory(private val registry: StationRegistry) : StationDirectory {
     override val ids: List<String> get() = registry.ids
     override fun name(stationId: String): String? = registry.config(stationId)?.name
+    override fun groupName(stationId: String): String? = registry.group(stationId)?.name ?: registry.brandName
     override fun smtp(stationId: String): SmtpConfig? = registry.smtpFor(stationId)
     override fun logo(stationId: String): String? = registry.config(stationId)?.logo?.takeIf { it.isNotBlank() }
     override fun dataSource(stationId: String): StationDataSource? =

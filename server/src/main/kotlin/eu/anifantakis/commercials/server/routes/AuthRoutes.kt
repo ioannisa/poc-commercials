@@ -216,7 +216,7 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
                     registry = registry,
                     intendedTo = it.email,
                     subject = "Επαναφορά κωδικού πρόσβασης",
-                    html = renderPasswordResetEmail(it.code, (PASSWORD_RESET_TTL_SECONDS / 60).toInt()),
+                    html = renderPasswordResetEmail(registry.brandName, it.code, (PASSWORD_RESET_TTL_SECONDS / 60).toInt()),
                 )
             }
             call.respond(mapOf("status" to "if the account exists with an email on file, a reset code was sent"))

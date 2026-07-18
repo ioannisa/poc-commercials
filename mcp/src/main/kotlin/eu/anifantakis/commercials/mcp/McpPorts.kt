@@ -42,6 +42,8 @@ interface StationDataSource : ScheduleEmailSource {
 interface StationDirectory {
     val ids: List<String>
     fun name(stationId: String): String?
+    /** The hosting group's display name for a station (server.yaml group `name`); null when absent. */
+    fun groupName(stationId: String): String? = null
     fun smtp(stationId: String): SmtpConfig?
     /** Report logo path from server.yaml; null when the station has none. */
     fun logo(stationId: String): String?

@@ -39,6 +39,7 @@ object ScheduleEmailAssembler {
         byTrader: Boolean,
         spotIds: Set<Long>,
         personalMessage: String?,
+        orgName: String? = null,
     ): ScheduleEmailData? {
         val customer = source.customerByCode(clientCode) ?: return null
 
@@ -89,6 +90,7 @@ object ScheduleEmailAssembler {
 
         return ScheduleEmailData(
             stationName = stationName,
+            orgName = orgName,
             customerName = customer.name,
             year = year,
             month = month,

@@ -47,6 +47,30 @@ class StationRegistryLiveGroupTest {
         stations = stationIds.map { StationConfig(id = it, name = it.uppercase()) },
     )
 
+    private fun namedGroup(id: String, name: String, vararg stationIds: String) =
+        group(id, *stationIds).copy(name = name)
+
+    /**
+     * Account emails must be branded with the groups the user was PLACED IN
+     * (their grants), not every group the server hosts - the operator's fix.
+     */
+    @Test
+    fun brandNameForScopesToTheStationsGroups() {
+        val registry = registry(
+            namedGroup("crete-group", "Κρητική Ραδιοτηλεόραση", "crete-tv", "radio-984"),
+            namedGroup("ch4-group", "Channel 4", "channel-4"),
+            namedGroup("test-group", "Test Group", "test-tv"),
+        )
+
+        // Placed only on Crete stations -> only that group's name.
+        assertEquals("Κρητική Ραδιοτηλεόραση", registry.brandNameFor(listOf("crete-tv", "radio-984")))
+        // Placed across two groups -> both, distinct, in first-seen order.
+        assertEquals("Κρητική Ραδιοτηλεόραση · Test Group", registry.brandNameFor(listOf("crete-tv", "test-tv")))
+        // No grants -> falls back to the whole-installation brand (every group).
+        assertEquals(registry.brandName, registry.brandNameFor(emptyList()))
+        assertEquals("Κρητική Ραδιοτηλεόραση · Channel 4 · Test Group", registry.brandName)
+    }
+
     /** The exact sequence a migration performs: boot with one group, host another. */
     @Test
     fun aGroupAddedAtRuntimeIsHostedWithoutARestart() {

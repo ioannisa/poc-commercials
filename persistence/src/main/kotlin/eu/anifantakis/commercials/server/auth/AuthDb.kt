@@ -757,7 +757,13 @@ class AuthDb(
     }
 
     /** A generated temporary password, the account it is for, and where to email it (if any). */
-    data class TempPassword(val password: String, val username: String, val email: String?)
+    data class TempPassword(
+        val password: String,
+        val username: String,
+        val email: String?,
+        /** The user's granted station ids - lets the notice be branded with their groups. */
+        val stationIds: List<String> = emptyList(),
+    )
 
     /**
      * Starts a "forgot password" flow: mints a fresh [RESET_CODE_DIGITS]-digit
@@ -882,7 +888,12 @@ class AuthDb(
             setPassword(c, userId, temp, mustChange = true)
             deletePasswordReset(c, userId)
             revokeAllTokens(c, userId)
-            return TempPassword(temp, row.username, selectEmail(c, userId)?.takeIf { it.isNotBlank() })
+            return TempPassword(
+                temp,
+                row.username,
+                selectEmail(c, userId)?.takeIf { it.isNotBlank() },
+                loadGrants(c, userId).map { it.stationId },
+            )
         }
     }
 
