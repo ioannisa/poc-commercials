@@ -25,6 +25,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlin.random.Random
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
@@ -120,6 +121,9 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
         return result
     }
 
+    override suspend fun fetchReport(id: String): DataResult<ByteArray, RemoteError> =
+        remoteCall { api.client.get("/api/ai/report/" + id).body<ByteArray>() }
+
     override suspend fun execute(
         tool: String,
         argumentsJson: String,
@@ -146,6 +150,8 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
             AiClientAction(
                 action = a.action,
                 station = (a.arguments["station"] as? JsonPrimitive)?.contentOrNull,
+                reportId = (a.arguments["id"] as? JsonPrimitive)?.contentOrNull,
+                fileName = (a.arguments["fileName"] as? JsonPrimitive)?.contentOrNull,
             )
         },
         proposals = proposals.mapIndexed { i, p ->

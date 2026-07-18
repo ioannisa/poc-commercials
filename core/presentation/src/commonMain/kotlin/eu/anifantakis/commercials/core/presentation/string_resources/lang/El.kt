@@ -370,6 +370,7 @@ internal class El : LanguageStrings {
         StringKey.AI_CHAT_NOTE_DECLINED -> "[Ο χρήστης ακύρωσε την προτεινόμενη ενέργεια {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[Η εκτέλεση της εγκεκριμένης ενέργειας {0} ΑΠΕΤΥΧΕ: {1}]"
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Ο ενεργός σταθμός άλλαξε σε {0}.]"
+        StringKey.AI_CHAT_NOTE_REPORT -> "[Το report {0} δημιουργήθηκε και άνοιξε.]"
         StringKey.AI_CHAT_HISTORY -> "Ιστορικό"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "Δεν υπάρχουν αποθηκευμένες συνομιλίες ακόμα."
         StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "Χρήση AI (tokens ανά χρήστη)"

@@ -375,6 +375,7 @@ internal class He : LanguageStrings {
         StringKey.AI_CHAT_NOTE_DECLINED -> "[המשתמש ביטל את הפעולה המוצעת {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[ביצוע הפעולה המאושרת {0} נכשל: {1}]"
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[התחנה הפעילה הוחלפה ל-{0}.]"
+        StringKey.AI_CHAT_NOTE_REPORT -> "[הדוח {0} נוצר ונפתח.]"
         StringKey.AI_CHAT_HISTORY -> "היסטוריה"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "אין עדיין שיחות שמורות."
         StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "שימוש ב-AI (אסימונים למשתמש)"

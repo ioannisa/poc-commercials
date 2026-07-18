@@ -1,6 +1,8 @@
 package eu.anifantakis.commercials.di
 
+import eu.anifantakis.commercials.reports.DesktopPdfSink
 import eu.anifantakis.commercials.reports.DesktopReportService
+import eu.anifantakis.commercials.reports.PdfSink
 import eu.anifantakis.commercials.reports.DesktopStationLogoCache
 import eu.anifantakis.commercials.reports.ReportService
 import eu.anifantakis.commercials.reports.StationLogoCache
@@ -28,6 +30,8 @@ actual val platformModule: Module = module {
 
     // Desktop generates reports in-process with the embedded Jasper engine
     singleOf(::DesktopReportService).bind<ReportService>()
+    // Server-rendered bytes (AI-chat out-of-band reports): temp file + system viewer.
+    singleOf(::DesktopPdfSink).bind<PdfSink>()
     // ...so Jasper needs the logo as a LOCAL file: fetch the bytes, cache them.
     // (Every other platform renders server-side, where the server applies its
     // own logo and a client-supplied path is refused.)

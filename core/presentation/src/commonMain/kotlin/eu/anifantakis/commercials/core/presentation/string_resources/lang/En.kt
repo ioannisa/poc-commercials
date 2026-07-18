@@ -370,6 +370,7 @@ internal class En : LanguageStrings {
         StringKey.AI_CHAT_NOTE_DECLINED -> "[The user cancelled the proposed action {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[Execution of the approved action {0} FAILED: {1}]"
         StringKey.AI_CHAT_NOTE_SWITCHED -> "[Active station switched to {0}.]"
+        StringKey.AI_CHAT_NOTE_REPORT -> "[The report {0} was generated and opened.]"
         StringKey.AI_CHAT_HISTORY -> "History"
         StringKey.AI_CHAT_HISTORY_EMPTY -> "No saved conversations yet."
         StringKey.ADMIN_MCP_AI_USAGE_HEADER -> "AI usage (tokens per user)"

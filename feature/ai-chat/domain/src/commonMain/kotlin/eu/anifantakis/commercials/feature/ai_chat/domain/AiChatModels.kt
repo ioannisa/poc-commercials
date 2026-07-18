@@ -44,7 +44,13 @@ data class AiProposal(
  * target [station] id - the app changes its active station (grant-checked).
  */
 @Immutable
-data class AiClientAction(val action: String, val station: String? = null)
+data class AiClientAction(
+    val action: String,
+    val station: String? = null,
+    /** open_report: the parked report's one-shot id + display file name. */
+    val reportId: String? = null,
+    val fileName: String? = null,
+)
 
 /** The assistant's reply to one request. */
 @Immutable

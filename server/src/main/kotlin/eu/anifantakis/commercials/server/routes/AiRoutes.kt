@@ -16,6 +16,9 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondBytesWriter
 import io.ktor.utils.io.writeStringUtf8
 import kotlinx.serialization.Serializable
@@ -253,6 +256,27 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                         )
                     }
                 )
+            }
+
+            /**
+             * Collect a parked out-of-band report (one shot, owner-only,
+             * 10-minute TTL): the open_report client action carries the id.
+             *
+             * Tag: AI
+             */
+            get("/report/{id}") {
+                val user = call.authUser()
+                val id = call.parameters["id"].orEmpty()
+                val report = aiChat.takeReport(id, user.username)
+                if (report == null) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Report not found (or expired)"))
+                    return@get
+                }
+                call.response.header(
+                    HttpHeaders.ContentDisposition,
+                    "attachment; filename=\"${report.second.replace("\"", "")}\"",
+                )
+                call.respondBytes(report.first, ContentType.Application.Pdf)
             }
 
             post("/execute") {

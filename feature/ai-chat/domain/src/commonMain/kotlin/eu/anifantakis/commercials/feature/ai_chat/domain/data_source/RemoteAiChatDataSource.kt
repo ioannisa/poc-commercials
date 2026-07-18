@@ -22,6 +22,8 @@ interface RemoteAiChatDataSource {
         onStep: (String) -> Unit,
     ): DataResult<AiChatReply, RemoteError>
 
+    suspend fun fetchReport(id: String): DataResult<ByteArray, RemoteError>
+
     suspend fun execute(
         tool: String,
         argumentsJson: String,

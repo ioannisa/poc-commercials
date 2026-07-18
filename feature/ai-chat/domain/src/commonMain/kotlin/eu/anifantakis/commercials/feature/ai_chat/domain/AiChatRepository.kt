@@ -33,6 +33,9 @@ interface AiChatRepository {
         onStep: (String) -> Unit,
     ): DataResult<AiChatReply, RemoteError>
 
+    /** Collect a parked out-of-band report's PDF bytes (one shot, expires). */
+    suspend fun fetchReport(id: String): DataResult<ByteArray, RemoteError>
+
     /** Execute a proposal the user APPROVED (the server re-validates everything). */
     suspend fun execute(
         tool: String,

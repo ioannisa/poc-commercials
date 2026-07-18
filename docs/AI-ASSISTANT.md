@@ -28,6 +28,23 @@ dry-run, `confirm=true` = perform). The chat bridge exploits it:
    change appears in the grid live**.
 5. **Cancel** marks the card declined and notes it - nothing runs.
 
+## Phase 3
+
+The chat also gained: **conversation history** (autosaved on every turn to
+encrypted local storage, capped at 30 - restore/delete from the History
+button; cards persist as their NOTE outcomes), **screen-context injection**
+(the request carries what the user is looking at, so "τι βλέπω;"/"this
+break" resolve against the actual screen), **per-user token metering**
+(aggregated per user x provider x model in the central `ai_usage` table,
+shown in the MCP oversight console, admin-only `GET /api/ai/usage`),
+**streaming** (`POST /api/ai/chat/stream`, NDJSON: a step event the moment
+each tool starts, then the full reply - the thinking indicator lists the
+work live), and **out-of-band PDF reports**: the report tools are bridged so
+the model only sees the small summary while the bytes park server-side
+(10-min TTL, one-shot, owner-only `GET /api/ai/report/{id}`) and the app
+opens them via the `open_report` client action - on desktop in the system
+viewer, on the web as a browser download.
+
 ## Client actions (Phase 3)
 
 Besides data tools, the model can ask the APP to do UI things via the

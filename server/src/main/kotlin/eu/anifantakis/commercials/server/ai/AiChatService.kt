@@ -13,8 +13,10 @@ import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.modelcontextprotocol.kotlin.sdk.types.BlobResourceContents
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
+import io.modelcontextprotocol.kotlin.sdk.types.EmbeddedResource
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -122,7 +124,7 @@ class AiChatService(
         val proposals = mutableListOf<AiProposal>()
         val clientActions = mutableListOf<AiClientAction>()
         val tools = buildList {
-            addAll(bridgedTools(user, if (mutations) proposals else null, onStep))
+            addAll(bridgedTools(user, if (mutations) proposals else null, onStep, clientActions))
             // Station switching is a pure UI action - only meaningful when an
             // app (not a raw API caller) is on the other end of the pin.
             if (activeStation != null) add(switchStationTool(user, activeStation, clientActions))
@@ -243,6 +245,7 @@ class AiChatService(
         user: AuthUser,
         proposals: MutableList<AiProposal>?,
         onStep: (suspend (AiToolStep) -> Unit)? = null,
+        clientActions: MutableList<AiClientAction>? = null,
     ): List<AiBridgedTool> {
         val ctx = ToolContext(McpCaller.of(user), services)
 
@@ -265,7 +268,46 @@ class AiChatService(
                     properties = tool.inputSchema.properties ?: JsonObject(emptyMap()),
                     required = tool.inputSchema.required ?: emptyList(),
                     execute = { rawArgs ->
-                        if (tool.mutating && proposals != null) {
+                        if (tool.name in REPORT_TOOLS) {
+                            // OUT-OF-BAND PDF: the model keeps the small text
+                            // summary; the bytes park server-side and the app
+                            // opens them via an open_report client action -
+                            // zero tokens spent on the document itself.
+                            onStep?.invoke(AiToolStep(tool.name, isError = false))
+                            val result = tool.handle(ctx, CallToolRequest(CallToolRequestParams(tool.name, rawArgs)))
+                            val text = result.content
+                                .filterIsInstance<TextContent>()
+                                .joinToString("\n") { it.text }
+                                .trim()
+                            val blob = result.content
+                                .filterIsInstance<EmbeddedResource>()
+                                .firstOrNull()
+                                ?.resource?.let { it as? BlobResourceContents }
+                                ?.blob
+                            if (result.isError == true || blob == null) {
+                                AiToolOutcome(text.ifBlank { "(empty result)" }, result.isError == true)
+                            } else {
+                                val bytes = java.util.Base64.getDecoder().decode(blob)
+                                val fileName = runCatching {
+                                    (kotlinx.serialization.json.Json.parseToJsonElement(text)
+                                        .let { it as? JsonObject }?.get("fileName") as? JsonPrimitive)?.contentOrNull
+                                }.getOrNull() ?: "report.pdf"
+                                val id = java.util.UUID.randomUUID().toString()
+                                pruneReports()
+                                reportCache[id] = CachedReport(bytes, fileName, user.username, System.currentTimeMillis())
+                                clientActions?.add(
+                                    AiClientAction(
+                                        "open_report",
+                                        JsonObject(mapOf("id" to JsonPrimitive(id), "fileName" to JsonPrimitive(fileName))),
+                                    )
+                                )
+                                AiToolOutcome(
+                                    text + "\n[The PDF is OPENING on the user's screen right now - " +
+                                        "tell them it opened; do not offer links or paths.]",
+                                    isError = false,
+                                )
+                            }
+                        } else if (tool.mutating && proposals != null) {
                             val args = JsonObject(rawArgs.filterKeys { it != "confirm" })
                             val outcome = run(tool, args)
                             if (outcome.isError) {
@@ -344,9 +386,31 @@ class AiChatService(
         """.trimIndent()
     }
 
+    /** A generated report parked for ONE out-of-band download by its owner. */
+    private data class CachedReport(val bytes: ByteArray, val fileName: String, val username: String, val atMs: Long)
+
+    private val reportCache = ConcurrentHashMap<String, CachedReport>()
+
+    /** Fetch-and-remove a parked report; only its OWNER may collect it. */
+    fun takeReport(id: String, username: String): Pair<ByteArray, String>? {
+        pruneReports()
+        val cached = reportCache[id] ?: return null
+        if (cached.username != username) return null
+        reportCache.remove(id)
+        return cached.bytes to cached.fileName
+    }
+
+    private fun pruneReports() {
+        val cutoff = System.currentTimeMillis() - REPORT_TTL_MS
+        reportCache.entries.removeIf { it.value.atMs < cutoff }
+    }
+
     private companion object {
-        /** Read tools whose output is a base64 PDF - useless and enormous in a chat context. */
-        val EXCLUDED_TOOLS = setOf("generate_break_report", "generate_day_report")
+        /** PDF tools: bridged OUT-OF-BAND - the model gets the small summary,
+         *  the bytes park in [reportCache] and open on the user's screen. */
+        val REPORT_TOOLS = setOf("generate_break_report", "generate_day_report")
+        val EXCLUDED_TOOLS = emptySet<String>()
+        const val REPORT_TTL_MS = 10 * 60 * 1000L
 
         val READ_ONLY_RULE = """
             You currently have READ-ONLY access: you cannot add, move or delete placements or send

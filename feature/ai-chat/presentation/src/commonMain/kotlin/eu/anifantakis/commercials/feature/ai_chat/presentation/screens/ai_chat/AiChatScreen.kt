@@ -79,6 +79,7 @@ import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatStoredTurn
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiClientAction
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiProposal
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiToolStep
+import eu.anifantakis.commercials.reports.PdfSink
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
@@ -151,6 +152,7 @@ class AiChatViewModel(
     private val session: UserSession,
     private val historyStore: AiChatHistoryStore,
     private val screenContext: ActiveScreenContext,
+    private val pdfSink: PdfSink,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
@@ -368,6 +370,19 @@ class AiChatViewModel(
      */
     private fun handleClientAction(action: AiClientAction) {
         when (action.action) {
+            "open_report" -> {
+                val id = action.reportId ?: return
+                val fileName = action.fileName ?: "report.pdf"
+                viewModelScope.launch {
+                    when (val bytes = repository.fetchReport(id)) {
+                        is DataResult.Success -> {
+                            pdfSink.preview(bytes.data, fileName)
+                            appendNote(StringKey.AI_CHAT_NOTE_REPORT.localized().withArgs(listOf(fileName)))
+                        }
+                        is DataResult.Failure -> _state.update { it.copy(error = bytes.error.toUiText()) }
+                    }
+                }
+            }
             "switch_station" -> {
                 val station = session.stations.firstOrNull { it.id == action.station } ?: return
                 if (session.selectedStation?.id != station.id) {

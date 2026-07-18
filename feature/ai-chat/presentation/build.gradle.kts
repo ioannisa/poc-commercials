@@ -10,6 +10,8 @@ kotlin {
             // Chat answers arrive as markdown (models emit it no matter what
             // the prompt says) - render it instead of fighting it.
             implementation(libs.markdown.renderer.m3)
+            // PdfSink: opening the out-of-band chat reports per platform.
+            implementation(projects.reportsClient)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
