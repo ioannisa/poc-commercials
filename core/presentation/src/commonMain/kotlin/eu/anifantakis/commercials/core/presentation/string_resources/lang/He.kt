@@ -357,7 +357,7 @@ internal class He : LanguageStrings {
         StringKey.PREFERENCES_ASSISTANT -> "עוזר"
         StringKey.PREFERENCES_AI_CHAT -> "עוזר AI"
         StringKey.PREFERENCES_AI_CHAT_DESC -> "שאל על לוחות שידור, הפסקות, ספוטים וחוזים"
-        StringKey.AI_CHAT_TITLE -> "עוזר AI"
+        StringKey.AI_CHAT_TITLE -> "Commercials Manager עוזר AI"
         StringKey.AI_CHAT_INPUT_HINT -> "שאל על לוח השידור שלך…"
         StringKey.AI_CHAT_SEND -> "שליחה"
         StringKey.AI_CHAT_CLEAR -> "שיחה חדשה"

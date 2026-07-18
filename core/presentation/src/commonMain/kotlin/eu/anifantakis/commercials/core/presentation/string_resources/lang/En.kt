@@ -352,7 +352,7 @@ internal class En : LanguageStrings {
         StringKey.PREFERENCES_ASSISTANT -> "Assistant"
         StringKey.PREFERENCES_AI_CHAT -> "AI assistant"
         StringKey.PREFERENCES_AI_CHAT_DESC -> "Ask about schedules, breaks, spots and contracts"
-        StringKey.AI_CHAT_TITLE -> "AI assistant"
+        StringKey.AI_CHAT_TITLE -> "Commercials Manager AI assistant"
         StringKey.AI_CHAT_INPUT_HINT -> "Ask about your schedule…"
         StringKey.AI_CHAT_SEND -> "Send"
         StringKey.AI_CHAT_CLEAR -> "New conversation"

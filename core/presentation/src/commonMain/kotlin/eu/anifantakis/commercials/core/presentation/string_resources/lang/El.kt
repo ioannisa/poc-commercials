@@ -352,7 +352,7 @@ internal class El : LanguageStrings {
         StringKey.PREFERENCES_ASSISTANT -> "Βοηθός"
         StringKey.PREFERENCES_AI_CHAT -> "AI βοηθός"
         StringKey.PREFERENCES_AI_CHAT_DESC -> "Ρώτησε για προγράμματα, breaks, spots και συμβόλαια"
-        StringKey.AI_CHAT_TITLE -> "AI βοηθός"
+        StringKey.AI_CHAT_TITLE -> "Commercials Manager AI βοηθός"
         StringKey.AI_CHAT_INPUT_HINT -> "Ρώτησε για το πρόγραμμά σου…"
         StringKey.AI_CHAT_SEND -> "Αποστολή"
         StringKey.AI_CHAT_CLEAR -> "Νέα συνομιλία"

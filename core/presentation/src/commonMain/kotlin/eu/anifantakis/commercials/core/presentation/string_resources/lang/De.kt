@@ -352,7 +352,7 @@ internal class De : LanguageStrings {
         StringKey.PREFERENCES_ASSISTANT -> "Assistent"
         StringKey.PREFERENCES_AI_CHAT -> "KI-Assistent"
         StringKey.PREFERENCES_AI_CHAT_DESC -> "Fragen zu Programmen, Breaks, Spots und Verträgen"
-        StringKey.AI_CHAT_TITLE -> "KI-Assistent"
+        StringKey.AI_CHAT_TITLE -> "Commercials Manager KI-Assistent"
         StringKey.AI_CHAT_INPUT_HINT -> "Frage zu deinem Programm…"
         StringKey.AI_CHAT_SEND -> "Senden"
         StringKey.AI_CHAT_CLEAR -> "Neue Unterhaltung"
