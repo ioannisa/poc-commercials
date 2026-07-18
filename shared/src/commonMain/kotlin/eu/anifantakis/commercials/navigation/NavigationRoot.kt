@@ -93,6 +93,12 @@ fun NavigationRoot() {
         navConfig,
         if (authSession.isLoggedIn) TimetableNavType.TimetableFlow else AuthNavType.Login
     )
+    // Biometric startup gate: evaluated ONCE, at cold start - a remembered
+    // session that opted in stays LOCKED behind the platform prompt until it
+    // passes. Locking again mid-session would fight the keep-alive.
+    var biometricLocked by remember {
+        mutableStateOf(authSession.isLoggedIn && authSession.biometricLoginRequired)
+    }
     val navigator = remember { Navigator(backStack) }
 
     // If the session becomes invalid at any point (e.g. the server rejects our
@@ -258,6 +264,22 @@ fun NavigationRoot() {
             providers = { authSession.aiChatProviders },
             onClose = { showAiChat = false },
         )
+
+        // The biometric lock screen - the TOPMOST layer: nothing underneath
+        // is visible or clickable until the prompt passes. Fallback: sign in
+        // with the password instead (revokes the remembered session).
+        if (biometricLocked) {
+            BiometricGate(
+                onUnlocked = { biometricLocked = false },
+                onUsePassword = {
+                    scope.launch {
+                        authRepository.logout()
+                        biometricLocked = false
+                        navigator.resetTo(AuthNavType.Login)
+                    }
+                },
+            )
+        }
         }
     }
 }

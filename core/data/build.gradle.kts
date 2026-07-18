@@ -18,6 +18,7 @@ kotlin {
             // Encrypted session/preferences store; KSafe appears in
             // constructor signatures (createKSafe factory)
             api(libs.ksafe)
+            implementation(libs.ksafe.biometrics)
             implementation(libs.koin.annotations)
 
             // authenticatedJsonClient returns HttpClient - api surface

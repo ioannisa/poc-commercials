@@ -26,15 +26,22 @@ class AuthRepositoryImpl(
     private val session: AuthSession,
 ) : AuthRepository {
 
-    override suspend fun login(username: String, password: String): EmptyDataResult<AuthError> {
+    override suspend fun login(
+        username: String,
+        password: String,
+        remember: Boolean,
+        biometricLogin: Boolean,
+    ): EmptyDataResult<AuthError> {
         // PREFLIGHT (the UX gate). KSafe says up front when encrypted storage is
         // broken - on a browser page that is not a secure context, WebCrypto is
         // simply absent - so refuse BEFORE sending someone's password to the
         // server, and give the real reason instead of a 401 they cannot explain.
         //
         // Not the safety net: the awaited store() below is, and it stays. This
-        // only spares a round trip and makes the failure legible.
-        if (session.encryptionUnavailable) {
+        // only spares a round trip and makes the failure legible. A
+        // memory-only sign-in (remember=false) touches no disk, so broken
+        // encrypted storage is no reason to refuse it.
+        if (remember && session.encryptionUnavailable) {
             return DataResult.Failure(AuthError.SessionNotPersisted)
         }
         return when (val result = remoteDataSource.login(username, password)) {
@@ -66,6 +73,8 @@ class AuthRepositoryImpl(
                                 StationAccess(it.id, it.name, it.role, it.clientCode)
                             },
                             mustChangePassword = login.mustChangePassword,
+                            remember = remember,
+                            biometricLogin = biometricLogin,
                         )
                         DataResult.Success(Unit)
                     } catch (e: CancellationException) {

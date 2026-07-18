@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.di.core
 
+import eu.anifantakis.commercials.core.data.auth.KSafeBiometricAuth
+import eu.anifantakis.commercials.core.domain.auth.BiometricAuth
 import eu.anifantakis.commercials.core.domain.context.ActiveScreenContext
 import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
@@ -41,6 +43,9 @@ val coreModule = module {
 
     // What the user is looking at - screens publish, the AI chat samples.
     single { ActiveScreenContext() }
+
+    // Biometric prompt seam (KSafe biometrics) - login opt-in + startup gate.
+    singleOf(::KSafeBiometricAuth).bind<BiometricAuth>()
 
     // Command router between app chrome (desktop MenuBar/shortcuts) and the
     // screen that currently owns each action. Bound on every platform - it

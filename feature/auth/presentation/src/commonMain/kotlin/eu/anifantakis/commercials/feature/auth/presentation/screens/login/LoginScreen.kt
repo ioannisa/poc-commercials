@@ -20,6 +20,7 @@ import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppFormColumn
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppImage
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppOtpField
@@ -123,6 +124,26 @@ private fun LoginScreen(
                                     enabled = !state.isLoading,
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                 )
+                                Spacer(Modifier.height(UIConst.paddingSmall))
+                                // Default OFF: a shared control-room machine
+                                // should ask for credentials every time unless
+                                // the operator explicitly opts in.
+                                AppCheckboxRow(
+                                    checked = state.rememberMe,
+                                    onCheckedChange = { onIntent(LoginIntent.RememberMeChanged(it)) },
+                                    label = Strings[StringKey.LOGIN_REMEMBER_ME],
+                                    enabled = !state.isLoading,
+                                )
+                                // Only meaningful for a REMEMBERED session, and
+                                // only where the device can actually prompt.
+                                if (state.rememberMe && state.biometricsAvailable) {
+                                    AppCheckboxRow(
+                                        checked = state.biometricLogin,
+                                        onCheckedChange = { onIntent(LoginIntent.BiometricLoginChanged(it)) },
+                                        label = Strings[StringKey.LOGIN_BIOMETRIC_LOCK],
+                                        enabled = !state.isLoading,
+                                    )
+                                }
                             }
 
                             LoginMode.FORGOT_REQUEST -> Unit   // username only

@@ -8,6 +8,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewM
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.core.domain.auth.BiometricAuth
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.presentation.toUiText
@@ -33,6 +34,12 @@ data class LoginState(
     val mode: LoginMode = LoginMode.LOGIN,
     val passwordVisible: Boolean = false,
     val isLoading: Boolean = false,
+    /** Keep the session for the next launch; false (default) = sign in every time. */
+    val rememberMe: Boolean = false,
+    /** Remembered sessions only: gate the next launch behind a biometric pass. */
+    val biometricLogin: Boolean = false,
+    /** The device can actually show a prompt - probed once; gates the checkbox. */
+    val biometricsAvailable: Boolean = false,
     val errorMessage: UiText? = null,
     val infoMessage: UiText? = null,
     /** >0 while the reset lockout counts down; submit is blocked until it hits 0. */
@@ -53,6 +60,8 @@ sealed interface LoginIntent {
     data class CodeChanged(val value: String) : LoginIntent
     data class NewPasswordChanged(val value: String) : LoginIntent
     data object TogglePasswordVisibility : LoginIntent
+    data class RememberMeChanged(val value: Boolean) : LoginIntent
+    data class BiometricLoginChanged(val value: Boolean) : LoginIntent
     data object StartForgot : LoginIntent
     data object BackToLogin : LoginIntent
     data object Submit : LoginIntent
@@ -65,10 +74,19 @@ sealed interface LoginEffect {
 @Stable
 class LoginViewModel(
     private val repository: AuthRepository,
+    private val biometricAuth: BiometricAuth,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
     val state by _state.toComposeState(viewModelScope)
+
+    init {
+        // Probe once; the biometric checkbox only exists where a real prompt can.
+        viewModelScope.launch {
+            val available = runCatching { biometricAuth.available() }.getOrDefault(false)
+            _state.update { it.copy(biometricsAvailable = available) }
+        }
+    }
 
     private val eventChannel = Channel<LoginEffect>()
     val events = eventChannel.receiveAsFlow()
@@ -82,6 +100,12 @@ class LoginViewModel(
             is LoginIntent.CodeChanged -> _state.update { it.copy(code = intent.value.filter { c -> c.isDigit() }.take(CODE_LENGTH)) }
             is LoginIntent.NewPasswordChanged -> _state.update { it.copy(newPassword = intent.value) }
             LoginIntent.TogglePasswordVisibility -> _state.update { it.copy(passwordVisible = !it.passwordVisible) }
+            is LoginIntent.RememberMeChanged -> _state.update {
+                // Un-remembering also drops the biometric gate - it rides the
+                // persisted session, which will no longer exist.
+                it.copy(rememberMe = intent.value, biometricLogin = it.biometricLogin && intent.value)
+            }
+            is LoginIntent.BiometricLoginChanged -> _state.update { it.copy(biometricLogin = intent.value) }
             LoginIntent.StartForgot -> _state.update {
                 it.copy(mode = LoginMode.FORGOT_REQUEST, password = "", code = "", newPassword = "", errorMessage = null, infoMessage = null)
             }
@@ -104,7 +128,12 @@ class LoginViewModel(
         if (!s.canSubmit) return
         _state.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
-            when (val result = repository.login(s.username, s.password)) {
+            when (val result = repository.login(
+                s.username,
+                s.password,
+                remember = s.rememberMe,
+                biometricLogin = s.rememberMe && s.biometricLogin,
+            )) {
                 is DataResult.Success -> eventChannel.send(LoginEffect.LoggedIn)
                 is DataResult.Failure -> _state.update { it.copy(errorMessage = result.error.toUiText()) }
             }

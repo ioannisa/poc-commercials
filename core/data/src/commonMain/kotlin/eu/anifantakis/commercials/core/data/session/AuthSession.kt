@@ -33,6 +33,8 @@ data class StoredSession(
     /** Logged in with a temp password: the app traps the user on a mandatory
      *  change-password screen until they set their own. */
     val mustChangePassword: Boolean = false,
+    /** Persisted sessions only: require a biometric pass before the app opens. */
+    val biometricLogin: Boolean = false,
 )
 
 /**
@@ -85,6 +87,17 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
     private var stored by ksafe(StoredSession(), key = SESSION_KEY)
 
     /**
+     * The "don't remember me" session: lives ONLY here, never in KSafe - the
+     * app closes and it is gone (its token dies server-side by expiry). When
+     * set, it IS the session; the persisted slot is wiped at login so no
+     * stale remembered token can resurrect on the next launch.
+     */
+    private var memorySession: StoredSession? = null
+
+    /** The effective session, wherever it lives. */
+    private val current: StoredSession get() = memorySession ?: stored
+
+    /**
      * Bumped on every login/logout/station switch. A StateFlow, so both the
      * chrome (collectAsState) and ViewModels (collect) can react - and this
      * data-layer class stays free of any UI framework.
@@ -101,24 +114,27 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         ksafe.platformAwaitReady()
     }
 
-    override val isLoggedIn: Boolean get() = stored.token.isNotEmpty()
-    val token: String? get() = stored.token.ifEmpty { null }
-    override val displayName: String get() = stored.displayName
-    override val isAdmin: Boolean get() = stored.isAdmin
-    override val swaggerEnabled: Boolean get() = stored.swaggerEnabled
-    override val aiChatProviders: List<AiChatProviderOption> get() = stored.aiChatProviders
+    override val isLoggedIn: Boolean get() = current.token.isNotEmpty()
+    val token: String? get() = current.token.ifEmpty { null }
+    override val displayName: String get() = current.displayName
+    override val isAdmin: Boolean get() = current.isAdmin
+    override val swaggerEnabled: Boolean get() = current.swaggerEnabled
+    override val aiChatProviders: List<AiChatProviderOption> get() = current.aiChatProviders
+
+    /** Cold start with a remembered session: gate the app behind a biometric pass. */
+    val biometricLoginRequired: Boolean get() = current.biometricLogin
 
     /** True until the temp-password user sets their own; drives the mandatory
      *  change-password trap in the navigation root. */
-    val mustChangePassword: Boolean get() = stored.mustChangePassword
+    val mustChangePassword: Boolean get() = current.mustChangePassword
 
     /** All stations this user may access, in server order. */
-    override val stations: List<StationAccess> get() = stored.stations
+    override val stations: List<StationAccess> get() = current.stations
 
     /** The station the UI is currently showing (first one as a safe default). */
     override val selectedStation: StationAccess?
-        get() = stored.stations.firstOrNull { it.id == stored.selectedStationId }
-            ?: stored.stations.firstOrNull()
+        get() = current.stations.firstOrNull { it.id == current.selectedStationId }
+            ?: current.stations.firstOrNull()
 
     /** The user's role ON THE SELECTED STATION. */
     override val role: AppRole get() = AppRole.parse(selectedStation?.role ?: "")
@@ -195,6 +211,8 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         mustChangePassword: Boolean = false,
         swaggerEnabled: Boolean = false,
         aiChatProviders: List<AiChatProviderOption> = emptyList(),
+        remember: Boolean = true,
+        biometricLogin: Boolean = false,
     ) {
         val session = StoredSession(
             token = token,
@@ -205,7 +223,19 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: "",
             mustChangePassword = mustChangePassword,
+            biometricLogin = remember && biometricLogin,
         )
+        if (!remember) {
+            // Session in MEMORY only - and any previously remembered one is
+            // wiped, so the next launch lands on Login, not on a stale token.
+            // Best-effort wipe: a broken encrypted store (plain-HTTP web page)
+            // must not block a memory-only sign-in - nothing needs disk here.
+            memorySession = session
+            runCatching { ksafe.put(SESSION_KEY, StoredSession()) }
+            _revision.value++
+            return
+        }
+        memorySession = null
         // Refuse here too, not only at the caller's preflight: a session written
         // where encryption cannot run is a session that is already gone, and no
         // future caller should be able to route around that by forgetting to ask.
@@ -241,31 +271,39 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         aiChatProviders: List<AiChatProviderOption>,
     ) {
         if (!isLoggedIn) return
-        if (stations == stored.stations && swaggerEnabled == stored.swaggerEnabled &&
-            aiChatProviders == stored.aiChatProviders
+        if (stations == current.stations && swaggerEnabled == current.swaggerEnabled &&
+            aiChatProviders == current.aiChatProviders
         ) {
             return
         }
 
-        val keepSelected = stations.any { it.id == stored.selectedStationId }
-        val session = stored.copy(
+        val keepSelected = stations.any { it.id == current.selectedStationId }
+        val session = current.copy(
             stations = stations,
             swaggerEnabled = swaggerEnabled,
             aiChatProviders = aiChatProviders,
             selectedStationId =
-                if (keepSelected) stored.selectedStationId else stations.firstOrNull()?.id ?: "",
+                if (keepSelected) current.selectedStationId else stations.firstOrNull()?.id ?: "",
         )
-        // Persist, so a client restart does not fall back to the stale snapshot -
-        // which is exactly the bug this fixes.
-        ksafe.put(SESSION_KEY, session)
+        if (memorySession != null) {
+            memorySession = session
+        } else {
+            // Persist, so a client restart does not fall back to the stale
+            // snapshot - which is exactly the bug this fixes.
+            ksafe.put(SESSION_KEY, session)
+        }
         _revision.value++
     }
 
     /** Switches the active station (no-op for ids the user has no grant on). */
     override fun selectStation(stationId: String) {
-        if (stored.stations.none { it.id == stationId }) return
-        if (stored.selectedStationId == stationId) return
-        stored = stored.copy(selectedStationId = stationId)
+        if (current.stations.none { it.id == stationId }) return
+        if (current.selectedStationId == stationId) return
+        memorySession?.let {
+            memorySession = it.copy(selectedStationId = stationId)
+        } ?: run {
+            stored = stored.copy(selectedStationId = stationId)
+        }
         _revision.value++
     }
 
@@ -278,6 +316,7 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
      */
     fun clear() {
         if (!isLoggedIn) return
+        memorySession = null
         stored = StoredSession()
         _revision.value++
     }

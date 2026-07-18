@@ -16,7 +16,18 @@ import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailabil
  */
 interface AuthRepository {
 
-    suspend fun login(username: String, password: String): EmptyDataResult<AuthError>
+    /**
+     * [remember] = keep the session for the next launch (persisted); false =
+     * memory-only, the app asks for credentials again next time.
+     * [biometricLogin] (remembered sessions only) = gate the next launch
+     * behind a biometric pass.
+     */
+    suspend fun login(
+        username: String,
+        password: String,
+        remember: Boolean = true,
+        biometricLogin: Boolean = false,
+    ): EmptyDataResult<AuthError>
 
     /** Best-effort server-side token revoke, then local session clear. */
     suspend fun logout()

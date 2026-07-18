@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateCont
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
+import eu.anifantakis.commercials.core.domain.auth.BiometricAuth
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
@@ -54,6 +55,14 @@ class LoginViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private class FakeBiometricAuth(
+        var isAvailable: Boolean = false,
+        var verifies: Boolean = true,
+    ) : BiometricAuth {
+        override suspend fun available(): Boolean = isAvailable
+        override suspend fun verify(reason: String): Boolean = verifies
+    }
+
     private class FakeAuthRepository(
         var loginResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
         var forgotResult: EmptyDataResult<AuthError> = DataResult.Success(Unit),
@@ -63,7 +72,17 @@ class LoginViewModelTest {
         var forgotCalls = 0
         var resetCalls = 0
 
-        override suspend fun login(username: String, password: String): EmptyDataResult<AuthError> {
+        var lastRemember: Boolean? = null
+        var lastBiometric: Boolean? = null
+
+        override suspend fun login(
+            username: String,
+            password: String,
+            remember: Boolean,
+            biometricLogin: Boolean,
+        ): EmptyDataResult<AuthError> {
+            lastRemember = remember
+            lastBiometric = biometricLogin
             loginCalls++
             return loginResult
         }
@@ -107,7 +126,7 @@ class LoginViewModelTest {
 
     @Test
     fun fieldIntentsUpdateStateAndGateCanSubmit() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository())
+        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
         assertFalse(vm.state.canSubmit, "blank form can't submit")
 
         vm.onAction(LoginIntent.UsernameChanged("admin"))
@@ -120,7 +139,7 @@ class LoginViewModelTest {
 
     @Test
     fun togglePasswordVisibilityFlips() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository())
+        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
         assertFalse(vm.state.passwordVisible)
 
         vm.onAction(LoginIntent.TogglePasswordVisibility)
@@ -130,7 +149,7 @@ class LoginViewModelTest {
 
     @Test
     fun startForgotArmsRequestModeAndClearsPassword() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository())
+        val vm = LoginViewModel(FakeAuthRepository(), FakeBiometricAuth())
         vm.onAction(LoginIntent.PasswordChanged("secret"))
 
         vm.onAction(LoginIntent.StartForgot)
@@ -142,7 +161,7 @@ class LoginViewModelTest {
     @Test
     fun submitWithBlankFieldsIsANoOp() = runTest(testDispatcher) {
         val repo = FakeAuthRepository()
-        val vm = LoginViewModel(repo)
+        val vm = LoginViewModel(repo, FakeBiometricAuth())
 
         vm.onAction(LoginIntent.Submit)
         advanceUntilIdle()
@@ -152,7 +171,7 @@ class LoginViewModelTest {
 
     @Test
     fun successfulLoginEmitsLoggedInAndStopsLoading() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Success(Unit)))
+        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Success(Unit)), FakeBiometricAuth())
         filledLogin(vm)
 
         val effects = mutableListOf<LoginEffect>()
@@ -167,8 +186,30 @@ class LoginViewModelTest {
     }
 
     @Test
+    fun rememberMeGatesTheBiometricOptionAndTheLoginFlags() = runTest(testDispatcher) {
+        val repo = FakeAuthRepository(loginResult = DataResult.Success(Unit))
+        val vm = LoginViewModel(repo, FakeBiometricAuth(isAvailable = true))
+        // probe landed in state
+        assertEquals(true, vm.state.biometricsAvailable)
+
+        vm.onAction(LoginIntent.RememberMeChanged(true))
+        vm.onAction(LoginIntent.BiometricLoginChanged(true))
+        // un-remembering drops the biometric opt-in with it
+        vm.onAction(LoginIntent.RememberMeChanged(false))
+        assertEquals(false, vm.state.biometricLogin)
+
+        // and the submit carries the flags
+        vm.onAction(LoginIntent.RememberMeChanged(true))
+        vm.onAction(LoginIntent.BiometricLoginChanged(true))
+        filledLogin(vm)
+        vm.onAction(LoginIntent.Submit)
+        assertEquals(true, repo.lastRemember)
+        assertEquals(true, repo.lastBiometric)
+    }
+
+    @Test
     fun failedLoginShowsTheMappedErrorAndClearsLoading() = runTest(testDispatcher) {
-        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Failure(AuthError.InvalidCredentials)))
+        val vm = LoginViewModel(FakeAuthRepository(loginResult = DataResult.Failure(AuthError.InvalidCredentials)), FakeBiometricAuth())
         filledLogin(vm)
 
         vm.onAction(LoginIntent.Submit)
@@ -181,7 +222,7 @@ class LoginViewModelTest {
     @Test
     fun forgotFlowRequestsCodeThenResetsAndReturnsToLogin() = runTest(testDispatcher) {
         val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Success))
-        val vm = LoginViewModel(repo)
+        val vm = LoginViewModel(repo, FakeBiometricAuth())
         vm.onAction(LoginIntent.StartForgot)
         vm.onAction(LoginIntent.UsernameChanged("admin"))
 
@@ -206,7 +247,7 @@ class LoginViewModelTest {
     @Test
     fun wrongCodeWithLockArmsCountdownAndBlocksSubmit() = runTest(testDispatcher) {
         val repo = FakeAuthRepository(resetResult = DataResult.Success(ResetOutcome.Invalid(retryAfterSeconds = 10)))
-        val vm = LoginViewModel(repo)
+        val vm = LoginViewModel(repo, FakeBiometricAuth())
         vm.onAction(LoginIntent.StartForgot)
         vm.onAction(LoginIntent.UsernameChanged("admin"))
         vm.onAction(LoginIntent.Submit)
