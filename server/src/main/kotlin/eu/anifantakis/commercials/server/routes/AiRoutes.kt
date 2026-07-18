@@ -47,11 +47,16 @@ data class AiProposalDto(
     val preview: String,
 )
 
+/** A UI action for the CLIENT to perform on receipt (e.g. switch_station). */
+@Serializable
+data class AiClientActionDto(val action: String, val arguments: JsonObject)
+
 @Serializable
 data class AiChatResponseDto(
     val text: String,
     val steps: List<AiToolStepDto> = emptyList(),
     val proposals: List<AiProposalDto> = emptyList(),
+    val clientActions: List<AiClientActionDto> = emptyList(),
 )
 
 @Serializable
@@ -107,6 +112,7 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                             text = reply.text,
                             steps = reply.steps.map { AiToolStepDto(it.tool, it.isError) },
                             proposals = reply.proposals.map { AiProposalDto(it.tool, it.arguments, it.preview) },
+                            clientActions = reply.clientActions.map { AiClientActionDto(it.action, it.arguments) },
                         )
                     )
                 } catch (e: AiSelectionException) {

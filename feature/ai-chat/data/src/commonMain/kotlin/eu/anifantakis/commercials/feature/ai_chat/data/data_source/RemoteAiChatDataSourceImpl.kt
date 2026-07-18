@@ -13,11 +13,14 @@ import eu.anifantakis.commercials.feature.ai_chat.data.dto.AiExecuteResponseDto
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatReply
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiClientAction
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiExecutionOutcome
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiProposal
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiToolStep
 import eu.anifantakis.commercials.feature.ai_chat.domain.data_source.RemoteAiChatDataSource
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlin.random.Random
 import io.ktor.client.call.body
@@ -59,6 +62,12 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
             AiChatReply(
                 text = dto.text,
                 steps = dto.steps.map { AiToolStep(it.tool, it.isError) },
+                clientActions = dto.clientActions.map { a ->
+                    AiClientAction(
+                        action = a.action,
+                        station = (a.arguments["station"] as? JsonPrimitive)?.contentOrNull,
+                    )
+                },
                 proposals = dto.proposals.mapIndexed { i, p ->
                     AiProposal(
                         // Client-generated card key: unique across the conversation.

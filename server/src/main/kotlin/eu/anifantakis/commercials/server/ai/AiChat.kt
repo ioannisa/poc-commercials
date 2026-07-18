@@ -52,11 +52,20 @@ data class AiToolOutcome(val text: String, val isError: Boolean)
  */
 data class AiProposal(val tool: String, val arguments: JsonObject, val preview: String)
 
+/**
+ * A UI action the model asked the CLIENT to perform - nothing touches data
+ * server-side, the app executes it on receipt. First case: `switch_station`
+ * with a `station` argument: the app changes its active station and the
+ * conversation's station pin follows on the next request.
+ */
+data class AiClientAction(val action: String, val arguments: JsonObject)
+
 /** The final answer plus the (name-only) trail of tool calls it took. */
 data class AiChatReply(
     val text: String,
     val steps: List<AiToolStep>,
     val proposals: List<AiProposal> = emptyList(),
+    val clientActions: List<AiClientAction> = emptyList(),
 )
 
 data class AiToolStep(val tool: String, val isError: Boolean)

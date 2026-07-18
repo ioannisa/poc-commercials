@@ -374,6 +374,7 @@ internal class He : LanguageStrings {
         StringKey.AI_CHAT_NOTE_EXECUTED -> "[הפעולה {0} אושרה ובוצעה. תוצאה: {1}]"
         StringKey.AI_CHAT_NOTE_DECLINED -> "[המשתמש ביטל את הפעולה המוצעת {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[ביצוע הפעולה המאושרת {0} נכשל: {1}]"
+        StringKey.AI_CHAT_NOTE_SWITCHED -> "[התחנה הפעילה הוחלפה ל-{0}.]"
         StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "תיעוד API (Swagger)"

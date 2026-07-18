@@ -26,10 +26,14 @@ internal data class AiProposalDto(
 )
 
 @Serializable
+internal data class AiClientActionDto(val action: String, val arguments: JsonObject = JsonObject(emptyMap()))
+
+@Serializable
 internal data class AiChatResponseDto(
     val text: String,
     val steps: List<AiToolStepDto> = emptyList(),
     val proposals: List<AiProposalDto> = emptyList(),
+    val clientActions: List<AiClientActionDto> = emptyList(),
 )
 
 @Serializable

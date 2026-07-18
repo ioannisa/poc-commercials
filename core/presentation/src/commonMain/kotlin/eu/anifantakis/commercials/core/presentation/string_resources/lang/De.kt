@@ -369,6 +369,7 @@ internal class De : LanguageStrings {
         StringKey.AI_CHAT_NOTE_EXECUTED -> "[Die Aktion {0} wurde freigegeben und ausgeführt. Ergebnis: {1}]"
         StringKey.AI_CHAT_NOTE_DECLINED -> "[Der Benutzer hat die vorgeschlagene Aktion {0} abgebrochen.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[Die Ausführung der freigegebenen Aktion {0} ist FEHLGESCHLAGEN: {1}]"
+        StringKey.AI_CHAT_NOTE_SWITCHED -> "[Aktiver Sender gewechselt zu {0}.]"
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API-Doku (Swagger)"

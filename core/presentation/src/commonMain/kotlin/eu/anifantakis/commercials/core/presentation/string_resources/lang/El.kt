@@ -369,6 +369,7 @@ internal class El : LanguageStrings {
         StringKey.AI_CHAT_NOTE_EXECUTED -> "[Η ενέργεια {0} εγκρίθηκε και εκτελέστηκε. Αποτέλεσμα: {1}]"
         StringKey.AI_CHAT_NOTE_DECLINED -> "[Ο χρήστης ακύρωσε την προτεινόμενη ενέργεια {0}.]"
         StringKey.AI_CHAT_NOTE_FAILED -> "[Η εκτέλεση της εγκεκριμένης ενέργειας {0} ΑΠΕΤΥΧΕ: {1}]"
+        StringKey.AI_CHAT_NOTE_SWITCHED -> "[Ο ενεργός σταθμός άλλαξε σε {0}.]"
         StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Τεκμηρίωση API (Swagger)"

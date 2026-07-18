@@ -111,15 +111,71 @@ class AiChatService(
         // STAFF role on it (the same rule the tools enforce at execution).
         val mutations = registry.aiChatMutations && activeStation != null && canEdit(user, activeStation)
         val proposals = mutableListOf<AiProposal>()
+        val clientActions = mutableListOf<AiClientAction>()
+        val tools = buildList {
+            addAll(bridgedTools(user, if (mutations) proposals else null))
+            // Station switching is a pure UI action - only meaningful when an
+            // app (not a raw API caller) is on the other end of the pin.
+            if (activeStation != null) add(switchStationTool(user, activeStation, clientActions))
+        }
         val reply = provider(entry).chat(
             system = systemPrompt(user, activeStation, mutations),
             history = history,
-            tools = bridgedTools(user, if (mutations) proposals else null),
+            tools = tools,
             model = model,
             maxTokens = registry.aiChatMaxTokens,
         )
-        return reply.copy(proposals = proposals.toList())
+        return reply.copy(proposals = proposals.toList(), clientActions = clientActions.toList())
     }
+
+    /**
+     * The one CLIENT-side tool: ask the app to change its ACTIVE station. No
+     * data is touched server-side - a successful call queues an
+     * [AiClientAction] the app executes on receipt (grant-checked here AND
+     * again client-side). The tool result tells the model it may already use
+     * the new station's id for the REST of this turn - the prompt pin refers
+     * to the station the app is switching to anyway.
+     */
+    private fun switchStationTool(
+        user: AuthUser,
+        activeStation: String,
+        sink: MutableList<AiClientAction>,
+    ): AiBridgedTool = AiBridgedTool(
+        name = "switch_station",
+        description = "Switch the application's ACTIVE station. Use this when the user asks to work on " +
+            "(or about) a different station they have access to. The application performs the switch " +
+            "the moment this reply reaches it - no confirmation card is involved.",
+        properties = kotlinx.serialization.json.buildJsonObject {
+            put(
+                "station",
+                kotlinx.serialization.json.buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("description", JsonPrimitive("The station id to switch to (e.g. crete-tv)."))
+                },
+            )
+        },
+        required = listOf("station"),
+        execute = { args ->
+            val target = (args["station"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+            when {
+                target.isEmpty() -> AiToolOutcome("Parameter 'station' is required.", isError = true)
+                registry.config(target) == null -> AiToolOutcome("Unknown station '$target'.", isError = true)
+                !user.isAdmin && user.grants.none { it.stationId == target } ->
+                    AiToolOutcome("The user has no access to station '$target'.", isError = true)
+                target == activeStation ->
+                    AiToolOutcome("Station '$target' is already the active station.", isError = false)
+                else -> {
+                    sink += AiClientAction("switch_station", JsonObject(mapOf("station" to JsonPrimitive(target))))
+                    AiToolOutcome(
+                        "The application switches its active station to '$target' as soon as this reply " +
+                            "is delivered. For the rest of THIS turn you may already pass station id " +
+                            "'$target' to tools.",
+                        isError = false,
+                    )
+                }
+            }
+        },
+    )
 
     /** Staff (NORMAL_USER) on [stationId] - mirrors McpToolServices.requireStaff. */
     private fun canEdit(user: AuthUser, stationId: String): Boolean =
@@ -219,9 +275,10 @@ class AiChatService(
             """
             The application is currently working on station "$name" (id: $activeStationId) - the
             ACTIVE station. Scope EVERYTHING to it: pass station id "$activeStationId" to every
-            tool call and NEVER ask which station is meant. If the user explicitly asks about a
-            different station, do not answer for it - explain that this chat follows the
-            application's active station and they should switch station in the app first.
+            tool call and NEVER ask which station is meant. If the user wants to work on (or asks
+            about) a DIFFERENT station they have access to, call the switch_station tool - the
+            application follows and the conversation continues on that station. Never answer
+            about another station without switching first.
             """.trimIndent()
         } else {
             """

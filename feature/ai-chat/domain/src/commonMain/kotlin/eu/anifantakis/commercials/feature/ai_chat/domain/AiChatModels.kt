@@ -38,12 +38,21 @@ data class AiProposal(
     val preview: String,
 )
 
+/**
+ * A UI action the assistant asked the app to perform on receipt. Only known
+ * actions execute; anything else is ignored. `switch_station` carries the
+ * target [station] id - the app changes its active station (grant-checked).
+ */
+@Immutable
+data class AiClientAction(val action: String, val station: String? = null)
+
 /** The assistant's reply to one request. */
 @Immutable
 data class AiChatReply(
     val text: String,
     val steps: List<AiToolStep>,
     val proposals: List<AiProposal> = emptyList(),
+    val clientActions: List<AiClientAction> = emptyList(),
 )
 
 /** The outcome of executing an approved proposal (isError = the tool refused). */

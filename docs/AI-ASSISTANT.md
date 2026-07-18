@@ -28,6 +28,16 @@ dry-run, `confirm=true` = perform). The chat bridge exploits it:
    change appears in the grid live**.
 5. **Cancel** marks the card declined and notes it - nothing runs.
 
+## Client actions (Phase 3)
+
+Besides data tools, the model can ask the APP to do UI things via the
+`clientActions` channel on the reply - nothing touches data server-side and
+the app executes them on receipt. First action: **`switch_station`** - "θέλω
+να δουλέψω στο Test TV" switches the app's active station (grant-checked on
+both sides), the grid reloads, and the conversation's station pin follows on
+the next message. Unknown actions are ignored, so older clients simply do
+nothing with newer servers' actions.
+
 Mutations require ALL of: `ai.mutations: true` in server.yaml (the default;
 set `false` for a strictly read-only assistant), an active station, and the
 user holding full (NORMAL_USER) access on it - viewer roles never see the

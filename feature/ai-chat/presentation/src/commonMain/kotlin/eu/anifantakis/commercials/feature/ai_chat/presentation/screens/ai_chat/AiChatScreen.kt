@@ -42,6 +42,7 @@ import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.MarkdownTypography
 import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
+import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
@@ -69,6 +70,7 @@ import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiClientAction
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiProposal
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -126,6 +128,7 @@ class AiChatViewModel(
     private val repository: AiChatRepository,
     private val prefs: AiChatPreferences,
     private val refreshBus: DataRefreshBus,
+    private val session: UserSession,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
@@ -199,16 +202,19 @@ class AiChatViewModel(
         _state.update { it.copy(messages = history, input = "", busy = true, error = null) }
         viewModelScope.launch {
             when (val result = repository.send(history, provider, model)) {
-                is DataResult.Success -> _state.update {
-                    it.copy(
-                        messages = (it.messages + AiChatMessage(
-                            role = AiChatRole.ASSISTANT,
-                            text = result.data.text,
-                            steps = result.data.steps,
-                            proposals = result.data.proposals,
-                        )).toImmutableList(),
-                        busy = false,
-                    )
+                is DataResult.Success -> {
+                    _state.update {
+                        it.copy(
+                            messages = (it.messages + AiChatMessage(
+                                role = AiChatRole.ASSISTANT,
+                                text = result.data.text,
+                                steps = result.data.steps,
+                                proposals = result.data.proposals,
+                            )).toImmutableList(),
+                            busy = false,
+                        )
+                    }
+                    result.data.clientActions.forEach(::handleClientAction)
                 }
                 is DataResult.Failure -> _state.update {
                     it.copy(busy = false, error = result.error.toUiText())
@@ -262,6 +268,25 @@ class AiChatViewModel(
         if (_state.value.actionResults.containsKey(p.id)) return
         setAction(p.id, AiActionState(AiActionStatus.DECLINED))
         appendNote(StringKey.AI_CHAT_NOTE_DECLINED.localized().withArgs(listOf(p.tool)))
+    }
+
+    /**
+     * UI actions the assistant asked the APP to perform. Grant-checked again
+     * here (the session's own station list is the source of truth); unknown
+     * actions are ignored - an older client simply does nothing with a newer
+     * server's actions. The station switch bumps the session revision, so the
+     * grid reloads and the chat's station pin follows on the next request.
+     */
+    private fun handleClientAction(action: AiClientAction) {
+        when (action.action) {
+            "switch_station" -> {
+                val station = session.stations.firstOrNull { it.id == action.station } ?: return
+                if (session.selectedStation?.id != station.id) {
+                    session.selectStation(station.id)
+                    appendNote(StringKey.AI_CHAT_NOTE_SWITCHED.localized().withArgs(listOf(station.name)))
+                }
+            }
+        }
     }
 
     private fun setAction(id: String, action: AiActionState) {
