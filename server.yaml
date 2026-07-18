@@ -132,8 +132,9 @@ mcpAllowedHosts:
 #    apiKey: "AIza..."
 #    models: [gemini-flash-latest, gemini-pro-latest]
 #  maxTokens: 8192           # optional per-response output cap
-# NOTE: keys are MASKED in git (xxxxxxxxxxxxxx) - put the real ones only on
-# the server's copy of this file.
+#  mutations: true           # chat may PREPARE schedule changes (user-confirmed
+#                            # cards; staff-only). false = read-only assistant.
+# NOTE: real credentials below - do NOT commit this block with the keys in it.
 # anthropic first = the default provider (models omitted = the built-in trio,
 # sonnet preselected). BOTH accounts currently hold ZERO credits - chats will
 # 502 with the provider's billing message until credits are purchased.

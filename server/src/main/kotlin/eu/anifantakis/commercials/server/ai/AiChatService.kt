@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.mcp.McpToolServices
 import eu.anifantakis.commercials.mcp.tools.ALL_MCP_TOOLS
 import eu.anifantakis.commercials.mcp.tools.ToolContext
 import eu.anifantakis.commercials.server.auth.AuthUser
+import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.stations.AiChatConfig
 import eu.anifantakis.commercials.server.stations.AiProviderCatalogEntry
 import eu.anifantakis.commercials.server.stations.StationRegistry
@@ -15,6 +16,8 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -104,38 +107,106 @@ class AiChatService(
             }
             id
         }
-        return provider(entry).chat(
-            system = systemPrompt(user, activeStation),
+        // Mutations need: the operator's yaml opt-in, a pinned station, and
+        // STAFF role on it (the same rule the tools enforce at execution).
+        val mutations = registry.aiChatMutations && activeStation != null && canEdit(user, activeStation)
+        val proposals = mutableListOf<AiProposal>()
+        val reply = provider(entry).chat(
+            system = systemPrompt(user, activeStation, mutations),
             history = history,
-            tools = bridgedTools(user),
+            tools = bridgedTools(user, if (mutations) proposals else null),
             model = model,
             maxTokens = registry.aiChatMaxTokens,
         )
+        return reply.copy(proposals = proposals.toList())
     }
 
-    private fun bridgedTools(user: AuthUser): List<AiBridgedTool> {
+    /** Staff (NORMAL_USER) on [stationId] - mirrors McpToolServices.requireStaff. */
+    private fun canEdit(user: AuthUser, stationId: String): Boolean =
+        user.isAdmin || user.grants.any { it.stationId == stationId && it.role == UserRole.NORMAL_USER }
+
+    /**
+     * The user pressed a card's APPROVE button: replay the proposed call with
+     * `confirm=true`. Everything is re-validated on this path - the tool must
+     * be a bridgeable mutation, mutations must (still) be enabled, and the
+     * action must target the app's active station; the tool itself re-checks
+     * the staff role and re-validates the data, so a proposal gone stale
+     * (spot deleted meanwhile) fails honestly instead of half-applying.
+     */
+    suspend fun executeProposal(
+        user: AuthUser,
+        stationId: String?,
+        toolName: String,
+        arguments: JsonObject,
+    ): AiToolOutcome {
+        if (!registry.aiChatMutations) throw AiSelectionException("Chat mutations are disabled (server.yaml ai.mutations)")
+        val tool = ALL_MCP_TOOLS.firstOrNull { it.name == toolName && it.mutating && it.name !in EXCLUDED_TOOLS }
+            ?: throw AiSelectionException("Unknown mutation tool '$toolName'")
+        stationId?.let { active ->
+            if (!canEdit(user, active)) throw AiSelectionException("Requires full access on station '$active'")
+            val target = (arguments["station"] as? JsonPrimitive)?.contentOrNull
+            if (target != null && target != active) {
+                throw AiSelectionException("Action targets station '$target' but the app is on '$active'")
+            }
+        }
+        val confirmed = JsonObject(arguments.filterKeys { it != "confirm" } + ("confirm" to JsonPrimitive(true)))
         val ctx = ToolContext(McpCaller.of(user), services)
+        val result = tool.handle(ctx, CallToolRequest(CallToolRequestParams(tool.name, confirmed)))
+        val text = result.content.filterIsInstance<TextContent>().joinToString("\n") { it.text }.trim()
+        return AiToolOutcome(text.ifBlank { "(empty result)" }, result.isError == true)
+    }
+
+    /**
+     * The tool bridge. Read tools pass through; when [proposals] is non-null
+     * the MUTATING tools ride along too - as FORCED DRY-RUNS: any `confirm`
+     * the model sends is stripped, the tool's preview runs (validating the
+     * data), and a successful preview is collected as an [AiProposal] card
+     * for the user to approve. The model can therefore never perform a write.
+     */
+    private fun bridgedTools(user: AuthUser, proposals: MutableList<AiProposal>?): List<AiBridgedTool> {
+        val ctx = ToolContext(McpCaller.of(user), services)
+
+        suspend fun run(tool: eu.anifantakis.commercials.mcp.tools.McpTool, args: JsonObject): AiToolOutcome {
+            val result = tool.handle(ctx, CallToolRequest(CallToolRequestParams(tool.name, args)))
+            val text = result.content
+                .filterIsInstance<TextContent>()
+                .joinToString("\n") { it.text }
+                .trim()
+            return AiToolOutcome(text.ifBlank { "(empty result)" }, result.isError == true)
+        }
+
         return ALL_MCP_TOOLS
-            .filter { !it.mutating && it.name !in EXCLUDED_TOOLS }
+            .filter { it.name !in EXCLUDED_TOOLS && (!it.mutating || proposals != null) }
             .map { tool ->
                 AiBridgedTool(
                     name = tool.name,
                     description = tool.description,
                     properties = tool.inputSchema.properties ?: JsonObject(emptyMap()),
                     required = tool.inputSchema.required ?: emptyList(),
-                    execute = { args ->
-                        val result = tool.handle(ctx, CallToolRequest(CallToolRequestParams(tool.name, args)))
-                        val text = result.content
-                            .filterIsInstance<TextContent>()
-                            .joinToString("\n") { it.text }
-                            .trim()
-                        AiToolOutcome(text.ifBlank { "(empty result)" }, result.isError == true)
+                    execute = { rawArgs ->
+                        if (tool.mutating && proposals != null) {
+                            val args = JsonObject(rawArgs.filterKeys { it != "confirm" })
+                            val outcome = run(tool, args)
+                            if (outcome.isError) {
+                                outcome
+                            } else {
+                                proposals += AiProposal(tool.name, args, outcome.text)
+                                AiToolOutcome(
+                                    outcome.text + "\n[PREPARED, NOT PERFORMED: the user now sees " +
+                                        "an approve/cancel card for this action. Do not call this tool " +
+                                        "again for the same action - tell the user to review the card.]",
+                                    isError = false,
+                                )
+                            }
+                        } else {
+                            run(tool, rawArgs)
+                        }
                     },
                 )
             }
     }
 
-    private fun systemPrompt(user: AuthUser, activeStationId: String? = null): String {
+    private fun systemPrompt(user: AuthUser, activeStationId: String? = null, mutations: Boolean = false): String {
         val stations = user.grants.joinToString("\n") { grant ->
             val name = registry.config(grant.stationId)?.name ?: grant.stationId
             "- ${grant.stationId} (\"$name\") - role ${grant.role.name}" +
@@ -173,9 +244,7 @@ class AiChatService(
             and customers.
             $stationRule
 
-            You currently have READ-ONLY access: you cannot add, move or delete placements or send
-            emails. If asked to change something, explain politely that modifications from the chat
-            are not enabled yet and describe how to do it in the application instead.
+            ${if (mutations) MUTATIONS_RULE else READ_ONLY_RULE}
 
             Answer in the language the user writes in. Be concise and factual. Your answers are
             rendered as GitHub-flavoured Markdown: use markdown tables for tabular data (schedule
@@ -187,6 +256,23 @@ class AiChatService(
     private companion object {
         /** Read tools whose output is a base64 PDF - useless and enormous in a chat context. */
         val EXCLUDED_TOOLS = setOf("generate_break_report", "generate_day_report")
+
+        val READ_ONLY_RULE = """
+            You currently have READ-ONLY access: you cannot add, move or delete placements or send
+            emails. If asked to change something, explain politely that modifications from the chat
+            are not enabled yet and describe how to do it in the application instead.
+        """.trimIndent()
+
+        val MUTATIONS_RULE = """
+            You can PREPARE schedule changes (add/delete/reorder placements, send schedule emails)
+            with the mutation tools - but you can never perform them. Calling a mutation tool runs
+            a validated DRY-RUN and queues a confirmation card in the app; ONLY the user's approval
+            of that card executes the action. Call the tool once per intended action (never set
+            'confirm'), then tell the user to review and approve the card. If the dry-run returns
+            an error, fix the arguments and try again. Never claim an action happened - it happens
+            only after the user approves, and you will see a confirmation note in the conversation
+            when it does.
+        """.trimIndent()
 
         fun currentTimeHHmm(): String = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
     }

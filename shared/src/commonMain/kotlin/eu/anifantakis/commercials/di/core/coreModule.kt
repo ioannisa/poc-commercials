@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.di.core
 
+import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
 import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
 import eu.anifantakis.commercials.core.data.party_search.PartySearchRepositoryImpl
@@ -32,6 +33,10 @@ val coreModule = module {
 
     // App-wide MVI container (kmp-developer global state)
     single { GlobalStateContainer() }
+
+    // Cross-feature "data changed under you" signal: out-of-screen writers
+    // (the AI assistant's approved mutations) emit, data screens refetch.
+    single { DataRefreshBus() }
 
     // Command router between app chrome (desktop MenuBar/shortcuts) and the
     // screen that currently owns each action. Bound on every platform - it

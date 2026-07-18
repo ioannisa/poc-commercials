@@ -439,6 +439,15 @@ data class AiChatConfig(
     val gemini: AiProviderConfig? = null,
     /** Per-response output-token cap, applied to every provider call. */
     val maxTokens: Int = 8192,
+    /**
+     * Schedule MUTATIONS from the chat (add/delete/reorder placements, send
+     * schedule emails). Default ON: unlike the network-reachable MCP server's
+     * default-deny env knob, every in-app mutation is behind the calling
+     * user's staff role AND an explicit per-action confirmation card - the
+     * model can only PREPARE actions, never perform them. Set false for a
+     * strictly read-only assistant.
+     */
+    val mutations: Boolean = true,
 ) {
     /**
      * The providers that actually hold an API key, resolved to catalog
@@ -524,6 +533,9 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** Per-response output-token cap for AI chat provider calls. */
     val aiChatMaxTokens: Int = hosting.ai?.maxTokens ?: 8192
+
+    /** Chat mutations (confirmation-card gated); server.yaml `ai.mutations`, default true. */
+    val aiChatMutations: Boolean = hosting.ai?.mutations ?: true
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
@@ -209,6 +210,8 @@ class TimetableViewModel(
      * suite that is green in July and red in August, with nothing having changed.
      */
     private val clock: Clock = Clock.System,
+    /** Cross-feature "data changed" signal (AI-chat mutations); default = inert bus for tests. */
+    private val refreshBus: DataRefreshBus = DataRefreshBus(),
 ) : BaseGlobalViewModel() {
 
     private val today = clock.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -263,6 +266,13 @@ class TimetableViewModel(
                 // made idempotent) spin a feedback loop. The app routes to Login.
                 if (index > 0 && session.isLoggedIn) reload()
             }
+        }
+
+        // Out-of-screen writers (the AI assistant's approved mutations)
+        // announce data changes here - refetch so the user watches the
+        // change land in the grid live.
+        viewModelScope.launch {
+            refreshBus.events.collect { if (session.isLoggedIn) reload() }
         }
     }
 

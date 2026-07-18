@@ -1,9 +1,38 @@
 # In-app AI assistant
 
 A chat inside the application that answers questions about schedules, breaks,
-spots, contracts and customers in natural language. **Phase 1 is read-only**:
-the model can look things up but cannot modify anything (mutations with
-in-chat confirmation are a follow-up).
+spots, contracts and customers in natural language - and, since Phase 2,
+**modifies the schedule through confirmation cards**: the model can PREPARE
+add/delete/reorder placements and schedule emails, but only the user's
+explicit approval of a card executes anything.
+
+## Mutations (Phase 2)
+
+The mutating MCP tools carry a built-in two-step (`confirm=false` = validated
+dry-run, `confirm=true` = perform). The chat bridge exploits it:
+
+1. The model calls a mutation tool; the bridge STRIPS any `confirm` - the
+   call always runs as a dry-run, so the model can never write.
+2. A successful dry-run becomes a **confirmation card** in the chat (tool,
+   arguments, the dry-run preview) and the model is told to point the user
+   at it.
+3. **Approve** replays the exact call with `confirm=true` via
+   `POST /api/ai/execute` - re-validating everything server-side: the
+   `ai.mutations` gate, STAFF role on the station, the station pin (an
+   action targeting another station than the app's active one is a 400), and
+   the tool's own data checks. A proposal gone stale (the spot vanished
+   meanwhile) fails honestly with the tool's error on the card.
+4. The outcome lands on the card and as a small NOTE line in the transcript
+   (so the model knows what actually happened next turn), and a successful
+   write signals the app's refresh bus - **the timetable refetches and the
+   change appears in the grid live**.
+5. **Cancel** marks the card declined and notes it - nothing runs.
+
+Mutations require ALL of: `ai.mutations: true` in server.yaml (the default;
+set `false` for a strictly read-only assistant), an active station, and the
+user holding full (NORMAL_USER) access on it - viewer roles never see the
+mutation tools at all. Every execution goes through the same audit log as
+the MCP transports.
 
 The chat is a **companion**: on Desktop it opens as a separate, resizable,
 **always-on-top OS window** (the main window keeps its full width - a small

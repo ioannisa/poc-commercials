@@ -42,6 +42,7 @@ import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.MarkdownTypography
 import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
+import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
@@ -61,19 +62,30 @@ import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiProposal
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
+
+/** A confirmation card's lifecycle after the user acted on it. */
+enum class AiActionStatus { RUNNING, EXECUTED, FAILED, DECLINED }
+
+@Immutable
+data class AiActionState(val status: AiActionStatus, val detail: UiText? = null)
 
 @Immutable
 data class AiChatState(
@@ -86,6 +98,8 @@ data class AiChatState(
     val providers: ImmutableList<AiChatProviderOption> = persistentListOf(),
     val selectedProviderId: String? = null,
     val selectedModel: String? = null,
+    /** Per-card execution state, keyed by [AiProposal.id]; absent = still pending. */
+    val actionResults: ImmutableMap<String, AiActionState> = persistentMapOf(),
 ) {
     val selectedProvider: AiChatProviderOption? get() = providers.firstOrNull { it.id == selectedProviderId }
     val canSend: Boolean get() = !busy && input.isNotBlank() && selectedProviderId != null && selectedModel != null
@@ -99,12 +113,19 @@ sealed interface AiChatIntent {
     data class InputChanged(val value: String) : AiChatIntent
     data object Send : AiChatIntent
     data object Clear : AiChatIntent
+
+    /** The user pressed a confirmation card's approve button. */
+    data class ConfirmAction(val proposal: AiProposal) : AiChatIntent
+
+    /** The user dismissed a confirmation card. */
+    data class DeclineAction(val proposal: AiProposal) : AiChatIntent
 }
 
 @Stable
 class AiChatViewModel(
     private val repository: AiChatRepository,
     private val prefs: AiChatPreferences,
+    private val refreshBus: DataRefreshBus,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
@@ -117,7 +138,11 @@ class AiChatViewModel(
             is AiChatIntent.SelectModel -> selectModel(intent.model)
             is AiChatIntent.InputChanged -> _state.update { it.copy(input = intent.value, error = null) }
             AiChatIntent.Send -> send()
-            AiChatIntent.Clear -> _state.update { it.copy(messages = persistentListOf(), input = "", error = null) }
+            AiChatIntent.Clear -> _state.update {
+                it.copy(messages = persistentListOf(), input = "", error = null, actionResults = persistentMapOf())
+            }
+            is AiChatIntent.ConfirmAction -> confirm(intent.proposal)
+            is AiChatIntent.DeclineAction -> decline(intent.proposal)
         }
     }
 
@@ -180,6 +205,7 @@ class AiChatViewModel(
                             role = AiChatRole.ASSISTANT,
                             text = result.data.text,
                             steps = result.data.steps,
+                            proposals = result.data.proposals,
                         )).toImmutableList(),
                         busy = false,
                     )
@@ -188,6 +214,63 @@ class AiChatViewModel(
                     it.copy(busy = false, error = result.error.toUiText())
                 }
             }
+        }
+    }
+
+    /**
+     * APPROVE: replay the prepared call server-side (confirm=true there). The
+     * outcome lands on the card AND as a NOTE turn, so the model learns what
+     * actually happened on the next request; a successful write also pokes
+     * the [DataRefreshBus] - the timetable refetches and the user watches
+     * the change land live.
+     */
+    private fun confirm(p: AiProposal) {
+        if (_state.value.actionResults.containsKey(p.id)) return   // one shot per card
+        setAction(p.id, AiActionState(AiActionStatus.RUNNING))
+        viewModelScope.launch {
+            when (val result = repository.execute(p.tool, p.argumentsJson)) {
+                is DataResult.Success -> {
+                    val out = result.data
+                    if (out.isError) {
+                        setAction(p.id, AiActionState(AiActionStatus.FAILED, UiText.Dynamic(out.text)))
+                        appendNote(
+                            StringKey.AI_CHAT_NOTE_FAILED.localized().withArgs(listOf(p.tool, out.text.take(500)))
+                        )
+                    } else {
+                        setAction(p.id, AiActionState(AiActionStatus.EXECUTED))
+                        appendNote(
+                            StringKey.AI_CHAT_NOTE_EXECUTED.localized().withArgs(listOf(p.tool, out.text.take(500)))
+                        )
+                        refreshBus.notifyChanged()
+                    }
+                }
+                is DataResult.Failure -> {
+                    // Transport-level failure: the card can be retried, so no
+                    // note yet - nothing definitive happened.
+                    _state.update {
+                        it.copy(
+                            actionResults = (it.actionResults - p.id).toImmutableMap(),
+                            error = result.error.toUiText(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun decline(p: AiProposal) {
+        if (_state.value.actionResults.containsKey(p.id)) return
+        setAction(p.id, AiActionState(AiActionStatus.DECLINED))
+        appendNote(StringKey.AI_CHAT_NOTE_DECLINED.localized().withArgs(listOf(p.tool)))
+    }
+
+    private fun setAction(id: String, action: AiActionState) {
+        _state.update { it.copy(actionResults = (it.actionResults + (id to action)).toImmutableMap()) }
+    }
+
+    private fun appendNote(text: String) {
+        _state.update {
+            it.copy(messages = (it.messages + AiChatMessage(AiChatRole.NOTE, text)).toImmutableList())
         }
     }
 }
@@ -291,7 +374,7 @@ private fun AiChatScreen(
                 }
             }
             items(state.messages) { message ->
-                ChatBubble(message)
+                ChatBubble(message, state.actionResults, onIntent)
             }
             if (state.busy) {
                 item {
@@ -445,13 +528,25 @@ private fun providerDisplayName(id: String): String = when (id) {
 
 /**
  * User turns hug the end edge, assistant turns the start edge (auto-mirrors in
- * RTL). Assistant turns render as MARKDOWN (models emit it regardless of
+ * RTL); NOTE turns (action approved/declined annotations) sit centred and
+ * small. Assistant turns render as MARKDOWN (models emit it regardless of
  * prompting - GFM tables included); the user's own words stay plain text.
  * Everything sits in a [SelectionContainer], so answers can be selected and
  * copied (one container per bubble: selection never straddles messages).
+ * Assistant turns may carry [AiProposal] confirmation cards under the text.
  */
 @Composable
-private fun ChatBubble(message: AiChatMessage) {
+private fun ChatBubble(
+    message: AiChatMessage,
+    actionResults: ImmutableMap<String, AiActionState>,
+    onIntent: (AiChatIntent) -> Unit,
+) {
+    if (message.role == AiChatRole.NOTE) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            AppText(message.text, AppTextStyle.TINY)
+        }
+        return
+    }
     val isUser = message.role == AiChatRole.USER
     Box(Modifier.fillMaxWidth()) {
         AppCard(
@@ -459,22 +554,92 @@ private fun ChatBubble(message: AiChatMessage) {
                 .align(if (isUser) Alignment.CenterEnd else Alignment.CenterStart)
                 .widthIn(max = 560.dp),
         ) {
-            SelectionContainer {
-                Column(Modifier.padding(UIConst.paddingSmall)) {
-                    if (isUser) {
-                        AppText(message.text, AppTextStyle.BODY)
-                    } else {
-                        Markdown(message.text, typography = chatMarkdownTypography())
-                    }
-                    if (message.steps.isNotEmpty()) {
-                        AppText(
-                            Strings[StringKey.AI_CHAT_TOOLS_USED].withArgs(
-                                listOf(message.steps.joinToString(", ") { it.tool })
-                            ),
-                            AppTextStyle.TINY,
-                        )
+            Column(Modifier.padding(UIConst.paddingSmall)) {
+                SelectionContainer {
+                    Column {
+                        if (isUser) {
+                            AppText(message.text, AppTextStyle.BODY)
+                        } else {
+                            Markdown(message.text, typography = chatMarkdownTypography())
+                        }
                     }
                 }
+                message.proposals.forEach { proposal ->
+                    ProposalCard(proposal, actionResults[proposal.id], onIntent)
+                }
+                if (message.steps.isNotEmpty()) {
+                    AppText(
+                        Strings[StringKey.AI_CHAT_TOOLS_USED].withArgs(
+                            listOf(message.steps.joinToString(", ") { it.tool })
+                        ),
+                        AppTextStyle.TINY,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One prepared mutation: the tool, its validated dry-run preview, and the
+ * approve/cancel pair. NOTHING executes without the approve press; the card
+ * then shows its terminal state (executed / failed / cancelled) and the
+ * buttons are gone - a card is one-shot.
+ */
+@Composable
+private fun ProposalCard(
+    proposal: AiProposal,
+    action: AiActionState?,
+    onIntent: (AiChatIntent) -> Unit,
+) {
+    AppCard(modifier = Modifier.fillMaxWidth().padding(top = UIConst.paddingSmall)) {
+        Column(Modifier.padding(UIConst.paddingSmall)) {
+            AppText(Strings[StringKey.AI_CHAT_ACTION_TITLE], AppTextStyle.BODY_STRONG)
+            AppText(proposal.tool, AppTextStyle.TINY)
+            SelectionContainer {
+                AppText(proposal.preview, AppTextStyle.LOG_LINE)
+            }
+            when (action?.status) {
+                null -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+                ) {
+                    AppButton(
+                        text = Strings[StringKey.AI_CHAT_APPROVE],
+                        onClick = { onIntent(AiChatIntent.ConfirmAction(proposal)) },
+                        // Destruction reads as destruction, even inside a card.
+                        variant = if (proposal.tool.startsWith("delete")) {
+                            AppButtonVariant.DESTRUCTIVE
+                        } else {
+                            AppButtonVariant.PRIMARY
+                        },
+                    )
+                    AppButton(
+                        text = Strings[StringKey.COMMON_CANCEL],
+                        onClick = { onIntent(AiChatIntent.DeclineAction(proposal)) },
+                        variant = AppButtonVariant.TEXT,
+                    )
+                }
+                AiActionStatus.RUNNING -> AppButton(
+                    text = Strings[StringKey.AI_CHAT_APPROVE],
+                    onClick = {},
+                    enabled = false,
+                    busy = true,
+                )
+                AiActionStatus.EXECUTED -> AppText(
+                    "✓ " + Strings[StringKey.AI_CHAT_ACTION_DONE],
+                    AppTextStyle.BODY_STRONG,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                AiActionStatus.FAILED -> AppText(
+                    Strings[StringKey.AI_CHAT_ACTION_FAILED] +
+                        (action.detail?.let { ": " + it.asString() } ?: ""),
+                    AppTextStyle.ERROR_NOTE,
+                )
+                AiActionStatus.DECLINED -> AppText(
+                    Strings[StringKey.AI_CHAT_ACTION_DECLINED],
+                    AppTextStyle.NOTE,
+                )
             }
         }
     }

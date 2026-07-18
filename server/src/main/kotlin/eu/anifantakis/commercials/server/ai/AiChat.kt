@@ -28,9 +28,11 @@ data class AiChatTurn(val role: AiChatRole, val text: String)
 enum class AiChatRole { USER, ASSISTANT }
 
 /**
- * One READ-ONLY tool the model may call, bridged from the MCP registry. The
- * schema pieces are plain JSON-schema fragments ([properties] + [required])
- * that each adapter re-wraps into its provider's dialect.
+ * One tool the model may call, bridged from the MCP registry. The schema
+ * pieces are plain JSON-schema fragments ([properties] + [required]) that
+ * each adapter re-wraps into its provider's dialect. Read tools execute
+ * directly; MUTATING tools are bridged as forced DRY-RUNS whose previews
+ * become [AiProposal] confirmation cards - the user's approval executes.
  */
 class AiBridgedTool(
     val name: String,
@@ -42,8 +44,20 @@ class AiBridgedTool(
 
 data class AiToolOutcome(val text: String, val isError: Boolean)
 
+/**
+ * A mutation the model PREPARED but did not perform: the bridge forced the
+ * tool's dry-run mode, [preview] is its validated output, and [arguments]
+ * (with any `confirm` stripped) are what the approval endpoint replays with
+ * `confirm=true` once the user presses the card's approve button.
+ */
+data class AiProposal(val tool: String, val arguments: JsonObject, val preview: String)
+
 /** The final answer plus the (name-only) trail of tool calls it took. */
-data class AiChatReply(val text: String, val steps: List<AiToolStep>)
+data class AiChatReply(
+    val text: String,
+    val steps: List<AiToolStep>,
+    val proposals: List<AiProposal> = emptyList(),
+)
 
 data class AiToolStep(val tool: String, val isError: Boolean)
 

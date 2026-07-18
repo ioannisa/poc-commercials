@@ -18,4 +18,10 @@ interface AiChatRepository {
         provider: String,
         model: String,
     ): DataResult<AiChatReply, RemoteError>
+
+    /** Execute a proposal the user APPROVED (the server re-validates everything). */
+    suspend fun execute(
+        tool: String,
+        argumentsJson: String,
+    ): DataResult<AiExecutionOutcome, RemoteError>
 }

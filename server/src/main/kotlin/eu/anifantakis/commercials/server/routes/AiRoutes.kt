@@ -15,6 +15,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /** One client-visible conversation turn; role is `user` or `assistant`. */
 @Serializable
@@ -35,8 +36,29 @@ data class AiChatRequestDto(
 @Serializable
 data class AiToolStepDto(val tool: String, val isError: Boolean = false)
 
+/**
+ * A mutation the model PREPARED (validated dry-run) - the client renders it
+ * as a confirmation card; approving POSTs [tool]+[arguments] to /execute.
+ */
 @Serializable
-data class AiChatResponseDto(val text: String, val steps: List<AiToolStepDto> = emptyList())
+data class AiProposalDto(
+    val tool: String,
+    val arguments: JsonObject,
+    val preview: String,
+)
+
+@Serializable
+data class AiChatResponseDto(
+    val text: String,
+    val steps: List<AiToolStepDto> = emptyList(),
+    val proposals: List<AiProposalDto> = emptyList(),
+)
+
+@Serializable
+data class AiExecuteRequestDto(val tool: String, val arguments: JsonObject)
+
+@Serializable
+data class AiExecuteResponseDto(val text: String, val isError: Boolean = false)
 
 /** Keep a runaway client (or a very long chat) from flooding the provider. */
 private const val MAX_TURNS = 40
@@ -80,13 +102,42 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                 val station = call.request.queryParameters["station"]?.trim()?.takeIf { it.isNotEmpty() }
                 try {
                     val reply = aiChat.chat(user, history, request.provider, request.model, station)
-                    call.respond(AiChatResponseDto(reply.text, reply.steps.map { AiToolStepDto(it.tool, it.isError) }))
+                    call.respond(
+                        AiChatResponseDto(
+                            text = reply.text,
+                            steps = reply.steps.map { AiToolStepDto(it.tool, it.isError) },
+                            proposals = reply.proposals.map { AiProposalDto(it.tool, it.arguments, it.preview) },
+                        )
+                    )
                 } catch (e: AiSelectionException) {
                     // A provider/model outside the server.yaml catalog is a CLIENT error.
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "invalid provider/model")))
                 } catch (e: AiProviderException) {
                     // Provider/config trouble is an upstream problem, not a client one.
                     call.respond(HttpStatusCode.BadGateway, mapOf("error" to (e.message ?: "AI provider error")))
+                }
+            }
+
+            /**
+             * Execute a confirmation card the user APPROVED: replays the
+             * prepared tool call with confirm=true, as the calling user.
+             * Everything is re-validated server-side (mutation gate, staff
+             * role, station pin, and the tool's own data checks) - a stale
+             * proposal fails honestly with the tool's error. A tool-level
+             * failure is a 200 with isError=true; only an invalid REQUEST
+             * (unknown tool, wrong station, mutations off) is a 400.
+             *
+             * Tag: AI
+             */
+            post("/execute") {
+                val user = call.authUser()
+                val request = call.receive<AiExecuteRequestDto>()
+                val station = call.request.queryParameters["station"]?.trim()?.takeIf { it.isNotEmpty() }
+                try {
+                    val outcome = aiChat.executeProposal(user, station, request.tool, request.arguments)
+                    call.respond(AiExecuteResponseDto(outcome.text, outcome.isError))
+                } catch (e: AiSelectionException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "invalid action")))
                 }
             }
         }

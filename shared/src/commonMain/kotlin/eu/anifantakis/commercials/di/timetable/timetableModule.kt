@@ -48,6 +48,7 @@ val timetableModule = module {
             session = get(),
             reportService = get(),
             logoCache = get(),
+            refreshBus = get(),
         )
     }
     viewModel { params ->
