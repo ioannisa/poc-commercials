@@ -160,6 +160,53 @@ OAuth or not. Public HTTPS (§4) is what unlocks them.
 - Auth endpoints are **per-IP rate limited** out of the box (10/min on
   login/authorize/forgot/reset, 60/min on register/token/revoke).
 
+### Cloudflare tunnel — public HTTPS without a VPS (the dev/test deployment)
+
+A **named Cloudflare tunnel** exposes the dev machine's `localhost:8080` as
+`https://mcp.anifantakis.eu`: `cloudflared` keeps an *outbound* connection to
+Cloudflare's edge, which terminates TLS (Universal SSL — no certificate to
+manage) and forwards requests through it. No public IP, no router ports, no
+reverse proxy. Requires the domain's DNS to be on Cloudflare.
+
+**One-time setup** (already done on this machine; repeat only on a new one):
+
+```bash
+brew install cloudflared
+cloudflared tunnel login                                  # browser: authorize the zone
+cloudflared tunnel create commercials-mcp
+cloudflared tunnel route dns commercials-mcp mcp.anifantakis.eu   # writes the CNAME
+```
+
+plus `~/.cloudflared/config.yml` pointing the hostname at the server:
+
+```yaml
+tunnel: <tunnel-id from create>
+credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
+ingress:
+  - hostname: mcp.anifantakis.eu
+    service: http://localhost:8080
+  - service: http_status:404
+```
+
+and the §4 `server.yaml` keys: `publicBaseUrl: "https://mcp.anifantakis.eu"`,
+`mcpAllowedHosts: [mcp.anifantakis.eu, localhost, 127.0.0.1]`,
+`behindReverseProxy: true`.
+
+**Daily use:**
+
+| | |
+|---|---|
+| **Up** | `cloudflared tunnel run commercials-mcp` (foreground; keep the terminal open) |
+| **Down** | `Ctrl-C` in that terminal — the public URL answers Cloudflare error 530 within seconds |
+| Status | `cloudflared tunnel list` · `cloudflared tunnel info commercials-mcp` |
+| Boot service (optional) | `sudo cloudflared service install` / `... service uninstall` |
+
+While the tunnel is up, the **entire** dev server is internet-reachable —
+login-gated and rate-limited, but treat it as exposed: bring it up for
+connector tests, `Ctrl-C` when done. The hostname is permanent; connectors
+stay configured between runs and simply error while the tunnel is down.
+Local development is unaffected either way.
+
 ## 5. Admin oversight
 
 **Preferences → MCP oversight** (super admin only):
