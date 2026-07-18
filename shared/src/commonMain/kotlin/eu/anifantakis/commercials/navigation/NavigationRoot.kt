@@ -43,6 +43,8 @@ import eu.anifantakis.commercials.feature.auth.presentation.screens.change_passw
 import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_mcp.AdminMcpDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
+import eu.anifantakis.commercials.feature.ai_chat.presentation.AiChatNavType
+import eu.anifantakis.commercials.feature.ai_chat.presentation.aiChatEntries
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
 import eu.anifantakis.commercials.feature.migration_console.presentation.MigrationNavType
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
@@ -199,12 +201,14 @@ fun NavigationRoot() {
                         }
                     },
                     onPreferences = { navigator.navigate(PreferencesNavType.Preferences) },
+                    onAiChat = { navigator.navigate(AiChatNavType.AiChat) },
                 )
 
                 preferencesEntries(
                     navigator = navigator,
                     isAdmin = { authSession.isAdmin },
                     swaggerEnabled = { authSession.swaggerEnabled },
+                    aiChatEnabled = { authSession.aiChatProviders.isNotEmpty() },
                     onChangePassword = { showChangePassword = true },
                     onApiTokens = { showApiTokens = true },
                     onAdminMcp = { showAdminMcp = true },
@@ -219,7 +223,10 @@ fun NavigationRoot() {
                             AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
                         )
                     },
+                    onAiChat = { navigator.navigate(AiChatNavType.AiChat) },
                 )
+
+                aiChatEntries(navigator, providers = { authSession.aiChatProviders })
 
                 userManagementEntries(
                     navigator = navigator,

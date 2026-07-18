@@ -68,6 +68,7 @@ fun EntryProviderScope<NavKey>.timetableEntries(
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
+    onAiChat: () -> Unit,
 ) {
     entry<TimetableNavType.TimetableFlow> {
         // THIS entry is the CommonViewModel's owner: popping the flow
@@ -78,6 +79,7 @@ fun EntryProviderScope<NavKey>.timetableEntries(
             onOpenEmailDialog = onOpenEmailDialog,
             onLogout = onLogout,
             onPreferences = onPreferences,
+            onAiChat = onAiChat,
         )
     }
 }
@@ -94,6 +96,7 @@ private fun TimetableFlowHost(
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
+    onAiChat: () -> Unit,
 ) {
     val stepStack = rememberNavBackStack(stepNavConfig, TimetableStepNavType.Grid)
 
@@ -123,6 +126,7 @@ private fun TimetableFlowHost(
                     onOpenEmailDialog = onOpenEmailDialog,
                     onLogout = onLogout,
                     onPreferences = onPreferences,
+                    onAiChat = onAiChat,
                 )
             }
 

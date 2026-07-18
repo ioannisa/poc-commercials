@@ -1,10 +1,13 @@
 package eu.anifantakis.commercials.core.presentation.files
 
+import eu.anifantakis.commercials.core.presentation.design_system.platform.UiPlatform
+import eu.anifantakis.commercials.core.presentation.design_system.platform.detectUiPlatform
 import java.io.File
 
-private val osName: String = System.getProperty("os.name").orEmpty().lowercase()
-private val isMac: Boolean = "mac" in osName || "darwin" in osName
-private val isWindows: Boolean = "win" in osName
+// OS comes from detectUiPlatform - the codebase's single `os.name` detection
+// door (fitness-rule enforced) - never re-derived here.
+private val isMac: Boolean = detectUiPlatform() == UiPlatform.MACOS
+private val isWindows: Boolean = detectUiPlatform() == UiPlatform.WINDOWS
 
 /**
  * The per-OS location Claude Desktop reads its `mcpServers` config from:

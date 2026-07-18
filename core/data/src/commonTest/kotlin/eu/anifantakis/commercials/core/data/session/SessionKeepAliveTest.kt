@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -43,10 +44,17 @@ class SessionKeepAliveTest {
             private set
         var swaggerEnabled: Boolean? = null
             private set
+        var aiChatProviders: List<AiChatProviderOption>? = null
+            private set
 
-        override suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean) {
+        override suspend fun refreshFromSession(
+            stations: List<StationAccess>,
+            swaggerEnabled: Boolean,
+            aiChatProviders: List<AiChatProviderOption>,
+        ) {
             this.stations = stations
             this.swaggerEnabled = swaggerEnabled
+            this.aiChatProviders = aiChatProviders
         }
 
         fun clear() {
@@ -120,17 +128,19 @@ class SessionKeepAliveTest {
     }
 
     /**
-     * The Swagger toggle rides the SAME knock as the station list, so a client that
-     * skipped login (persisted token) tracks a server.yaml `swagger` change without
-     * re-login - the exact staleness a login-only flag would leave behind.
+     * The Swagger toggle and the AI provider catalog ride the SAME knock as the
+     * station list, so a client that skipped login (persisted token) tracks a
+     * server.yaml change without re-login - the exact staleness a login-only
+     * snapshot would leave behind.
      */
     @Test
-    fun knock_adopts_the_servers_swagger_flag() = runTest {
+    fun knock_adopts_the_servers_swagger_flag_and_ai_catalog() = runTest {
         val store = FakeStore()
         val engine = MockEngine { request ->
             seen += request.url.encodedPath
             respond(
-                """{"expiresInSeconds":3600,"stations":[],"swaggerEnabled":true}""",
+                """{"expiresInSeconds":3600,"stations":[],"swaggerEnabled":true,""" +
+                    """"aiChat":[{"id":"anthropic","models":["claude-sonnet-5","claude-haiku-4-5"]}]}""",
                 HttpStatusCode.OK,
                 headersOf(HttpHeaders.ContentType, "application/json"),
             )
@@ -139,6 +149,10 @@ class SessionKeepAliveTest {
         keepAlive(store, engine).knock()
 
         assertEquals(true, store.swaggerEnabled)
+        assertEquals(
+            listOf(AiChatProviderOption("anthropic", listOf("claude-sonnet-5", "claude-haiku-4-5"))),
+            store.aiChatProviders,
+        )
     }
 
     /**

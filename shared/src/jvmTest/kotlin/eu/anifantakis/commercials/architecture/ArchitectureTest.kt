@@ -383,6 +383,7 @@ class ArchitectureTest {
             .filter { f ->
                 !f.isTestSource() &&
                     f.name != "Language.kt" &&                   // language endonyms
+                    f.name != "LegacyToolbarLab.kt" &&           // verbatim mock of the GREEK legacy console - its strings ARE the spec
                     "/string_resources/lang/" !in f.path         // the El/En providers
             }
             .flatMap { f ->

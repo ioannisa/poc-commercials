@@ -119,6 +119,8 @@ data class TimetableState(
     val canEdit: Boolean = false,
     val displayName: String = "",
     val isAdmin: Boolean = false,
+    /** At least one AI provider is configured server-side - show the chat launcher. */
+    val aiChatEnabled: Boolean = false,
     val role: AppRole = AppRole.REPORT_VIEWER,
     val stations: ImmutableList<StationAccess> = persistentListOf(),
     val selectedStation: StationAccess? = null,
@@ -269,6 +271,7 @@ class TimetableViewModel(
         canEdit = session.role.canEdit,
         displayName = session.displayName,
         isAdmin = session.isAdmin,
+        aiChatEnabled = session.aiChatProviders.isNotEmpty(),
         role = session.role,
         stations = session.stations.toImmutableList(),
         selectedStation = session.selectedStation,

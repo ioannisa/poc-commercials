@@ -35,6 +35,11 @@ dependencies {
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.forwarded.header)
     implementation(libs.ktor.server.double.receive)
+
+    // In-app AI assistant: Anthropic via official SDK; OpenAI/Gemini via ktor-client HTTP
+    implementation(libs.anthropic.java)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
     // OpenAPI/Swagger UI: compiler-generated spec (dev-only, gated in Routing.kt).
     // routing-openapi provides the generation + .describe {}; swagger serves the UI.
     implementation(libs.ktor.server.swagger)

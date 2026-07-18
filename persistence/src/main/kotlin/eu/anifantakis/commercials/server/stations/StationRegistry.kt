@@ -217,6 +217,13 @@ data class HostingConfig(
      */
     val swagger: Boolean = false,
     /**
+     * In-app AI assistant. UNSET = feature off (the client hides the chat
+     * entry). The server holds the provider API key and proxies every chat -
+     * the key never reaches a client.
+     */
+    val ai: AiChatConfig? = null,
+
+    /**
      * Public origin of this server (e.g. `"https://mcp.example.gr"`) - the
      * OAuth 2.1 `issuer`. Setting it MOUNTS the OAuth endpoints (under
      * `/oauth` and the `/.well-known` discovery documents) and the 401
@@ -302,6 +309,28 @@ fun loadHostingConfig(): HostingConfig {
         }
     }
 
+    parsed.ai?.let { ai ->
+        // A keyed openai/gemini block without models would put an EMPTY model
+        // dropdown in front of the user - reject at boot, not at first chat.
+        listOf(
+            AiChatConfig.PROVIDER_OPENAI to ai.openai,
+            AiChatConfig.PROVIDER_GEMINI to ai.gemini,
+        ).forEach { (id, block) ->
+            require(block == null || block.apiKey.isBlank() || block.models.any { it.isNotBlank() }) {
+                "ai.$id.models must list at least one model in '${file.path}' - " +
+                    "$id has no safe baked-in default (their catalogs move too fast)"
+            }
+        }
+        val configured = ai.configuredProviders()
+        ai.provider?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { def ->
+            require(configured.any { it.id == def }) {
+                "ai.provider is '$def' in '${file.path}' but that provider holds no apiKey - " +
+                    "configured providers: ${configured.map { it.id }.ifEmpty { listOf("none") }}"
+            }
+        }
+        require(ai.maxTokens > 0) { "ai.maxTokens must be > 0 in '${file.path}' (was ${ai.maxTokens})" }
+    }
+
     val duplicateGroups = parsed.groups.groupBy { it.id }.filterValues { it.size > 1 }.keys
     require(duplicateGroups.isEmpty()) { "Duplicate group ids in '${file.path}': $duplicateGroups" }
 
@@ -381,6 +410,77 @@ fun databaseTarget(jdbcUrl: String): String =
  * HostingConfig is @Provided: it comes from a file-loading factory registered
  * with a classic-DSL definition the compile-time checker can't index.
  */
+/**
+ * One provider block inside `ai:` - an API key plus the models the client may
+ * pick from (FIRST entry = that provider's default). [models] is optional for
+ * anthropic (falls back to [AiChatConfig.ANTHROPIC_DEFAULT_MODELS]) and
+ * REQUIRED for openai/gemini - their catalogs move too fast for a safe
+ * baked-in default. A BLANK apiKey counts as unconfigured, so commenting out
+ * the key and emptying it both remove the provider from the dropdown.
+ */
+@Serializable
+data class AiProviderConfig(
+    val apiKey: String = "",
+    val models: List<String> = emptyList(),
+)
+
+/**
+ * The in-app AI assistant (server.yaml `ai:` block) - one optional block per
+ * provider. Every provider holding a key becomes an option in the client's
+ * chat dropdown; [provider] optionally names the DEFAULT (preselected, listed
+ * first), otherwise anthropic > openai > gemini order decides. Zero configured
+ * providers = feature off: the route is unmounted and clients hide the entry.
+ */
+@Serializable
+data class AiChatConfig(
+    val provider: String? = null,
+    val anthropic: AiProviderConfig? = null,
+    val openai: AiProviderConfig? = null,
+    val gemini: AiProviderConfig? = null,
+    /** Per-response output-token cap, applied to every provider call. */
+    val maxTokens: Int = 8192,
+) {
+    /**
+     * The providers that actually hold an API key, resolved to catalog
+     * entries - DEFAULT FIRST (that order IS the client dropdown order).
+     */
+    fun configuredProviders(): List<AiProviderCatalogEntry> {
+        val entries = buildList {
+            fun addIfKeyed(id: String, block: AiProviderConfig?, fallback: List<String> = emptyList()) {
+                val keyed = block?.takeIf { it.apiKey.isNotBlank() } ?: return
+                val models = keyed.models.map(String::trim).filter(String::isNotEmpty).ifEmpty { fallback }
+                if (models.isNotEmpty()) add(AiProviderCatalogEntry(id, models, keyed.apiKey))
+            }
+            addIfKeyed(PROVIDER_ANTHROPIC, anthropic, fallback = ANTHROPIC_DEFAULT_MODELS)
+            addIfKeyed(PROVIDER_OPENAI, openai)
+            addIfKeyed(PROVIDER_GEMINI, gemini)
+        }
+        val default = provider?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return entries
+        // Stable sort: the default floats to the front, the rest keep their order.
+        return entries.sortedBy { if (it.id == default) 0 else 1 }
+    }
+
+    companion object {
+        const val PROVIDER_ANTHROPIC = "anthropic"
+        const val PROVIDER_OPENAI = "openai"
+        const val PROVIDER_GEMINI = "gemini"
+
+        /** Anthropic's stable model trio - the one catalog safe to bake in. */
+        val ANTHROPIC_DEFAULT_MODELS = listOf("claude-sonnet-5", "claude-haiku-4-5", "claude-opus-4-8")
+    }
+}
+
+/**
+ * A configured AI provider as offered to clients: its id, the models the user
+ * may choose (first = default), and the key the server calls it with. The key
+ * NEVER leaves the server - client responses carry only id + models.
+ */
+data class AiProviderCatalogEntry(
+    val id: String,
+    val models: List<String>,
+    val apiKey: String,
+)
+
 class StationRegistry(@Provided hosting: HostingConfig) {
 
     // Mutable (thread-safe) because stations and groups can be added or removed
@@ -414,6 +514,16 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** Install XForwardedHeaders (server.yaml `behindReverseProxy: true`). */
     val behindReverseProxy: Boolean = hosting.behindReverseProxy
+
+    /**
+     * In-app AI assistant: the providers holding an API key, DEFAULT FIRST
+     * (server.yaml `ai:`). Empty = feature off - the chat route stays
+     * unmounted and clients hide the entry entirely.
+     */
+    val aiChatProviders: List<AiProviderCatalogEntry> = hosting.ai?.configuredProviders().orEmpty()
+
+    /** Per-response output-token cap for AI chat provider calls. */
+    val aiChatMaxTokens: Int = hosting.ai?.maxTokens ?: 8192
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

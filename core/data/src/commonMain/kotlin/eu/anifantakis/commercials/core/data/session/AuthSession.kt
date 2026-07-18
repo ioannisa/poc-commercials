@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.preferences.platformAwaitReady
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
@@ -24,6 +25,9 @@ data class StoredSession(
     val isAdmin: Boolean = false,
     /** Server-wide: whether the server serves the Swagger UI (server.yaml `swagger`). */
     val swaggerEnabled: Boolean = false,
+    /** Server-wide: the AI assistant's provider catalog (server.yaml `ai:`),
+     *  default first. Empty = feature off - the UI hides the chat entry. */
+    val aiChatProviders: List<AiChatProviderOption> = emptyList(),
     val stations: List<StationAccess> = emptyList(),
     val selectedStationId: String = "",
     /** Logged in with a temp password: the app traps the user on a mandatory
@@ -102,6 +106,7 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
     override val displayName: String get() = stored.displayName
     override val isAdmin: Boolean get() = stored.isAdmin
     override val swaggerEnabled: Boolean get() = stored.swaggerEnabled
+    override val aiChatProviders: List<AiChatProviderOption> get() = stored.aiChatProviders
 
     /** True until the temp-password user sets their own; drives the mandatory
      *  change-password trap in the navigation root. */
@@ -189,12 +194,14 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
         stations: List<StationAccess>,
         mustChangePassword: Boolean = false,
         swaggerEnabled: Boolean = false,
+        aiChatProviders: List<AiChatProviderOption> = emptyList(),
     ) {
         val session = StoredSession(
             token = token,
             displayName = displayName,
             isAdmin = isAdmin,
             swaggerEnabled = swaggerEnabled,
+            aiChatProviders = aiChatProviders,
             stations = stations,
             selectedStationId = stations.firstOrNull()?.id ?: "",
             mustChangePassword = mustChangePassword,
@@ -228,14 +235,23 @@ class AuthSession(@Provided private val ksafe: KSafe) : UserSession, SessionCred
      * user can no longer reach would 403 on every request. No-op when nothing
      * changed, so the revision does not churn on every keep-alive tick.
      */
-    override suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean) {
+    override suspend fun refreshFromSession(
+        stations: List<StationAccess>,
+        swaggerEnabled: Boolean,
+        aiChatProviders: List<AiChatProviderOption>,
+    ) {
         if (!isLoggedIn) return
-        if (stations == stored.stations && swaggerEnabled == stored.swaggerEnabled) return
+        if (stations == stored.stations && swaggerEnabled == stored.swaggerEnabled &&
+            aiChatProviders == stored.aiChatProviders
+        ) {
+            return
+        }
 
         val keepSelected = stations.any { it.id == stored.selectedStationId }
         val session = stored.copy(
             stations = stations,
             swaggerEnabled = swaggerEnabled,
+            aiChatProviders = aiChatProviders,
             selectedStationId =
                 if (keepSelected) stored.selectedStationId else stations.firstOrNull()?.id ?: "",
         )

@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.auth.data.data_source
 
 import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.core.data.network.PlainJsonHttpClient
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
@@ -69,6 +70,7 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
                         displayName = dto.displayName,
                         isAdmin = dto.isAdmin,
                         swaggerEnabled = dto.swaggerEnabled,
+                        aiChatProviders = dto.aiChat.map { AiChatProviderOption(it.id, it.models) },
                         mustChangePassword = dto.mustChangePassword,
                         stations = dto.stations.map {
                             GrantedStation(it.id, it.name, it.role, it.clientCode)

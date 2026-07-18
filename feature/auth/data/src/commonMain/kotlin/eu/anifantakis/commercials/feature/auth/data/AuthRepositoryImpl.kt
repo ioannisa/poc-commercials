@@ -61,6 +61,7 @@ class AuthRepositoryImpl(
                             displayName = login.displayName,
                             isAdmin = login.isAdmin,
                             swaggerEnabled = login.swaggerEnabled,
+                            aiChatProviders = login.aiChatProviders,
                             stations = login.stations.map {
                                 StationAccess(it.id, it.name, it.role, it.clientCode)
                             },

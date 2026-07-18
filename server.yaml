@@ -115,6 +115,28 @@ mcpAllowedHosts:
   - localhost
   - 127.0.0.1
 
+# In-app AI assistant. One optional block PER PROVIDER; every provider with an
+# apiKey becomes an option in the client's chat dropdown (its `models` list is
+# the model dropdown, FIRST entry = default). `provider:` names the default
+# provider (optional - otherwise the first configured of anthropic/openai/gemini).
+# Zero keys = feature off, the client hides the chat entry entirely. The server
+# holds the keys and proxies every chat - a key never reaches a client; the
+# model runs the MCP READ tools as the logged-in user. `models` is optional for
+# anthropic only (defaults to claude-sonnet-5 / claude-haiku-4-5 /
+# claude-opus-4-8); REQUIRED for openai/gemini.
+#ai:
+#  provider: anthropic       # default (preselected) provider in the dropdown
+#  anthropic:
+#    apiKey: "sk-ant-..."
+#    models: [claude-sonnet-5, claude-haiku-4-5, claude-opus-4-8]
+#  openai:
+#    apiKey: "sk-..."
+#    models: [gpt-5.5, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna]
+#  gemini:
+#    apiKey: "AIza..."
+#    models: [gemini-flash-latest, gemini-pro-latest]
+#  maxTokens: 8192           # optional per-response output cap
+
 # Set true ONLY when a reverse proxy terminates TLS in front of this server:
 # installs XForwardedHeaders so rate limiting / logs see the real client IP.
 # NEVER enable without a proxy - the headers are client-spoofable.

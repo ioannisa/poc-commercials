@@ -51,6 +51,7 @@ import kotlin.math.roundToInt
 fun PreferencesScreenRoot(
     isAdmin: Boolean,
     swaggerEnabled: Boolean,
+    aiChatEnabled: Boolean,
     onBack: () -> Unit,
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
@@ -59,6 +60,7 @@ fun PreferencesScreenRoot(
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
     onOpenSwagger: () -> Unit,
+    onAiChat: () -> Unit,
     viewModel: PreferencesViewModel = koinViewModel(),
 ) {
     PreferencesScreen(
@@ -67,6 +69,7 @@ fun PreferencesScreenRoot(
         language = LocalLanguage.current ?: Language.FALLBACK,
         isAdmin = isAdmin,
         swaggerEnabled = swaggerEnabled,
+        aiChatEnabled = aiChatEnabled,
         onIntent = viewModel::onAction,
         onNavIntent = { navIntent ->
             when (navIntent) {
@@ -78,6 +81,7 @@ fun PreferencesScreenRoot(
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
                 PreferencesScreenNavIntent.OnOpenSwagger -> onOpenSwagger()
+                PreferencesScreenNavIntent.OnAiChat -> onAiChat()
             }
         },
     )
@@ -98,6 +102,7 @@ private sealed interface PreferencesScreenNavIntent {
     data object OnMigration : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
     data object OnOpenSwagger : PreferencesScreenNavIntent
+    data object OnAiChat : PreferencesScreenNavIntent
 }
 
 @Composable
@@ -107,6 +112,7 @@ private fun PreferencesScreen(
     language: Language,
     isAdmin: Boolean,
     swaggerEnabled: Boolean,
+    aiChatEnabled: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
     onNavIntent: (PreferencesScreenNavIntent) -> Unit,
 ) {
@@ -176,6 +182,18 @@ private fun PreferencesScreen(
             }
 
             Spacer(Modifier.height(UIConst.paddingCompact))
+
+            // ── AI assistant (hidden unless the server configures an ai: provider) ─
+            if (aiChatEnabled) {
+                AppCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(UIConst.paddingRegular)) {
+                        AppText(Strings[StringKey.PREFERENCES_ASSISTANT], AppTextStyle.SECTION_TITLE)
+                        Spacer(Modifier.height(UIConst.paddingExtraSmall))
+                        PreferenceEntry(AppDrawableRepo.chat, Strings[StringKey.PREFERENCES_AI_CHAT], Strings[StringKey.PREFERENCES_AI_CHAT_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAiChat) }
+                    }
+                }
+                Spacer(Modifier.height(UIConst.paddingCompact))
+            }
 
             // ── account (server refuses these for the YAML super admin) ─
             if (!isAdmin) {
@@ -297,6 +315,7 @@ private fun PreferencesScreenPreview() = AppPreview(padded = false) {
         language = Language.EN,
         isAdmin = false,
         swaggerEnabled = true,
+        aiChatEnabled = true,
         onIntent = {},
         onNavIntent = {},
     )
@@ -312,6 +331,7 @@ private fun PreferencesScreenAdminPreview() = AppPreview(padded = false) {
         isAdmin = true,
         // Preview the disabled state (server with `swagger: false`).
         swaggerEnabled = false,
+        aiChatEnabled = false,
         onIntent = {},
         onNavIntent = {},
     )
@@ -326,6 +346,7 @@ private fun PreferencesScreenLargeFontPreview() = AppPreview(padded = false) {
         language = Language.EN,
         isAdmin = false,
         swaggerEnabled = true,
+        aiChatEnabled = true,
         onIntent = {},
         onNavIntent = {},
     )

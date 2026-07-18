@@ -1,8 +1,11 @@
 package eu.anifantakis.commercials.server.plugins
 
+import eu.anifantakis.commercials.mcp.McpToolServices
+import eu.anifantakis.commercials.server.ai.AiChatService
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
+import eu.anifantakis.commercials.server.routes.aiRoutes
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.migration.migrationRoutes
 import eu.anifantakis.commercials.server.routes.authRoutes
@@ -54,6 +57,8 @@ fun Application.configureRouting() {
     val oauthDb by inject<OAuthDb>()
     val registry by inject<StationRegistry>()
     val migrationService by inject<MigrationService>()
+    val mcpToolServices by inject<McpToolServices>()
+    val aiChatService = AiChatService(registry, mcpToolServices)
 
     routing {
         // Interactive API docs at /swagger, rendered from the compiler-generated
@@ -111,6 +116,11 @@ fun Application.configureRouting() {
         authenticate(AUTH_BEARER) {
             // A pending OAuth grant resolves but must not reach any data route.
             install(PendingOAuthGate)
+
+            // In-app AI assistant - mounted only when server.yaml configures `ai:`.
+            if (aiChatService.enabled) {
+                aiRoutes(aiChatService)
+            }
             // User management + legacy migration (super administrator only)
             adminRoutes(authDb, oauthDb, registry)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })

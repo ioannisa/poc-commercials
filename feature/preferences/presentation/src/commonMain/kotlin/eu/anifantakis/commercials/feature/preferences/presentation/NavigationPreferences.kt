@@ -20,6 +20,7 @@ fun EntryProviderScope<NavKey>.preferencesEntries(
     navigator: Navigator,
     isAdmin: () -> Boolean,
     swaggerEnabled: () -> Boolean,
+    aiChatEnabled: () -> Boolean,
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
     onAdminMcp: () -> Unit,
@@ -27,11 +28,13 @@ fun EntryProviderScope<NavKey>.preferencesEntries(
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
     onOpenSwagger: () -> Unit,
+    onAiChat: () -> Unit,
 ) {
     entry<PreferencesNavType.Preferences> {
         PreferencesScreenRoot(
             isAdmin = isAdmin(),
             swaggerEnabled = swaggerEnabled(),
+            aiChatEnabled = aiChatEnabled(),
             onBack = { navigator.goBack() },
             onChangePassword = onChangePassword,
             onApiTokens = onApiTokens,
@@ -40,6 +43,7 @@ fun EntryProviderScope<NavKey>.preferencesEntries(
             onMigration = onMigration,
             onDatabases = onDatabases,
             onOpenSwagger = onOpenSwagger,
+            onAiChat = onAiChat,
         )
     }
 }

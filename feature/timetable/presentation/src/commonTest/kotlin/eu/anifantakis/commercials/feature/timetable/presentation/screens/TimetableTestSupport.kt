@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
@@ -330,6 +331,7 @@ class FakeUserSession(
     override val displayName: String = "Tester",
     override val isAdmin: Boolean = false,
     override val swaggerEnabled: Boolean = false,
+    override val aiChatProviders: List<AiChatProviderOption> = emptyList(),
     override val stations: List<StationAccess> = emptyList(),
     override val isLoggedIn: Boolean = true,
 ) : UserSession {

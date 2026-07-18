@@ -32,6 +32,9 @@ import kotlin.time.Duration.Companion.seconds
 val CREDENTIALS_RATE_LIMIT = RateLimitName("credentials")
 val OAUTH_PROTOCOL_RATE_LIMIT = RateLimitName("oauth-protocol")
 
+/** In-app AI chat: each request costs real provider money - bound it per IP. */
+val AI_CHAT_RATE_LIMIT = RateLimitName("ai-chat")
+
 fun Application.configureRateLimiting() {
     install(RateLimit) {
         register(CREDENTIALS_RATE_LIMIT) {
@@ -40,6 +43,10 @@ fun Application.configureRateLimiting() {
         }
         register(OAUTH_PROTOCOL_RATE_LIMIT) {
             rateLimiter(limit = 60, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteHost }
+        }
+        register(AI_CHAT_RATE_LIMIT) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
             requestKey { call -> call.request.origin.remoteHost }
         }
     }

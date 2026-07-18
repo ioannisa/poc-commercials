@@ -112,6 +112,7 @@ fun TimetableScreenRoot(
     onOpenEmailDialog: () -> Unit,
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
+    onAiChat: () -> Unit,
 ) {
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
@@ -146,6 +147,7 @@ fun TimetableScreenRoot(
                 TimetableScreenNavIntent.OnOpenEmailDialog -> onOpenEmailDialog()
                 TimetableScreenNavIntent.OnLogout -> onLogout()
                 TimetableScreenNavIntent.OnPreferences -> onPreferences()
+                TimetableScreenNavIntent.OnAiChat -> onAiChat()
             }
         },
     )
@@ -161,6 +163,7 @@ private sealed interface TimetableScreenNavIntent {
     data object OnOpenEmailDialog : TimetableScreenNavIntent
     data object OnLogout : TimetableScreenNavIntent
     data object OnPreferences : TimetableScreenNavIntent
+    data object OnAiChat : TimetableScreenNavIntent
 }
 
 @Composable
@@ -660,6 +663,15 @@ private fun KeyboardEnabledHeader(
                                 isAdmin = state.isAdmin,
                                 role = state.role,
                             )
+                            // AI assistant launcher - only when the server holds
+                            // at least one provider key (empty catalog = hidden).
+                            if (state.aiChatEnabled) {
+                                AppIconButton(
+                                    label = Strings[StringKey.TIMETABLE_CD_AI_CHAT],
+                                    icon = AppDrawableRepo.autoAwesome,
+                                    onClick = { onNavIntent(TimetableScreenNavIntent.OnAiChat) },
+                                )
+                            }
                             AppIconButton(
                                 label = Strings[StringKey.TIMETABLE_CD_PREFERENCES],
                                 icon = AppDrawableRepo.settings,

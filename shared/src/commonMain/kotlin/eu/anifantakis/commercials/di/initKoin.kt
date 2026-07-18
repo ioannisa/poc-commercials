@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.di
 
+import eu.anifantakis.commercials.di.ai_chat.aiChatModule
 import eu.anifantakis.commercials.di.auth.authModule
 import eu.anifantakis.commercials.di.core.coreModule
 import eu.anifantakis.commercials.di.databases.databasesModule
@@ -21,6 +22,7 @@ val allModules: List<Module>
     get() = listOf(
         coreModule,
         authModule,
+        aiChatModule,
         timetableModule,
         scheduleEmailModule,
         preferencesModule,

@@ -1,6 +1,7 @@
 package eu.anifantakis.commercials.core.data.session
 
 import eu.anifantakis.commercials.core.data.network.ApiHttpClient
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.SessionRefresher
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.util.DataResult
@@ -26,7 +27,11 @@ interface SessionCredentialStore {
      * toggle), refreshed on every [SessionKeepAlive.knock] - so a running client
      * that skipped login (persisted token) still tracks server.yaml changes.
      */
-    suspend fun refreshFromSession(stations: List<StationAccess>, swaggerEnabled: Boolean)
+    suspend fun refreshFromSession(
+        stations: List<StationAccess>,
+        swaggerEnabled: Boolean,
+        aiChatProviders: List<AiChatProviderOption>,
+    )
 }
 
 /**
@@ -150,7 +155,7 @@ class SessionKeepAlive(
     internal suspend fun knock(): Duration? =
         when (val result = api.get<SessionInfoDto>("/api/auth/session")) {
             is DataResult.Success -> {
-                session.refreshFromSession(result.data.stations, result.data.swaggerEnabled)
+                session.refreshFromSession(result.data.stations, result.data.swaggerEnabled, result.data.aiChat)
                 result.data.expiresInSeconds.toInterval()
             }
             is DataResult.Failure -> null
@@ -173,4 +178,5 @@ private data class SessionInfoDto(
     val expiresInSeconds: Long? = null,
     val stations: List<StationAccess> = emptyList(),
     val swaggerEnabled: Boolean = false,
+    val aiChat: List<AiChatProviderOption> = emptyList(),
 )

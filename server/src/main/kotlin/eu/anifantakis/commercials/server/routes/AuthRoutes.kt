@@ -33,6 +33,14 @@ data class StationAccessDto(
     val clientCode: String? = null,
 )
 
+/**
+ * One AI-chat provider the user may pick in the in-app assistant dropdown:
+ * its id (`anthropic` | `openai` | `gemini`) and the models offered for it
+ * (first = default). Only ids/models travel - API keys never leave the server.
+ */
+@Serializable
+data class AiProviderOptionDto(val id: String, val models: List<String>)
+
 @Serializable
 data class LoginResponse(
     val token: String,
@@ -41,6 +49,9 @@ data class LoginResponse(
     /** Server-wide: whether this server serves the OpenAPI/Swagger UI (server.yaml
      *  `swagger`). The super-admin "API Docs" link is disabled when this is false. */
     val swaggerEnabled: Boolean = false,
+    /** Server-wide: the in-app AI assistant's provider catalog (server.yaml `ai:`),
+     *  default provider FIRST. Empty = feature off, the client hides the entry. */
+    val aiChat: List<AiProviderOptionDto> = emptyList(),
     /** After an admin reset / on a fresh account: the client must trap the user
      *  on a change-password screen until they pick a new one. */
     val mustChangePassword: Boolean = false,
@@ -72,6 +83,8 @@ data class SessionInfoResponse(
     /** Server-wide Swagger toggle, carried on every keep-alive knock so a running
      *  client that skipped login (persisted token) tracks a server.yaml change. */
     val swaggerEnabled: Boolean = false,
+    /** The AI-assistant provider catalog (default first), kept fresh the same way. */
+    val aiChat: List<AiProviderOptionDto> = emptyList(),
 )
 
 @Serializable
@@ -183,6 +196,7 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
                     displayName = user.displayName,
                     isAdmin = user.isAdmin,
                     swaggerEnabled = registry.swaggerEnabled,
+                    aiChat = registry.aiChatProviders.map { AiProviderOptionDto(it.id, it.models) },
                     mustChangePassword = user.mustChangePassword,
                     stations = registry.accessFor(user),
                 )
@@ -284,6 +298,7 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
                         expiresInSeconds = expiresIn,
                         stations = user?.let { registry.accessFor(it) }.orEmpty(),
                         swaggerEnabled = registry.swaggerEnabled,
+                        aiChat = registry.aiChatProviders.map { AiProviderOptionDto(it.id, it.models) },
                     )
                 )
             }

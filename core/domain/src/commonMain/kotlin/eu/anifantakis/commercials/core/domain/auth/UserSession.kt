@@ -31,6 +31,10 @@ interface UserSession {
     /** Server-wide: whether the server serves the OpenAPI/Swagger UI (server.yaml
      *  `swagger`). Reflects the server this session logged into. */
     val swaggerEnabled: Boolean
+
+    /** Server-wide: the in-app AI assistant's provider catalog (server.yaml `ai:`),
+     *  default provider first. EMPTY = feature off - the UI hides the chat entry. */
+    val aiChatProviders: List<AiChatProviderOption>
     /** The user's role ON THE CURRENTLY SELECTED STATION. */
     val role: AppRole
     /** All stations this user may access, in server order. */

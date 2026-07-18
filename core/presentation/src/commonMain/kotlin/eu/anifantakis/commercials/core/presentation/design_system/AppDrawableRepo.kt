@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.core.presentation.design_system
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
@@ -95,6 +97,7 @@ object AppDrawableRepo {
     // ── Material AutoMirrored (flip in RTL) ────────────────────────────────
     val arrowBack: ImageVector @Composable get() = Icons.AutoMirrored.Filled.ArrowBack
     val arrowForward: ImageVector @Composable get() = Icons.AutoMirrored.Filled.ArrowForward
+    val chat: ImageVector @Composable get() = Icons.AutoMirrored.Filled.Send
     val keyboardArrowLeft: ImageVector @Composable get() = Icons.AutoMirrored.Filled.KeyboardArrowLeft
     val keyboardArrowRight: ImageVector @Composable get() = Icons.AutoMirrored.Filled.KeyboardArrowRight
     val logout: ImageVector @Composable get() = Icons.AutoMirrored.Filled.Logout
@@ -133,6 +136,8 @@ object AppDrawableRepo {
     val refresh: ImageVector @Composable get() = Icons.Default.Refresh
     val save: ImageVector @Composable get() = Icons.Default.Save
     val settings: ImageVector @Composable get() = Icons.Default.Settings
+    /** The AI "sparkles" mark - the chat assistant's launcher icon. */
+    val autoAwesome: ImageVector @Composable get() = Icons.Default.AutoAwesome
     val storage: ImageVector @Composable get() = Icons.Default.Storage
     val timer: ImageVector @Composable get() = Icons.Default.Timer
     val visibility: ImageVector @Composable get() = Icons.Default.Visibility

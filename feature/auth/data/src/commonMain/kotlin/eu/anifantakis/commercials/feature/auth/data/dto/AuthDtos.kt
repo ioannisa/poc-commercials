@@ -13,12 +13,21 @@ internal data class StationAccessDto(
     val clientCode: String? = null,
 )
 
+/** One AI-chat provider option from the server's catalog (models: first = default). */
+@Serializable
+internal data class AiProviderOptionDto(
+    val id: String,
+    val models: List<String> = emptyList(),
+)
+
 @Serializable
 internal data class LoginResponseDto(
     val token: String,
     val displayName: String,
     val isAdmin: Boolean = false,
     val swaggerEnabled: Boolean = false,
+    /** The AI assistant's provider catalog, default first; empty = feature off. */
+    val aiChat: List<AiProviderOptionDto> = emptyList(),
     val mustChangePassword: Boolean = false,
     val stations: List<StationAccessDto> = emptyList(),
 )
