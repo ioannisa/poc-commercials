@@ -222,6 +222,14 @@ data class HostingConfig(
      * the key never reaches a client.
      */
     val ai: AiChatConfig? = null,
+    /**
+     * Path to the BUILT web client (`webApp/build/dist/wasmJs/productionExecutable`
+     * after `./gradlew :webApp:wasmJsBrowserDistribution`). When set and the
+     * directory exists, this server also SERVES the web application at `/` -
+     * one process, one origin for page + API, so a reverse proxy / tunnel
+     * hostname pointed here is a complete remote deployment. Unset = API only.
+     */
+    val webApp: String? = null,
 
     /**
      * Public origin of this server (e.g. `"https://mcp.example.gr"`) - the
@@ -536,6 +544,9 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** Chat mutations (confirmation-card gated); server.yaml `ai.mutations`, default true. */
     val aiChatMutations: Boolean = hosting.ai?.mutations ?: true
+
+    /** Directory of the built web client to serve at `/`; null = API only. */
+    val webAppPath: String? = hosting.webApp?.trim()?.takeIf { it.isNotEmpty() }
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

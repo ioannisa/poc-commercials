@@ -148,6 +148,11 @@ ai:
     apiKey: "xxxxxxxxxxxxxx"
     models: [gemini-flash-latest, gemini-pro-latest]
 
+# Serve the BUILT web client at / from this server (one origin for page+API -
+# a tunnel hostname pointed here is a complete remote deployment). Build it
+# with: ./gradlew :webApp:wasmJsBrowserDistribution . Unset = API only.
+webApp: "webApp/build/dist/wasmJs/productionExecutable"
+
 # Set true ONLY when a reverse proxy terminates TLS in front of this server:
 # installs XForwardedHeaders so rate limiting / logs see the real client IP.
 # NEVER enable without a proxy - the headers are client-spoofable.
