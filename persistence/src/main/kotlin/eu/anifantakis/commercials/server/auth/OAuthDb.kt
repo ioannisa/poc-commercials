@@ -412,17 +412,25 @@ class OAuthDb(private val db: CentralDb) {
     )
 
     /** Every live OAuth grant across all users (admin oversight). */
-    fun listAllTokens(): List<OAuthTokenInfo> =
+    fun listAllTokens(): List<OAuthTokenInfo> = queryTokens(userId = null)
+
+    /** The caller's OWN OAuth grants (self-service "My AI connections"). */
+    fun listTokensForUser(userId: Long): List<OAuthTokenInfo> = queryTokens(userId)
+
+    private fun queryTokens(userId: Long?): List<OAuthTokenInfo> =
         db.connection().use { c ->
-            c.createStatement().use { s ->
-                s.executeQuery(
-                    "SELECT t.id, t.user_id, u.username, cl.client_name, t.created_at, t.last_used_at, " +
-                        "t.refresh_expires_at " +
-                        "FROM oauth_tokens t " +
-                        "JOIN users u ON u.id = t.user_id " +
-                        "JOIN oauth_clients cl ON cl.client_id = t.client_id " +
-                        "ORDER BY t.created_at DESC"
-                ).use { rs ->
+            val where = if (userId != null) "WHERE t.user_id = ? " else ""
+            c.prepareStatement(
+                "SELECT t.id, t.user_id, u.username, cl.client_name, t.created_at, t.last_used_at, " +
+                    "t.refresh_expires_at " +
+                    "FROM oauth_tokens t " +
+                    "JOIN users u ON u.id = t.user_id " +
+                    "JOIN oauth_clients cl ON cl.client_id = t.client_id " +
+                    where +
+                    "ORDER BY t.created_at DESC"
+            ).use { ps ->
+                if (userId != null) ps.setLong(1, userId)
+                ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) {
                             add(
@@ -447,6 +455,16 @@ class OAuthDb(private val db: CentralDb) {
         db.connection().use { c ->
             c.prepareStatement("DELETE FROM oauth_tokens WHERE id = ?").use { ps ->
                 ps.setLong(1, id)
+                ps.executeUpdate() == 1
+            }
+        }
+
+    /** Self-service revoke of one of the caller's OWN grants (ownership enforced). True if it existed. */
+    fun revokeTokenByIdForUser(id: Long, userId: Long): Boolean =
+        db.connection().use { c ->
+            c.prepareStatement("DELETE FROM oauth_tokens WHERE id = ? AND user_id = ?").use { ps ->
+                ps.setLong(1, id)
+                ps.setLong(2, userId)
                 ps.executeUpdate() == 1
             }
         }

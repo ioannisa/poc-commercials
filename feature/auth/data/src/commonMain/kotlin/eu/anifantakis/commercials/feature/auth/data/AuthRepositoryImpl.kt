@@ -10,6 +10,7 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import kotlinx.coroutines.CancellationException
@@ -123,5 +124,15 @@ class AuthRepositoryImpl(
     override suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError> {
         val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
         return remoteDataSource.revokeApiToken(token, id)
+    }
+
+    override suspend fun listOAuthGrants(): DataResult<List<OAuthGrant>, AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.listOAuthGrants(token)
+    }
+
+    override suspend fun revokeOAuthGrant(id: Long): EmptyDataResult<AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.revokeOAuthGrant(token, id)
     }
 }

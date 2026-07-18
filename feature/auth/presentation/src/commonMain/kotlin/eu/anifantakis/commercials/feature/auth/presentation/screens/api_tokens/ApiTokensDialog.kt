@@ -34,6 +34,7 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 import eu.anifantakis.commercials.feature.auth.presentation.toUiText
 import kotlinx.collections.immutable.ImmutableList
@@ -50,6 +51,8 @@ import org.koin.compose.viewmodel.koinViewModel
 data class ApiTokensState(
     /** The caller's own tokens - one per workstation they've claimed. */
     val tokens: ImmutableList<ApiToken> = persistentListOf(),
+    /** The caller's own OAuth grants - the AI clients they connected via browser login. */
+    val oauthGrants: ImmutableList<OAuthGrant> = persistentListOf(),
     val workstation: String = "",
     /** FREE / MINE / OTHER for the current input; null while blank or unresolved. */
     val availability: WorkstationAvailability? = null,
@@ -70,6 +73,7 @@ sealed interface ApiTokensIntent {
     data object ConfirmTakeover : ApiTokensIntent
     data object CancelTakeover : ApiTokensIntent
     data class Revoke(val id: Long) : ApiTokensIntent
+    data class RevokeOAuth(val id: Long) : ApiTokensIntent
     data object DismissCreated : ApiTokensIntent
 }
 
@@ -91,6 +95,7 @@ class ApiTokensViewModel(
             ApiTokensIntent.ConfirmTakeover -> create(confirmTakeover = true)
             ApiTokensIntent.CancelTakeover -> _state.update { it.copy(pendingTakeover = false) }
             is ApiTokensIntent.Revoke -> revoke(intent.id)
+            is ApiTokensIntent.RevokeOAuth -> revokeOAuth(intent.id)
             ApiTokensIntent.DismissCreated -> _state.update { it.copy(created = null) }
         }
     }
@@ -99,6 +104,10 @@ class ApiTokensViewModel(
         viewModelScope.launch {
             when (val result = repository.listApiTokens()) {
                 is DataResult.Success -> _state.update { it.copy(tokens = result.data.toImmutableList()) }
+                is DataResult.Failure -> _state.update { it.copy(error = result.error.toUiText()) }
+            }
+            when (val result = repository.listOAuthGrants()) {
+                is DataResult.Success -> _state.update { it.copy(oauthGrants = result.data.toImmutableList()) }
                 is DataResult.Failure -> _state.update { it.copy(error = result.error.toUiText()) }
             }
         }
@@ -171,6 +180,19 @@ class ApiTokensViewModel(
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             when (val result = repository.revokeApiToken(id)) {
+                is DataResult.Success -> {
+                    _state.update { it.copy(busy = false) }
+                    load()
+                }
+                is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+            }
+        }
+    }
+
+    private fun revokeOAuth(id: Long) {
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            when (val result = repository.revokeOAuthGrant(id)) {
                 is DataResult.Success -> {
                     _state.update { it.copy(busy = false) }
                     load()
@@ -285,6 +307,25 @@ private fun ApiTokensDialog(
                 }
                 AppText(Strings[StringKey.MCP_TOKENS_HAVE_ONE], AppTextStyle.NOTE)
             }
+
+            // The caller's OAuth grants: the AI clients they connected through
+            // the browser login (Claude, ChatGPT, ...). One per client app, not
+            // per machine - the vendor connector is account-level. Revoke drops
+            // the grant; that client must sign in again to reconnect.
+            AppText(Strings[StringKey.MCP_OAUTH_HEADER], AppTextStyle.BODY_STRONG)
+            if (state.oauthGrants.isEmpty()) {
+                AppText(Strings[StringKey.MCP_OAUTH_NONE], AppTextStyle.NOTE)
+            } else {
+                Column {
+                    state.oauthGrants.forEach { grant ->
+                        OAuthGrantRow(
+                            grant = grant,
+                            enabled = !state.busy,
+                            onRevoke = { onIntent(ApiTokensIntent.RevokeOAuth(grant.id)) },
+                        )
+                    }
+                }
+            }
         }
         state.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
@@ -337,6 +378,30 @@ private fun TokenRow(token: ApiToken, enabled: Boolean, onRevoke: () -> Unit) {
             AppText(token.workstationName, AppTextStyle.BODY_STRONG)
             AppText(
                 token.lastUsedAt?.let { Strings[StringKey.MCP_TOKENS_LAST_USED].withArgs(listOf(it)) }
+                    ?: Strings[StringKey.MCP_TOKENS_NEVER_USED],
+                AppTextStyle.TINY,
+            )
+        }
+        AppButton(
+            text = Strings[StringKey.MCP_TOKENS_REVOKE],
+            onClick = onRevoke,
+            variant = AppButtonVariant.TEXT,
+            enabled = enabled,
+        )
+    }
+}
+
+@Composable
+private fun OAuthGrantRow(grant: OAuthGrant, enabled: Boolean, onRevoke: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            AppText(grant.clientName, AppTextStyle.BODY_STRONG)
+            AppText(Strings[StringKey.MCP_OAUTH_CONNECTED].withArgs(listOf(grant.createdAt)), AppTextStyle.TINY)
+            AppText(
+                grant.lastUsedAt?.let { Strings[StringKey.MCP_TOKENS_LAST_USED].withArgs(listOf(it)) }
                     ?: Strings[StringKey.MCP_TOKENS_NEVER_USED],
                 AppTextStyle.TINY,
             )

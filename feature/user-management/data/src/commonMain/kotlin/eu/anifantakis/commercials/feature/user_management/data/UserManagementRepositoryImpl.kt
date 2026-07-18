@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.user_management.data
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
+import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
 import eu.anifantakis.commercials.feature.user_management.domain.McpSettings
 import eu.anifantakis.commercials.feature.user_management.domain.TempPasswordResult
@@ -39,6 +40,12 @@ class UserManagementRepositoryImpl(
 
     override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.revokeApiToken(tokenId)
+
+    override suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError> =
+        remoteDataSource.listAllOAuthTokens()
+
+    override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
+        remoteDataSource.revokeOAuthToken(tokenId)
 
     override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.reassignApiToken(workstation, targetUserId)

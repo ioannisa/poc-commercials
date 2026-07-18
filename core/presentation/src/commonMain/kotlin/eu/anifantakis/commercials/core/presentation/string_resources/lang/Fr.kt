@@ -339,6 +339,9 @@ internal class Fr : LanguageStrings {
         StringKey.MCP_TOKENS_TAKEOVER_CONFIRM -> "Ce poste appartient à un autre utilisateur. Continuer révoquera son jeton."
         StringKey.MCP_TOKENS_TAKEOVER_NEEDED -> "Ce poste appartient à un autre utilisateur."
         StringKey.MCP_TOKENS_HAVE_ONE -> "Vous avez déjà un jeton. Révoquez-le pour en créer un autre."
+        StringKey.MCP_OAUTH_HEADER -> "Mes connexions IA"
+        StringKey.MCP_OAUTH_NONE -> "Aucun client IA connecté."
+        StringKey.MCP_OAUTH_CONNECTED -> "Connecté {0}"
         StringKey.PREFERENCES_ADMIN_MCP -> "Supervision MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tous les jetons + l'interrupteur global"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Doc API (Swagger)"
@@ -350,6 +353,8 @@ internal class Fr : LanguageStrings {
         StringKey.ADMIN_MCP_CHANGE_ROLE -> "Changer de rôle"
         StringKey.ADMIN_MCP_PICK_USER -> "Attribuer « {0} » à l'utilisateur :"
         StringKey.ADMIN_MCP_ASSIGN -> "Attribuer"
+        StringKey.ADMIN_MCP_OAUTH_HEADER -> "Connexions IA ({0})"
+        StringKey.ADMIN_MCP_NO_OAUTH -> "Aucune connexion IA."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Après ce changement, toutes les sessions seront déconnectées - reconnectez-vous avec le nouveau mot de passe."
         StringKey.RECOVERY_TITLE -> "Codes de récupération"

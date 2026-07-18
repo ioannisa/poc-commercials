@@ -98,7 +98,7 @@ fun Application.configureRouting() {
             call.respondText("OK")
         }
 
-        authRoutes(authDb, registry)
+        authRoutes(authDb, oauthDb, registry)
 
         // The built-in OAuth 2.1 AS for native MCP connectors - mounted only
         // when server.yaml sets publicBaseUrl (it is the issuer). Open routes

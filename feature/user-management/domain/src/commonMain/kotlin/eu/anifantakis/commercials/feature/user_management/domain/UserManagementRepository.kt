@@ -40,8 +40,26 @@ data class AdminApiToken(
     val lastUsedAt: String?,
 )
 
-/** The global MCP state: the kill-switch [enabled] flag + how many tokens exist. */
-data class McpSettings(val enabled: Boolean, val tokenCount: Int)
+/**
+ * An OAuth grant as the admin oversees it: which user connected which AI
+ * client ([clientName]), when, and when last used. Per user × client app, not
+ * per machine (see [eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant]).
+ */
+@Immutable
+data class AdminOAuthToken(
+    val id: Long,
+    val userId: Long,
+    val username: String,
+    val clientName: String,
+    val createdAt: String,
+    val lastUsedAt: String?,
+)
+
+/**
+ * The global MCP state: the kill-switch [enabled] flag + how many PATs
+ * ([tokenCount]) and OAuth grants ([oauthGrantCount]) exist.
+ */
+data class McpSettings(val enabled: Boolean, val tokenCount: Int, val oauthGrantCount: Int = 0)
 
 /**
  * Super-admin user management: list, create, reset password, edit
@@ -69,6 +87,12 @@ interface UserManagementRepository {
 
     /** Admin revoke of any token by id. */
     suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError>
+
+    /** Admin MCP oversight: every user's OAuth grants (connected AI clients). */
+    suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError>
+
+    /** Admin revoke of any OAuth grant by id. */
+    suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
 
     /**
      * Admin "change role": repoint the token on [workstation] to [targetUserId]

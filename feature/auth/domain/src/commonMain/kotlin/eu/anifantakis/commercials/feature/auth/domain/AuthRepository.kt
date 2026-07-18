@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 
@@ -43,4 +44,10 @@ interface AuthRepository {
 
     /** Revokes one of the caller's own tokens. */
     suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError>
+
+    /** The caller's own OAuth grants (AI clients they connected via browser login). */
+    suspend fun listOAuthGrants(): DataResult<List<OAuthGrant>, AuthError>
+
+    /** Revokes one of the caller's own OAuth grants (that connector must re-authenticate). */
+    suspend fun revokeOAuthGrant(id: Long): EmptyDataResult<AuthError>
 }

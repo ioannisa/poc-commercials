@@ -339,6 +339,9 @@ internal class En : LanguageStrings {
         StringKey.MCP_TOKENS_TAKEOVER_CONFIRM -> "This workstation belongs to another user. Continuing will revoke their token."
         StringKey.MCP_TOKENS_TAKEOVER_NEEDED -> "This workstation belongs to another user."
         StringKey.MCP_TOKENS_HAVE_ONE -> "You already have a token. Revoke it to create a different one."
+        StringKey.MCP_OAUTH_HEADER -> "My AI connections"
+        StringKey.MCP_OAUTH_NONE -> "No AI clients are connected."
+        StringKey.MCP_OAUTH_CONNECTED -> "Connected {0}"
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP oversight"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "All tokens + the global switch"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API Docs (Swagger)"
@@ -350,6 +353,8 @@ internal class En : LanguageStrings {
         StringKey.ADMIN_MCP_CHANGE_ROLE -> "Change role"
         StringKey.ADMIN_MCP_PICK_USER -> "Assign \"{0}\" to user:"
         StringKey.ADMIN_MCP_ASSIGN -> "Assign"
+        StringKey.ADMIN_MCP_OAUTH_HEADER -> "AI connections ({0})"
+        StringKey.ADMIN_MCP_NO_OAUTH -> "No AI connections."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "After the change every session is signed out - log in with the new password."
         StringKey.RECOVERY_TITLE -> "Recovery codes"

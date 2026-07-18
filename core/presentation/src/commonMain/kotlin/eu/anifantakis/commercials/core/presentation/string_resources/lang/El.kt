@@ -339,6 +339,9 @@ internal class El : LanguageStrings {
         StringKey.MCP_TOKENS_TAKEOVER_CONFIRM -> "Αυτό το workstation ανήκει σε άλλον χρήστη. Αν συνεχίσεις, το token του θα ακυρωθεί."
         StringKey.MCP_TOKENS_TAKEOVER_NEEDED -> "Αυτό το workstation ανήκει σε άλλον χρήστη."
         StringKey.MCP_TOKENS_HAVE_ONE -> "Έχεις ήδη token. Κάνε Revoke για να φτιάξεις άλλο."
+        StringKey.MCP_OAUTH_HEADER -> "Οι AI συνδέσεις μου"
+        StringKey.MCP_OAUTH_NONE -> "Δεν υπάρχουν συνδεδεμένοι AI clients."
+        StringKey.MCP_OAUTH_CONNECTED -> "Συνδέθηκε {0}"
         StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Τεκμηρίωση API (Swagger)"
@@ -350,6 +353,8 @@ internal class El : LanguageStrings {
         StringKey.ADMIN_MCP_CHANGE_ROLE -> "Αλλαγή ρόλου"
         StringKey.ADMIN_MCP_PICK_USER -> "Ανάθεση «{0}» σε χρήστη:"
         StringKey.ADMIN_MCP_ASSIGN -> "Ανάθεση"
+        StringKey.ADMIN_MCP_OAUTH_HEADER -> "AI συνδέσεις ({0})"
+        StringKey.ADMIN_MCP_NO_OAUTH -> "Καμία AI σύνδεση."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Μετά την αλλαγή αποσυνδέονται όλες οι συνεδρίες - συνδεθείτε ξανά με τον νέο κωδικό."
         StringKey.RECOVERY_TITLE -> "Κωδικοί ανάκτησης"

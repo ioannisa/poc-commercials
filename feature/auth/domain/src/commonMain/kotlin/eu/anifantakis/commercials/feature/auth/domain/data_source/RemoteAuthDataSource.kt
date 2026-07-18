@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 
@@ -48,4 +49,10 @@ interface RemoteAuthDataSource {
     ): DataResult<CreatedApiToken, AuthError>
 
     suspend fun revokeApiToken(token: String, id: Long): EmptyDataResult<AuthError>
+
+    /** The caller's own OAuth grants (connected AI clients). */
+    suspend fun listOAuthGrants(token: String): DataResult<List<OAuthGrant>, AuthError>
+
+    /** Revoke one of the caller's own OAuth grants by id. */
+    suspend fun revokeOAuthGrant(token: String, id: Long): EmptyDataResult<AuthError>
 }

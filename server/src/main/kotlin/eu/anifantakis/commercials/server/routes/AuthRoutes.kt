@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.server.routes
 import eu.anifantakis.commercials.mailer.renderPasswordResetEmail
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.AuthUser
+import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.auth.PASSWORD_RESET_TTL_SECONDS
 import eu.anifantakis.commercials.server.plugins.AUTH_BEARER
 import eu.anifantakis.commercials.server.plugins.CREDENTIALS_RATE_LIMIT
@@ -123,7 +124,17 @@ private fun StationRegistry.accessFor(user: AuthUser): List<StationAccessDto> =
         }
     }
 
-fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
+/** One of the caller's own OAuth grants (native-connector login), for self-service listing. */
+@Serializable
+data class MyOAuthGrantDto(
+    val id: Long,
+    val clientName: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+    val refreshExpiresAt: String,
+)
+
+fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry) {
     route("/api/auth") {
 
         // The three OPEN endpoints are the password-guessing surface - per-IP
@@ -353,6 +364,44 @@ fun Route.authRoutes(authDb: AuthDb, registry: StationRegistry) {
                     val revoked = withContext(Dispatchers.IO) { authDb.revokeApiToken(user.id, id) }
                     if (revoked) call.respond(mapOf("status" to "revoked"))
                     else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such token"))
+                }
+            }
+
+            // Self-service view of the caller's OWN OAuth grants ("My AI
+            // connections"): every native connector (Claude, ChatGPT, ...) the
+            // user authorized, each revocable. Unlike PATs these are per
+            // user × client app, not per workstation - the vendor connector is
+            // account-level, so one grant covers that client's web+desktop+mobile.
+            route("/oauth-tokens") {
+                /**
+                 * List the caller's own OAuth grants (the AI clients they've connected).
+                 *
+                 * Tag: MCP
+                 */
+                get {
+                    val user = call.authUser()
+                    val grants = withContext(Dispatchers.IO) { oauthDb.listTokensForUser(user.id) }
+                    call.respond(
+                        grants.map {
+                            MyOAuthGrantDto(it.id, it.clientName, it.createdAt, it.lastUsedAt, it.refreshExpiresAt)
+                        }
+                    )
+                }
+                /**
+                 * Revoke one of the caller's own OAuth grants by id (that connector must re-authenticate).
+                 *
+                 * Tag: MCP
+                 */
+                delete("/{id}") {
+                    val user = call.authUser()
+                    val id = call.parameters["id"]?.toLongOrNull()
+                    if (id == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Numeric grant id required"))
+                        return@delete
+                    }
+                    val revoked = withContext(Dispatchers.IO) { oauthDb.revokeTokenByIdForUser(id, user.id) }
+                    if (revoked) call.respond(mapOf("status" to "revoked"))
+                    else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such grant"))
                 }
             }
         }

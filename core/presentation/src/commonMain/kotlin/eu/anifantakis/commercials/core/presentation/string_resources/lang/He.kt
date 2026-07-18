@@ -344,6 +344,9 @@ internal class He : LanguageStrings {
         StringKey.MCP_TOKENS_TAKEOVER_CONFIRM -> "עמדה זו שייכת למשתמש אחר. המשך יבטל את הטוקן שלו."
         StringKey.MCP_TOKENS_TAKEOVER_NEEDED -> "עמדה זו שייכת למשתמש אחר."
         StringKey.MCP_TOKENS_HAVE_ONE -> "כבר יש לך טוקן. בטל אותו כדי ליצור אחר."
+        StringKey.MCP_OAUTH_HEADER -> "חיבורי ה-AI שלי"
+        StringKey.MCP_OAUTH_NONE -> "אין קליינטים של AI מחוברים."
+        StringKey.MCP_OAUTH_CONNECTED -> "חובר {0}"
         StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "תיעוד API (Swagger)"
@@ -355,6 +358,8 @@ internal class He : LanguageStrings {
         StringKey.ADMIN_MCP_CHANGE_ROLE -> "שינוי תפקיד"
         StringKey.ADMIN_MCP_PICK_USER -> "הקצאת ‏«{0}»‏ למשתמש:"
         StringKey.ADMIN_MCP_ASSIGN -> "הקצאה"
+        StringKey.ADMIN_MCP_OAUTH_HEADER -> "חיבורי AI ({0})"
+        StringKey.ADMIN_MCP_NO_OAUTH -> "אין חיבורי AI."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "לאחר השינוי כל הסשנים ינותקו - התחבר מחדש עם הסיסמה החדשה."
         StringKey.RECOVERY_TITLE -> "קודי שחזור"

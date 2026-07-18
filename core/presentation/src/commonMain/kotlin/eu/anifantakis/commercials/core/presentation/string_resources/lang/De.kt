@@ -339,6 +339,9 @@ internal class De : LanguageStrings {
         StringKey.MCP_TOKENS_TAKEOVER_CONFIRM -> "Dieser Arbeitsplatz gehört einem anderen Benutzer. Beim Fortfahren wird dessen Token widerrufen."
         StringKey.MCP_TOKENS_TAKEOVER_NEEDED -> "Dieser Arbeitsplatz gehört einem anderen Benutzer."
         StringKey.MCP_TOKENS_HAVE_ONE -> "Du hast bereits ein Token. Widerrufe es, um ein anderes zu erstellen."
+        StringKey.MCP_OAUTH_HEADER -> "Meine KI-Verbindungen"
+        StringKey.MCP_OAUTH_NONE -> "Keine KI-Clients verbunden."
+        StringKey.MCP_OAUTH_CONNECTED -> "Verbunden {0}"
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API-Doku (Swagger)"
@@ -350,6 +353,8 @@ internal class De : LanguageStrings {
         StringKey.ADMIN_MCP_CHANGE_ROLE -> "Rolle ändern"
         StringKey.ADMIN_MCP_PICK_USER -> "„{0}“ einem Benutzer zuweisen:"
         StringKey.ADMIN_MCP_ASSIGN -> "Zuweisen"
+        StringKey.ADMIN_MCP_OAUTH_HEADER -> "KI-Verbindungen ({0})"
+        StringKey.ADMIN_MCP_NO_OAUTH -> "Keine KI-Verbindungen."
         StringKey.CHPASS_SIGNOUT_NOTE ->
             "Nach der Änderung werden alle Sitzungen abgemeldet - melden Sie sich mit dem neuen Passwort an."
         StringKey.RECOVERY_TITLE -> "Wiederherstellungscodes"

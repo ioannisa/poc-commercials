@@ -12,6 +12,7 @@ import eu.anifantakis.commercials.feature.auth.data.dto.CreateApiTokenResponseDt
 import eu.anifantakis.commercials.feature.auth.data.dto.ForgotPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginRequestDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginResponseDto
+import eu.anifantakis.commercials.feature.auth.data.dto.OAuthGrantDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ResetPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ResetResultDto
 import eu.anifantakis.commercials.feature.auth.data.dto.WorkstationAvailabilityDto
@@ -21,6 +22,7 @@ import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.GrantedStation
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 import io.ktor.client.call.body
@@ -193,6 +195,26 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
 
     override suspend fun revokeApiToken(token: String, id: Long): EmptyDataResult<AuthError> = authCall {
         val response = httpClient.delete(url("api-tokens/$id")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) DataResult.Success(Unit)
+        else DataResult.Failure(AuthError.Server(response.errorMessage()))
+    }
+
+    override suspend fun listOAuthGrants(token: String): DataResult<List<OAuthGrant>, AuthError> = authCall {
+        val response = httpClient.get(url("oauth-tokens")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) {
+            val dtos: List<OAuthGrantDto> = response.body()
+            DataResult.Success(dtos.map { OAuthGrant(it.id, it.clientName, it.createdAt, it.lastUsedAt) })
+        } else {
+            DataResult.Failure(AuthError.Server(response.errorMessage()))
+        }
+    }
+
+    override suspend fun revokeOAuthGrant(token: String, id: Long): EmptyDataResult<AuthError> = authCall {
+        val response = httpClient.delete(url("oauth-tokens/$id")) {
             header(HttpHeaders.Authorization, "Bearer $token")
         }
         if (response.status.isSuccess()) DataResult.Success(Unit)

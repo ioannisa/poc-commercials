@@ -8,6 +8,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
+import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
@@ -91,6 +92,8 @@ class LoginViewModelTest {
         override suspend fun createApiToken(workstation: String, confirmTakeover: Boolean): DataResult<CreatedApiToken, AuthError> =
             DataResult.Success(CreatedApiToken("tok", "http://localhost/mcp"))
         override suspend fun revokeApiToken(id: Long): EmptyDataResult<AuthError> = DataResult.Success(Unit)
+        override suspend fun listOAuthGrants(): DataResult<List<OAuthGrant>, AuthError> = DataResult.Success(emptyList())
+        override suspend fun revokeOAuthGrant(id: Long): EmptyDataResult<AuthError> = DataResult.Success(Unit)
     }
 
     private fun filledLogin(vm: LoginViewModel) {

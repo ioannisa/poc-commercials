@@ -22,6 +22,8 @@ interface RemoteUserManagementDataSource {
     suspend fun deleteUser(userId: Long): DataResult<Unit, RemoteError>
     suspend fun listAllApiTokens(): DataResult<List<AdminApiToken>, RemoteError>
     suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError>
+    suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError>
+    suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
     suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError>
     suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError>
     suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError>

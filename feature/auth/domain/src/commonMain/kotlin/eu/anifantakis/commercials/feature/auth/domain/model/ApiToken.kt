@@ -26,3 +26,18 @@ data class CreatedApiToken(
     val token: String,
     val mcpUrl: String,
 )
+
+/**
+ * One of the caller's OWN OAuth grants - a native AI connector (Claude,
+ * ChatGPT, Gemini, ...) they authorized through the browser login. Unlike a
+ * PAT this is NOT per-machine: the vendor connector is account-level, so one
+ * grant covers that client's web/desktop/mobile. [clientName] is what the
+ * client declared at registration.
+ */
+@Immutable
+data class OAuthGrant(
+    val id: Long,
+    val clientName: String,
+    val createdAt: String,
+    val lastUsedAt: String?,
+)

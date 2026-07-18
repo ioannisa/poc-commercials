@@ -33,6 +33,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
+import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import kotlinx.collections.immutable.ImmutableList
@@ -47,7 +48,9 @@ import org.koin.compose.viewmodel.koinViewModel
 data class AdminMcpState(
     val enabled: Boolean = true,
     val tokenCount: Int = 0,
+    val oauthGrantCount: Int = 0,
     val tokens: ImmutableList<AdminApiToken> = persistentListOf(),
+    val oauthGrants: ImmutableList<AdminOAuthToken> = persistentListOf(),
     val users: ImmutableList<ManagedUser> = persistentListOf(),
     /** When set, the change-role picker is open for this workstation's token. */
     val reassignFor: AdminApiToken? = null,
@@ -59,6 +62,7 @@ sealed interface AdminMcpIntent {
     data object Load : AdminMcpIntent
     data class SetEnabled(val enabled: Boolean) : AdminMcpIntent
     data class Revoke(val id: Long) : AdminMcpIntent
+    data class RevokeOAuth(val id: Long) : AdminMcpIntent
     data class Reassign(val token: AdminApiToken) : AdminMcpIntent
     data class ConfirmReassign(val workstation: String, val userId: Long) : AdminMcpIntent
     data object CancelReassign : AdminMcpIntent
@@ -77,6 +81,7 @@ class AdminMcpViewModel(
             AdminMcpIntent.Load -> load()
             is AdminMcpIntent.SetEnabled -> setEnabled(intent.enabled)
             is AdminMcpIntent.Revoke -> revoke(intent.id)
+            is AdminMcpIntent.RevokeOAuth -> revokeOAuth(intent.id)
             is AdminMcpIntent.Reassign -> _state.update { it.copy(reassignFor = intent.token) }
             AdminMcpIntent.CancelReassign -> _state.update { it.copy(reassignFor = null) }
             is AdminMcpIntent.ConfirmReassign -> reassign(intent.workstation, intent.userId)
@@ -86,12 +91,22 @@ class AdminMcpViewModel(
     private fun load() {
         viewModelScope.launch {
             when (val settings = repository.getMcpSettings()) {
-                is DataResult.Success -> _state.update { it.copy(enabled = settings.data.enabled, tokenCount = settings.data.tokenCount) }
+                is DataResult.Success -> _state.update {
+                    it.copy(
+                        enabled = settings.data.enabled,
+                        tokenCount = settings.data.tokenCount,
+                        oauthGrantCount = settings.data.oauthGrantCount,
+                    )
+                }
                 is DataResult.Failure -> _state.update { it.copy(error = settings.error.toUiText()) }
             }
             when (val tokens = repository.listAllApiTokens()) {
                 is DataResult.Success -> _state.update { it.copy(tokens = tokens.data.toImmutableList()) }
                 is DataResult.Failure -> _state.update { it.copy(error = tokens.error.toUiText()) }
+            }
+            when (val grants = repository.listAllOAuthTokens()) {
+                is DataResult.Success -> _state.update { it.copy(oauthGrants = grants.data.toImmutableList()) }
+                is DataResult.Failure -> _state.update { it.copy(error = grants.error.toUiText()) }
             }
             when (val users = repository.listUsers()) {
                 is DataResult.Success -> _state.update { it.copy(users = users.data.toImmutableList()) }
@@ -114,6 +129,16 @@ class AdminMcpViewModel(
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             when (val result = repository.revokeApiToken(id)) {
+                is DataResult.Success -> { _state.update { it.copy(busy = false) }; load() }
+                is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+            }
+        }
+    }
+
+    private fun revokeOAuth(id: Long) {
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            when (val result = repository.revokeOAuthToken(id)) {
                 is DataResult.Success -> { _state.update { it.copy(busy = false) }; load() }
                 is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
             }
@@ -181,13 +206,34 @@ private fun AdminMcpDialog(
             if (state.tokens.isEmpty()) {
                 AppText(Strings[StringKey.ADMIN_MCP_NO_TOKENS], AppTextStyle.NOTE)
             } else {
-                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
                     items(state.tokens, key = { it.id }) { token ->
                         TokenRow(
                             token = token,
                             enabled = !state.busy,
                             onRevoke = { onIntent(AdminMcpIntent.Revoke(token.id)) },
                             onChangeRole = { onIntent(AdminMcpIntent.Reassign(token)) },
+                        )
+                    }
+                }
+            }
+
+            // OAuth grants: native-connector logins (Claude, ChatGPT, ...), one
+            // per user × client app. No workstation, no change-role - the grant
+            // IS a user's own identity; the only admin action is revoke.
+            AppText(
+                Strings[StringKey.ADMIN_MCP_OAUTH_HEADER].withArgs(listOf(state.oauthGrantCount)),
+                AppTextStyle.BODY_STRONG,
+            )
+            if (state.oauthGrants.isEmpty()) {
+                AppText(Strings[StringKey.ADMIN_MCP_NO_OAUTH], AppTextStyle.NOTE)
+            } else {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                    items(state.oauthGrants, key = { it.id }) { grant ->
+                        OAuthGrantRow(
+                            grant = grant,
+                            enabled = !state.busy,
+                            onRevoke = { onIntent(AdminMcpIntent.RevokeOAuth(grant.id)) },
                         )
                     }
                 }
@@ -225,6 +271,34 @@ private fun TokenRow(
             variant = AppButtonVariant.TEXT,
             enabled = enabled,
         )
+        AppButton(
+            text = Strings[StringKey.MCP_TOKENS_REVOKE],
+            onClick = onRevoke,
+            variant = AppButtonVariant.TEXT,
+            enabled = enabled,
+        )
+    }
+}
+
+@Composable
+private fun OAuthGrantRow(
+    grant: AdminOAuthToken,
+    enabled: Boolean,
+    onRevoke: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            AppText(grant.clientName, AppTextStyle.BODY_STRONG)
+            AppText("${grant.username} · ${grant.createdAt}", AppTextStyle.TINY)
+            AppText(
+                grant.lastUsedAt?.let { Strings[StringKey.MCP_TOKENS_LAST_USED].withArgs(listOf(it)) }
+                    ?: Strings[StringKey.MCP_TOKENS_NEVER_USED],
+                AppTextStyle.TINY,
+            )
+        }
         AppButton(
             text = Strings[StringKey.MCP_TOKENS_REVOKE],
             onClick = onRevoke,

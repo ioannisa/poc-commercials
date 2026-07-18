@@ -47,3 +47,12 @@ internal data class CreateApiTokenResponseDto(val token: String)
 
 @Serializable
 internal data class WorkstationAvailabilityDto(val status: String)
+
+@Serializable
+internal data class OAuthGrantDto(
+    val id: Long,
+    val clientName: String,
+    val createdAt: String,
+    val lastUsedAt: String? = null,
+    val refreshExpiresAt: String,
+)
