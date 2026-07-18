@@ -11,6 +11,8 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.routing.openapi.describe
+import io.ktor.utils.io.ExperimentalKtorApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -75,6 +77,7 @@ data class DeleteStationResponse(
  * honest modes: `purge` deletes just this station's rows, and `drop-group`
  * drops the whole group database and says which stations it is about to destroy.
  */
+@OptIn(ExperimentalKtorApi::class)
 fun Route.stationAdminRoutes(registry: StationRegistry, authDb: AuthDb) {
     route("/api/admin/stations") {
 
@@ -239,6 +242,9 @@ fun Route.stationAdminRoutes(registry: StationRegistry, authDb: AuthDb) {
                 }
             }
             call.respond(response)
+        }.describe {
+            summary = "Delete a station: safe-unhost, purge just its rows, or drop the whole group database (mode + confirm id required)."
+            tag("Admin")
         }
     }
 }

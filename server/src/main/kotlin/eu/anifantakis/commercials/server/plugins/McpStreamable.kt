@@ -23,9 +23,11 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.intercept
+import io.ktor.server.routing.openapi.describe
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.sse
+import io.ktor.utils.io.ExperimentalKtorApi
 import io.modelcontextprotocol.kotlin.sdk.server.DnsRebindingProtection
 import io.modelcontextprotocol.kotlin.sdk.server.StreamableHttpServerTransport
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCError
@@ -166,6 +168,7 @@ val McpAuthChallenge = createRouteScopedPlugin("McpAuthChallenge", ::McpAuthChal
  * Mounts the streamable HTTP endpoint at `path`. Must be called inside
  * `authenticate(AUTH_BEARER)` - handlers assume an authenticated principal.
  */
+@OptIn(ExperimentalKtorApi::class)
 fun Route.mcpStreamableRoutes(
     path: String,
     services: McpToolServices,
@@ -173,6 +176,10 @@ fun Route.mcpStreamableRoutes(
     sessions: McpStreamableSessions,
 ) {
     route(path) {
+        // Group the whole subtree (POST/GET/DELETE) under the MCP tag in the
+        // OpenAPI docs; per-verb summaries are set on the handlers below.
+        describe { tag("MCP") }
+
         // MCP JSON-RPC needs McpJson (explicitNulls=false, encodeDefaults=true,
         // no class discriminator); the app-global ContentNegotiation uses a
         // different Json. ContentNegotiation is route-scoped in Ktor 3, so this
@@ -237,11 +244,15 @@ fun Route.mcpStreamableRoutes(
                 newSessionTransport(call.authUser(), services, sessions)
             }
             transport.handleRequest(null, call)
+        }.describe {
+            summary = "MCP Streamable HTTP (JSON-RPC): initialize a new session, or send a request on an existing one."
         }
 
         delete {
             val transport = call.resolveOwnedSession(sessions) ?: return@delete
             transport.handleRequest(null, call)   // -> handleDeleteRequest -> onSessionClosed -> remove
+        }.describe {
+            summary = "Terminate an MCP streamable session (the caller's own)."
         }
     }
 }

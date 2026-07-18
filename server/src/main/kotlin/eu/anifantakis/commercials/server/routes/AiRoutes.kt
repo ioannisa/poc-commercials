@@ -13,8 +13,10 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.openapi.describe
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import io.ktor.utils.io.ExperimentalKtorApi
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.server.response.header
@@ -26,7 +28,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /** For hand-built NDJSON stream lines (route-scoped negotiation can't help here). */
 private val StreamJson = Json { encodeDefaults = true }
@@ -103,6 +104,7 @@ private const val MAX_TURN_CHARS = 8_000
  * the model sees exactly what the user's grants allow. The provider API key
  * never leaves the server.
  */
+@OptIn(ExperimentalKtorApi::class)
 fun Route.aiRoutes(aiChat: AiChatService) {
     rateLimit(AI_CHAT_RATE_LIMIT) {
         route("/api/ai") {
@@ -152,6 +154,9 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                     // Provider/config trouble is an upstream problem, not a client one.
                     call.respond(HttpStatusCode.BadGateway, mapOf("error" to (e.message ?: "AI provider error")))
                 }
+            }.describe {
+                summary = "One AI chat turn: full visible history in, the assistant's reply plus its tool-call trail out (stateless)."
+                tag("AI")
             }
 
             /**
@@ -223,6 +228,9 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                         })
                     }
                 }
+            }.describe {
+                summary = "Streaming AI chat (NDJSON): a step line as each tool runs, then a final reply (or error) envelope."
+                tag("AI")
             }
 
             /**
@@ -245,6 +253,9 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                         )
                     }
                 )
+            }.describe {
+                summary = "AI usage per user (admin only), aggregated by (user, provider, model), most-recent first."
+                tag("AI")
             }
 
             /**
@@ -289,6 +300,9 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                 } catch (e: AiSelectionException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to (e.message ?: "invalid action")))
                 }
+            }.describe {
+                summary = "Execute an approved confirmation card: replay the prepared tool call with confirm=true as the calling user."
+                tag("AI")
             }
         }
     }

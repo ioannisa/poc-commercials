@@ -7,7 +7,9 @@ import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.routing.*
+import io.ktor.server.routing.openapi.describe
 import io.ktor.server.sse.*
+import io.ktor.utils.io.ExperimentalKtorApi
 import io.modelcontextprotocol.kotlin.sdk.server.mcp
 import org.koin.ktor.ext.inject
 
@@ -34,6 +36,7 @@ import org.koin.ktor.ext.inject
  * 401s advertise the RFC 9728 resource metadata that native connectors need to
  * discover the OAuth server (no-op otherwise).
  */
+@OptIn(ExperimentalKtorApi::class)
 fun Application.configureMcp() {
     val services by inject<McpToolServices>()
     val registry by inject<StationRegistry>()
@@ -43,6 +46,9 @@ fun Application.configureMcp() {
     routing {
         authenticate(AUTH_BEARER) {
             route("/mcp") {
+                // MCP over SSE (the classic transport): JSON-RPC for mcp-remote
+                // bridges and static-PAT clients (listed for reference).
+                describe { tag("MCP") }
                 install(McpAuthChallenge) {
                     resourceMetadataUrl = registry.publicBaseUrl
                         ?.let { "$it/.well-known/oauth-protected-resource/mcp" }
@@ -53,6 +59,7 @@ fun Application.configureMcp() {
                 // JSON-RPC method instead (and shares this "mcp" path node,
                 // hence the exemption).
                 install(PendingOAuthGate) { exemptPrefixes = listOf("/mcp/http") }
+                // MCP over SSE (classic transport): JSON-RPC for mcp-remote bridges and static-PAT clients.
                 mcp(allowedHosts = registry.mcpAllowedHosts) {
                     buildCommercialsMcpServer(McpCaller.of(call.authUser()), services)
                 }
