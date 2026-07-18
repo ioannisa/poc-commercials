@@ -15,8 +15,10 @@ import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.hooks.ResponseBodyReadyForSend
 import io.ktor.server.application.install
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.doublereceive.DoubleReceive
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -30,6 +32,13 @@ import io.modelcontextprotocol.kotlin.sdk.server.StreamableHttpServerTransport
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCError
 import io.modelcontextprotocol.kotlin.sdk.types.McpJson
 import io.modelcontextprotocol.kotlin.sdk.types.RPCError
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
@@ -171,6 +180,10 @@ fun Route.mcpStreamableRoutes(
         // override applies to this subtree only.
         install(ContentNegotiation) { json(McpJson) }
 
+        // Lets the pending-grant gate PEEK at the JSON-RPC method below and
+        // still hand the untouched body to the SDK transport.
+        install(DoubleReceive)
+
         install(DnsRebindingProtection) {
             // Mirrors the SDK's secure-by-default: localhost hosts+origins for
             // dev; a remote deployment lists its public host(s) in server.yaml
@@ -207,6 +220,14 @@ fun Route.mcpStreamableRoutes(
         }
 
         post {
+            // A PENDING grant (awaiting user-e-mail or admin approval) may
+            // complete the protocol handshake - otherwise claude.ai reports
+            // "Authentication failed" and every retry mints another pending
+            // grant - but any data-bearing method answers a JSON-RPC error
+            // until the gate clears. Checked per REQUEST, so approval takes
+            // effect on the very next call without a new session.
+            if (call.authUser().oauthPending && call.refusePendingDataMethod()) return@post
+
             val sessionId = call.request.header(MCP_SESSION_ID)
             val transport = if (sessionId != null) {
                 call.resolveOwnedSession(sessions) ?: return@post
@@ -255,6 +276,37 @@ private suspend fun newSessionTransport(
     server.onClose { transport.sessionId?.let { sessions.remove(it) } }
     server.createSession(transport)
     return transport
+}
+
+/** The bare protocol handshake a PENDING grant may still perform. */
+private val PENDING_ALLOWED_METHODS = setOf("initialize", "ping", "tools/list")
+
+/**
+ * When the request is a data-bearing JSON-RPC method, answers it with a
+ * "pending approval" error and returns true; the handshake methods (and
+ * anything unparseable, which the SDK will reject on its own terms) pass.
+ * The body read here is repeatable thanks to the route's [DoubleReceive].
+ */
+private suspend fun ApplicationCall.refusePendingDataMethod(): Boolean {
+    val body = runCatching { receiveText() }.getOrNull() ?: return false
+    val request = runCatching { McpJson.parseToJsonElement(body) }.getOrNull() as? JsonObject ?: return false
+    val method = (request["method"] as? JsonPrimitive)?.contentOrNull ?: return false
+    if (method in PENDING_ALLOWED_METHODS || method.startsWith("notifications/")) return false
+    respond(
+        buildJsonObject {
+            put("jsonrpc", "2.0")
+            put("id", request["id"] ?: JsonNull)
+            putJsonObject("error") {
+                put("code", -32002)
+                put(
+                    "message",
+                    "This AI connection is pending approval. Approve it from the e-mail " +
+                        "sent to your account, or ask your administrator, then try again.",
+                )
+            }
+        }
+    )
+    return true
 }
 
 /**

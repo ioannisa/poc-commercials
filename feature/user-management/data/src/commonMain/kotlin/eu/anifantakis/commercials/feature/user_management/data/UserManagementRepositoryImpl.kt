@@ -47,6 +47,12 @@ class UserManagementRepositoryImpl(
     override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.revokeOAuthToken(tokenId)
 
+    override suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
+        remoteDataSource.approveOAuthToken(tokenId)
+
+    override suspend fun setOauthAdminApproval(required: Boolean): DataResult<Unit, RemoteError> =
+        remoteDataSource.setOauthAdminApproval(required)
+
     override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> =
         remoteDataSource.reassignApiToken(workstation, targetUserId)
 

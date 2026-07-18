@@ -1,5 +1,7 @@
 package eu.anifantakis.commercials.server.routes
 
+import eu.anifantakis.commercials.mailer.renderConnectionApprovalEmail
+import eu.anifantakis.commercials.mailer.renderConsentOtpEmail
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.oauth.canonicalResource
@@ -7,7 +9,9 @@ import eu.anifantakis.commercials.server.oauth.challengeMatches
 import eu.anifantakis.commercials.server.oauth.isAcceptableRedirectUri
 import eu.anifantakis.commercials.server.oauth.isValidCodeVerifier
 import eu.anifantakis.commercials.server.oauth.redirectUriMatches
+import eu.anifantakis.commercials.server.oauth.renderApprovalResultPage
 import eu.anifantakis.commercials.server.oauth.renderAuthorizePage
+import eu.anifantakis.commercials.server.oauth.renderConsentOtpPage
 import eu.anifantakis.commercials.server.oauth.renderOAuthErrorPage
 import eu.anifantakis.commercials.server.plugins.CREDENTIALS_RATE_LIMIT
 import eu.anifantakis.commercials.server.plugins.OAUTH_PROTOCOL_RATE_LIMIT
@@ -277,9 +281,19 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
                 rerender("Your password must be changed in the Commercials Manager app before connecting an AI client.")
             )
         }
+        // Self-declared "who is connecting" (the AI account's e-mail) - the
+        // protocol never transmits the vendor-side identity, so we ask the
+        // human at consent and then PROVE the mailbox with an emailed OTP:
+        // the authorization code is minted only after the code checks out.
+        val connectedAccount = p["connected_account"].orEmpty().trim().take(255)
+        if (connectedAccount.isEmpty() || "@" !in connectedAccount) {
+            return@post call.respondHtmlPage(
+                rerender("Enter the e-mail of the ${client.clientName} account you are connecting.")
+            )
+        }
 
-        val code = withContext(Dispatchers.IO) {
-            oauthDb.createCode(
+        val consent = withContext(Dispatchers.IO) {
+            oauthDb.createConsentOtp(
                 clientId = client.clientId,
                 userId = user.id,
                 redirectUri = redirectUri,
@@ -287,15 +301,89 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
                 codeChallengeMethod = p["code_challenge_method"] ?: "S256",
                 resource = p["resource"],
                 scope = p["scope"],
+                state = state,
+                connectedAccount = connectedAccount,
+                // Real client IP: XForwardedHeaders is installed when
+                // behindReverseProxy is set, so origin sees through the proxy.
+                consentIp = call.request.origin.remoteHost,
+                consentUserAgent = call.request.headers[HttpHeaders.UserAgent]?.take(255),
             )
         }
-        val location = URLBuilder(redirectUri).apply {
-            parameters.append("code", code)
-            state?.let { parameters.append("state", it) }
-            parameters.append("iss", issuer)
-        }.buildString()
+        call.application.sendAuthMail(
+            registry = registry,
+            intendedTo = connectedAccount,
+            subject = "Commercials Manager verification code",
+            html = renderConsentOtpEmail(consent.otp, client.clientName, oauthDb.consentOtpTtlMinutes),
+        )
         call.response.headers.append(HttpHeaders.CacheControl, "no-store")
-        call.respondRedirect(location)
+        call.respondHtmlPage(
+            renderConsentOtpPage(
+                clientName = client.clientName,
+                consentId = consent.consentId,
+                maskedEmail = maskEmail(connectedAccount),
+                ttlMinutes = oauthDb.consentOtpTtlMinutes,
+            )
+        )
+    }
+
+    /**
+     * Step 2 of the consent: verify the OTP e-mailed to the DECLARED address
+     * and only then mint the authorization code. Wrong codes burn a bounded
+     * attempt budget; an exhausted/expired consent must be restarted from the
+     * AI client.
+     *
+     * Tag: MCP
+     */
+    post("/oauth/authorize/otp") {
+        val p = runCatching { call.receiveParameters() }.getOrNull()
+            ?: return@post call.respondHtmlPage(
+                renderOAuthErrorPage("Invalid request", "The verification form was malformed."),
+                HttpStatusCode.BadRequest,
+            )
+        val consentId = p["consent_id"].orEmpty()
+        val otp = p["otp"].orEmpty().trim()
+        when (val result = withContext(Dispatchers.IO) { oauthDb.redeemConsentOtp(consentId, otp) }) {
+            is OAuthDb.ConsentOtpResult.Verified -> {
+                val v = result.consent
+                val code = withContext(Dispatchers.IO) {
+                    oauthDb.createCode(
+                        clientId = v.clientId,
+                        userId = v.userId,
+                        redirectUri = v.redirectUri,
+                        codeChallenge = v.codeChallenge,
+                        codeChallengeMethod = v.codeChallengeMethod,
+                        resource = v.resource,
+                        scope = v.scope,
+                        connectedAccount = v.connectedAccount,
+                        consentIp = v.consentIp,
+                        consentUserAgent = v.consentUserAgent,
+                    )
+                }
+                val location = URLBuilder(v.redirectUri).apply {
+                    parameters.append("code", code)
+                    v.state?.let { parameters.append("state", it) }
+                    parameters.append("iss", issuer)
+                }.buildString()
+                call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+                call.respondRedirect(location)
+            }
+            is OAuthDb.ConsentOtpResult.WrongCode -> call.respondHtmlPage(
+                renderConsentOtpPage(
+                    clientName = result.clientName,
+                    consentId = consentId,
+                    maskedEmail = maskEmail(result.connectedAccount),
+                    ttlMinutes = oauthDb.consentOtpTtlMinutes,
+                    error = "Wrong code - ${result.attemptsLeft} attempt(s) left.",
+                )
+            )
+            OAuthDb.ConsentOtpResult.Gone -> call.respondHtmlPage(
+                renderOAuthErrorPage(
+                    "Verification expired",
+                    "The code expired or too many wrong attempts were made. " +
+                        "Close this page and start the connection again from your AI client.",
+                )
+            )
+        }
     }
     }
 
@@ -357,8 +445,34 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
                         )
                     }
                 }
+                // Approval gates, decided at mint time: the user's own opt-in
+                // (confirmation from their REGISTERED e-mail) and the global
+                // admin-approval switch. The protocol completes either way -
+                // the pair just stays unusable until approved.
+                val confirmation = withContext(Dispatchers.IO) { authDb.aiConnectionConfirmation(redeemed.userId) }
+                val requireUserApproval = confirmation.enabled && confirmation.email != null
+                val requireAdminApproval = withContext(Dispatchers.IO) { authDb.isOauthAdminApprovalRequired() }
                 val issued = withContext(Dispatchers.IO) {
-                    oauthDb.issueTokens(redeemed.userId, client.clientId, redeemed.resource, redeemed.scope)
+                    oauthDb.issueTokens(
+                        redeemed.userId, client.clientId, redeemed.resource, redeemed.scope,
+                        redeemed.connectedAccount, redeemed.consentIp, redeemed.consentUserAgent,
+                        requireUserApproval = requireUserApproval,
+                        requireAdminApproval = requireAdminApproval,
+                    )
+                }
+                issued.approveToken?.let { raw ->
+                    call.application.sendAuthMail(
+                        registry = registry,
+                        intendedTo = confirmation.email!!,
+                        subject = "Νέα σύνδεση AI - απαιτείται έγκριση",
+                        html = renderConnectionApprovalEmail(
+                            clientName = client.clientName,
+                            connectedAccount = redeemed.connectedAccount ?: "-",
+                            ip = redeemed.consentIp,
+                            userAgent = redeemed.consentUserAgent,
+                            approveUrl = "$issuer/oauth/approve?token=$raw",
+                        ),
+                    )
                 }
                 call.respondIssuedTokens(issued)
             }
@@ -404,10 +518,31 @@ fun Route.oAuthRoutes(oauthDb: OAuthDb, authDb: AuthDb, registry: StationRegistr
         withContext(Dispatchers.IO) { oauthDb.revokeToken(token, client.clientId) }
         call.respond(HttpStatusCode.OK)
     }
+
+    /**
+     * The single-use approval link from the "new AI connection" e-mail: clears
+     * the USER approval gate on the pending grant. Open by nature (clicked
+     * from a mail client) - the token IS the credential.
+     *
+     * Tag: MCP
+     */
+    get("/oauth/approve") {
+        val token = call.request.queryParameters["token"]
+        val approved = token != null && token.length >= 32 &&
+            withContext(Dispatchers.IO) { oauthDb.approveByEmailToken(token) }
+        call.respondHtmlPage(renderApprovalResultPage(approved))
+    }
     }
 }
 
 // ─────────────────────────────────────────────────────────── helpers ──
+
+/** "io•••@gmail.com" - enough for the owner to recognise, useless to a shoulder-surfer. */
+private fun maskEmail(email: String): String {
+    val at = email.indexOf('@')
+    if (at <= 2) return email
+    return email.take(2) + "•••" + email.substring(at)
+}
 
 private const val MAX_REDIRECT_URIS = 10
 private const val MAX_REDIRECT_URI_LENGTH = 512

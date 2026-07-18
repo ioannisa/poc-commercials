@@ -9,6 +9,7 @@ import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.request.path
 import io.ktor.server.response.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,6 +39,36 @@ fun Application.configureSecurity() {
 /** The authenticated user of this call (only valid inside `authenticate` blocks). */
 fun ApplicationCall.authUser(): AuthUser =
     principal<AuthUser>() ?: error("No authenticated user on this call - route not under authenticate{}?")
+
+class PendingOAuthGateConfig {
+    /**
+     * Request-path prefixes the gate skips. Needed because Ktor MERGES path
+     * segments: `route("/mcp")` and `route("/mcp/http")` share the `mcp`
+     * node, so a plugin meant for the classic SSE subtree also fires for the
+     * streamable one - which must stay open (it gates per JSON-RPC method).
+     */
+    var exemptPrefixes: List<String> = emptyList()
+}
+
+/**
+ * Refuses callers whose OAuth grant awaits approval ([AuthUser.oauthPending]).
+ * Pending bearers still RESOLVE so the MCP handshake on /mcp/http can complete
+ * (that endpoint gates per JSON-RPC method instead) - but every DATA surface
+ * this plugin is installed on (the REST API, the classic /mcp SSE) answers 403
+ * until the user's e-mail link or an admin clears the gate.
+ */
+val PendingOAuthGate = createRouteScopedPlugin("PendingOAuthGate", ::PendingOAuthGateConfig) {
+    val exempt = pluginConfig.exemptPrefixes
+    on(AuthenticationChecked) { call ->
+        if (exempt.any { call.request.path().startsWith(it) }) return@on
+        if (call.principal<AuthUser>()?.oauthPending == true) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                mapOf("error" to "This AI connection is pending approval - approve it from your e-mail or ask an administrator"),
+            )
+        }
+    }
+}
 
 /**
  * A station the caller is entitled to touch: its DB pool plus the caller's

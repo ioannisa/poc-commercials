@@ -50,4 +50,27 @@ class OAuthPagesTest {
         assertFalse(page.contains("<b>T</b>"))
         assertFalse(page.contains("<i>M</i>"))
     }
+
+    /** The consent form must collect the self-declared account identity, and require it. */
+    @Test
+    fun authorizePageRequiresConnectedAccount() {
+        val page = renderAuthorizePage("Claude", emptyMap())
+        val input = page.lineSequence().firstOrNull { it.contains("name=\"connected_account\"") }
+        assertTrue(input != null)
+        assertTrue(page.substringAfter("name=\"connected_account\"").substringBefore(">").contains("required"))
+    }
+
+    /** The OTP page interpolates the attacker-controlled client name and the declared e-mail. */
+    @Test
+    fun consentOtpPageEscapesClientNameAndEmail() {
+        val page = renderConsentOtpPage(
+            clientName = "<script>alert(3)</script>",
+            consentId = "abc123",
+            maskedEmail = "\"><img onerror=x>",
+            ttlMinutes = 10,
+        )
+        assertFalse(page.contains("<script>alert(3)</script>"))
+        assertFalse(page.contains("<img onerror=x>"))
+        assertTrue(page.contains("name=\"consent_id\" value=\"abc123\""))
+    }
 }

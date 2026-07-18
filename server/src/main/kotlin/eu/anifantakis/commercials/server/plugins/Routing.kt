@@ -109,6 +109,8 @@ fun Application.configureRouting() {
 
         // Everything else requires a valid bearer token
         authenticate(AUTH_BEARER) {
+            // A pending OAuth grant resolves but must not reach any data route.
+            install(PendingOAuthGate)
             // User management + legacy migration (super administrator only)
             adminRoutes(authDb, oauthDb, registry)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })

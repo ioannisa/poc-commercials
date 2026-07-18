@@ -32,6 +32,8 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckboxRow
+import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
@@ -53,11 +55,16 @@ data class ApiTokensState(
     val tokens: ImmutableList<ApiToken> = persistentListOf(),
     /** The caller's own OAuth grants - the AI clients they connected via browser login. */
     val oauthGrants: ImmutableList<OAuthGrant> = persistentListOf(),
+    /** The "confirm new AI connections from my e-mail" opt-in; null until loaded. */
+    val aiConfirm: AiConfirmation? = null,
     val workstation: String = "",
     /** FREE / MINE / OTHER for the current input; null while blank or unresolved. */
     val availability: WorkstationAvailability? = null,
     /** OTHER + the user asked to generate: show a takeover confirmation. */
     val pendingTakeover: Boolean = false,
+    /** Revoke is destructive - it arms one of these and a confirm dialog fires it. */
+    val pendingRevokeToken: ApiToken? = null,
+    val pendingRevokeGrant: OAuthGrant? = null,
     val busy: Boolean = false,
     /** Set right after a mint: the raw secret + MCP URL, shown ONCE. */
     val created: CreatedApiToken? = null,
@@ -72,8 +79,12 @@ sealed interface ApiTokensIntent {
     data object Generate : ApiTokensIntent
     data object ConfirmTakeover : ApiTokensIntent
     data object CancelTakeover : ApiTokensIntent
+    data class RequestRevoke(val token: ApiToken) : ApiTokensIntent
+    data class RequestRevokeOAuth(val grant: OAuthGrant) : ApiTokensIntent
+    data object CancelRevoke : ApiTokensIntent
     data class Revoke(val id: Long) : ApiTokensIntent
     data class RevokeOAuth(val id: Long) : ApiTokensIntent
+    data class ToggleAiConfirmation(val enabled: Boolean) : ApiTokensIntent
     data object DismissCreated : ApiTokensIntent
 }
 
@@ -94,8 +105,13 @@ class ApiTokensViewModel(
             ApiTokensIntent.Generate -> onGenerate()
             ApiTokensIntent.ConfirmTakeover -> create(confirmTakeover = true)
             ApiTokensIntent.CancelTakeover -> _state.update { it.copy(pendingTakeover = false) }
+            is ApiTokensIntent.RequestRevoke -> _state.update { it.copy(pendingRevokeToken = intent.token) }
+            is ApiTokensIntent.RequestRevokeOAuth -> _state.update { it.copy(pendingRevokeGrant = intent.grant) }
+            ApiTokensIntent.CancelRevoke ->
+                _state.update { it.copy(pendingRevokeToken = null, pendingRevokeGrant = null) }
             is ApiTokensIntent.Revoke -> revoke(intent.id)
             is ApiTokensIntent.RevokeOAuth -> revokeOAuth(intent.id)
+            is ApiTokensIntent.ToggleAiConfirmation -> toggleAiConfirmation(intent.enabled)
             ApiTokensIntent.DismissCreated -> _state.update { it.copy(created = null) }
         }
     }
@@ -109,6 +125,22 @@ class ApiTokensViewModel(
             when (val result = repository.listOAuthGrants()) {
                 is DataResult.Success -> _state.update { it.copy(oauthGrants = result.data.toImmutableList()) }
                 is DataResult.Failure -> _state.update { it.copy(error = result.error.toUiText()) }
+            }
+            when (val result = repository.getAiConfirmation()) {
+                is DataResult.Success -> _state.update { it.copy(aiConfirm = result.data) }
+                is DataResult.Failure -> _state.update { it.copy(error = result.error.toUiText()) }
+            }
+        }
+    }
+
+    private fun toggleAiConfirmation(enabled: Boolean) {
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            when (val result = repository.setAiConfirmation(enabled)) {
+                is DataResult.Success -> _state.update {
+                    it.copy(busy = false, aiConfirm = it.aiConfirm?.copy(enabled = enabled))
+                }
+                is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
             }
         }
     }
@@ -177,7 +209,7 @@ class ApiTokensViewModel(
     }
 
     private fun revoke(id: Long) {
-        _state.update { it.copy(busy = true, error = null) }
+        _state.update { it.copy(busy = true, error = null, pendingRevokeToken = null) }
         viewModelScope.launch {
             when (val result = repository.revokeApiToken(id)) {
                 is DataResult.Success -> {
@@ -190,7 +222,7 @@ class ApiTokensViewModel(
     }
 
     private fun revokeOAuth(id: Long) {
-        _state.update { it.copy(busy = true, error = null) }
+        _state.update { it.copy(busy = true, error = null, pendingRevokeGrant = null) }
         viewModelScope.launch {
             when (val result = repository.revokeOAuthGrant(id)) {
                 is DataResult.Success -> {
@@ -302,7 +334,7 @@ private fun ApiTokensDialog(
             } else {
                 Column {
                     state.tokens.forEach { token ->
-                        TokenRow(token = token, enabled = !state.busy, onRevoke = { onIntent(ApiTokensIntent.Revoke(token.id)) })
+                        TokenRow(token = token, enabled = !state.busy, onRevoke = { onIntent(ApiTokensIntent.RequestRevoke(token)) })
                     }
                 }
                 AppText(Strings[StringKey.MCP_TOKENS_HAVE_ONE], AppTextStyle.NOTE)
@@ -321,15 +353,60 @@ private fun ApiTokensDialog(
                         OAuthGrantRow(
                             grant = grant,
                             enabled = !state.busy,
-                            onRevoke = { onIntent(ApiTokensIntent.RevokeOAuth(grant.id)) },
+                            onRevoke = { onIntent(ApiTokensIntent.RequestRevokeOAuth(grant)) },
                         )
                     }
+                }
+            }
+
+            // Personal protection: new AI connections stay inactive until the
+            // caller approves them from their registered e-mail. Needs an
+            // e-mail on the account, so the toggle locks without one.
+            state.aiConfirm?.let { confirm ->
+                AppCheckboxRow(
+                    checked = confirm.enabled,
+                    onCheckedChange = { onIntent(ApiTokensIntent.ToggleAiConfirmation(it)) },
+                    label = Strings[StringKey.MCP_AI_CONFIRM_TOGGLE],
+                    enabled = !state.busy && confirm.hasEmail,
+                )
+                if (!confirm.hasEmail) {
+                    AppText(Strings[StringKey.MCP_AI_CONFIRM_NO_EMAIL], AppTextStyle.NOTE)
                 }
             }
         }
         state.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
+    }
+
+    state.pendingRevokeToken?.let { token ->
+        RevokeConfirmDialog(
+            name = token.workstationName,
+            onConfirm = { onIntent(ApiTokensIntent.Revoke(token.id)) },
+            onCancel = { onIntent(ApiTokensIntent.CancelRevoke) },
+        )
+    }
+    state.pendingRevokeGrant?.let { grant ->
+        RevokeConfirmDialog(
+            name = grant.connectedAccount?.let { "${grant.clientName} — $it" } ?: grant.clientName,
+            onConfirm = { onIntent(ApiTokensIntent.RevokeOAuth(grant.id)) },
+            onCancel = { onIntent(ApiTokensIntent.CancelRevoke) },
+        )
+    }
+}
+
+/** Revoke is destructive and instant - always a confirmation step first. */
+@Composable
+private fun RevokeConfirmDialog(name: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    AppDialog(
+        title = Strings[StringKey.MCP_REVOKE_CONFIRM_TITLE].withArgs(listOf(name)),
+        onDismiss = onCancel,
+        confirmText = Strings[StringKey.MCP_TOKENS_REVOKE],
+        onConfirm = onConfirm,
+        dismissText = Strings[StringKey.COMMON_CANCEL],
+        destructive = true,
+    ) {
+        AppText(Strings[StringKey.MCP_REVOKE_CONFIRM_TEXT], AppTextStyle.NOTE)
     }
 }
 
@@ -398,13 +475,22 @@ private fun OAuthGrantRow(grant: OAuthGrant, enabled: Boolean, onRevoke: () -> U
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            AppText(grant.clientName, AppTextStyle.BODY_STRONG)
+            // Title carries the self-declared identity: "Claude — you@example.com"
+            // is what tells two grants of the same client apart.
+            AppText(
+                grant.connectedAccount?.let { "${grant.clientName} — $it" } ?: grant.clientName,
+                AppTextStyle.BODY_STRONG,
+            )
             AppText(Strings[StringKey.MCP_OAUTH_CONNECTED].withArgs(listOf(grant.createdAt)), AppTextStyle.TINY)
             AppText(
                 grant.lastUsedAt?.let { Strings[StringKey.MCP_TOKENS_LAST_USED].withArgs(listOf(it)) }
                     ?: Strings[StringKey.MCP_TOKENS_NEVER_USED],
                 AppTextStyle.TINY,
             )
+            when {
+                !grant.userApproved -> AppText(Strings[StringKey.MCP_OAUTH_PENDING_USER], AppTextStyle.ERROR_NOTE)
+                !grant.adminApproved -> AppText(Strings[StringKey.MCP_OAUTH_PENDING_ADMIN], AppTextStyle.ERROR_NOTE)
+            }
         }
         AppButton(
             text = Strings[StringKey.MCP_TOKENS_REVOKE],

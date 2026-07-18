@@ -55,4 +55,13 @@ internal data class OAuthGrantDto(
     val createdAt: String,
     val lastUsedAt: String? = null,
     val refreshExpiresAt: String,
+    val connectedAccount: String? = null,
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
 )
+
+@Serializable
+internal data class AiConfirmationDto(val enabled: Boolean, val hasEmail: Boolean)
+
+@Serializable
+internal data class SetAiConfirmationDto(val enabled: Boolean)

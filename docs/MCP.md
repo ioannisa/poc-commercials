@@ -22,7 +22,19 @@ connector connects with **one URL and a login** — no tokens, no config files:
 
 - **claude.ai / Claude Desktop / Claude mobile**: Settings → Connectors →
   *Add custom connector* → paste the URL → **Connect** → log in with your
-  Commercials Manager username/password on the page that opens.
+  Commercials Manager username/password on the page that opens. The form also
+  asks for the **e-mail of the AI account you are connecting** (required) — the
+  protocol never transmits it, so we record the self-declared identity plus the
+  consent IP/browser for the audit trail — and a **6-digit code sent to that
+  e-mail** verifies you actually control the mailbox before the connection
+  completes (10 minutes, 5 attempts, then restart from the client).
+
+  Two optional approval gates can hold a NEW connection **inactive** after it
+  connects: the user's own opt-in (*Preferences → MCP / API Access → Confirm
+  new AI connections from my e-mail* — an approval link goes to their
+  registered address, doubling as the new-connection alert) and the global
+  *New AI connections need admin approval* switch in MCP oversight. Until
+  approved, the connector's tool calls fail with 401.
 - **ChatGPT** (developer mode, Pro/Plus/Business/Enterprise): Settings →
   Connectors → add the same URL.
 - **Gemini, Cursor, VS Code (Copilot agent mode), Zed, Claude Code, …**: add it
@@ -33,8 +45,9 @@ What happens underneath: the server is its own OAuth 2.1 Authorization Server
 (discovery per RFC 8414/9728, dynamic client registration per RFC 7591,
 authorization-code + PKCE). The login page **is** your normal app login — the
 minted token carries *your* identity, so your grants and role apply unchanged.
-Access lasts until you disconnect the connector, an admin revokes the grant, or
-you change your password (which, as always, revokes your sessions — OAuth
+Access lasts until you disconnect the connector, you revoke the grant yourself
+(**Preferences → MCP / API Access → My AI connections**), an admin revokes it,
+or you change your password (which, as always, revokes your sessions — OAuth
 grants included).
 
 Enter the URL **without a trailing slash**, and make sure the host serves it
@@ -154,9 +167,14 @@ OAuth or not. Public HTTPS (§4) is what unlocks them.
 - **Kill switch** — one toggle disables **all PATs and all OAuth grants** at
   once (REST + `/mcp` + `/mcp/http`). App logins keep working.
 - **PATs** — see every workstation token, its owner, last use; revoke any.
-- **OAuth grants** — `GET/DELETE /api/admin/oauth-tokens`: every
-  native-connector login (user, client app, last use), each revocable
-  (the connector then has to re-authenticate).
+- **OAuth grants** — every native-connector login (user, client app, the
+  OTP-verified AI-account e-mail, consent IP/browser, last use), each
+  revocable — the connector then has to re-authenticate. Pending grants show
+  their state and an **Approve** button (admin approval clears both gates —
+  the unblock path when a user's approval e-mail never arrived). Every revoke
+  asks for confirmation first. (REST: `GET/DELETE /api/admin/oauth-tokens`,
+  `POST .../{id}/approve`; users self-manage via
+  `GET/DELETE /api/auth/oauth-tokens` + `GET/PUT /api/auth/ai-confirmation`.)
 
 ## Security notes
 

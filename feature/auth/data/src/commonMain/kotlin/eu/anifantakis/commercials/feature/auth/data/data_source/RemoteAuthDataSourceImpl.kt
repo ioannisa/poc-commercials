@@ -12,6 +12,8 @@ import eu.anifantakis.commercials.feature.auth.data.dto.CreateApiTokenResponseDt
 import eu.anifantakis.commercials.feature.auth.data.dto.ForgotPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginRequestDto
 import eu.anifantakis.commercials.feature.auth.data.dto.LoginResponseDto
+import eu.anifantakis.commercials.feature.auth.data.dto.AiConfirmationDto
+import eu.anifantakis.commercials.feature.auth.data.dto.SetAiConfirmationDto
 import eu.anifantakis.commercials.feature.auth.data.dto.OAuthGrantDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ResetPasswordDto
 import eu.anifantakis.commercials.feature.auth.data.dto.ResetResultDto
@@ -22,6 +24,7 @@ import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.GrantedStation
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
+import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
 import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
 import eu.anifantakis.commercials.feature.auth.domain.model.ResetOutcome
 import eu.anifantakis.commercials.feature.auth.domain.model.WorkstationAvailability
@@ -31,6 +34,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -207,7 +211,9 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
         }
         if (response.status.isSuccess()) {
             val dtos: List<OAuthGrantDto> = response.body()
-            DataResult.Success(dtos.map { OAuthGrant(it.id, it.clientName, it.createdAt, it.lastUsedAt) })
+            DataResult.Success(dtos.map {
+                OAuthGrant(it.id, it.clientName, it.createdAt, it.lastUsedAt, it.connectedAccount, it.userApproved, it.adminApproved)
+            })
         } else {
             DataResult.Failure(AuthError.Server(response.errorMessage()))
         }
@@ -216,6 +222,28 @@ class RemoteAuthDataSourceImpl(http: PlainJsonHttpClient) : RemoteAuthDataSource
     override suspend fun revokeOAuthGrant(token: String, id: Long): EmptyDataResult<AuthError> = authCall {
         val response = httpClient.delete(url("oauth-tokens/$id")) {
             header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) DataResult.Success(Unit)
+        else DataResult.Failure(AuthError.Server(response.errorMessage()))
+    }
+
+    override suspend fun getAiConfirmation(token: String): DataResult<AiConfirmation, AuthError> = authCall {
+        val response = httpClient.get(url("ai-confirmation")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        if (response.status.isSuccess()) {
+            val dto: AiConfirmationDto = response.body()
+            DataResult.Success(AiConfirmation(dto.enabled, dto.hasEmail))
+        } else {
+            DataResult.Failure(AuthError.Server(response.errorMessage()))
+        }
+    }
+
+    override suspend fun setAiConfirmation(token: String, enabled: Boolean): EmptyDataResult<AuthError> = authCall {
+        val response = httpClient.put(url("ai-confirmation")) {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(SetAiConfirmationDto(enabled))
         }
         if (response.status.isSuccess()) DataResult.Success(Unit)
         else DataResult.Failure(AuthError.Server(response.errorMessage()))

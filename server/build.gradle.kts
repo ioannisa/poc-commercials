@@ -34,6 +34,7 @@ dependencies {
     // client IPs when TLS terminates at a reverse proxy (gated in server.yaml)
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.forwarded.header)
+    implementation(libs.ktor.server.double.receive)
     // OpenAPI/Swagger UI: compiler-generated spec (dev-only, gated in Routing.kt).
     // routing-openapi provides the generation + .describe {}; swagger serves the UI.
     implementation(libs.ktor.server.swagger)

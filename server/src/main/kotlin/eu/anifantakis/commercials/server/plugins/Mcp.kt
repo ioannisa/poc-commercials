@@ -47,6 +47,12 @@ fun Application.configureMcp() {
                     resourceMetadataUrl = registry.publicBaseUrl
                         ?.let { "$it/.well-known/oauth-protected-resource/mcp" }
                 }
+                // Classic SSE has no per-method gate (the SDK owns the whole
+                // exchange) - a pending OAuth grant is refused outright here;
+                // native connectors negotiate on /mcp/http, which gates per
+                // JSON-RPC method instead (and shares this "mcp" path node,
+                // hence the exemption).
+                install(PendingOAuthGate) { exemptPrefixes = listOf("/mcp/http") }
                 mcp(allowedHosts = registry.mcpAllowedHosts) {
                     buildCommercialsMcpServer(McpCaller.of(call.authUser()), services)
                 }

@@ -99,6 +99,8 @@ class UserManagementViewModelTest {
         override suspend fun revokeApiToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
         override suspend fun listAllOAuthTokens(): DataResult<List<AdminOAuthToken>, RemoteError> = DataResult.Success(emptyList())
         override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
+        override suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
+        override suspend fun setOauthAdminApproval(required: Boolean): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
         override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
         override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> = DataResult.Success(McpSettings(true, 0))
         override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> = DataResult.Success(Unit)

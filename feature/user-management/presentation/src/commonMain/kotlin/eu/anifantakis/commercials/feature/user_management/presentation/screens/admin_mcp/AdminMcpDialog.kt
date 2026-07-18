@@ -47,6 +47,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Immutable
 data class AdminMcpState(
     val enabled: Boolean = true,
+    /** Global switch: every NEW OAuth grant needs super-admin approval. */
+    val adminApprovalRequired: Boolean = false,
     val tokenCount: Int = 0,
     val oauthGrantCount: Int = 0,
     val tokens: ImmutableList<AdminApiToken> = persistentListOf(),
@@ -54,6 +56,9 @@ data class AdminMcpState(
     val users: ImmutableList<ManagedUser> = persistentListOf(),
     /** When set, the change-role picker is open for this workstation's token. */
     val reassignFor: AdminApiToken? = null,
+    /** Revoke is destructive - it arms one of these and a confirm dialog fires it. */
+    val pendingRevokeToken: AdminApiToken? = null,
+    val pendingRevokeGrant: AdminOAuthToken? = null,
     val busy: Boolean = false,
     val error: UiText? = null,
 )
@@ -61,8 +66,13 @@ data class AdminMcpState(
 sealed interface AdminMcpIntent {
     data object Load : AdminMcpIntent
     data class SetEnabled(val enabled: Boolean) : AdminMcpIntent
+    data class SetAdminApproval(val required: Boolean) : AdminMcpIntent
+    data class RequestRevoke(val token: AdminApiToken) : AdminMcpIntent
+    data class RequestRevokeOAuth(val grant: AdminOAuthToken) : AdminMcpIntent
+    data object CancelRevoke : AdminMcpIntent
     data class Revoke(val id: Long) : AdminMcpIntent
     data class RevokeOAuth(val id: Long) : AdminMcpIntent
+    data class ApproveOAuth(val id: Long) : AdminMcpIntent
     data class Reassign(val token: AdminApiToken) : AdminMcpIntent
     data class ConfirmReassign(val workstation: String, val userId: Long) : AdminMcpIntent
     data object CancelReassign : AdminMcpIntent
@@ -80,8 +90,14 @@ class AdminMcpViewModel(
         when (intent) {
             AdminMcpIntent.Load -> load()
             is AdminMcpIntent.SetEnabled -> setEnabled(intent.enabled)
+            is AdminMcpIntent.SetAdminApproval -> setAdminApproval(intent.required)
+            is AdminMcpIntent.RequestRevoke -> _state.update { it.copy(pendingRevokeToken = intent.token) }
+            is AdminMcpIntent.RequestRevokeOAuth -> _state.update { it.copy(pendingRevokeGrant = intent.grant) }
+            AdminMcpIntent.CancelRevoke ->
+                _state.update { it.copy(pendingRevokeToken = null, pendingRevokeGrant = null) }
             is AdminMcpIntent.Revoke -> revoke(intent.id)
             is AdminMcpIntent.RevokeOAuth -> revokeOAuth(intent.id)
+            is AdminMcpIntent.ApproveOAuth -> approveOAuth(intent.id)
             is AdminMcpIntent.Reassign -> _state.update { it.copy(reassignFor = intent.token) }
             AdminMcpIntent.CancelReassign -> _state.update { it.copy(reassignFor = null) }
             is AdminMcpIntent.ConfirmReassign -> reassign(intent.workstation, intent.userId)
@@ -94,6 +110,7 @@ class AdminMcpViewModel(
                 is DataResult.Success -> _state.update {
                     it.copy(
                         enabled = settings.data.enabled,
+                        adminApprovalRequired = settings.data.adminApprovalRequired,
                         tokenCount = settings.data.tokenCount,
                         oauthGrantCount = settings.data.oauthGrantCount,
                     )
@@ -125,8 +142,18 @@ class AdminMcpViewModel(
         }
     }
 
-    private fun revoke(id: Long) {
+    private fun setAdminApproval(required: Boolean) {
         _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            when (val result = repository.setOauthAdminApproval(required)) {
+                is DataResult.Success -> _state.update { it.copy(adminApprovalRequired = required, busy = false) }
+                is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+            }
+        }
+    }
+
+    private fun revoke(id: Long) {
+        _state.update { it.copy(busy = true, error = null, pendingRevokeToken = null) }
         viewModelScope.launch {
             when (val result = repository.revokeApiToken(id)) {
                 is DataResult.Success -> { _state.update { it.copy(busy = false) }; load() }
@@ -136,9 +163,19 @@ class AdminMcpViewModel(
     }
 
     private fun revokeOAuth(id: Long) {
-        _state.update { it.copy(busy = true, error = null) }
+        _state.update { it.copy(busy = true, error = null, pendingRevokeGrant = null) }
         viewModelScope.launch {
             when (val result = repository.revokeOAuthToken(id)) {
+                is DataResult.Success -> { _state.update { it.copy(busy = false) }; load() }
+                is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
+            }
+        }
+    }
+
+    private fun approveOAuth(id: Long) {
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            when (val result = repository.approveOAuthToken(id)) {
                 is DataResult.Success -> { _state.update { it.copy(busy = false) }; load() }
                 is DataResult.Failure -> _state.update { it.copy(busy = false, error = result.error.toUiText()) }
             }
@@ -157,10 +194,11 @@ class AdminMcpViewModel(
 }
 
 /**
- * Admin oversight of every workstation's MCP token: the global kill switch, the
- * live count, and per-workstation Revoke or Change role (repoint the token to
- * another user without touching that machine). Super-admin only (endpoints 403
- * others).
+ * Admin oversight of all MCP access: the global kill switch (covers PATs AND
+ * OAuth grants), live counts, per-workstation PAT Revoke or Change role
+ * (repoint the token to another user without touching that machine), and every
+ * user's OAuth grants (native-connector logins - revoke only, a grant IS its
+ * user's identity). Super-admin only (endpoints 403 others).
  */
 @Composable
 fun AdminMcpDialogRoot(
@@ -199,6 +237,13 @@ private fun AdminMcpDialog(
                 label = Strings[StringKey.ADMIN_MCP_ENABLED],
                 enabled = !state.busy,
             )
+            // Global gate: new OAuth grants stay pending until approved here.
+            AppCheckboxRow(
+                checked = state.adminApprovalRequired,
+                onCheckedChange = { onIntent(AdminMcpIntent.SetAdminApproval(it)) },
+                label = Strings[StringKey.ADMIN_MCP_APPROVAL_TOGGLE],
+                enabled = !state.busy,
+            )
             AppText(
                 Strings[StringKey.ADMIN_MCP_TOKENS_HEADER].withArgs(listOf(state.tokenCount)),
                 AppTextStyle.BODY_STRONG,
@@ -211,7 +256,7 @@ private fun AdminMcpDialog(
                         TokenRow(
                             token = token,
                             enabled = !state.busy,
-                            onRevoke = { onIntent(AdminMcpIntent.Revoke(token.id)) },
+                            onRevoke = { onIntent(AdminMcpIntent.RequestRevoke(token)) },
                             onChangeRole = { onIntent(AdminMcpIntent.Reassign(token)) },
                         )
                     }
@@ -220,7 +265,7 @@ private fun AdminMcpDialog(
 
             // OAuth grants: native-connector logins (Claude, ChatGPT, ...), one
             // per user × client app. No workstation, no change-role - the grant
-            // IS a user's own identity; the only admin action is revoke.
+            // IS a user's own identity; admin actions are revoke and approve.
             AppText(
                 Strings[StringKey.ADMIN_MCP_OAUTH_HEADER].withArgs(listOf(state.oauthGrantCount)),
                 AppTextStyle.BODY_STRONG,
@@ -233,7 +278,8 @@ private fun AdminMcpDialog(
                         OAuthGrantRow(
                             grant = grant,
                             enabled = !state.busy,
-                            onRevoke = { onIntent(AdminMcpIntent.RevokeOAuth(grant.id)) },
+                            onRevoke = { onIntent(AdminMcpIntent.RequestRevokeOAuth(grant)) },
+                            onApprove = { onIntent(AdminMcpIntent.ApproveOAuth(grant.id)) },
                         )
                     }
                 }
@@ -242,6 +288,36 @@ private fun AdminMcpDialog(
         state.error?.let {
             AppText(it.asString(), AppTextStyle.ERROR_NOTE)
         }
+    }
+
+    state.pendingRevokeToken?.let { token ->
+        RevokeConfirmDialog(
+            name = token.workstationName,
+            onConfirm = { onIntent(AdminMcpIntent.Revoke(token.id)) },
+            onCancel = { onIntent(AdminMcpIntent.CancelRevoke) },
+        )
+    }
+    state.pendingRevokeGrant?.let { grant ->
+        RevokeConfirmDialog(
+            name = grant.connectedAccount?.let { "${grant.clientName} — $it" } ?: grant.clientName,
+            onConfirm = { onIntent(AdminMcpIntent.RevokeOAuth(grant.id)) },
+            onCancel = { onIntent(AdminMcpIntent.CancelRevoke) },
+        )
+    }
+}
+
+/** Revoke is destructive and instant - always a confirmation step first. */
+@Composable
+private fun RevokeConfirmDialog(name: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    AppDialog(
+        title = Strings[StringKey.MCP_REVOKE_CONFIRM_TITLE].withArgs(listOf(name)),
+        onDismiss = onCancel,
+        confirmText = Strings[StringKey.MCP_TOKENS_REVOKE],
+        onConfirm = onConfirm,
+        dismissText = Strings[StringKey.COMMON_CANCEL],
+        destructive = true,
+    ) {
+        AppText(Strings[StringKey.MCP_REVOKE_CONFIRM_TEXT], AppTextStyle.NOTE)
     }
 }
 
@@ -285,18 +361,47 @@ private fun OAuthGrantRow(
     grant: AdminOAuthToken,
     enabled: Boolean,
     onRevoke: () -> Unit,
+    onApprove: () -> Unit,
 ) {
+    val pending = !grant.userApproved || !grant.adminApproved
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            AppText(grant.clientName, AppTextStyle.BODY_STRONG)
+            // Title carries the self-declared identity: "Claude — you@example.com"
+            // is what tells two grants of the same client apart.
+            AppText(
+                grant.connectedAccount?.let { "${grant.clientName} — $it" } ?: grant.clientName,
+                AppTextStyle.BODY_STRONG,
+            )
             AppText("${grant.username} · ${grant.createdAt}", AppTextStyle.TINY)
             AppText(
                 grant.lastUsedAt?.let { Strings[StringKey.MCP_TOKENS_LAST_USED].withArgs(listOf(it)) }
                     ?: Strings[StringKey.MCP_TOKENS_NEVER_USED],
                 AppTextStyle.TINY,
+            )
+            // Consent forensics (IP · browser) - unspoofable, unlike the label.
+            val forensics = listOfNotNull(grant.consentIp, grant.consentUserAgent?.take(64))
+            if (forensics.isNotEmpty()) {
+                AppText(
+                    Strings[StringKey.ADMIN_MCP_CONSENT_FROM].withArgs(listOf(forensics.joinToString(" · "))),
+                    AppTextStyle.TINY,
+                )
+            }
+            when {
+                !grant.adminApproved -> AppText(Strings[StringKey.MCP_OAUTH_PENDING_ADMIN], AppTextStyle.ERROR_NOTE)
+                !grant.userApproved -> AppText(Strings[StringKey.ADMIN_MCP_PENDING_USER], AppTextStyle.ERROR_NOTE)
+            }
+        }
+        // Approve force-clears BOTH gates - the unblock path when the user's
+        // approval e-mail never arrived.
+        if (pending) {
+            AppButton(
+                text = Strings[StringKey.ADMIN_MCP_APPROVE],
+                onClick = onApprove,
+                variant = AppButtonVariant.TEXT,
+                enabled = enabled,
             )
         }
         AppButton(

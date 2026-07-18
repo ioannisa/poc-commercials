@@ -40,4 +40,17 @@ data class OAuthGrant(
     val clientName: String,
     val createdAt: String,
     val lastUsedAt: String?,
+    /** Self-declared at consent - the AI account's e-mail (null on older grants). */
+    val connectedAccount: String?,
+    /** Approval gates - the grant works only when BOTH are true. */
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
+)
+
+/** The caller's "confirm new AI connections from my registered e-mail" opt-in. */
+@Immutable
+data class AiConfirmation(
+    val enabled: Boolean,
+    /** Enabling requires an e-mail on the account. */
+    val hasEmail: Boolean,
 )

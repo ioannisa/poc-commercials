@@ -41,6 +41,13 @@ data class AuthUser(
     val isAdmin: Boolean,
     val grants: List<StationGrant>,
     val mustChangePassword: Boolean = false,
+    /**
+     * TRUE when this call authenticated with an OAuth access token whose grant
+     * awaits approval (user e-mail link and/or admin). The bearer still
+     * RESOLVES - so the MCP handshake can complete - but data surfaces (REST,
+     * tool calls) must refuse it until the gate clears.
+     */
+    val oauthPending: Boolean = false,
 ) {
     fun grantFor(stationId: String): StationGrant? = grants.firstOrNull { it.stationId == stationId }
     fun hasRoleAnywhere(role: UserRole): Boolean = grants.any { it.role == role }

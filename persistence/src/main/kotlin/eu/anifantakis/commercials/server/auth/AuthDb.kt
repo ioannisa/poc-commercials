@@ -180,6 +180,9 @@ class AuthDb(
             ensureExpiresAtColumn(c)
             ensureColumn(c, "users", "email", "VARCHAR(255) NULL")
             ensureColumn(c, "users", "must_change_password", "BOOLEAN NOT NULL DEFAULT FALSE")
+            // Per-user opt-in: new AI connections stay pending until approved
+            // from the registered e-mail (see OAuthDb approval gates).
+            ensureColumn(c, "users", "confirm_ai_connections", "BOOLEAN NOT NULL DEFAULT FALSE")
             ensureApiTokenWorkstationColumn(c)
             // Recovery codes were retired in favour of email + admin reset; drop
             // the legacy table so a leaked backup can't be replayed as a credential.
@@ -605,16 +608,24 @@ class AuthDb(
      */
     private fun findByOAuthToken(c: Connection, hash: String): AuthUser? {
         if (!mcpEnabled(c)) return null
+        // Unapproved grants still RESOLVE (marked pending) so the MCP protocol
+        // handshake can complete; every data surface refuses pending callers.
+        var pending = false
         val row = c.prepareStatement(
             """
             SELECT u.id, u.username, u.display_name, u.is_admin, u.password_hash, u.password_salt,
-                   u.must_change_password
+                   u.must_change_password, t.user_approved, t.admin_approved
             FROM oauth_tokens t, users u
             WHERE u.id = t.user_id AND t.access_token_hash = ? AND t.access_expires_at > NOW()
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, hash)
-            ps.executeQuery().use { rs -> if (rs.next()) rs.toUserRow() else null }
+            ps.executeQuery().use { rs ->
+                if (rs.next()) {
+                    pending = !(rs.getBoolean("user_approved") && rs.getBoolean("admin_approved"))
+                    rs.toUserRow()
+                } else null
+            }
         } ?: return null
 
         c.prepareStatement(
@@ -624,7 +635,7 @@ class AuthDb(
             ps.setString(1, hash)
             ps.executeUpdate()
         }
-        return toAuthUser(c, row)
+        return toAuthUser(c, row).copy(oauthPending = pending)
     }
 
     /**
@@ -1075,6 +1086,50 @@ class AuthDb(
     }
 
     private fun mcpEnabled(c: Connection): Boolean = getSetting(c, "mcp_enabled") != "false"
+
+    /** Global switch: every NEW OAuth grant needs super-admin approval (default off). */
+    fun isOauthAdminApprovalRequired(): Boolean =
+        db.connection().use { getSetting(it, "oauth_admin_approval") == "true" }
+
+    fun setOauthAdminApprovalRequired(required: Boolean) {
+        db.connection().use { c ->
+            c.prepareStatement(
+                "INSERT INTO app_settings(setting_key, setting_value) VALUES('oauth_admin_approval', ?) AS new " +
+                    "ON DUPLICATE KEY UPDATE setting_value = new.setting_value"
+            ).use { ps ->
+                ps.setString(1, required.toString())
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    /** The per-user "confirm new AI connections from my e-mail" opt-in + the address it needs. */
+    data class AiConnectionConfirmation(val enabled: Boolean, val email: String?)
+
+    fun aiConnectionConfirmation(userId: Long): AiConnectionConfirmation =
+        db.connection().use { c ->
+            c.prepareStatement("SELECT confirm_ai_connections, email FROM users WHERE id = ?").use { ps ->
+                ps.setLong(1, userId)
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) AiConnectionConfirmation(rs.getBoolean(1), rs.getString(2)?.takeIf { it.isNotBlank() })
+                    else AiConnectionConfirmation(enabled = false, email = null)
+                }
+            }
+        }
+
+    /** Enabling requires an e-mail on file - throws IllegalArgumentException otherwise (400 via StatusPages). */
+    fun setAiConnectionConfirmation(userId: Long, enabled: Boolean) {
+        db.connection().use { c ->
+            if (enabled && selectEmail(c, userId).isNullOrBlank()) {
+                throw IllegalArgumentException("An e-mail address on the account is required for connection confirmation")
+            }
+            c.prepareStatement("UPDATE users SET confirm_ai_connections = ? WHERE id = ?").use { ps ->
+                ps.setBoolean(1, enabled)
+                ps.setLong(2, userId)
+                ps.executeUpdate()
+            }
+        }
+    }
 
     private fun getSetting(c: Connection, key: String): String? =
         c.prepareStatement("SELECT setting_value FROM app_settings WHERE setting_key = ?").use { ps ->

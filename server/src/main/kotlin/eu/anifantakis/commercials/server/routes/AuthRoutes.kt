@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.auth.PASSWORD_RESET_TTL_SECONDS
 import eu.anifantakis.commercials.server.plugins.AUTH_BEARER
 import eu.anifantakis.commercials.server.plugins.CREDENTIALS_RATE_LIMIT
+import eu.anifantakis.commercials.server.plugins.PendingOAuthGate
 import eu.anifantakis.commercials.server.plugins.authUser
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.*
@@ -132,7 +133,23 @@ data class MyOAuthGrantDto(
     val createdAt: String,
     val lastUsedAt: String? = null,
     val refreshExpiresAt: String,
+    /** Self-declared at consent - the AI account's e-mail (NULL on pre-migration grants). */
+    val connectedAccount: String? = null,
+    /** Approval gates - the grant works only when BOTH are true. */
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
 )
+
+/** The per-user "confirm new AI connections from my e-mail" opt-in. */
+@Serializable
+data class AiConfirmationDto(
+    val enabled: Boolean,
+    /** Whether the account has an e-mail on file - enabling requires one. */
+    val hasEmail: Boolean,
+)
+
+@Serializable
+data class SetAiConfirmationDto(val enabled: Boolean)
 
 fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry) {
     route("/api/auth") {
@@ -217,6 +234,8 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
         }   // end rateLimit(CREDENTIALS_RATE_LIMIT)
 
         authenticate(AUTH_BEARER) {
+            // A pending OAuth grant resolves but must not reach any data route.
+            install(PendingOAuthGate)
 
             /**
              * THE HEARTBEAT - what makes "an app that is open is never logged out"
@@ -383,7 +402,11 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
                     val grants = withContext(Dispatchers.IO) { oauthDb.listTokensForUser(user.id) }
                     call.respond(
                         grants.map {
-                            MyOAuthGrantDto(it.id, it.clientName, it.createdAt, it.lastUsedAt, it.refreshExpiresAt)
+                            MyOAuthGrantDto(
+                                it.id, it.clientName, it.createdAt, it.lastUsedAt,
+                                it.refreshExpiresAt, it.connectedAccount,
+                                it.userApproved, it.adminApproved,
+                            )
                         }
                     )
                 }
@@ -402,6 +425,33 @@ fun Route.authRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistry
                     val revoked = withContext(Dispatchers.IO) { oauthDb.revokeTokenByIdForUser(id, user.id) }
                     if (revoked) call.respond(mapOf("status" to "revoked"))
                     else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such grant"))
+                }
+            }
+
+            // The caller's own "confirm new AI connections" opt-in: when ON,
+            // every new OAuth grant stays inactive until approved from the
+            // link e-mailed to their REGISTERED address.
+            route("/ai-confirmation") {
+                /**
+                 * Read the caller's AI-connection confirmation opt-in (and whether an e-mail is on file).
+                 *
+                 * Tag: MCP
+                 */
+                get {
+                    val user = call.authUser()
+                    val c = withContext(Dispatchers.IO) { authDb.aiConnectionConfirmation(user.id) }
+                    call.respond(AiConfirmationDto(enabled = c.enabled, hasEmail = c.email != null))
+                }
+                /**
+                 * Set the caller's AI-connection confirmation opt-in (400 without an e-mail on file).
+                 *
+                 * Tag: MCP
+                 */
+                put {
+                    val user = call.authUser()
+                    val request = call.receive<SetAiConfirmationDto>()
+                    withContext(Dispatchers.IO) { authDb.setAiConnectionConfirmation(user.id, request.enabled) }
+                    call.respond(mapOf("status" to "updated"))
                 }
             }
         }

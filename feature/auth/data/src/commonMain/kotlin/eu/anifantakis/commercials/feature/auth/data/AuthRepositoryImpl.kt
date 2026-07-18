@@ -8,6 +8,7 @@ import eu.anifantakis.commercials.core.domain.util.onSuccess
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
 import eu.anifantakis.commercials.feature.auth.domain.AuthRepository
 import eu.anifantakis.commercials.feature.auth.domain.data_source.RemoteAuthDataSource
+import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
@@ -134,5 +135,15 @@ class AuthRepositoryImpl(
     override suspend fun revokeOAuthGrant(id: Long): EmptyDataResult<AuthError> {
         val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
         return remoteDataSource.revokeOAuthGrant(token, id)
+    }
+
+    override suspend fun getAiConfirmation(): DataResult<AiConfirmation, AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.getAiConfirmation(token)
+    }
+
+    override suspend fun setAiConfirmation(enabled: Boolean): EmptyDataResult<AuthError> {
+        val token = session.token ?: return DataResult.Failure(AuthError.NotLoggedIn)
+        return remoteDataSource.setAiConfirmation(token, enabled)
     }
 }

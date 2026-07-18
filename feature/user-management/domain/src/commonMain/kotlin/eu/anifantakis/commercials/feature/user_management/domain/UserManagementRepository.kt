@@ -53,13 +53,27 @@ data class AdminOAuthToken(
     val clientName: String,
     val createdAt: String,
     val lastUsedAt: String?,
+    /** Self-declared at consent - the AI account's e-mail (null on older grants). */
+    val connectedAccount: String?,
+    /** IP + browser that submitted the consent form (audit trail; null on older grants). */
+    val consentIp: String?,
+    val consentUserAgent: String?,
+    /** Approval gates - the grant works only when BOTH are true. */
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
 )
 
 /**
  * The global MCP state: the kill-switch [enabled] flag + how many PATs
  * ([tokenCount]) and OAuth grants ([oauthGrantCount]) exist.
  */
-data class McpSettings(val enabled: Boolean, val tokenCount: Int, val oauthGrantCount: Int = 0)
+data class McpSettings(
+    val enabled: Boolean,
+    val tokenCount: Int,
+    val oauthGrantCount: Int = 0,
+    /** Global switch: every NEW OAuth grant needs super-admin approval. */
+    val adminApprovalRequired: Boolean = false,
+)
 
 /**
  * Super-admin user management: list, create, reset password, edit
@@ -93,6 +107,12 @@ interface UserManagementRepository {
 
     /** Admin revoke of any OAuth grant by id. */
     suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
+
+    /** Admin approval of a pending OAuth grant (clears both gates). */
+    suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError>
+
+    /** Toggle the global "new AI connections need admin approval" switch. */
+    suspend fun setOauthAdminApproval(required: Boolean): DataResult<Unit, RemoteError>
 
     /**
      * Admin "change role": repoint the token on [workstation] to [targetUserId]

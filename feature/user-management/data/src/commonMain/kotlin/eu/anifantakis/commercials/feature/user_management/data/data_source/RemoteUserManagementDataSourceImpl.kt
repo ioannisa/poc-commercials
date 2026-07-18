@@ -61,19 +61,32 @@ private data class AdminOAuthTokenDto(
     val createdAt: String,
     val lastUsedAt: String? = null,
     val refreshExpiresAt: String,
+    val connectedAccount: String? = null,
+    val consentIp: String? = null,
+    val consentUserAgent: String? = null,
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
 )
 
 @Serializable
-private data class McpSettingsDto(val enabled: Boolean, val tokenCount: Int, val oauthGrantCount: Int = 0)
+private data class McpSettingsDto(
+    val enabled: Boolean,
+    val tokenCount: Int,
+    val oauthGrantCount: Int = 0,
+    val adminApprovalRequired: Boolean = false,
+)
 
 @Serializable
-private data class SetMcpEnabledDto(val enabled: Boolean)
+private data class SetMcpEnabledDto(val enabled: Boolean? = null, val adminApprovalRequired: Boolean? = null)
 
 private fun AdminApiTokenDto.toDomain() =
     AdminApiToken(id, workstationName, userId, username, userRole, createdAt, lastUsedAt)
 
 private fun AdminOAuthTokenDto.toDomain() =
-    AdminOAuthToken(id, userId, username, clientName, createdAt, lastUsedAt)
+    AdminOAuthToken(
+        id, userId, username, clientName, createdAt, lastUsedAt,
+        connectedAccount, consentIp, consentUserAgent, userApproved, adminApproved,
+    )
 
 @Serializable
 private data class SetGrantsDto(val grants: List<GrantDto>)
@@ -121,12 +134,18 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
     override suspend fun revokeOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
         api.deleteRemoteEmpty("/api/admin/oauth-tokens/$tokenId")
 
+    override suspend fun approveOAuthToken(tokenId: Long): DataResult<Unit, RemoteError> =
+        api.postRemoteEmpty("/api/admin/oauth-tokens/$tokenId/approve", Unit)
+
+    override suspend fun setOauthAdminApproval(required: Boolean): DataResult<Unit, RemoteError> =
+        api.putRemoteEmpty("/api/admin/mcp-settings", SetMcpEnabledDto(adminApprovalRequired = required))
+
     override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> =
         api.postRemoteEmpty("/api/admin/api-tokens/reassign", ReassignApiTokenDto(workstation, targetUserId))
 
     override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> =
         api.getRemote<McpSettingsDto>("/api/admin/mcp-settings")
-            .map { McpSettings(it.enabled, it.tokenCount, it.oauthGrantCount) }
+            .map { McpSettings(it.enabled, it.tokenCount, it.oauthGrantCount, it.adminApprovalRequired) }
 
     override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
         api.putRemoteEmpty("/api/admin/mcp-settings", SetMcpEnabledDto(enabled))

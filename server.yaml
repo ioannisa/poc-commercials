@@ -101,6 +101,26 @@ session:
 # authenticated routes still needs a bearer token.
 swagger: true
 
+# Public origin of this server = the OAuth 2.1 issuer. Setting it mounts the OAuth
+# endpoints (/oauth/*, /.well-known/*) and the 401 challenge that native MCP
+# connectors (claude.ai, ChatGPT, Gemini, ...) need. Leave UNSET to keep OAuth off
+# (PAT access still works). Production: the https:// origin the reverse proxy
+# serves; no trailing slash.
+publicBaseUrl: "https://mcp.anifantakis.eu"
+
+# Host-header allowlist for the MCP endpoints' DNS-rebinding guard. Localhost
+# entries keep Inspector / Claude Code working locally next to the tunnel host.
+mcpAllowedHosts:
+  - mcp.anifantakis.eu
+  - localhost
+  - 127.0.0.1
+
+# Set true ONLY when a reverse proxy terminates TLS in front of this server:
+# installs XForwardedHeaders so rate limiting / logs see the real client IP.
+# NEVER enable without a proxy - the headers are client-spoofable.
+# (true here: the cloudflared tunnel terminates TLS at the Cloudflare edge.)
+behindReverseProxy: true
+
 # File-wide SMTP for customer schedule emails (a station/group block may override).
 # Office 365 requires the From to be the authenticated mailbox; the display name is
 # allowed. STARTTLS on 587. NOTE: real credential below - do NOT commit this file.

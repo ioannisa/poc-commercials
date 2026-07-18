@@ -66,6 +66,8 @@ data class McpSettingsDto(
     val tokenCount: Int,
     /** Live OAuth grants (native-connector logins), counted separately from PATs. */
     val oauthGrantCount: Int = 0,
+    /** Global switch: every NEW OAuth grant needs super-admin approval. */
+    val adminApprovalRequired: Boolean = false,
 )
 
 /** One OAuth grant (a native MCP connector a user logged in from), for admin oversight. */
@@ -78,10 +80,22 @@ data class AdminOAuthTokenDto(
     val createdAt: String,
     val lastUsedAt: String? = null,
     val refreshExpiresAt: String,
+    /** Self-declared at consent - the AI account's e-mail (NULL on pre-migration grants). */
+    val connectedAccount: String? = null,
+    /** IP + browser that submitted the consent form (audit trail). */
+    val consentIp: String? = null,
+    val consentUserAgent: String? = null,
+    /** Approval gates - the grant works only when BOTH are true. */
+    val userApproved: Boolean = true,
+    val adminApproved: Boolean = true,
 )
 
+/** Partial update: only the non-null fields are applied. */
 @Serializable
-data class SetMcpEnabledRequest(val enabled: Boolean)
+data class SetMcpEnabledRequest(
+    val enabled: Boolean? = null,
+    val adminApprovalRequired: Boolean? = null,
+)
 
 @Serializable
 data class SetGrantsRequest(val grants: List<GrantDto>)
@@ -285,6 +299,11 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
                         createdAt = it.createdAt,
                         lastUsedAt = it.lastUsedAt,
                         refreshExpiresAt = it.refreshExpiresAt,
+                        connectedAccount = it.connectedAccount,
+                        consentIp = it.consentIp,
+                        consentUserAgent = it.consentUserAgent,
+                        userApproved = it.userApproved,
+                        adminApproved = it.adminApproved,
                     )
                 }
             )
@@ -301,6 +320,18 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
             if (revoked) call.respond(mapOf("status" to "revoked"))
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such grant"))
         }
+        /**
+         * Approve a pending OAuth grant (clears BOTH gates - the admin outranks the e-mail link).
+         *
+         * Tag: MCP
+         */
+        post("/{id}/approve") {
+            if (!call.requireAdmin()) return@post
+            val id = call.userIdParam() ?: return@post
+            val approved = withContext(Dispatchers.IO) { oauthDb.adminApproveById(id) }
+            if (approved) call.respond(mapOf("status" to "approved"))
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No such grant"))
+        }
     }
 
     // The global MCP kill switch + a token-count status.
@@ -315,17 +346,21 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
             val enabled = withContext(Dispatchers.IO) { authDb.isMcpEnabled() }
             val count = withContext(Dispatchers.IO) { authDb.apiTokenCount() }
             val oauthCount = withContext(Dispatchers.IO) { oauthDb.oauthTokenCount() }
-            call.respond(McpSettingsDto(enabled, count, oauthCount))
+            val adminApproval = withContext(Dispatchers.IO) { authDb.isOauthAdminApprovalRequired() }
+            call.respond(McpSettingsDto(enabled, count, oauthCount, adminApproval))
         }
         /**
-         * Toggle the global MCP kill switch on or off.
+         * Update the global MCP switches: the kill switch and/or the new-grant admin-approval requirement.
          *
          * Tag: MCP
          */
         put {
             if (!call.requireAdmin()) return@put
             val request = call.receive<SetMcpEnabledRequest>()
-            withContext(Dispatchers.IO) { authDb.setMcpEnabled(request.enabled) }
+            withContext(Dispatchers.IO) {
+                request.enabled?.let { authDb.setMcpEnabled(it) }
+                request.adminApprovalRequired?.let { authDb.setOauthAdminApprovalRequired(it) }
+            }
             call.respond(mapOf("status" to "updated"))
         }
     }

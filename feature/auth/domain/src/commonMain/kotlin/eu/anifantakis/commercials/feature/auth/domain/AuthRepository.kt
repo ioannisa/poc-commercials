@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.auth.domain
 
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
+import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.OAuthGrant
@@ -50,4 +51,10 @@ interface AuthRepository {
 
     /** Revokes one of the caller's own OAuth grants (that connector must re-authenticate). */
     suspend fun revokeOAuthGrant(id: Long): EmptyDataResult<AuthError>
+
+    /** The caller's "confirm new AI connections" opt-in. */
+    suspend fun getAiConfirmation(): DataResult<AiConfirmation, AuthError>
+
+    /** Sets the opt-in (the server rejects enabling without an e-mail on file). */
+    suspend fun setAiConfirmation(enabled: Boolean): EmptyDataResult<AuthError>
 }

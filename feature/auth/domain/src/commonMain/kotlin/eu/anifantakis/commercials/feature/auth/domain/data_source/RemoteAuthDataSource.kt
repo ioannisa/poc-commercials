@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.auth.domain.data_source
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.auth.domain.AuthError
+import eu.anifantakis.commercials.feature.auth.domain.model.AiConfirmation
 import eu.anifantakis.commercials.feature.auth.domain.model.ApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.CreatedApiToken
 import eu.anifantakis.commercials.feature.auth.domain.model.LoginResult
@@ -55,4 +56,8 @@ interface RemoteAuthDataSource {
 
     /** Revoke one of the caller's own OAuth grants by id. */
     suspend fun revokeOAuthGrant(token: String, id: Long): EmptyDataResult<AuthError>
+
+    suspend fun getAiConfirmation(token: String): DataResult<AiConfirmation, AuthError>
+
+    suspend fun setAiConfirmation(token: String, enabled: Boolean): EmptyDataResult<AuthError>
 }
