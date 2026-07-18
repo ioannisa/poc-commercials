@@ -462,7 +462,15 @@ private fun AiChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
         ) {
-            AppText(Strings[StringKey.AI_CHAT_TITLE], AppTextStyle.SECTION_TITLE, modifier = Modifier.weight(1f))
+            // Single line + ellipsis: the header hosts up to five actions -
+            // at narrow widths a long title must truncate, never wrap.
+            AppText(
+                Strings[StringKey.AI_CHAT_TITLE],
+                AppTextStyle.SECTION_TITLE,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
             onDetach?.let {
                 AppIconButton(
                     label = Strings[StringKey.AI_CHAT_DETACH],

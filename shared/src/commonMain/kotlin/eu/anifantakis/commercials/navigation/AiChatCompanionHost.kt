@@ -67,8 +67,8 @@ internal expect fun AiChatCompanionHost(
     onClose: () -> Unit,
 )
 
-/** The overlay's drag-resize bounds. */
-internal val AI_PANEL_MIN_WIDTH = 320.dp
+/** The overlay's drag-resize bounds; the floor keeps the header usable. */
+internal val AI_PANEL_MIN_WIDTH = 360.dp
 
 /** How much of the app must stay visible (and clickable) beside the overlay. */
 internal val AI_PANEL_MIN_UNCOVERED = 240.dp
