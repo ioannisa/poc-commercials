@@ -53,6 +53,11 @@ class AiChatService(
             install(HttpTimeout) {
                 requestTimeoutMillis = 180_000
                 connectTimeoutMillis = 15_000
+                // Without this, OkHttp's 10s READ default applies - and a model
+                // "thinking" longer than 10s before the first response byte
+                // kills the round with a SocketTimeoutException (surfaced to
+                // clients as an unexplained 406 before StatusPages was fixed).
+                socketTimeoutMillis = 180_000
             }
         }
     }

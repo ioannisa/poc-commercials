@@ -77,12 +77,19 @@ class GeminiAiProvider(
                 if (tools.isNotEmpty()) put("tools", buildJsonArray { add(toolDefs) })
                 putJsonObject("generationConfig") { put("maxOutputTokens", maxTokens) }
             }
-            val response = http.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
-            ) {
-                header("x-goog-api-key", apiKey)
-                contentType(ContentType.Application.Json)
-                setBody(body.toString())
+            // Transport failures (timeouts, DNS, resets) become a clean 502
+            // with the provider named - never an unhandled 500/406.
+            val response = try {
+                http.post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent"
+                ) {
+                    header("x-goog-api-key", apiKey)
+                    contentType(ContentType.Application.Json)
+                    setBody(body.toString())
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                throw AiProviderException("Gemini: ${e.message ?: "network failure"}", e)
             }
             val text = response.bodyAsText()
             if (!response.status.isSuccess()) {

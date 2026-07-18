@@ -89,10 +89,17 @@ class OpenAiAiProvider(
                 if (tools.isNotEmpty()) put("tools", toolDefs)
                 previousResponseId?.let { put("previous_response_id", it) }
             }
-            val response = http.post("https://api.openai.com/v1/responses") {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
-                contentType(ContentType.Application.Json)
-                setBody(body.toString())
+            // Transport failures (timeouts, DNS, resets) become a clean 502
+            // with the provider named - never an unhandled 500/406.
+            val response = try {
+                http.post("https://api.openai.com/v1/responses") {
+                    header(HttpHeaders.Authorization, "Bearer $apiKey")
+                    contentType(ContentType.Application.Json)
+                    setBody(body.toString())
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                throw AiProviderException("OpenAI: ${e.message ?: "network failure"}", e)
             }
             val text = response.bodyAsText()
             if (!response.status.isSuccess()) {

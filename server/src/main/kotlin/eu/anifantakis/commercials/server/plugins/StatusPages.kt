@@ -6,6 +6,7 @@ import io.ktor.server.plugins.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Global exception -> HTTP status mapping, so every route gets consistent
@@ -18,30 +19,38 @@ import io.ktor.server.response.*
  *   unknown parameter/field checks) are the caller's fault -> 400.
  * - Everything else is a real server-side failure -> 500, logged with the
  *   request line since the response body alone won't tell us where it happened.
+ *
+ * The bodies are built by hand and sent with [ApplicationCall.respondText],
+ * NOT `respond(mapOf(...))`: ContentNegotiation is installed on the ROUTING
+ * root (it must be - the MCP subtree overrides it, see Serialization.kt), but
+ * StatusPages handlers run OUTSIDE the routing pipeline, where no converter
+ * is registered. A `respond(map)` here therefore came back as a bare 406
+ * Not Acceptable with an empty body - the client saw "406" for what was
+ * actually a provider socket timeout.
  */
 fun Application.configureStatusPages() {
     install(StatusPages) {
         exception<BadRequestException> { call, cause ->
-            call.respond(
-                HttpStatusCode.BadRequest,
-                mapOf("error" to (cause.message ?: "Malformed request"))
-            )
+            call.respondErrorJson(HttpStatusCode.BadRequest, cause.message ?: "Malformed request")
         }
         exception<IllegalArgumentException> { call, cause ->
-            call.respond(
-                HttpStatusCode.BadRequest,
-                mapOf("error" to (cause.message ?: "Invalid request"))
-            )
+            call.respondErrorJson(HttpStatusCode.BadRequest, cause.message ?: "Invalid request")
         }
         exception<Throwable> { call, cause ->
             call.application.log.error(
                 "Unhandled error for ${call.request.httpMethod.value} ${call.request.uri}",
                 cause
             )
-            call.respond(
-                HttpStatusCode.InternalServerError,
-                mapOf("error" to (cause.message ?: "Internal server error"))
-            )
+            call.respondErrorJson(HttpStatusCode.InternalServerError, cause.message ?: "Internal server error")
         }
     }
+}
+
+/** `{"error": "..."}` with correct JSON escaping, independent of ContentNegotiation. */
+private suspend fun ApplicationCall.respondErrorJson(status: HttpStatusCode, message: String) {
+    respondText(
+        text = """{"error":${JsonPrimitive(message)}}""",
+        contentType = ContentType.Application.Json,
+        status = status,
+    )
 }
