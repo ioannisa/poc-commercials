@@ -12,6 +12,8 @@ internal data class AiChatRequestDto(
     val messages: List<AiChatTurnDto>,
     val provider: String? = null,
     val model: String? = null,
+    /** What the user is looking at right now (short line; server caps it). */
+    val screenContext: String? = null,
 )
 
 @Serializable

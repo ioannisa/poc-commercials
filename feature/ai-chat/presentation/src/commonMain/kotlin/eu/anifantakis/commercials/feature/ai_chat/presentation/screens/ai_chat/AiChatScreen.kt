@@ -45,6 +45,7 @@ import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.MarkdownTypography
 import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.UserSession
+import eu.anifantakis.commercials.core.domain.context.ActiveScreenContext
 import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
@@ -147,6 +148,7 @@ class AiChatViewModel(
     private val refreshBus: DataRefreshBus,
     private val session: UserSession,
     private val historyStore: AiChatHistoryStore,
+    private val screenContext: ActiveScreenContext,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
@@ -233,7 +235,7 @@ class AiChatViewModel(
         val history = (s.messages + AiChatMessage(AiChatRole.USER, text)).toImmutableList()
         _state.update { it.copy(messages = history, input = "", busy = true, error = null) }
         viewModelScope.launch {
-            when (val result = repository.send(history, provider, model)) {
+            when (val result = repository.send(history, provider, model, screenContext.current)) {
                 is DataResult.Success -> {
                     _state.update {
                         it.copy(

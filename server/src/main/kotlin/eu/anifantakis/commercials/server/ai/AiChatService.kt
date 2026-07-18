@@ -89,6 +89,7 @@ class AiChatService(
         providerId: String?,
         modelId: String?,
         stationId: String? = null,
+        screenContext: String? = null,
     ): AiChatReply {
         val entries = catalog
         if (entries.isEmpty()) throw AiProviderException("AI assistant is not configured (server.yaml ai:)")
@@ -124,7 +125,7 @@ class AiChatService(
             if (activeStation != null) add(switchStationTool(user, activeStation, clientActions))
         }
         val reply = provider(entry).chat(
-            system = systemPrompt(user, activeStation, mutations),
+            system = systemPrompt(user, activeStation, mutations, screenContext),
             history = history,
             tools = tools,
             model = model,
@@ -267,7 +268,12 @@ class AiChatService(
             }
     }
 
-    private fun systemPrompt(user: AuthUser, activeStationId: String? = null, mutations: Boolean = false): String {
+    private fun systemPrompt(
+        user: AuthUser,
+        activeStationId: String? = null,
+        mutations: Boolean = false,
+        screenContext: String? = null,
+    ): String {
         val stations = user.grants.joinToString("\n") { grant ->
             val name = registry.config(grant.stationId)?.name ?: grant.stationId
             "- ${grant.stationId} (\"$name\") - role ${grant.role.name}" +
@@ -305,6 +311,10 @@ class AiChatService(
             Use the available tools to answer questions about schedules, breaks, spots, contracts
             and customers.
             $stationRule
+            ${screenContext?.let {
+                "\nRIGHT NOW the user is looking at: $it\n" +
+                    "Resolve deictic questions (\"what am I looking at?\", \"this break\", \"here\") against it."
+            } ?: ""}
 
             ${if (mutations) MUTATIONS_RULE else READ_ONLY_RULE}
 

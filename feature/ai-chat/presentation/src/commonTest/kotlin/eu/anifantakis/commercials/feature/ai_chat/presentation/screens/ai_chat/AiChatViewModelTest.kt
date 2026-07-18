@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.auth.UserSession
+import eu.anifantakis.commercials.core.domain.context.ActiveScreenContext
 import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
@@ -122,15 +123,19 @@ class AiChatViewModelTest {
         var lastExecuteTool: String? = null
         var lastExecuteArgs: String? = null
 
+        var lastScreenContext: String? = null
+
         override suspend fun send(
             history: List<AiChatMessage>,
             provider: String,
             model: String,
+            screenContext: String?,
         ): DataResult<AiChatReply, RemoteError> {
             calls++
             lastHistory = history
             lastProvider = provider
             lastModel = model
+            lastScreenContext = screenContext
             return result
         }
 
@@ -147,7 +152,7 @@ class AiChatViewModelTest {
 
     @Test
     fun initSelectsDefaultProviderAndModel() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
 
         vm.onAction(AiChatIntent.Init(catalog))
 
@@ -159,7 +164,7 @@ class AiChatViewModelTest {
 
     @Test
     fun selectProviderResetsModelToThatProvidersFirst() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
@@ -178,7 +183,7 @@ class AiChatViewModelTest {
 
     @Test
     fun reInitKeepsAStillValidSelection() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
         vm.onAction(AiChatIntent.SelectModel("gemini-pro"))
@@ -200,7 +205,7 @@ class AiChatViewModelTest {
         val repo = FakeAiChatRepository(
             result = DataResult.Success(AiChatReply("3 spots", listOf(AiToolStep("list_breaks", isError = false)))),
         )
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
 
@@ -227,7 +232,7 @@ class AiChatViewModelTest {
     @Test
     fun failureKeepsUserTurnAndShowsError() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository(result = DataResult.Failure(RemoteError.Server("boom")))
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.InputChanged("hi"))
@@ -243,7 +248,7 @@ class AiChatViewModelTest {
     @Test
     fun blankInputOrMissingSelectionDoesNotSend() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository()
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.InputChanged("   "))
@@ -252,7 +257,7 @@ class AiChatViewModelTest {
         assertTrue(vm.state.messages.isEmpty())
 
         // No catalog (feature hidden mid-session): Send must be a no-op too.
-        val bare = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val bare = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         bare.onAction(AiChatIntent.InputChanged("hello"))
         bare.onAction(AiChatIntent.Send)
         assertEquals(0, repo.calls)
@@ -262,7 +267,7 @@ class AiChatViewModelTest {
     @Test
     fun initRestoresThePersistedSelection() = runTest(testDispatcher) {
         val prefs = FakeAiChatPreferences(provider = "gemini", model = "gemini-pro")
-        val vm = AiChatViewModel(FakeAiChatRepository(), prefs, DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(FakeAiChatRepository(), prefs, DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
 
         vm.onAction(AiChatIntent.Init(catalog))
 
@@ -271,7 +276,7 @@ class AiChatViewModelTest {
         assertEquals("gemini-pro", vm.state.selectedModel)
 
         // ...but a STALE pick (provider gone from server.yaml) falls through.
-        val vm2 = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(provider = "openai", model = "gpt-x"), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm2 = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(provider = "openai", model = "gpt-x"), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm2.onAction(AiChatIntent.Init(catalog))
         assertEquals("anthropic", vm2.state.selectedProviderId)
         assertEquals("claude-sonnet-5", vm2.state.selectedModel)
@@ -280,7 +285,7 @@ class AiChatViewModelTest {
     @Test
     fun selectionChangesPersistSilently() = runTest(testDispatcher) {
         val prefs = FakeAiChatPreferences()
-        val vm = AiChatViewModel(FakeAiChatRepository(), prefs, DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(FakeAiChatRepository(), prefs, DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
@@ -300,7 +305,7 @@ class AiChatViewModelTest {
         val bus = DataRefreshBus()
         var refreshes = 0
         val busJob = backgroundScope.launch { bus.events.collect { refreshes++ } }
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), bus, FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), bus, FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.InputChanged("add it"))
         vm.onAction(AiChatIntent.Send)
@@ -327,7 +332,7 @@ class AiChatViewModelTest {
         val repo = FakeAiChatRepository(
             result = DataResult.Success(AiChatReply("Ready.", emptyList(), listOf(proposal))),
         )
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.InputChanged("delete it"))
         vm.onAction(AiChatIntent.Send)
@@ -346,7 +351,7 @@ class AiChatViewModelTest {
             result = DataResult.Success(AiChatReply("Ready.", emptyList(), listOf(proposal))),
             executeResult = DataResult.Success(AiExecutionOutcome("Spot 9 not found", isError = true)),
         )
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.InputChanged("add it"))
         vm.onAction(AiChatIntent.Send)
@@ -365,7 +370,7 @@ class AiChatViewModelTest {
             ),
         )
         val fakeSession = FakeUserSession()
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), fakeSession, FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), fakeSession, FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.InputChanged("δούλεψε στο test tv"))
         vm.onAction(AiChatIntent.Send)
@@ -383,10 +388,21 @@ class AiChatViewModelTest {
     }
 
     @Test
+    fun sendSamplesTheActiveScreenContext() = runTest(testDispatcher) {
+        val repo = FakeAiChatRepository()
+        val ctx = ActiveScreenContext().apply { current = "Timetable grid: month 2026-07, selected 12:15" }
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ctx)
+        vm.onAction(AiChatIntent.Init(catalog))
+        vm.onAction(AiChatIntent.InputChanged("τι βλέπω;"))
+        vm.onAction(AiChatIntent.Send)
+        assertEquals("Timetable grid: month 2026-07, selected 12:15", repo.lastScreenContext)
+    }
+
+    @Test
     fun conversationsAutosaveRestoreAndDelete() = runTest(testDispatcher) {
         val store = FakeHistoryStore()
         val repo = FakeAiChatRepository()
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), store)
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), store, ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
 
         // Sending AUTOSAVES the conversation (user + assistant turns).
@@ -419,7 +435,7 @@ class AiChatViewModelTest {
     @Test
     fun clearResetsTheConversationButKeepsTheSelection() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository()
-        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore())
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences(), DataRefreshBus(), FakeUserSession(), FakeHistoryStore(), ActiveScreenContext())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
 

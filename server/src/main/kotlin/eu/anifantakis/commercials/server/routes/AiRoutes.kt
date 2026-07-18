@@ -31,6 +31,8 @@ data class AiChatRequestDto(
     val messages: List<AiChatTurnDto>,
     val provider: String? = null,
     val model: String? = null,
+    /** What the user is looking at right now (client-supplied, capped server-side). */
+    val screenContext: String? = null,
 )
 
 @Serializable
@@ -106,7 +108,10 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                 // model is told to scope everything to it (no "which station?").
                 val station = call.request.queryParameters["station"]?.trim()?.takeIf { it.isNotEmpty() }
                 try {
-                    val reply = aiChat.chat(user, history, request.provider, request.model, station)
+                    val reply = aiChat.chat(
+                        user, history, request.provider, request.model, station,
+                        screenContext = request.screenContext?.take(300),
+                    )
                     call.respond(
                         AiChatResponseDto(
                             text = reply.text,

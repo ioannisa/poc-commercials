@@ -11,6 +11,7 @@ interface RemoteAiChatDataSource {
         history: List<AiChatMessage>,
         provider: String,
         model: String,
+        screenContext: String?,
     ): DataResult<AiChatReply, RemoteError>
 
     suspend fun execute(

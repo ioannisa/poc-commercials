@@ -36,6 +36,7 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
         history: List<AiChatMessage>,
         provider: String,
         model: String,
+        screenContext: String?,
     ): DataResult<AiChatReply, RemoteError> =
         remoteCall {
             api.client.post("/api/ai/chat") {
@@ -55,6 +56,7 @@ class RemoteAiChatDataSourceImpl(private val api: ApiHttpClient) : RemoteAiChatD
                         },
                         provider = provider,
                         model = model,
+                        screenContext = screenContext,
                     )
                 )
             }.body<AiChatResponseDto>()

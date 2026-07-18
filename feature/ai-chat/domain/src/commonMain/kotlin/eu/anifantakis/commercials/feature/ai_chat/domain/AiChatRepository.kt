@@ -17,6 +17,7 @@ interface AiChatRepository {
         history: List<AiChatMessage>,
         provider: String,
         model: String,
+        screenContext: String? = null,
     ): DataResult<AiChatReply, RemoteError>
 
     /** Execute a proposal the user APPROVED (the server re-validates everything). */

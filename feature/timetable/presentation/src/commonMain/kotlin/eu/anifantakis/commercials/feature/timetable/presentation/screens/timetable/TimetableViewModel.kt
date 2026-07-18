@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.context.ActiveScreenContext
 import eu.anifantakis.commercials.core.domain.refresh.DataRefreshBus
 import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
@@ -212,6 +213,8 @@ class TimetableViewModel(
     private val clock: Clock = Clock.System,
     /** Cross-feature "data changed" signal (AI-chat mutations); default = inert bus for tests. */
     private val refreshBus: DataRefreshBus = DataRefreshBus(),
+    /** "What am I looking at" publisher the AI chat samples; inert default for tests. */
+    private val screenContext: ActiveScreenContext = ActiveScreenContext(),
 ) : BaseGlobalViewModel() {
 
     private val today = clock.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
@@ -273,6 +276,25 @@ class TimetableViewModel(
         // change land in the grid live.
         viewModelScope.launch {
             refreshBus.events.collect { if (session.isLoggedIn) reload() }
+        }
+
+        // Publish "what the user is looking at" for the AI assistant: month,
+        // view mode, and the selected cell (break time + day). Cheap string
+        // build on every state change, sampled once per chat request.
+        viewModelScope.launch {
+            _state.collect { s ->
+                val cell = s.breaks.getOrNull(s.selectedRow)?.let { slot ->
+                    val day = (s.selectedColumn + 1).toString().padStart(2, '0')
+                    val month = s.month.toString().padStart(2, '0')
+                    val hh = slot.time.hour.toString().padStart(2, '0')
+                    val mm = slot.time.minute.toString().padStart(2, '0')
+                    ", selected cell: break $hh:$mm on ${s.year}-$month-$day"
+                }.orEmpty()
+                screenContext.current =
+                    "Timetable grid of station '${s.selectedStation?.id ?: "?"}': month ${s.year}-" +
+                        s.month.toString().padStart(2, '0') +
+                        ", view mode ${s.viewMode.name}$cell"
+            }
         }
     }
 
