@@ -106,22 +106,26 @@ fun Application.configureRouting() {
         // OpenAPI spec (ktor { openApi { enabled } } in build.gradle.kts). Gated by
         // the `swagger` flag in server.yaml (default off) - a per-deployment toggle,
         // independent of developmentMode, so the super-admin "API Docs" link works
-        // wherever it is turned on. NOTE: when enabled this endpoint is
-        // UNAUTHENTICATED (a browser navigation carries no bearer), so the full API
-        // SHAPE - including admin routes - is browsable by anyone who can reach the
-        // server; executing any authenticated route still requires a valid token.
+        // wherever it is turned on. Guarded by HTTP Basic (AUTH_SWAGGER_BASIC),
+        // accepted only for the super administrator: the full API SHAPE - admin
+        // routes included - must not be browsable by anyone who reaches the public
+        // host. Basic (not bearer) because Swagger UI is a browser navigation with
+        // no Authorization header; the browser answers the 401 with its own login
+        // dialog and carries the credentials to the spec sub-request too.
         // Covers REST only; /mcp (JSON-RPC over SSE) is outside OpenAPI's scope.
         if (registry.swaggerEnabled) {
-            swaggerUI("swagger") {
-                info = OpenApiInfo("Commercials Manager API", "1.0.0")
-                // Inject the group (tag) descriptions the config DSL can't express:
-                // serialize the assembled doc ourselves after stamping API_TAGS on it.
-                source = OpenApiDocSource.Routing(
-                    contentType = ContentType.Application.Json,
-                    serializeModel = { doc ->
-                        SPEC_JSON.encodeToString(OpenApiDoc.serializer(), doc.copy(tags = API_TAGS))
-                    },
-                )
+            authenticate(AUTH_SWAGGER_BASIC) {
+                swaggerUI("swagger") {
+                    info = OpenApiInfo("Commercials Manager API", "1.0.0")
+                    // Inject the group (tag) descriptions the config DSL can't express:
+                    // serialize the assembled doc ourselves after stamping API_TAGS on it.
+                    source = OpenApiDocSource.Routing(
+                        contentType = ContentType.Application.Json,
+                        serializeModel = { doc ->
+                            SPEC_JSON.encodeToString(OpenApiDoc.serializer(), doc.copy(tags = API_TAGS))
+                        },
+                    )
+                }
             }
         }
 

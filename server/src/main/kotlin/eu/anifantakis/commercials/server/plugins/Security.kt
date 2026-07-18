@@ -18,6 +18,16 @@ import org.koin.ktor.ext.inject
 const val AUTH_BEARER = "auth-bearer"
 
 /**
+ * HTTP Basic auth guarding the /swagger docs. The API itself is bearer-only,
+ * but Swagger UI is reached by a browser NAVIGATION, which carries no
+ * Authorization header - so the one scheme a browser answers natively (a
+ * username/password dialog) is the only way to gate it. Validated against the
+ * users table and accepted ONLY for the super administrator; credentials
+ * travel over the proxy's TLS. See configureRouting's swaggerUI mount.
+ */
+const val AUTH_SWAGGER_BASIC = "auth-swagger-basic"
+
+/**
  * Bearer-token authentication: every request under an `authenticate` block
  * must carry `Authorization: Bearer <token>` where the token exists in the
  * auth_tokens table. Unknown/revoked tokens -> 401 automatically. The
@@ -31,6 +41,18 @@ fun Application.configureSecurity() {
             realm = "Commercials Manager"
             authenticate { credential ->
                 withContext(Dispatchers.IO) { authDb.findUserByToken(credential.token) }
+            }
+        }
+        basic(AUTH_SWAGGER_BASIC) {
+            realm = "Commercials Manager API docs"
+            validate { credential ->
+                withContext(Dispatchers.IO) {
+                    // Super-admin only: verifyCredentials returns the user (with
+                    // its is_admin flag); anyone who is not the admin is refused
+                    // so the browser re-challenges.
+                    authDb.verifyCredentials(credential.name, credential.password)
+                        ?.takeIf { it.isAdmin }
+                }
             }
         }
     }
