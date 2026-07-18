@@ -3,7 +3,8 @@
 The Ktor server can serve the BUILT WasmJS client itself: one process, one
 origin for page + API, so the existing Cloudflare tunnel makes the whole app
 reachable at `https://commercials.anifantakis.eu` — a complete remote demo
-with no second server and no CORS.
+with no second server and no CORS. The same hostname is also the MCP
+connector endpoint (`/mcp/http`) and the OAuth issuer (`publicBaseUrl`).
 
 ## One-time setup (already done on this machine)
 
@@ -11,9 +12,9 @@ with no second server and no CORS.
   ```yaml
   webApp: "webApp/build/dist/wasmJs/productionExecutable"
   ```
-- `~/.cloudflared/config.yml` has a second ingress hostname
-  (`commercials.anifantakis.eu → http://localhost:8080`), and the DNS CNAME
-  was created with:
+- `~/.cloudflared/config.yml` routes the single public hostname
+  (`commercials.anifantakis.eu → http://localhost:8080`; it replaced the
+  original `mcp.anifantakis.eu`), and the DNS CNAME was created with:
   ```bash
   cloudflared tunnel route dns commercials-mcp commercials.anifantakis.eu
   ```
@@ -56,6 +57,10 @@ tunnel when done — nothing is exposed while it is down (530 from Cloudflare).
   the distribution instead (step 1 takes ~1-2 minutes).
 - Optional: put a Cloudflare Access policy in front of
   `commercials.anifantakis.eu` (Zero Trust → Access) if the demo should ask
-  for an email code before the login screen — same as the mcp hostname.
+  for an email code before the login screen. CAREFUL: the SAME hostname now
+  carries `/mcp/http` and `/oauth/*` — native connectors and their OAuth
+  discovery cannot answer an Access challenge, so any Access app must either
+  scope its path to `/` demo pages or add bypass rules for `/mcp*`,
+  `/oauth*`, `/.well-known/*`, and `/api/*`.
 - The demo hits the REAL local databases. Log in as a demo user with grants
   on the demo stations if the client should not see production data.

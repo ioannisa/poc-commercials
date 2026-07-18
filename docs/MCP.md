@@ -163,7 +163,8 @@ OAuth or not. Public HTTPS (§4) is what unlocks them.
 ### Cloudflare tunnel — public HTTPS without a VPS (the dev/test deployment)
 
 A **named Cloudflare tunnel** exposes the dev machine's `localhost:8080` as
-`https://mcp.anifantakis.eu`: `cloudflared` keeps an *outbound* connection to
+`https://commercials.anifantakis.eu` (the app at `/`, the API under `/api`,
+the MCP connector at `/mcp/http`): `cloudflared` keeps an *outbound* connection to
 Cloudflare's edge, which terminates TLS (Universal SSL — no certificate to
 manage) and forwards requests through it. No public IP, no router ports, no
 reverse proxy. Requires the domain's DNS to be on Cloudflare.
@@ -174,7 +175,7 @@ reverse proxy. Requires the domain's DNS to be on Cloudflare.
 brew install cloudflared
 cloudflared tunnel login                                  # browser: authorize the zone
 cloudflared tunnel create commercials-mcp
-cloudflared tunnel route dns commercials-mcp mcp.anifantakis.eu   # writes the CNAME
+cloudflared tunnel route dns commercials-mcp commercials.anifantakis.eu   # writes the CNAME
 ```
 
 plus `~/.cloudflared/config.yml` pointing the hostname at the server:
@@ -183,14 +184,20 @@ plus `~/.cloudflared/config.yml` pointing the hostname at the server:
 tunnel: <tunnel-id from create>
 credentials-file: /Users/<you>/.cloudflared/<tunnel-id>.json
 ingress:
-  - hostname: mcp.anifantakis.eu
+  - hostname: commercials.anifantakis.eu
     service: http://localhost:8080
   - service: http_status:404
 ```
 
-and the §4 `server.yaml` keys: `publicBaseUrl: "https://mcp.anifantakis.eu"`,
-`mcpAllowedHosts: [mcp.anifantakis.eu, localhost, 127.0.0.1]`,
+and the §4 `server.yaml` keys: `publicBaseUrl: "https://commercials.anifantakis.eu"`,
+`mcpAllowedHosts: [commercials.anifantakis.eu, localhost, 127.0.0.1]`,
 `behindReverseProxy: true`.
+
+> **Hostname history:** the tunnel originally served `mcp.anifantakis.eu`;
+> once the server started serving the web client too (docs/WEB-DEMO.md), the
+> single hostname `commercials.anifantakis.eu` replaced it. Changing the
+> hostname changes the **OAuth issuer**, so every native connector must be
+> deleted and re-added with the new URL — old grants die with the old issuer.
 
 **Daily use:**
 

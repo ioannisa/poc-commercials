@@ -106,12 +106,12 @@ swagger: true
 # connectors (claude.ai, ChatGPT, Gemini, ...) need. Leave UNSET to keep OAuth off
 # (PAT access still works). Production: the https:// origin the reverse proxy
 # serves; no trailing slash.
-publicBaseUrl: "https://mcp.anifantakis.eu"
+publicBaseUrl: "https://commercials.anifantakis.eu"
 
 # Host-header allowlist for the MCP endpoints' DNS-rebinding guard. Localhost
 # entries keep Inspector / Claude Code working locally next to the tunnel host.
 mcpAllowedHosts:
-  - mcp.anifantakis.eu
+  - commercials.anifantakis.eu
   - localhost
   - 127.0.0.1
 
