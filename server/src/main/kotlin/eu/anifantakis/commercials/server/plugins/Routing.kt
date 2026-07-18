@@ -46,6 +46,7 @@ private val API_TAGS = listOf(
     Tag("Schedule", "Commercials schedule: breaks, placements, and the spot finder."),
     Tag("Reports", "PDF report generation (single and batch) and the station report logo."),
     Tag("Migration", "Legacy-dump migration console: browse, start, flow-map, and reset."),
+    Tag("AI", "In-app AI assistant: chat (blocking + streaming), approved-mutation execution, per-user usage, and out-of-band report pickup."),
     Tag("Health", "Liveness and database-connectivity probes."),
 )
 

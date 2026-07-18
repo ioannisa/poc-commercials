@@ -155,17 +155,6 @@ fun Route.aiRoutes(aiChat: AiChatService) {
             }
 
             /**
-             * Execute a confirmation card the user APPROVED: replays the
-             * prepared tool call with confirm=true, as the calling user.
-             * Everything is re-validated server-side (mutation gate, staff
-             * role, station pin, and the tool's own data checks) - a stale
-             * proposal fails honestly with the tool's error. A tool-level
-             * failure is a 200 with isError=true; only an invalid REQUEST
-             * (unknown tool, wrong station, mutations off) is a 400.
-             *
-             * Tag: AI
-             */
-            /**
              * STREAMING chat: same request as /chat, but the response is
              * NDJSON - one {"type":"step",...} line the moment each tool
              * starts (the user watches the work happen instead of a blank
@@ -279,6 +268,17 @@ fun Route.aiRoutes(aiChat: AiChatService) {
                 call.respondBytes(report.first, ContentType.Application.Pdf)
             }
 
+            /**
+             * Execute a confirmation card the user APPROVED: replays the
+             * prepared tool call with confirm=true, as the calling user.
+             * Everything is re-validated server-side (mutation gate, staff
+             * role, station pin, and the tool's own data checks) - a stale
+             * proposal fails honestly with the tool's error. A tool-level
+             * failure is a 200 with isError=true; only an invalid REQUEST
+             * (unknown tool, wrong station, mutations off) is a 400.
+             *
+             * Tag: AI
+             */
             post("/execute") {
                 val user = call.authUser()
                 val request = call.receive<AiExecuteRequestDto>()
