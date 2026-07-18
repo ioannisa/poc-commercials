@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -34,14 +34,23 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownTypography
+import com.mikepenz.markdown.model.MarkdownTypography
 import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
 import eu.anifantakis.commercials.core.domain.util.DataResult
-import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
+import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppLoadingIndicator
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
@@ -55,6 +64,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Strings
 import eu.anifantakis.commercials.core.presentation.string_resources.withArgs
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
 import kotlinx.collections.immutable.ImmutableList
@@ -94,6 +104,7 @@ sealed interface AiChatIntent {
 @Stable
 class AiChatViewModel(
     private val repository: AiChatRepository,
+    private val prefs: AiChatPreferences,
 ) : BaseGlobalViewModel() {
 
     private val _state = MutableStateFlow(AiChatState())
@@ -112,14 +123,19 @@ class AiChatViewModel(
 
     /**
      * Adopts the session's catalog. The keep-alive can change it mid-session
-     * (server.yaml edit), so a still-valid selection survives and anything
-     * else falls back to the default: first provider, its first model.
+     * (server.yaml edit), so a still-valid selection survives; before the
+     * first selection, the SILENTLY PERSISTED provider/model preference is
+     * tried (validated against the catalog - a stale entry from an edited
+     * server.yaml falls through); anything else lands on the default: first
+     * provider, its first model.
      */
     private fun init(providers: List<AiChatProviderOption>) {
         _state.update { s ->
             if (providers == s.providers) return
-            val provider = providers.firstOrNull { it.id == s.selectedProviderId } ?: providers.firstOrNull()
-            val model = provider?.models?.firstOrNull { it == s.selectedModel } ?: provider?.models?.firstOrNull()
+            val wantedProvider = s.selectedProviderId ?: prefs.provider.takeIf { it.isNotBlank() }
+            val provider = providers.firstOrNull { it.id == wantedProvider } ?: providers.firstOrNull()
+            val wantedModel = s.selectedModel ?: prefs.model.takeIf { it.isNotBlank() }
+            val model = provider?.models?.firstOrNull { it == wantedModel } ?: provider?.models?.firstOrNull()
             s.copy(
                 providers = providers.toImmutableList(),
                 selectedProviderId = provider?.id,
@@ -128,20 +144,24 @@ class AiChatViewModel(
         }
     }
 
-    /** Switching provider resets the model to THAT provider's default (first). */
+    /**
+     * Switching provider resets the model to THAT provider's default (first).
+     * Both picks persist silently - the next session restores them.
+     */
     private fun selectProvider(id: String) {
-        _state.update { s ->
-            val provider = s.providers.firstOrNull { it.id == id } ?: return
-            if (provider.id == s.selectedProviderId) return
-            s.copy(selectedProviderId = provider.id, selectedModel = provider.models.firstOrNull())
-        }
+        val s = _state.value
+        val provider = s.providers.firstOrNull { it.id == id } ?: return
+        if (provider.id == s.selectedProviderId) return
+        val model = provider.models.firstOrNull()
+        _state.update { it.copy(selectedProviderId = provider.id, selectedModel = model) }
+        prefs.provider = provider.id
+        prefs.model = model.orEmpty()
     }
 
     private fun selectModel(model: String) {
-        _state.update { s ->
-            if (s.selectedProvider?.models?.contains(model) != true) return
-            s.copy(selectedModel = model)
-        }
+        if (_state.value.selectedProvider?.models?.contains(model) != true) return
+        _state.update { it.copy(selectedModel = model) }
+        prefs.model = model
     }
 
     private fun send() {
@@ -175,26 +195,29 @@ class AiChatViewModel(
 /**
  * The in-app AI assistant: ask about schedules, breaks, spots, contracts and
  * customers in natural language. Phase 1 is READ-ONLY - the server exposes
- * only the read tools to the model. Reached from Preferences when the server
- * configures at least one `ai:` provider; [providers] is the session's
- * catalog and drives the provider/model dropdowns.
+ * only the read tools to the model. Rendered as a COMPANION PANEL docked
+ * beside the running screen (the sparkles toolbar button and the Preferences
+ * entry toggle it); [providers] is the session's catalog and drives the
+ * provider/model dropdowns.
  */
 @Composable
 fun AiChatScreenRoot(
     providers: () -> List<AiChatProviderOption>,
-    onBack: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: AiChatViewModel = koinViewModel(),
 ) {
     val catalog = providers()
     LaunchedEffect(catalog) { viewModel.onAction(AiChatIntent.Init(catalog)) }
-    AiChatScreen(state = viewModel.state, onIntent = viewModel::onAction, onBack = onBack)
+    AiChatScreen(state = viewModel.state, onIntent = viewModel::onAction, onClose = onClose, modifier = modifier)
 }
 
 @Composable
 private fun AiChatScreen(
     state: AiChatState,
     onIntent: (AiChatIntent) -> Unit,
-    onBack: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
     // Keep the newest turn in view as the conversation grows.
@@ -203,7 +226,7 @@ private fun AiChatScreen(
         if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
-    Column(Modifier.fillMaxSize().padding(UIConst.paddingRegular)) {
+    Column(modifier.padding(UIConst.paddingRegular)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -216,15 +239,16 @@ private fun AiChatScreen(
                 variant = AppButtonVariant.TEXT,
                 enabled = !state.busy && state.messages.isNotEmpty(),
             )
-            AppButton(
-                text = Strings[StringKey.COMMON_CLOSE],
-                onClick = onBack,
-                variant = AppButtonVariant.SECONDARY,
+            AppIconButton(
+                label = Strings[StringKey.COMMON_CLOSE],
+                icon = AppDrawableRepo.close,
+                onClick = onClose,
             )
         }
 
         // Which brain answers: provider + that provider's models. A lone option
         // renders as plain text - nothing else to pick, so no dropdown at all.
+        // Two stacked rows: side by side they overflow the panel's width.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -239,6 +263,12 @@ private fun AiChatScreen(
                 enabled = !state.busy,
                 onSelect = { onIntent(AiChatIntent.SelectProvider(it)) },
             )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+        ) {
             AppText(Strings[StringKey.AI_CHAT_MODEL], AppTextStyle.NOTE)
             ChatDropdown(
                 options = state.selectedProvider?.models.orEmpty().toImmutableList(),
@@ -370,6 +400,41 @@ private fun ChatDropdown(
     }
 }
 
+/**
+ * Markdown typography matched to the design system: body text at the SAME
+ * size as [AppTextStyle.BODY] (the renderer's default bodyLarge reads a step
+ * bigger than the user's own bubbles), code in the design system's mono face,
+ * headings tamed for a narrow panel, tables at TABLE_CELL size. Built from
+ * [AppTheme.typography], which the app-wide font-size preference already
+ * scales - so the chat resizes with every other screen.
+ */
+@Composable
+private fun chatMarkdownTypography(): MarkdownTypography {
+    val t = AppTheme.typography
+    val m = t.material
+    val body = m.bodyMedium
+    return markdownTypography(
+        h1 = t.sectionTitle,
+        h2 = m.titleMedium,
+        h3 = m.titleMedium,
+        h4 = m.titleSmall,
+        h5 = m.titleSmall,
+        h6 = m.titleSmall,
+        text = body,
+        code = t.mono,
+        inlineCode = t.mono,
+        quote = body.copy(fontStyle = FontStyle.Italic),
+        paragraph = body,
+        ordered = body,
+        bullet = body,
+        list = body,
+        textLink = TextLinkStyles(
+            style = body.copy(fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline).toSpanStyle()
+        ),
+        table = m.bodySmall,
+    )
+}
+
 /** Brand nouns, identical in every language - not localization material. */
 private fun providerDisplayName(id: String): String = when (id) {
     "anthropic" -> "Anthropic"
@@ -378,7 +443,13 @@ private fun providerDisplayName(id: String): String = when (id) {
     else -> id
 }
 
-/** User turns hug the end edge, assistant turns the start edge (auto-mirrors in RTL). */
+/**
+ * User turns hug the end edge, assistant turns the start edge (auto-mirrors in
+ * RTL). Assistant turns render as MARKDOWN (models emit it regardless of
+ * prompting - GFM tables included); the user's own words stay plain text.
+ * Everything sits in a [SelectionContainer], so answers can be selected and
+ * copied (one container per bubble: selection never straddles messages).
+ */
 @Composable
 private fun ChatBubble(message: AiChatMessage) {
     val isUser = message.role == AiChatRole.USER
@@ -388,15 +459,21 @@ private fun ChatBubble(message: AiChatMessage) {
                 .align(if (isUser) Alignment.CenterEnd else Alignment.CenterStart)
                 .widthIn(max = 560.dp),
         ) {
-            Column(Modifier.padding(UIConst.paddingSmall)) {
-                AppText(message.text, AppTextStyle.BODY)
-                if (message.steps.isNotEmpty()) {
-                    AppText(
-                        Strings[StringKey.AI_CHAT_TOOLS_USED].withArgs(
-                            listOf(message.steps.joinToString(", ") { it.tool })
-                        ),
-                        AppTextStyle.TINY,
-                    )
+            SelectionContainer {
+                Column(Modifier.padding(UIConst.paddingSmall)) {
+                    if (isUser) {
+                        AppText(message.text, AppTextStyle.BODY)
+                    } else {
+                        Markdown(message.text, typography = chatMarkdownTypography())
+                    }
+                    if (message.steps.isNotEmpty()) {
+                        AppText(
+                            Strings[StringKey.AI_CHAT_TOOLS_USED].withArgs(
+                                listOf(message.steps.joinToString(", ") { it.tool })
+                            ),
+                            AppTextStyle.TINY,
+                        )
+                    }
                 }
             }
         }

@@ -5,10 +5,18 @@ spots, contracts and customers in natural language. **Phase 1 is read-only**:
 the model can look things up but cannot modify anything (mutations with
 in-chat confirmation are a follow-up).
 
-Reached two ways, both visible ONLY when the server has at least one provider
-key: the **sparkles button** in the main-screen toolbar (next to the
-Preferences gear) and Preferences → Assistant. In the chat, **Enter sends**
-(Shift+Enter inserts a newline). The chat is **pinned to the application's
+The chat is a **companion**: on Desktop it opens as a separate, resizable,
+**always-on-top OS window** (the main window keeps its full width - a small
+display never squeezes the schedule, and the chat can live on a second
+monitor); on the Web it docks as a drag-resizable side panel whose width is
+capped so the main content never drops below its working minimum. Either way
+the schedule stays visible and live beside it, and the conversation survives
+closing/reopening the companion and navigating. It is toggled by the **sparkles
+button** in the main-screen toolbar (next to the Preferences gear) or opened
+from Preferences → Assistant - both visible ONLY when the server has at least
+one provider key. **Enter sends** (Shift+Enter inserts a newline). Assistant
+answers render as **GitHub-flavoured Markdown** (tables included) and every
+bubble is **selectable/copyable**. The chat is **pinned to the application's
 active station**: every client request already carries `?station=<selected>`,
 so the model scopes every answer to it, never asks "which station?", and
 politely refuses questions about other stations (switch station in the app

@@ -177,8 +177,10 @@ class AiChatService(
             emails. If asked to change something, explain politely that modifications from the chat
             are not enabled yet and describe how to do it in the application instead.
 
-            Answer in the language the user writes in. Be concise and factual; prefer short tables
-            or lists for schedule data. Never invent data - if a tool returns nothing, say so.
+            Answer in the language the user writes in. Be concise and factual. Your answers are
+            rendered as GitHub-flavoured Markdown: use markdown tables for tabular data (schedule
+            lists, spot breakdowns) and inline code for ids/codes. Never invent data - if a tool
+            returns nothing, say so.
         """.trimIndent()
     }
 

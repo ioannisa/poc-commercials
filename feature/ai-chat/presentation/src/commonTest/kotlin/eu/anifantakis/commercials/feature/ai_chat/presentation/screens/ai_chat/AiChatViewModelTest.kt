@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatMessage
+import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatPreferences
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatReply
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRepository
 import eu.anifantakis.commercials.feature.ai_chat.domain.AiChatRole
@@ -55,6 +56,12 @@ class AiChatViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private class FakeAiChatPreferences(
+        override var provider: String = "",
+        override var model: String = "",
+        override var panelWidthDp: Int = AiChatPreferences.DEFAULT_PANEL_WIDTH_DP,
+    ) : AiChatPreferences
+
     private class FakeAiChatRepository(
         var result: DataResult<AiChatReply, RemoteError> =
             DataResult.Success(AiChatReply("Hello!", emptyList())),
@@ -79,7 +86,7 @@ class AiChatViewModelTest {
 
     @Test
     fun initSelectsDefaultProviderAndModel() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences())
 
         vm.onAction(AiChatIntent.Init(catalog))
 
@@ -91,7 +98,7 @@ class AiChatViewModelTest {
 
     @Test
     fun selectProviderResetsModelToThatProvidersFirst() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
@@ -110,7 +117,7 @@ class AiChatViewModelTest {
 
     @Test
     fun reInitKeepsAStillValidSelection() = runTest(testDispatcher) {
-        val vm = AiChatViewModel(FakeAiChatRepository())
+        val vm = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
         vm.onAction(AiChatIntent.SelectModel("gemini-pro"))
@@ -132,7 +139,7 @@ class AiChatViewModelTest {
         val repo = FakeAiChatRepository(
             result = DataResult.Success(AiChatReply("3 spots", listOf(AiToolStep("list_breaks", isError = false)))),
         )
-        val vm = AiChatViewModel(repo)
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
 
@@ -159,7 +166,7 @@ class AiChatViewModelTest {
     @Test
     fun failureKeepsUserTurnAndShowsError() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository(result = DataResult.Failure(RemoteError.Server("boom")))
-        val vm = AiChatViewModel(repo)
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.InputChanged("hi"))
@@ -175,7 +182,7 @@ class AiChatViewModelTest {
     @Test
     fun blankInputOrMissingSelectionDoesNotSend() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository()
-        val vm = AiChatViewModel(repo)
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
 
         vm.onAction(AiChatIntent.InputChanged("   "))
@@ -184,7 +191,7 @@ class AiChatViewModelTest {
         assertTrue(vm.state.messages.isEmpty())
 
         // No catalog (feature hidden mid-session): Send must be a no-op too.
-        val bare = AiChatViewModel(repo)
+        val bare = AiChatViewModel(repo, FakeAiChatPreferences())
         bare.onAction(AiChatIntent.InputChanged("hello"))
         bare.onAction(AiChatIntent.Send)
         assertEquals(0, repo.calls)
@@ -192,9 +199,41 @@ class AiChatViewModelTest {
     }
 
     @Test
+    fun initRestoresThePersistedSelection() = runTest(testDispatcher) {
+        val prefs = FakeAiChatPreferences(provider = "gemini", model = "gemini-pro")
+        val vm = AiChatViewModel(FakeAiChatRepository(), prefs)
+
+        vm.onAction(AiChatIntent.Init(catalog))
+
+        // The silently persisted pick wins over the catalog default...
+        assertEquals("gemini", vm.state.selectedProviderId)
+        assertEquals("gemini-pro", vm.state.selectedModel)
+
+        // ...but a STALE pick (provider gone from server.yaml) falls through.
+        val vm2 = AiChatViewModel(FakeAiChatRepository(), FakeAiChatPreferences(provider = "openai", model = "gpt-x"))
+        vm2.onAction(AiChatIntent.Init(catalog))
+        assertEquals("anthropic", vm2.state.selectedProviderId)
+        assertEquals("claude-sonnet-5", vm2.state.selectedModel)
+    }
+
+    @Test
+    fun selectionChangesPersistSilently() = runTest(testDispatcher) {
+        val prefs = FakeAiChatPreferences()
+        val vm = AiChatViewModel(FakeAiChatRepository(), prefs)
+        vm.onAction(AiChatIntent.Init(catalog))
+
+        vm.onAction(AiChatIntent.SelectProvider("gemini"))
+        assertEquals("gemini", prefs.provider)
+        assertEquals("gemini-flash", prefs.model)   // provider switch resets to ITS default
+
+        vm.onAction(AiChatIntent.SelectModel("gemini-pro"))
+        assertEquals("gemini-pro", prefs.model)
+    }
+
+    @Test
     fun clearResetsTheConversationButKeepsTheSelection() = runTest(testDispatcher) {
         val repo = FakeAiChatRepository()
-        val vm = AiChatViewModel(repo)
+        val vm = AiChatViewModel(repo, FakeAiChatPreferences())
         vm.onAction(AiChatIntent.Init(catalog))
         vm.onAction(AiChatIntent.SelectProvider("gemini"))
 

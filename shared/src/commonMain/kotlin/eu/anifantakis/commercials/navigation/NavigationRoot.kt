@@ -5,6 +5,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -43,8 +47,6 @@ import eu.anifantakis.commercials.feature.auth.presentation.screens.change_passw
 import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_mcp.AdminMcpDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
-import eu.anifantakis.commercials.feature.ai_chat.presentation.AiChatNavType
-import eu.anifantakis.commercials.feature.ai_chat.presentation.aiChatEntries
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
 import eu.anifantakis.commercials.feature.migration_console.presentation.MigrationNavType
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
@@ -108,6 +110,12 @@ fun NavigationRoot() {
     // App-level dialogs: each belongs to a feature (own Root + ViewModel),
     // but the launch points live on other features' screens, so the app
     // layer renders them.
+    // AI assistant COMPANION PANEL: chrome, not a route - it opens BESIDE the
+    // current screen (docked at the end edge) so the schedule stays visible
+    // and live while chatting. Hosted here so the ViewModel outlives toggling
+    // and navigation - the conversation survives both.
+    var showAiChat by remember { mutableStateOf(false) }
+
     var showEmailDialog by remember { mutableStateOf(false) }
     if (showEmailDialog) {
         SendScheduleEmailDialogRoot(onDismiss = { showEmailDialog = false })
@@ -168,12 +176,14 @@ fun NavigationRoot() {
     }
 
     ApplicationScaffold { scaffoldPadding ->
+        BoxWithConstraints(Modifier.padding(scaffoldPadding)) {
+        Row {
+            Box(Modifier.weight(1f)) {
         NavDisplay(
             backStack = navigator.backStack,
             onBack = {
                 if (!globalStateContainer.state.value.isCriticalLoading) navigator.goBack()
             },
-            modifier = Modifier.padding(scaffoldPadding),
             entryDecorators = listOf(
                 rememberSaveableStateHolderNavEntryDecorator(),   // must be first
                 rememberViewModelStoreNavEntryDecorator()
@@ -201,7 +211,7 @@ fun NavigationRoot() {
                         }
                     },
                     onPreferences = { navigator.navigate(PreferencesNavType.Preferences) },
-                    onAiChat = { navigator.navigate(AiChatNavType.AiChat) },
+                    onAiChat = { showAiChat = !showAiChat },
                 )
 
                 preferencesEntries(
@@ -223,10 +233,8 @@ fun NavigationRoot() {
                             AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
                         )
                     },
-                    onAiChat = { navigator.navigate(AiChatNavType.AiChat) },
+                    onAiChat = { showAiChat = true },
                 )
-
-                aiChatEntries(navigator, providers = { authSession.aiChatProviders })
 
                 userManagementEntries(
                     navigator = navigator,
@@ -239,5 +247,20 @@ fun NavigationRoot() {
                 databasesEntries(navigator)
             }
         )
+            }
+
+            // The companion: an always-on-top OS window on desktop, a docked
+            // side panel on the web (see AiChatCompanionHost). Catalog emptied
+            // by a server.yaml change or logout hides it even while open.
+            val aiAvailable = remember(authRevision) { authSession.isLoggedIn && authSession.aiChatProviders.isNotEmpty() }
+            AiChatCompanionHost(
+                visible = showAiChat && aiAvailable,
+                windowWidth = this@BoxWithConstraints.maxWidth,
+                providers = { authSession.aiChatProviders },
+                onClose = { showAiChat = false },
+            )
+        }
+        }
     }
 }
+

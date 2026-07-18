@@ -825,10 +825,15 @@ private fun AccountBadge(displayName: String, isAdmin: Boolean, role: AppRole) {
         horizontalAlignment = Alignment.End,
         modifier = Modifier.padding(horizontal = UIConst.paddingSmall, vertical = UIConst.paddingHairline)
     ) {
-        AppText(displayName, AppTextStyle.BODY_STRONG)
+        // Single line + ellipsis: when the window (or the AI companion panel)
+        // squeezes the toolbar, the name must truncate - never wrap into a
+        // one-letter-per-line column.
+        AppText(displayName, AppTextStyle.BODY_STRONG, maxLines = 1, overflow = TextOverflow.Ellipsis)
         AppText(
             if (isAdmin) Strings[StringKey.ROLE_SUPER_ADMIN] else Strings[role.toStringKey()],
             AppTextStyle.TINY,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

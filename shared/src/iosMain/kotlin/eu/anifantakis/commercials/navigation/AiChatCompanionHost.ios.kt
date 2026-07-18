@@ -1,0 +1,14 @@
+package eu.anifantakis.commercials.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
+import eu.anifantakis.commercials.core.domain.auth.AiChatProviderOption
+
+/** Compile-only target: the docked panel keeps the expect satisfied. */
+@Composable
+internal actual fun AiChatCompanionHost(
+    visible: Boolean,
+    windowWidth: Dp,
+    providers: () -> List<AiChatProviderOption>,
+    onClose: () -> Unit,
+) = DockedAiChatPanel(visible, windowWidth, providers, onClose)
