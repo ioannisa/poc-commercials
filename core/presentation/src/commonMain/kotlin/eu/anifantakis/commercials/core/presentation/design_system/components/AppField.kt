@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ fun AppWireframeField(
     singleLine: Boolean = true,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
     val t = AppTheme.visualTokens
     // iOS native text input (native caret/selection/system context menu) is
@@ -91,6 +93,9 @@ fun AppWireframeField(
         singleLine = singleLine,
         visualTransformation = visualTransformation,
         keyboardOptions = effectiveKeyboardOptions,
+        // The IME-action callback (e.g. Enter/Done submits a form). Physical
+        // Enter on a single-line field routes here on desktop/web too.
+        keyboardActions = keyboardActions,
         shape = RoundedCornerShape(t.cornerSmall),
         // Must be the SAME source we read isFocused from - otherwise the field spins
         // up its own internal one, our isFocused stays false forever, and the label
@@ -115,6 +120,7 @@ fun AppTextField(
     errorText: String? = null,
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) = AppWireframeField(
     value = value,
     onValueChange = onValueChange,
@@ -129,6 +135,7 @@ fun AppTextField(
     errorText = errorText,
     singleLine = singleLine,
     keyboardOptions = keyboardOptions,
+    keyboardActions = keyboardActions,
 )
 
 /**
@@ -148,6 +155,7 @@ fun AppPasswordField(
     isError: Boolean = false,
     errorText: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) = AppWireframeField(
     value = value,
     onValueChange = onValueChange,
@@ -172,6 +180,7 @@ fun AppPasswordField(
     visualTransformation =
         if (visible) VisualTransformation.None else PasswordVisualTransformation(),
     keyboardOptions = keyboardOptions,
+    keyboardActions = keyboardActions,
 )
 
 // The base field: the states the thin wrappers cannot show - read-only, a caller

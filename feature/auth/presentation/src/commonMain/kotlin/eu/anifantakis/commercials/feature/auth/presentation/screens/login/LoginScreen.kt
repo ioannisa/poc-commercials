@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -123,6 +124,9 @@ private fun LoginScreen(
                                     leadingIcon = AppDrawableRepo.lock,
                                     enabled = !state.isLoading,
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    // Enter submits (the VM's canSubmit guard makes
+                                    // it a no-op on empty/loading) - no mouse trip.
+                                    keyboardActions = KeyboardActions(onDone = { onIntent(LoginIntent.Submit) }),
                                 )
                                 Spacer(Modifier.height(UIConst.paddingSmall))
                                 // Default OFF: a shared control-room machine
@@ -168,6 +172,8 @@ private fun LoginScreen(
                                     leadingIcon = AppDrawableRepo.lock,
                                     enabled = !state.isLoading,
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    // Enter completes the reset too (same guard).
+                                    keyboardActions = KeyboardActions(onDone = { onIntent(LoginIntent.Submit) }),
                                 )
                                 if (state.lockSeconds > 0) {
                                     Spacer(Modifier.height(UIConst.paddingCompact))
