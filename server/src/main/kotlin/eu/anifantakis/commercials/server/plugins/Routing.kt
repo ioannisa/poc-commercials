@@ -23,6 +23,8 @@ import io.ktor.openapi.OpenApiInfo
 import io.ktor.openapi.Tag
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.http.content.staticFiles
+import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.swagger.swaggerUI
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -62,6 +64,44 @@ fun Application.configureRouting() {
     val aiChatService = AiChatService(registry, mcpToolServices, aiUsageDb)
 
     routing {
+        // Serve the BUILT web client at `/` when server.yaml points at its
+        // distribution (webApp:). One process, one ORIGIN for page + API - a
+        // tunnel/proxy hostname aimed at this server is a complete remote
+        // deployment: no CORS, no second server, and HTTPS at the edge gives
+        // the browser the secure context KSafe's WebCrypto needs. Explicit
+        // routes (/api, /mcp, /oauth, /swagger) win over the static tailcard.
+        var webMounted = false
+        registry.webAppPath?.let { path ->
+            val dir = java.io.File(path)
+            if (dir.isDirectory) {
+                webMounted = true
+                // The bundled config.properties points at localhost - answer it
+                // DYNAMICALLY with the origin the request came through instead
+                // (XForwardedHeaders makes that the public https origin behind
+                // the tunnel), so the same build works on every hostname.
+                // The exact route beats staticFiles' tailcard.
+                get("/config.properties") {
+                    val o = call.request.origin
+                    val port = when {
+                        o.scheme == "http" && o.serverPort == 80 -> ""
+                        o.scheme == "https" && o.serverPort == 443 -> ""
+                        else -> ":${o.serverPort}"
+                    }
+                    call.respondText(
+                        "server.baseUrl=${o.scheme}://${o.serverHost}$port\n",
+                        ContentType.Text.Plain,
+                    )
+                }
+                staticFiles("/", dir, index = "index.html")
+                log.info("Serving the web client from '${dir.absolutePath}' at /")
+            } else {
+                log.warn(
+                    "server.yaml webApp points at '$path' but it is not a directory - " +
+                        "run ./gradlew :webApp:wasmJsBrowserDistribution first. Web client NOT mounted."
+                )
+            }
+        }
+
         // Interactive API docs at /swagger, rendered from the compiler-generated
         // OpenAPI spec (ktor { openApi { enabled } } in build.gradle.kts). Gated by
         // the `swagger` flag in server.yaml (default off) - a per-deployment toggle,
@@ -85,14 +125,18 @@ fun Application.configureRouting() {
             }
         }
 
-        // Open endpoints: health checks + login (how you obtain a token)
-        /**
-         * Report that the Commercials Manager server is running (root liveness check).
-         *
-         * Tag: Health
-         */
-        get("/") {
-            call.respondText("Commercials Manager Server is running")
+        // Open endpoints: health checks + login (how you obtain a token).
+        // The root liveness text yields to the web client when one is mounted -
+        // /health remains the probe endpoint either way.
+        if (!webMounted) {
+            /**
+             * Report that the Commercials Manager server is running (root liveness check).
+             *
+             * Tag: Health
+             */
+            get("/") {
+                call.respondText("Commercials Manager Server is running")
+            }
         }
 
         /**
