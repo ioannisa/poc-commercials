@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import eu.anifantakis.commercials.server.stations.GroupConfig
 import java.sql.Connection
+import java.sql.SQLException
 
 /**
  * One GROUP's database: a dedicated connection pool over the group's schema
@@ -68,6 +69,11 @@ import java.sql.Connection
  * of groups is data, not wiring. The per-station [StationDb] views borrow this
  * pool; they never own one.
  */
+/** MySQL "object already exists" error codes the idempotent schema helpers tolerate. */
+private const val MYSQL_ER_DUP_KEYNAME = 1061   // CREATE INDEX: index name already exists
+private const val MYSQL_ER_DUP_KEY = 1022       // duplicate key on an add
+private const val MYSQL_ER_FK_DUP_NAME = 1826   // ADD CONSTRAINT: FK name already exists
+
 class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
 
     private val dataSource = HikariDataSource(
@@ -766,11 +772,16 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         // InnoDB invents one.
         ensureIndex(c, "placements", "idx_placements_break", "break_id")
         if (foreignKeyOn(c, "placements", "break_id") == null) {
-            c.createStatement().use { s ->
-                s.executeUpdate(
-                    "ALTER TABLE placements ADD CONSTRAINT fk_placements_break " +
-                        "FOREIGN KEY (break_id) REFERENCES breaks(id)"
-                )
+            // Same idempotency hardening as ensureIndex: a partially-applied
+            // prior run may have added the constraint after the pre-check last
+            // saw it absent - tolerate the duplicate rather than 500 the request.
+            ignoringDuplicate(MYSQL_ER_FK_DUP_NAME, MYSQL_ER_DUP_KEY) {
+                c.createStatement().use { s ->
+                    s.executeUpdate(
+                        "ALTER TABLE placements ADD CONSTRAINT fk_placements_break " +
+                            "FOREIGN KEY (break_id) REFERENCES breaks(id)"
+                    )
+                }
             }
         }
     }
@@ -803,19 +814,31 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         columns: String,
         unique: Boolean = false,
     ) {
-        val exists = c.prepareStatement(
-            """
-            SELECT 1 FROM information_schema.statistics
-            WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
-            LIMIT 1
-            """.trimIndent()
-        ).use { ps ->
-            ps.setString(1, table); ps.setString(2, indexName)
-            ps.executeQuery().use { it.next() }
-        }
-        if (!exists) {
-            val kind = if (unique) "UNIQUE INDEX" else "INDEX"
+        if (indexExists(c, table, indexName)) return
+        val kind = if (unique) "UNIQUE INDEX" else "INDEX"
+        // Belt-and-suspenders: the pre-check can disagree with reality - a
+        // partially-applied prior migration, a fresh table's inline KEY, or
+        // information_schema stats caching can all HIDE an index that exists,
+        // and then this CREATE would 500 the whole request with ER_DUP_KEYNAME
+        // (exactly the /api/schedule crash this guards against). Tolerate that
+        // one error: a duplicate index IS the state we were ensuring.
+        ignoringDuplicate(MYSQL_ER_DUP_KEYNAME) {
             c.createStatement().use { it.executeUpdate("CREATE $kind $indexName ON $table($columns)") }
+        }
+    }
+
+    /**
+     * Runs [block], swallowing a MySQL "object already exists" error whose code
+     * is one of [duplicateCodes]. The schema helpers pre-check information_schema
+     * for idempotency, but that read can lag reality - so the CREATE/ALTER is
+     * ALSO made to tolerate the duplicate it may race, instead of turning a
+     * harmless re-run into a 500. Any other SQLException propagates unchanged.
+     */
+    private fun ignoringDuplicate(vararg duplicateCodes: Int, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: SQLException) {
+            if (e.errorCode !in duplicateCodes) throw e
         }
     }
 
