@@ -51,7 +51,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
 import androidx.compose.ui.platform.LocalDensity
@@ -748,6 +747,14 @@ private fun SchedulerCanvasRow(
         modifier = Modifier
             .width(cellWidth * n)
             .fillMaxHeight()
+            // Mouse right-click -> context menu. A DEDICATED detector that fires on the
+            // secondary PRESS - the row's awaitFirstDown gesture below does not reliably
+            // see the secondary button inside the scroll stack, which silently dropped
+            // the popup when cell rendering was consolidated into this row.
+            .then(
+                if (contextMenuItems != null) Modifier.onRightClick { off -> openMenu(off) }
+                else Modifier
+            )
             // One gesture handler for the whole row. Modelled on multiButtonClickable:
             // the tap SELECTS IMMEDIATELY - it never waits to see if a double-tap is
             // coming, which is what made a click feel like it hung for a second. It
@@ -761,11 +768,8 @@ private fun SchedulerCanvasRow(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val pos = down.position
 
-                    // Mouse right-click -> context menu.
-                    if (contextMenuItems != null && currentEvent.buttons.isSecondaryPressed) {
-                        if (waitForUpOrCancellation() != null) openMenu(pos)
-                        return@awaitEachGesture
-                    }
+                    // Mouse right-click is handled by the dedicated onRightClick modifier
+                    // above; this gesture drives tap-select, double-tap and long-press.
 
                     // Touch/stylus long-press -> the same menu. A drag/scroll consumes
                     // the pointer and cancels the wait, so scrolling never opens it.
