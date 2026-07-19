@@ -111,6 +111,13 @@ data class ContractLineDto(
     val placements: Int,
     val totalSeconds: Long,
     val entryDate: String? = null,
+    /**
+     * The CONTRACT's period (ISO dates). Legacy doc numbers REPEAT, so a party
+     * can hold two contracts both numbered «18» - without the period the finder
+     * renders two indistinguishable rows and the operator picks blind.
+     */
+    val startDate: String? = null,
+    val endDate: String? = null,
 )
 
 @Serializable
@@ -240,8 +247,9 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          * "Προβολή Βάσει…": at most ONE of programId | partyCode(+partyKind) |
          * lineId | spotId narrows the counts to the matching airings - and,
          * with them, which cells (and condensed rows) exist at all. lineId
-         * selects its WHOLE contract; partyKind is 'customer' (spot owner,
-         * default) or 'trader' (contract payer).
+         * selects its WHOLE contract (that one deal - same-numbered docs stay
+         * separate); partyKind is 'customer' (spot owner, default) or
+         * 'trader' (contract payer).
          *
          * Tag: Schedule
          */
@@ -435,7 +443,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                     ContractLineDto(
                         it.lineId, it.contractNumber, it.isGift, it.lineNo,
                         it.desiredQty, it.spotCount, it.placements, it.totalSeconds,
-                        it.entryDate,
+                        it.entryDate, it.startDate, it.endDate,
                     )
                 }
             }

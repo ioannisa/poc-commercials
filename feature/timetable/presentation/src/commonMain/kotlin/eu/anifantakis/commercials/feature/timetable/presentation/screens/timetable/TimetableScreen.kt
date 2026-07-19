@@ -94,6 +94,7 @@ import kotlinx.datetime.number
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
 /**
@@ -970,7 +971,7 @@ private fun SpotFinderDialog(
                         (if (line.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]) to 0.34f,
                         "${line.placements}" to 0.12f,
                         "${line.totalSeconds}" to 0.12f,
-                        (line.entryDate ?: "") to 0.20f,
+                        line.dateLabel() to 0.20f,
                     )
                 }
             }
@@ -1024,6 +1025,15 @@ private fun SpotFinderDialog(
         }
     }
 }
+
+/**
+ * The contracts table's date cell: the ERP issue date, or the contract's
+ * PERIOD when that is absent. Load-bearing, not cosmetic: legacy doc numbers
+ * repeat (a party can hold two contracts both numbered «18»), so without a
+ * date the finder shows two identical rows and the operator picks blind.
+ */
+private fun ContractLine.dateLabel(): String =
+    entryDate ?: listOfNotNull(startDate, endDate).joinToString(" → ")
 
 @Composable
 private fun SectionTitle(text: String) {

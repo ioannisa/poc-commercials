@@ -79,6 +79,9 @@ internal data class ContractLineDto(
     val placements: Int,
     val totalSeconds: Long,
     val entryDate: String? = null,
+    /** The CONTRACT's period - what tells two same-numbered contracts apart. */
+    val startDate: String? = null,
+    val endDate: String? = null,
 )
 
 @Serializable

@@ -96,7 +96,12 @@ sealed interface ScheduleFilter {
      */
     data class ByParty(val code: String, val kind: PartyKind) : ScheduleFilter
 
-    /** The selected line's WHOLE contract (every line of it - «Συμβολαίου»). */
+    /**
+     * «Συμβολαίου»: the selected line's WHOLE contract - every line of that
+     * ONE deal. Legacy doc numbers repeat per customer (two KRIVEK gift docs
+     * are both «18») but those are DIFFERENT deals and stay out; the finder's
+     * period column is what tells them apart when selecting.
+     */
     data class ByContract(val lineId: Long) : ScheduleFilter
 
     /** One spot (the finder's armed message - «Μηνύματος»). */

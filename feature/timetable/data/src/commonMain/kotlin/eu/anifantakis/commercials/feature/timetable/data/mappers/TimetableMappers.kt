@@ -56,6 +56,7 @@ internal fun ContractLineDto.toDomain(): ContractLine = ContractLine(
     lineId = lineId, contractNumber = contractNumber, isGift = isGift, lineNo = lineNo,
     desiredQty = desiredQty, spotCount = spotCount, placements = placements,
     totalSeconds = totalSeconds, entryDate = entryDate,
+    startDate = startDate, endDate = endDate,
 )
 
 internal fun FinderSpotDto.toDomain(): ContractLineSpot = ContractLineSpot(

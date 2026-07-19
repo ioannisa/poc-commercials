@@ -554,6 +554,14 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         val placements: Int,
         val totalSeconds: Long,
         val entryDate: String?,
+        /**
+         * The CONTRACT's period. Load-bearing for disambiguation: legacy doc
+         * numbers repeat (KRIVEK holds TWO gift contracts both numbered «18»,
+         * one 2023-11, one 2026-02), so number + line alone can render two
+         * indistinguishable finder rows - the period is what tells them apart.
+         */
+        val startDate: String?,
+        val endDate: String?,
     )
 
     /**
@@ -585,7 +593,8 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         return connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty,
+                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
+                       cl.line_no, cl.desired_qty,
                        COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placements,
                        -- the SPOT's duration, not the airing's (see durationSeconds
                        -- on CommercialRow). The CASE is what the LEFT JOIN needs: a
@@ -597,7 +606,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 $spotJoin
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
                 WHERE ($keep)
-                GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, cl.line_no, cl.desired_qty
+                GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date, cl.line_no, cl.desired_qty
                 ORDER BY ct.number, cl.line_no
                 """.trimIndent()
             ).use { ps ->
@@ -616,6 +625,8 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                                 placements = rs.getInt("placements"),
                                 totalSeconds = rs.getLong("total_secs"),
                                 entryDate = rs.getString("entry_date"),
+                                startDate = rs.getString("start_date"),
+                                endDate = rs.getString("end_date"),
                             )
                         )
                     }
@@ -1306,7 +1317,12 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         data class ByCustomer(val code: String) : CellFilter
         /** The spots under contracts PAID by this code (legacy traid - agencies). */
         data class ByTrader(val code: String) : CellFilter
-        /** The selected line's WHOLE contract - every line of it. */
+        /**
+         * The selected line's WHOLE contract - every line of that ONE deal.
+         * Same-numbered contracts of the same payer exist (legacy numbering
+         * repeats) and stay OUT: they are different deals; the finder's
+         * period column disambiguates them at selection time.
+         */
         data class ByContract(val lineId: Long) : CellFilter
         /** One spot (the finder's armed message). */
         data class BySpot(val spotId: Long) : CellFilter
@@ -1387,14 +1403,26 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             JOIN spots s ON s.id = p.spot_id
             ${when (filter) {
                 is CellFilter.ByCustomer -> "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+                // Contract-scoped filters must follow the AIRING'S CHARGE line -
+                // COALESCE(p.contract_line_id, s.contract_line_id), the same read
+                // path the Break Console's Σύμβαση column uses. The spot's default
+                // alone is NOT it: 400k of this station's airings charge to a
+                // different line than their spot's default (a spot re-links
+                // across contracts), and filtering by the default would show a
+                // contract in the console and an empty grid for it.
                 is CellFilter.ByTrader ->
-                    """JOIN contract_lines cl ON cl.id = s.contract_line_id
+                    """JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
             JOIN contracts ct ON ct.id = cl.contract_id
             JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"""
                 is CellFilter.ByContract ->
-                    // The selected LINE addresses its contract; every sibling
-                    // line's spots count - «Συμβολαίου», not «Είδους».
-                    """JOIN contract_lines cl ON cl.id = s.contract_line_id
+                    // The selected LINE addresses its ONE contract; every
+                    // sibling line of it counts - «Συμβολαίου», not «Είδους».
+                    // Deliberately NOT widened to same-number siblings (owner
+                    // decision, 2026-07-20): legacy doc numbers repeat per
+                    // customer (KRIVEK holds a 2023 AND a 2026 gift doc, both
+                    // «18»), but those ARE different deals - the finder's
+                    // period column is what tells them apart at selection time.
+                    """JOIN contract_lines cl ON cl.id = COALESCE(p.contract_line_id, s.contract_line_id)
             JOIN contract_lines sel ON sel.id = ? AND sel.contract_id = cl.contract_id"""
                 else -> ""
             }}

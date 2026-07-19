@@ -15,6 +15,13 @@ data class ContractLine(
     val placements: Int,
     val totalSeconds: Long,
     val entryDate: String? = null,
+    /**
+     * The CONTRACT's period (ISO dates). Legacy doc numbers repeat - a party
+     * can hold two contracts both numbered «18» - so number + line alone can
+     * name two different deals; the period is the operator's tell.
+     */
+    val startDate: String? = null,
+    val endDate: String? = null,
 )
 
 /** One spot (creative) of a contract line, with consumption stats. */
