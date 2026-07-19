@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeSch
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
@@ -61,13 +62,16 @@ class TimetableViewModelTest : TimetableTestBase() {
      * print. That is the only reason this fake is here.
      */
     private val schedule = FakeScheduleRepository()
+    private val programs = FakeProgramsRepository()
 
     private fun vm(
         prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
         session: FakeUserSession = FakeUserSession(),
         reportService: FakeReportService = reports,
         logoCache: StationLogoCache = FakeStationLogoCache(),
-    ) = TimetableViewModel(finder, partySearch, schedule, common, prefs, session, reportService, logoCache, TEST_CLOCK)
+    ) = TimetableViewModel(
+        finder, partySearch, schedule, programs, common, prefs, session, reportService, logoCache, TEST_CLOCK
+    )
 
     /**
      * A month with one spot in the 10:00 break - enough to build a payload.
@@ -386,6 +390,10 @@ class TimetableViewModelTest : TimetableTestBase() {
     @Test
     fun addSpotAtWithAnArmedSpotDelegatesToTheCommonContract() = runTest(testDispatcher) {
         val vm = vm()
+        // The target cell is PAINTED (its break has a programme) - adding into
+        // it needs no selection; the spot will inherit the break's own.
+        common.emit(TimetableCommonState(cells = persistentMapOf(cell(programName = "News").toUi())))
+        advanceUntilIdle()
         vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
 
         vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
@@ -396,6 +404,89 @@ class TimetableViewModelTest : TimetableTestBase() {
             "the armed spot's id is delegated up to common.add - the screen never persists itself",
         )
     }
+
+    @Test
+    fun addSpotAtOnAWhiteCellWithoutAProgrammeIsRefused() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
+
+        // No cell at (TEST_TIME, TEST_DATE) and no selected programme: the
+        // first spot into a white cell PAINTS it - it needs a Τύπος
+        // Προγράμματος, the legacy rule.
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
+
+        assertTrue(common.adds.isEmpty(), "a white cell without a selected programme must refuse the add")
+    }
+
+    @Test
+    fun addSpotAtOnAnUnpaintedCellWithoutAProgrammeIsRefused() = runTest(testDispatcher) {
+        val vm = vm()
+        // The cell EXISTS but is UNPAINTED (a «Πρόσθεση νέου διαλείμματος» row's
+        // cell): still white - the first spot must carry a programme.
+        common.emit(TimetableCommonState(cells = persistentMapOf(cell(programName = null).toUi())))
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
+
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
+
+        assertTrue(common.adds.isEmpty(), "an unpainted cell is still white - no programme, no add")
+    }
+
+    @Test
+    fun addSpotAtOnAWhiteCellCarriesTheSelectedProgramme() = runTest(testDispatcher) {
+        programs.programs = listOf(
+            eu.anifantakis.commercials.feature.timetable.domain.model.Program(id = 7, name = "News", colorArgb = null)
+        )
+        val vm = vm()
+        advanceUntilIdle()   // loadPrograms lands
+        vm.onAction(TimetableIntent.SelectProgram(7))
+        vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
+
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
+
+        assertEquals(listOf(Triple(42L, TEST_TIME, TEST_DATE)), common.adds)
+        assertEquals(
+            listOf<Long?>(7L),
+            common.addProgramIds,
+            "the first spot into a white cell rides on the selected programme - it paints the break",
+        )
+    }
+
+    @Test
+    fun addBreakAddsARowWithoutNeedingAProgramme() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        // NO programme selected on purpose: the button only adds a ROW; the
+        // programme enters later, with the first spot into a white cell.
+        vm.onAction(TimetableIntent.NewBreakTimeChanged("23:55"))
+
+        vm.onAction(TimetableIntent.AddBreak)
+
+        assertEquals(
+            listOf(LocalTime(23, 55) to selectedDayOf(vm)),
+            common.breakCreates,
+            "the typed ΩΩ:ΛΛ becomes an unpainted break holding the row",
+        )
+    }
+
+    @Test
+    fun addBreakIsANoOpWhenTheTimeAlreadyHoldsARow() = runTest(testDispatcher) {
+        val vm = vm()
+        common.emit(
+            TimetableCommonState(breaks = persistentListOf(BreakSlot(time = LocalTime(23, 55), label = "23:55")))
+        )
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.NewBreakTimeChanged("23:55"))
+
+        vm.onAction(TimetableIntent.AddBreak)
+
+        assertTrue(common.breakCreates.isEmpty(), "a time that already holds a row adds nothing")
+    }
+
+    /** The AddBreak row anchors on the focused day; with no selection that is day 1. */
+    private fun selectedDayOf(vm: TimetableViewModel) =
+        kotlinx.datetime.LocalDate(vm.state.year, vm.state.month, vm.state.selectedColumn + 1)
 
     @Test
     fun removeLastAtDelegatesToTheCommonContract() = runTest(testDispatcher) {

@@ -20,9 +20,11 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
+import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
@@ -58,10 +60,13 @@ import kotlinx.coroutines.flow.collectIndexed
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
 import kotlinx.datetime.number
+import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
@@ -111,6 +116,21 @@ data class TimetableState(
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
 
+    // ── the programme console (legacy «Τύποι Προγράμματος» + «Πρόσθεση νέου
+    //    διαλείμματος» boxes) ────────────────────────────────────────────────
+    /** The station's visible programmes - the dropdown's content. */
+    val programs: ImmutableList<Program> = persistentListOf(),
+    /**
+     * The programme that will PAINT the next break this operator creates -
+     * exactly the legacy dropdown's role. Adding to an existing (painted) cell
+     * ignores it: the spot takes the cell's programme.
+     */
+    val selectedProgramId: Long? = null,
+    /** Which programme dialog is open (ΔΙΟΡΘ/ΠΡΟΣΘ/ΑΦΑΙΡ/Χρώμα), if any. */
+    val programDialog: ProgramDialog? = null,
+    /** The «Πρόσθεση νέου διαλείμματος» box's ΩΩ:ΛΛ field. */
+    val newBreakTime: String = "",
+
     /** This platform can generate reports at all (desktop/browser yes, mobile no). */
     val reportsAvailable: Boolean = false,
     /** A month report is running - the toolbar waits for it. */
@@ -127,6 +147,9 @@ data class TimetableState(
     val stations: ImmutableList<StationAccess> = persistentListOf(),
     val selectedStation: StationAccess? = null,
 )
+
+/** The programme-console dialogs (one per legacy button). */
+enum class ProgramDialog { ADD, EDIT, REMOVE, COLOR }
 
 sealed interface TimetableIntent {
     data object PreviousMonth : TimetableIntent
@@ -164,6 +187,23 @@ sealed interface TimetableIntent {
     data class AddSpotAt(val time: LocalTime, val date: LocalDate) : TimetableIntent
     data class RemoveLastAt(val time: LocalTime, val date: LocalDate) : TimetableIntent
 
+    // The programme console (Τύποι Προγράμματος + Πρόσθεση νέου διαλείμματος).
+    data class SelectProgram(val programId: Long) : TimetableIntent
+    data class OpenProgramDialog(val dialog: ProgramDialog) : TimetableIntent
+    data object CloseProgramDialog : TimetableIntent
+    data class CreateProgram(val name: String, val colorArgb: Int?) : TimetableIntent
+    data class RenameProgram(val name: String) : TimetableIntent
+    data class RecolorProgram(val colorArgb: Int) : TimetableIntent
+    data object RemoveProgram : TimetableIntent
+    /** The ΩΩ:ΛΛ field of the «Πρόσθεση νέου διαλείμματος» box. */
+    data class NewBreakTimeChanged(val value: String) : TimetableIntent
+    /**
+     * Adds a ROW at the typed time (an unpainted break on the focused day
+     * anchors it); no-op when the time already holds a row. Its cells stay
+     * white - the first spot into one (with a selected programme) paints it.
+     */
+    data object AddBreak : TimetableIntent
+
     data object OpenFinder : TimetableIntent
     data object CloseFinder : TimetableIntent
     data object ClearFinder : TimetableIntent
@@ -199,6 +239,8 @@ class TimetableViewModel(
      * so they fetch their own slice on demand.
      */
     private val scheduleRepository: ScheduleRepository,
+    /** The programme console's catalog (Τύποι Προγράμματος) - editors only. */
+    private val programsRepository: ProgramsRepository,
     private val common: TimetableCommon,
     private val prefs: TimetablePreferences,
     private val session: UserSession,
@@ -350,6 +392,29 @@ class TimetableViewModel(
             is TimetableIntent.AddSpotAt -> addSpotAt(intent.time, intent.date)
             is TimetableIntent.RemoveLastAt -> common.removeLast(intent.time, intent.date)
 
+            is TimetableIntent.SelectProgram ->
+                _state.update { it.copy(selectedProgramId = intent.programId) }
+
+            is TimetableIntent.OpenProgramDialog -> {
+                // ΔΙΟΡΘ/ΑΦΑΙΡ/Χρώμα act ON the selection; ΠΡΟΣΘ never needs one.
+                if (intent.dialog != ProgramDialog.ADD && selectedProgram() == null) {
+                    showSnackbar(StringKey.TIMETABLE_SELECT_PROGRAM_FIRST)
+                } else {
+                    _state.update { it.copy(programDialog = intent.dialog) }
+                }
+            }
+
+            TimetableIntent.CloseProgramDialog -> _state.update { it.copy(programDialog = null) }
+
+            is TimetableIntent.CreateProgram -> createProgram(intent.name, intent.colorArgb)
+            is TimetableIntent.RenameProgram -> renameProgram(intent.name)
+            is TimetableIntent.RecolorProgram -> recolorProgram(intent.colorArgb)
+            TimetableIntent.RemoveProgram -> removeProgram()
+
+            is TimetableIntent.NewBreakTimeChanged ->
+                _state.update { it.copy(newBreakTime = intent.value) }
+            TimetableIntent.AddBreak -> addBreak()
+
             TimetableIntent.OpenFinder -> _state.update { it.copy(showFinder = true) }
             TimetableIntent.CloseFinder -> _state.update { it.copy(showFinder = false) }
             TimetableIntent.ClearFinder -> _state.update { it.copy(finder = FinderUiState()) }
@@ -382,6 +447,29 @@ class TimetableViewModel(
     // separately (loadBreaks() is gone).
     private fun loadAll() {
         common.loadMonth(_state.value.year, _state.value.month)
+        loadPrograms()
+    }
+
+    /**
+     * The programme catalog, for the console's dropdown. [selectId] arms the
+     * brush with that programme once the list lands (a freshly created one).
+     * Viewer roles never see the console, and the server 403s them - skip.
+     */
+    private fun loadPrograms(selectId: Long? = null) {
+        if (!session.role.canEdit) return
+        viewModelScope.launch {
+            when (val result = programsRepository.list()) {
+                is DataResult.Success -> _state.update { st ->
+                    val programs = result.data.toImmutableList()
+                    val keep = selectId ?: st.selectedProgramId
+                    st.copy(
+                        programs = programs,
+                        selectedProgramId = keep?.takeIf { id -> programs.any { it.id == id } },
+                    )
+                }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
     }
 
     /** A new session (or station): clean slate, keep the month the user was on. */
@@ -529,8 +617,135 @@ class TimetableViewModel(
     // ── placement editing ('a' / 'r') - delegated to the common VM ──────
 
     private fun addSpotAt(time: LocalTime, date: LocalDate) {
-        val spot = _state.value.finder.selectedSpot ?: return   // 'a' is armed by the finder
-        common.add(spot.spotId, time, date)
+        val s = _state.value
+        val spot = s.finder.selectedSpot ?: return   // 'a' is armed by the finder
+        // A WHITE cell - no break there, or an UNPAINTED one (a «Πρόσθεση νέου
+        // διαλείμματος» row) - is painted by its FIRST spot, so the legacy rule
+        // applies: pick a Τύπος Προγράμματος first. A painted cell ignores the
+        // selection: the spot takes ITS programme.
+        val cell = s.cells[SchedulerKey(time, date)]
+        if ((cell == null || cell.programName == null) && s.selectedProgramId == null) {
+            showSnackbar(StringKey.TIMETABLE_SELECT_PROGRAM_FIRST)
+            return
+        }
+        common.add(spot.spotId, time, date, s.selectedProgramId)
+    }
+
+    // ── the programme console (Τύποι Προγράμματος + Πρόσθεση διαλείμματος) ──
+
+    private fun selectedProgram(): Program? {
+        val s = _state.value
+        return s.programs.firstOrNull { it.id == s.selectedProgramId }
+    }
+
+    private fun createProgram(name: String, colorArgb: Int?) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            when (val result = programsRepository.create(trimmed, colorArgb)) {
+                is DataResult.Success -> {
+                    _state.update { it.copy(programDialog = null) }
+                    // The new programme arms the brush at once - that is what
+                    // the operator created it FOR.
+                    loadPrograms(selectId = result.data.id)
+                }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
+    }
+
+    private fun renameProgram(name: String) {
+        val program = selectedProgram() ?: return
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || trimmed == program.name) {
+            _state.update { it.copy(programDialog = null) }
+            return
+        }
+        viewModelScope.launch {
+            when (val result = programsRepository.update(program.id, name = trimmed)) {
+                is DataResult.Success -> {
+                    _state.update { it.copy(programDialog = null) }
+                    loadPrograms()
+                    // Cells show the programme NAME - re-fetch so they follow.
+                    common.refreshMonth()
+                }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
+    }
+
+    private fun recolorProgram(colorArgb: Int) {
+        val program = selectedProgram() ?: return
+        viewModelScope.launch {
+            when (val result = programsRepository.update(program.id, colorArgb = colorArgb)) {
+                is DataResult.Success -> {
+                    _state.update { it.copy(programDialog = null) }
+                    loadPrograms()
+                    // Recoloring repaints every cell whose break carries the
+                    // programme - the colour is data ON the programme.
+                    common.refreshMonth()
+                }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
+    }
+
+    private fun removeProgram() {
+        val program = selectedProgram() ?: return
+        viewModelScope.launch {
+            when (val result = programsRepository.remove(program.id)) {
+                is DataResult.Success -> {
+                    // Soft delete: painted cells keep their colours (the server
+                    // keeps the row) - only the dropdown loses the entry.
+                    _state.update { it.copy(programDialog = null, selectedProgramId = null) }
+                    loadPrograms()
+                }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
+    }
+
+    private fun addBreak() {
+        val s = _state.value
+        val time = parseHhMmOrNull(s.newBreakTime)
+        if (time == null) {
+            showSnackbar(StringKey.TIMETABLE_ADD_BREAK_INVALID_TIME)
+            return
+        }
+        // The button adds a ROW, nothing more - no programme needed (the first
+        // spot into one of its white cells is what carries a programme in). A
+        // time that already holds a row (scaffold or real) is a no-op.
+        if (s.breaks.any { it.time == time }) {
+            showSnackbar(StringKey.TIMETABLE_BREAK_EXISTS)
+            return
+        }
+        common.createBreak(time, selectedDate())
+        _state.update { it.copy(newBreakTime = "") }
+    }
+
+    /** The grid's focused day - where the row-anchoring unpainted break lands. */
+    private fun selectedDate(): LocalDate {
+        val s = _state.value
+        val first = LocalDate(s.year, s.month, 1)
+        val daysInMonth = first.daysUntil(first.plus(1, DateTimeUnit.MONTH))
+        return LocalDate(s.year, s.month, (s.selectedColumn + 1).coerceIn(1, daysInMonth))
+    }
+
+    /**
+     * ΩΩ:ΛΛ like the server's own parser (seconds rejected, not truncated),
+     * plus the colon-less digits the field lets through: "2355" -> 23:55,
+     * "955" -> 9:55 (the last two digits are always the minutes).
+     */
+    private fun parseHhMmOrNull(value: String): LocalTime? {
+        val v = value.trim()
+        val m = Regex("""^(\d{1,2}):(\d{2})$""").matchEntire(v)
+            ?: Regex("""^(\d{1,2})(\d{2})$""").matchEntire(v)
+            ?: return null
+        val (h, min) = m.destructured
+        val hh = h.toIntOrNull() ?: return null
+        val mm = min.toIntOrNull() ?: return null
+        if (hh !in 0..23 || mm !in 0..59) return null
+        return LocalTime(hh, mm)
     }
 
     // ── finder (Εύρεση console) ─────────────────────────────────────────

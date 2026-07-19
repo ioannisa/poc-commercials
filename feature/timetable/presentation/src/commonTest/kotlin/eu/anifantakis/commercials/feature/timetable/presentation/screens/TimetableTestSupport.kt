@@ -17,6 +17,7 @@ import eu.anifantakis.commercials.core.domain.party_search.Party
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
+import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
@@ -25,6 +26,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -123,12 +125,15 @@ fun cell(
     time: LocalTime = TEST_TIME,
     date: LocalDate = TEST_DATE,
     spots: List<PlacedCommercial> = emptyList(),
+    /** Null = a WHITE (unpainted) cell - the first add must carry a programme. */
+    programName: String? = null,
 ): ScheduleCell = ScheduleCell(
     time = time,
     date = date,
     spotCount = spots.size,
     totalDurationSeconds = spots.sumOf { it.durationSeconds },
     zoneColorArgb = 0xFFFFFFFF.toInt(),
+    programName = programName,
     commercials = emptyList(),
 )
 
@@ -255,11 +260,20 @@ class FakePlacementsRepository : PlacementsRepository {
     val removedIds = mutableListOf<Long>()
     val reorders = mutableListOf<Triple<LocalTime, LocalDate, List<Long>>>()
 
+    /** The programme each add rode in with (position-matched to the adds). */
+    val addProgramIds = mutableListOf<Long?>()
+    val breakCreates = mutableListOf<Pair<LocalTime, LocalDate>>()
+    var createBreakResult: EmptyDataResult<DataError.Network> = DataResult.Success(Unit)
+
     override suspend fun add(
         spotId: Long,
         time: LocalTime,
         date: LocalDate,
-    ): DataResult<PlacedCommercial, DataError.Network> = addResult ?: DataResult.Success(nextAdded)
+        programId: Long?,
+    ): DataResult<PlacedCommercial, DataError.Network> {
+        addProgramIds += programId
+        return addResult ?: DataResult.Success(nextAdded)
+    }
 
     override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> {
         removedIds += placementId
@@ -273,6 +287,44 @@ class FakePlacementsRepository : PlacementsRepository {
     ): EmptyDataResult<DataError.Network> {
         reorders += Triple(time, date, orderedIds)
         return reorderResult
+    }
+
+    override suspend fun createBreak(
+        time: LocalTime,
+        date: LocalDate,
+    ): EmptyDataResult<DataError.Network> {
+        breakCreates += (time to date)
+        return createBreakResult
+    }
+}
+
+class FakeProgramsRepository : ProgramsRepository {
+    var programs: List<Program> = emptyList()
+    val created = mutableListOf<Pair<String, Int?>>()
+    val updates = mutableListOf<Triple<Long, String?, Int?>>()
+    val removed = mutableListOf<Long>()
+
+    override suspend fun list(): DataResult<List<Program>, DataError.Network> = DataResult.Success(programs)
+
+    override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> {
+        created += name to colorArgb
+        val program = Program(id = (programs.maxOfOrNull { it.id } ?: 0) + 1, name = name, colorArgb = colorArgb)
+        programs = programs + program
+        return DataResult.Success(program)
+    }
+
+    override suspend fun update(id: Long, name: String?, colorArgb: Int?): EmptyDataResult<DataError.Network> {
+        updates += Triple(id, name, colorArgb)
+        programs = programs.map {
+            if (it.id == id) it.copy(name = name ?: it.name, colorArgb = colorArgb ?: it.colorArgb) else it
+        }
+        return DataResult.Success(Unit)
+    }
+
+    override suspend fun remove(id: Long): EmptyDataResult<DataError.Network> {
+        removed += id
+        programs = programs.filterNot { it.id == id }
+        return DataResult.Success(Unit)
     }
 }
 
@@ -308,16 +360,25 @@ class FakeTimetableCommon : TimetableCommon {
     /** The cells whose AIRINGS a screen asked for - the Break Console asks for its own, on open. */
     val commercialLoads = mutableListOf<Pair<LocalTime, LocalDate>>()
     val adds = mutableListOf<Triple<Long, LocalTime, LocalDate>>()
+    /** The programme each add rode in with (position-matched to [adds]). */
+    val addProgramIds = mutableListOf<Long?>()
     val removes = mutableListOf<Pair<LocalTime, LocalDate>>()
     val reorders = mutableListOf<Triple<LocalTime, LocalDate, List<Long>>>()
+    val breakCreates = mutableListOf<Pair<LocalTime, LocalDate>>()
+    var refreshes = 0
 
     override fun clear() { clears++ }
     override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
     override fun setViewMode(mode: GridViewMode) { viewModes += mode }
     override fun loadCommercials(time: LocalTime, date: LocalDate) { commercialLoads += (time to date) }
-    override fun add(spotId: Long, time: LocalTime, date: LocalDate) { adds += Triple(spotId, time, date) }
+    override fun add(spotId: Long, time: LocalTime, date: LocalDate, programId: Long?) {
+        adds += Triple(spotId, time, date)
+        addProgramIds += programId
+    }
     override fun removeLast(time: LocalTime, date: LocalDate) { removes += (time to date) }
     override fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(time, date, orderedIds) }
+    override fun createBreak(time: LocalTime, date: LocalDate) { breakCreates += (time to date) }
+    override fun refreshMonth() { refreshes++ }
 }
 
 /**

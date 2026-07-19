@@ -3,6 +3,8 @@ package eu.anifantakis.commercials.server.routes
 import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
+import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
+import eu.anifantakis.commercials.server.scheduler.CreateBreakResult
 import eu.anifantakis.commercials.server.scheduler.GridViewMode
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
 import eu.anifantakis.commercials.server.scheduler.formatHhMm
@@ -17,12 +19,11 @@ import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
 /**
- * A ROW of the grid. Its identity is its TIME - there is no break id, because
- * there is no break table: a break is a time something aired at (see GroupDb).
+ * A ROW of the grid. Its identity is its TIME: the break entity's database id
+ * never leaves the server (see GroupDb) - clients address breaks as "HH:mm".
  *
  * A row may be EMPTY (the hourly/half-hourly scaffold prints 08:00 whether or
- * not anything airs there), which is exactly why the id had to go: an empty row
- * has no break to have one.
+ * not anything airs there), so a row is not necessarily a break at all.
  */
 @Serializable
 data class BreakSlotDto(
@@ -65,7 +66,7 @@ data class CellDto(
     val spotCount: Int,
     val totalDurationSeconds: Int,
     val zoneColorArgb: Int,
-    /** The programme airing at this slot (first placement's), when it has one. */
+    /** THE BREAK's programme (its owned state - see GroupDb), when it has one. */
     val programName: String? = null,
 )
 
@@ -126,9 +127,47 @@ data class AddPlacementRequest(
     val spotId: Long,
     /**
      * "HH:mm". It need not be a time anything has aired at: putting a spot at
-     * 23:55 is how the 23:55 break comes into being (the legacy console's
-     * "Πρόσθεση νέου διαλείμματος - Ώρα:" box did just this).
+     * an unused time creates its break on the fly - IF [programId] says which
+     * programme the new break belongs to.
      */
+    val time: String,
+    /** ISO yyyy-MM-dd */
+    val date: String,
+    /**
+     * The operator's selected "Τύπος Προγράμματος". Consulted ONLY when the
+     * cell is WHITE (no break at the slot, or an unpainted one): the first
+     * spot paints the break with it, and inherits it. A painted break ignores
+     * it and stamps its own programme on the spot instead (adding to a painted
+     * cell never repaints it). Absent + white cell -> 409: pick a programme.
+     */
+    val programId: Long? = null,
+)
+
+/** One programme of the station's catalog (the "Τύποι Προγράμματος" dropdown). */
+@Serializable
+data class ProgramDto(
+    val id: Long,
+    val name: String,
+    /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
+    val colorArgb: Int? = null,
+)
+
+@Serializable
+data class CreateProgramRequest(
+    val name: String,
+    val colorArgb: Int? = null,
+)
+
+/** Nulls keep the current value - send only what changed. */
+@Serializable
+data class UpdateProgramRequest(
+    val name: String? = null,
+    val colorArgb: Int? = null,
+)
+
+@Serializable
+data class CreateBreakRequest(
+    /** "HH:mm" */
     val time: String,
     /** ISO yyyy-MM-dd */
     val date: String,
@@ -392,7 +431,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
         // ── placement editing (the grid's 'a'/'r' keys) ─────────────────
 
         /**
-         * Append a spot to the (time, date) cell, creating the break when the time has none yet.
+         * Append a spot to the (time, date) cell; an unused time needs programId to found its break.
          *
          * Tag: Schedule
          */
@@ -409,25 +448,40 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
                 return@post
             }
-            val row = withContext(Dispatchers.IO) { access.db.addPlacement(req.spotId, time, date) }
-            if (row == null) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to "Unknown spot ${req.spotId} on this station"))
-                return@post
+            val result = withContext(Dispatchers.IO) {
+                access.db.addPlacement(req.spotId, time, date, req.programId)
             }
-            call.respond(
-                CommercialDto(
-                    id = row.id,
-                    position = row.position,
-                    clientCode = row.clientCode,
-                    clientName = row.clientName,
-                    message = row.message,
-                    durationSeconds = row.durationSeconds,
-                    type = row.type,
-                    contract = row.contract,
-                    excludeFromReports = row.excludeFromReports,
-                    flow = row.flow,
+            when (result) {
+                is AddPlacementResult.UnknownSpot -> call.respond(
+                    HttpStatusCode.NotFound,
+                    mapOf("error" to "Unknown spot ${req.spotId} on this station")
                 )
-            )
+                is AddPlacementResult.ProgramRequired -> call.respond(
+                    HttpStatusCode.Conflict,
+                    mapOf("error" to "The ${req.time} cell on ${req.date} has no programme - select a Τύπος Προγράμματος; the first spot paints the break")
+                )
+                is AddPlacementResult.UnknownProgram -> call.respond(
+                    HttpStatusCode.BadRequest,
+                    mapOf("error" to "Unknown programme ${req.programId} on this station")
+                )
+                is AddPlacementResult.Added -> {
+                    val row = result.row
+                    call.respond(
+                        CommercialDto(
+                            id = row.id,
+                            position = row.position,
+                            clientCode = row.clientCode,
+                            clientName = row.clientName,
+                            message = row.message,
+                            durationSeconds = row.durationSeconds,
+                            type = row.type,
+                            contract = row.contract,
+                            excludeFromReports = row.excludeFromReports,
+                            flow = row.flow,
+                        )
+                    )
+                }
+            }
         }
 
         /**
@@ -473,6 +527,112 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             val deleted = withContext(Dispatchers.IO) { access.db.deletePlacement(id) }
             if (deleted) call.respond(HttpStatusCode.NoContent)
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No placement $id"))
+        }
+
+        // ── breaks (the console's "Πρόσθεση νέου διαλείμματος" box) ──────
+
+        /**
+         * Create an EMPTY, UNPAINTED break at (time, date) - it holds a grid ROW; the first spot placed into it paints it.
+         *
+         * Tag: Schedule
+         */
+        post("/schedule/breaks") {
+            val access = call.editorAccessOrRespond(registry) ?: return@post
+            val req = call.receive<CreateBreakRequest>()
+            val date = runCatching { LocalDate.parse(req.date) }.getOrNull()
+            if (date == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
+                return@post
+            }
+            val time = parseHhMmOrNull(req.time)
+            if (time == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
+                return@post
+            }
+            val result = withContext(Dispatchers.IO) { access.db.createBreak(time, date) }
+            when (result) {
+                CreateBreakResult.CREATED -> call.respond(HttpStatusCode.Created)
+                CreateBreakResult.EXISTS -> call.respond(
+                    HttpStatusCode.Conflict,
+                    mapOf("error" to "A break already exists at ${req.time} on ${req.date}")
+                )
+            }
+        }
+
+        // ── programme catalog (the console's "Τύποι Προγράμματος" box) ──
+        // Editor-gated like the placement routes: the catalog is staff console
+        // furniture - customers never see the dropdown.
+
+        /**
+         * The station's visible programmes, for the console dropdown.
+         *
+         * Tag: Schedule
+         */
+        get("/schedule/programs") {
+            val access = call.editorAccessOrRespond(registry) ?: return@get
+            val programs = withContext(Dispatchers.IO) { access.db.listPrograms() }
+            call.respond(programs.map { ProgramDto(it.id, it.name, it.colorArgb) })
+        }
+
+        /**
+         * ΠΡΟΣΘ: create a programme on this station.
+         *
+         * Tag: Schedule
+         */
+        post("/schedule/programs") {
+            val access = call.editorAccessOrRespond(registry) ?: return@post
+            val req = call.receive<CreateProgramRequest>()
+            val name = req.name.trim()
+            if (name.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "name required"))
+                return@post
+            }
+            val row = withContext(Dispatchers.IO) { access.db.createProgram(name, req.colorArgb) }
+            call.respond(HttpStatusCode.Created, ProgramDto(row.id, row.name, row.colorArgb))
+        }
+
+        /**
+         * ΔΙΟΡΘ / Χρώμα: rename and/or recolor a programme - nulls keep the current value.
+         *
+         * Tag: Schedule
+         */
+        put("/schedule/programs/{id}") {
+            val access = call.editorAccessOrRespond(registry) ?: return@put
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "numeric id required"))
+                return@put
+            }
+            val req = call.receive<UpdateProgramRequest>()
+            val name = req.name?.trim()
+            if (name != null && name.isEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "name must not be blank"))
+                return@put
+            }
+            if (name == null && req.colorArgb == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "nothing to update"))
+                return@put
+            }
+            val ok = withContext(Dispatchers.IO) { access.db.updateProgram(id, name, req.colorArgb) }
+            if (ok) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No programme $id on this station"))
+        }
+
+        /**
+         * ΑΦΑΙΡ: retire a programme from the dropdown (soft delete - painted history keeps its colours).
+         *
+         * Tag: Schedule
+         */
+        delete("/schedule/programs/{id}") {
+            val access = call.editorAccessOrRespond(registry) ?: return@delete
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "numeric id required"))
+                return@delete
+            }
+            val ok = withContext(Dispatchers.IO) { access.db.hideProgram(id) }
+            if (ok) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No programme $id on this station"))
         }
     }
 }

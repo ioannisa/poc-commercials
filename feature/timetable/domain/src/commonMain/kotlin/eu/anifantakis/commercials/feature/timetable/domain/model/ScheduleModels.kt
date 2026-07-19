@@ -58,9 +58,22 @@ data class ScheduleCell(
     val spotCount: Int,
     val totalDurationSeconds: Int,
     val zoneColorArgb: Int,
-    /** The programme airing at this slot (first placement's), when it has one. */
+    /** THE BREAK's programme (the break owns it server-side), when it has one. */
     val programName: String? = null,
     val commercials: List<PlacedCommercial>,
+)
+
+/**
+ * One programme of the station's catalog - the legacy console's "Τύποι
+ * Προγράμματος" dropdown. Its colour is DATA (never theme-adapted): the
+ * selected programme paints the NEXT break the operator creates, and
+ * recoloring a programme repaints every cell whose break carries it.
+ */
+data class Program(
+    val id: Long,
+    val name: String,
+    /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
+    val colorArgb: Int? = null,
 )
 
 /**

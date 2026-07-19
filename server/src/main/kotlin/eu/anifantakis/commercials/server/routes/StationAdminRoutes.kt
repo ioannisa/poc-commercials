@@ -264,10 +264,10 @@ private fun purgeStationRows(c: Connection, stationId: String): Long {
             total += ps.executeUpdate()
         }
     }
-    // Airings first - they reference spots and programmes. (There is no break
-    // table to purge: a break is a time on the airing, so deleting the airings
-    // deletes the breaks.)
+    // Airings first - they reference spots, programmes AND breaks; then the
+    // breaks, which reference programmes; then the rest.
     exec("DELETE FROM placements WHERE station_id = ?")
+    exec("DELETE FROM breaks WHERE station_id = ?")
     exec("DELETE FROM spots WHERE station_id = ?")
     exec("DELETE FROM programs WHERE station_id = ?")
     exec("DELETE FROM flow_comments WHERE station_id = ?")

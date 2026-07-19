@@ -54,14 +54,19 @@ class TimetableCommonViewModel(
     override fun loadCommercials(time: LocalTime, date: LocalDate) =
         dispatch(TimetableCommonIntent.LoadCommercials(time, date))
 
-    override fun add(spotId: Long, time: LocalTime, date: LocalDate) =
-        dispatch(TimetableCommonIntent.Add(spotId, time, date))
+    override fun add(spotId: Long, time: LocalTime, date: LocalDate, programId: Long?) =
+        dispatch(TimetableCommonIntent.Add(spotId, time, date, programId))
 
     override fun removeLast(time: LocalTime, date: LocalDate) =
         dispatch(TimetableCommonIntent.RemoveLast(time, date))
 
     override fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>) =
         dispatch(TimetableCommonIntent.Reorder(time, date, orderedIds))
+
+    override fun createBreak(time: LocalTime, date: LocalDate) =
+        dispatch(TimetableCommonIntent.CreateBreak(time, date))
+
+    override fun refreshMonth() = dispatch(TimetableCommonIntent.RefreshMonth)
 
     // ── the single reducer ──────────────────────────────────────────────────
 
@@ -135,11 +140,33 @@ class TimetableCommonViewModel(
             }
 
             is TimetableCommonIntent.Add -> {
-                when (val result = placementsRepository.add(intent.spotId, intent.time, intent.date)) {
-                    is DataResult.Success -> applyAdd(SchedulerKey(intent.time, intent.date), result.data)
+                val key = SchedulerKey(intent.time, intent.date)
+                val cell = commonState.value.cells[key]
+                // WHITE going in: no cell, or a cell without a programme -
+                // this add founds and/or PAINTS the break server-side.
+                val paintedBreak = cell == null || cell.programName == null
+                when (val result =
+                    placementsRepository.add(intent.spotId, intent.time, intent.date, intent.programId)) {
+                    is DataResult.Success -> {
+                        applyAdd(key, result.data)
+                        // The row (maybe an off-scaffold time) and the fresh
+                        // paint are server truth - re-fetch, keeping markers.
+                        if (paintedBreak) refreshMonthKeepingMarkers()
+                    }
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
+
+            is TimetableCommonIntent.CreateBreak -> {
+                when (val result = placementsRepository.createBreak(intent.time, intent.date)) {
+                    // The new break holds a ROW (its cells stay white) - only
+                    // the server can place it among the scaffold - re-fetch.
+                    is DataResult.Success -> refreshMonthKeepingMarkers()
+                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
+                }
+            }
+
+            TimetableCommonIntent.RefreshMonth -> refreshMonthKeepingMarkers()
 
             is TimetableCommonIntent.RemoveLast -> {
                 val key = SchedulerKey(intent.time, intent.date)
@@ -169,6 +196,37 @@ class TimetableCommonViewModel(
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
+        }
+    }
+
+    /**
+     * Re-fetches the current month's rows + cells WITHOUT blanking first,
+     * keeping the session's markers ([TimetableCommonState.modifiedCells] /
+     * addedCounts) and any already-loaded airings. LoadMonth's blank-then-fetch
+     * is right for navigation; this is for in-place server-side repaints (a
+     * break founded/created, a programme recolored). Reducer-only, so it is
+     * serialized with every other mutation.
+     */
+    private suspend fun refreshMonthKeepingMarkers() {
+        val st = commonState.value
+        val year = st.year ?: return
+        val month = st.month ?: return
+        when (val result = scheduleRepository.getMonth(year, month, st.viewMode)) {
+            is DataResult.Success -> updateCommonState { s ->
+                val fresh = result.data.cells.associate { c -> c.toUi() }
+                // The fresh cells carry no airings; keep the ones already loaded
+                // (an opened Break Console, this session's optimistic adds).
+                val merged = fresh.mapValues { (key, cell) ->
+                    val old = s.cells[key]
+                    if (old != null && old.commercials.isNotEmpty()) cell.copy(commercials = old.commercials)
+                    else cell
+                }
+                s.copy(
+                    breaks = result.data.rows.map { b -> b.toUi() }.toImmutableList(),
+                    cells = merged.toImmutableMap(),
+                )
+            }
+            is DataResult.Failure -> showSnackbar(result.error.toUiText())
         }
     }
 

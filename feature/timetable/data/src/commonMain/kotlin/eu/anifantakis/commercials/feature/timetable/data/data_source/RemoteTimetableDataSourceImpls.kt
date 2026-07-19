@@ -10,13 +10,18 @@ import eu.anifantakis.commercials.feature.timetable.data.dto.AddPlacementRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.BreakSlotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
+import eu.anifantakis.commercials.feature.timetable.data.dto.CreateBreakRequest
+import eu.anifantakis.commercials.feature.timetable.data.dto.CreateProgramRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
+import eu.anifantakis.commercials.feature.timetable.data.dto.ProgramDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ReorderPlacementsRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialsDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ScheduleDto
+import eu.anifantakis.commercials.feature.timetable.data.dto.UpdateProgramRequest
 import eu.anifantakis.commercials.feature.timetable.data.mappers.toDomain
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFinderDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePlacementsDataSource
+import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteProgramsDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
@@ -24,6 +29,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -71,10 +77,11 @@ class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePla
         spotId: Long,
         time: LocalTime,
         date: LocalDate,
+        programId: Long?,
     ): DataResult<PlacedCommercial, DataError.Network> =
         api.post<AddPlacementRequest, CommercialDto>(
             "/api/schedule/placements",
-            AddPlacementRequest(spotId, time.hhMm(), date.toString()),
+            AddPlacementRequest(spotId, time.hhMm(), date.toString(), programId),
         ).map { it.toDomain() }
 
     override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> =
@@ -89,6 +96,34 @@ class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePla
             "/api/schedule/placements/order",
             ReorderPlacementsRequest(time.hhMm(), date.toString(), orderedIds),
         )
+
+    override suspend fun createBreak(
+        time: LocalTime,
+        date: LocalDate,
+    ): EmptyDataResult<DataError.Network> =
+        api.postEmpty(
+            "/api/schedule/breaks",
+            CreateBreakRequest(time.hhMm(), date.toString()),
+        )
+}
+
+class RemoteProgramsDataSourceImpl(private val api: ApiHttpClient) : RemoteProgramsDataSource {
+
+    override suspend fun list(): DataResult<List<Program>, DataError.Network> =
+        api.get<List<ProgramDto>>("/api/schedule/programs")
+            .map { list -> list.map { it.toDomain() } }
+
+    override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> =
+        api.post<CreateProgramRequest, ProgramDto>(
+            "/api/schedule/programs",
+            CreateProgramRequest(name, colorArgb),
+        ).map { it.toDomain() }
+
+    override suspend fun update(id: Long, name: String?, colorArgb: Int?): EmptyDataResult<DataError.Network> =
+        api.putEmpty("/api/schedule/programs/$id", UpdateProgramRequest(name, colorArgb))
+
+    override suspend fun remove(id: Long): EmptyDataResult<DataError.Network> =
+        api.deleteEmpty("/api/schedule/programs/$id")
 }
 
 class RemoteFinderDataSourceImpl(private val api: ApiHttpClient) : RemoteFinderDataSource {

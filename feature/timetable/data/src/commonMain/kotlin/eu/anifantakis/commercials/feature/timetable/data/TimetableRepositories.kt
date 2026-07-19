@@ -6,9 +6,11 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.EmptyDataResult
 import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
+import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteFinderDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemotePlacementsDataSource
+import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteProgramsDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteScheduleDataSource
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
@@ -16,6 +18,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -58,7 +61,8 @@ class PlacementsRepositoryImpl(
         spotId: Long,
         time: LocalTime,
         date: LocalDate,
-    ): DataResult<PlacedCommercial, DataError.Network> = remoteDataSource.add(spotId, time, date)
+        programId: Long?,
+    ): DataResult<PlacedCommercial, DataError.Network> = remoteDataSource.add(spotId, time, date, programId)
 
     override suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network> =
         remoteDataSource.remove(placementId)
@@ -68,6 +72,26 @@ class PlacementsRepositoryImpl(
         date: LocalDate,
         orderedIds: List<Long>,
     ): EmptyDataResult<DataError.Network> = remoteDataSource.reorder(time, date, orderedIds)
+
+    override suspend fun createBreak(
+        time: LocalTime,
+        date: LocalDate,
+    ): EmptyDataResult<DataError.Network> = remoteDataSource.createBreak(time, date)
+}
+
+class ProgramsRepositoryImpl(
+    private val remoteDataSource: RemoteProgramsDataSource,
+) : ProgramsRepository {
+
+    override suspend fun list(): DataResult<List<Program>, DataError.Network> = remoteDataSource.list()
+
+    override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> =
+        remoteDataSource.create(name, colorArgb)
+
+    override suspend fun update(id: Long, name: String?, colorArgb: Int?): EmptyDataResult<DataError.Network> =
+        remoteDataSource.update(id, name, colorArgb)
+
+    override suspend fun remove(id: Long): EmptyDataResult<DataError.Network> = remoteDataSource.remove(id)
 }
 
 class FinderRepositoryImpl(

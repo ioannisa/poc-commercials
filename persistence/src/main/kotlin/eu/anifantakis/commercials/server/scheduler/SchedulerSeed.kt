@@ -129,6 +129,10 @@ fun breakZoneColorArgb(zone: BreakZone): Int = when (zone) {
  * used, so the grid looks identical).
  */
 fun cellColorArgb(zone: BreakZone, isWeekend: Boolean, spotCount: Int): Int = when {
+    // An EMPTY cell is white whatever its zone. Only the break-entity model
+    // can produce one (an unpainted break holding a row); it must look exactly
+    // like the truly-empty cells around it, not wear the zone's colour.
+    spotCount == 0 -> COLOR_WHITE
     zone == BreakZone.PRIME -> ZONE_PINK
     zone == BreakZone.SPECIAL -> ZONE_GREEN
     isWeekend -> ZONE_ORANGE

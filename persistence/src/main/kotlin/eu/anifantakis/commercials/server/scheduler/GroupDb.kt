@@ -24,13 +24,34 @@ import java.sql.Connection
  *   half.
  *
  *   STATION-scoped (carry `station_id` ≙ legacy `forTV`):
- *       spots, programs, placements, flow_comments, print_audit, station_meta
+ *       spots, programs, breaks, placements, flow_comments, print_audit, station_meta
  *
- *   A BREAK IS NOT AN ENTITY. There is no `break_slots` table: a break is what
- *   `GROUP BY show_date, show_time` returns, exactly as the legacy app did it -
- *   its `schedule` rows carry a plain showDate/showTime and nothing points at a
- *   break. That is the flexible model: an operator schedules a spot AT A TIME
- *   and the break comes into existence; nobody has to create 23:55 first.
+ *   A BREAK IS AN ENTITY - `breaks` (station, date, time) - and it OWNS the
+ *   slot's PROGRAMME. The break's identity is still its time: the unique key is
+ *   (station_id, show_date, show_time), the API keeps addressing breaks by
+ *   "HH:mm", and `breaks.id` never leaves the database. What the entity adds is
+ *   the programme rule the emergent model could not express:
+ *
+ *     - the break's `program_id` is what the grid paints - always. Per-spot
+ *       programme tags never decide a cell's colour again (they used to, via a
+ *       "first spot with a programme" window, and ~7,200 cells showed a
+ *       minority programme because of it).
+ *     - a NEW placement's `program_id` is stamped FROM the break's, dogmatically:
+ *       spot and break can never disagree from here on.
+ *     - LEGACY placements keep the per-spot programme the migration gave them,
+ *       even where it disagrees with their break's - on purpose, so the printed
+ *       reports stay byte-identical with the legacy app's.
+ *     - the FIRST spot into a WHITE cell paints it: the operator's selected
+ *       programme (the legacy console's "Τύποι Προγράμματος" dropdown) is
+ *       required then, and only then. A white cell is a slot with no break OR
+ *       an UNPAINTED one - the console's "Πρόσθεση νέου διαλείμματος" creates
+ *       breaks unpainted, just to hold a ROW. Painted breaks ignore the
+ *       selection entirely.
+ *
+ *   Seeding at upgrade time picks each break's programme by DOMINANCE: the
+ *   programme with the most spots in the break wins; ties go to the first
+ *   spot's programme (see BreakSeeder). That rule exists ONLY in the one-off
+ *   seed - at runtime the programme is operator input, never derived.
  *
  *   `placements` therefore carries `station_id` of its own, which legacy did NOT
  *   need: it kept ONE DATABASE PER OUTLET, so its `schedule` was already a single
@@ -91,6 +112,7 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
             upgradeFromPerStationSchema(c)
             upgradeToEmergentBreaks(c)
             ensureColumns(c)
+            upgradeToBreakEntities(c)
         }
     }
 
@@ -306,9 +328,35 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
             )
+            // The BREAK entity (see the class doc). Its identity is its slot -
+            // (station, date, time), which is the unique key - and its one piece
+            // of OWNED state is the programme the operator gave it. `id` exists
+            // for the placements FK and never leaves the database: the API talks
+            // "HH:mm", exactly as before.
+            //
+            // program_id NULL = an UNPAINTED break: the seeded past where no
+            // spot carried a programme, and operator-created rows ("Πρόσθεση
+            // νέου διαλείμματος") waiting for their first spot to paint them.
+            s.executeUpdate(
+                """
+                CREATE TABLE IF NOT EXISTS breaks (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    station_id VARCHAR(64) NOT NULL,
+                    show_date DATE NOT NULL,
+                    show_time TIME NOT NULL,
+                    program_id BIGINT NULL,
+                    UNIQUE KEY uq_breaks_slot (station_id, show_date, show_time),
+                    CONSTRAINT fk_breaks_station FOREIGN KEY (station_id) REFERENCES stations(id),
+                    CONSTRAINT fk_breaks_program FOREIGN KEY (program_id) REFERENCES programs(id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """.trimIndent()
+            )
             // ≙ legacy `schedule`: an airing AT A TIME. `show_time` mirrors its
-            // `showTime` column, and there is nothing else - no break_id, because
-            // there is no break table. The break EMERGES from the group by.
+            // `showTime` column. `break_id` points at the airing's break; the
+            // slot tuple (station, date, time) stays on the row too - it is the
+            // airing's IDENTITY (the unique key below) and what the grid's
+            // covering index reads, so the FK adds integrity without rerouting
+            // any query through a join.
             //
             // `station_id` is the one column legacy did not have, and it is not a
             // denormalization: legacy kept one database per outlet, so its
@@ -337,7 +385,13 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     -- products over time; the spot's own line is only its
                     -- CURRENT default. NULL -> displays fall back to the spot's.
                     contract_line_id BIGINT NULL,
+                    -- The airing's programme TAG. On rows the operator creates it
+                    -- EQUALS the break's programme (stamped at insert - see
+                    -- StationDb.addPlacement); on migrated rows it is the legacy
+                    -- per-spot tag, kept verbatim so old reports don't shift.
+                    -- Displays never read it for the CELL - that is the break's.
                     program_id BIGINT NULL,
+                    break_id BIGINT NULL,
                     played BOOLEAN NOT NULL DEFAULT FALSE,
                     hidden BOOLEAN NOT NULL DEFAULT FALSE,
                     UNIQUE KEY uq_placement_slot (station_id, show_date, show_time, position),
@@ -373,9 +427,11 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     -- most. Measured on a warm buffer pool; on a cold one the
                     -- lookups it removes cost far more, which is what tipped it.
                     KEY idx_placements_grid (station_id, show_date, hidden, show_time, position, spot_id, program_id),
+                    KEY idx_placements_break (break_id),
                     CONSTRAINT fk_placements_spot FOREIGN KEY (spot_id) REFERENCES spots(id),
                     CONSTRAINT fk_placements_station FOREIGN KEY (station_id) REFERENCES stations(id),
-                    CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id)
+                    CONSTRAINT fk_placements_program FOREIGN KEY (program_id) REFERENCES programs(id),
+                    CONSTRAINT fk_placements_break FOREIGN KEY (break_id) REFERENCES breaks(id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """.trimIndent()
             )
@@ -615,7 +671,13 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
 
     /**
      * Retires the `break_slots` catalog, in place, for a schema an older build
-     * wrote. Idempotent: the tell is `placements.break_id` still existing.
+     * wrote. Idempotent: the tell is the `break_slots` TABLE still existing -
+     * it is dropped as this upgrade's LAST step, so its presence means the
+     * upgrade has not finished and a half-run resumes. The tell used to be
+     * `placements.break_id`, and that is no longer distinctive: the break
+     * ENTITY model (upgradeToBreakEntities) reintroduces a break_id column,
+     * and keying on it made this run again on every boot after that upgrade -
+     * straight into the dropped catalog.
      *
      * The catalog was never anything but a materialized GROUP BY - the migration
      * built it as `SELECT DISTINCT station, HOUR(showTime), MINUTE(showTime)` and
@@ -638,6 +700,7 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
      * So: foreign key, then index, then column.
      */
     private fun upgradeToEmergentBreaks(c: Connection) {
+        if (!tableExists(c, "break_slots")) return
         if (!columnExists(c, "placements", "break_id")) return
 
         // Defaults only so the NOT NULL columns can land on existing rows; every
@@ -677,6 +740,38 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                 )
             }
             s.executeUpdate("DROP TABLE break_slots")
+        }
+    }
+
+    /**
+     * Promotes breaks from emergent (a GROUP BY) to entities (the `breaks`
+     * table), in place. Runs AFTER [ensureColumns] because the seeder reads
+     * `placements.program_id`, which ensureColumns adds to older schemas.
+     *
+     * Idempotent and resumable at every step: the column add is guarded, the
+     * seed itself is guarded by "is any placement still unattached?" - which
+     * also makes it SELF-REPAIRING: a legacy re-migration that inserts
+     * placements without break_id is healed on the next boot. The seeding rule
+     * (dominant programme, ties to the first spot) lives in [BreakSeeder],
+     * shared with the migration module - and applies ONLY here, to the past;
+     * from now on a break's programme is operator input (see the class doc).
+     */
+    private fun upgradeToBreakEntities(c: Connection) {
+        ensureColumn(c, "placements", "break_id", "BIGINT NULL")
+        val unattached = c.createStatement().use { s ->
+            s.executeQuery("SELECT 1 FROM placements WHERE break_id IS NULL LIMIT 1").use { it.next() }
+        }
+        if (unattached) BreakSeeder.seed(c)
+        // The FK needs an index on break_id; create OUR name for it first or
+        // InnoDB invents one.
+        ensureIndex(c, "placements", "idx_placements_break", "break_id")
+        if (foreignKeyOn(c, "placements", "break_id") == null) {
+            c.createStatement().use { s ->
+                s.executeUpdate(
+                    "ALTER TABLE placements ADD CONSTRAINT fk_placements_break " +
+                        "FOREIGN KEY (break_id) REFERENCES breaks(id)"
+                )
+            }
         }
     }
 

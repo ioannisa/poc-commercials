@@ -6,12 +6,14 @@ import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialsDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
+import eu.anifantakis.commercials.feature.timetable.data.dto.ProgramDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ScheduleDto
 import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -59,4 +61,8 @@ internal fun ContractLineDto.toDomain(): ContractLine = ContractLine(
 internal fun FinderSpotDto.toDomain(): ContractLineSpot = ContractLineSpot(
     spotId = spotId, description = description, durationSeconds = durationSeconds,
     placements = placements, totalSeconds = totalSeconds,
+)
+
+internal fun ProgramDto.toDomain(): Program = Program(
+    id = id, name = name, colorArgb = colorArgb,
 )

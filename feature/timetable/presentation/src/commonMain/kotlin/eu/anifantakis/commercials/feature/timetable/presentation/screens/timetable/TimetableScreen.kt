@@ -219,6 +219,10 @@ private fun TimetableScreen(
             )
         }
 
+        // The programme console's ΔΙΟΡΘ/ΠΡΟΣΘ/ΑΦΑΙΡ/Χρώμα dialogs (opened from
+        // the header's «Τύποι Προγράμματος» box).
+        ProgramDialogHost(state = state, onIntent = onIntent)
+
         // The scheduler grid with keyboard navigation (using LazyColumn for performance)
         LazySchedulerGrid(
             labels = schedulerLabels(),
@@ -577,19 +581,22 @@ private fun KeyboardEnabledHeader(
                     ) {
                         if (state.canEdit) {
                             // "Πρόσθεση νέου διαλείματος" ⏐ "Τύποι Προγράμματος"
-                            // - not migrated yet. width(IntrinsicSize.Max): the
-                            // column hugs its widest box; fillMaxWidth then
-                            // EQUALIZES the pair without grabbing the whole row.
+                            // - the programme console (ProgramConsole.kt).
+                            // width(IntrinsicSize.Max): the column hugs its
+                            // widest box; fillMaxWidth then EQUALIZES the pair
+                            // without grabbing the whole row.
                             Column(
                                 modifier = Modifier.fillMaxHeight().width(IntrinsicSize.Max),
                                 verticalArrangement = Arrangement.spacedBy(UIConst.paddingExtraSmall),
                             ) {
-                                AppPendingBox(
-                                    title = Strings[StringKey.TIMETABLE_ADD_BREAK_TITLE],
+                                AddBreakBox(
+                                    state = state,
+                                    onIntent = onIntent,
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
-                                AppPendingBox(
-                                    title = Strings[StringKey.TIMETABLE_PROGRAM_TYPES_TITLE],
+                                ProgramTypesBox(
+                                    state = state,
+                                    onIntent = onIntent,
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
                             }

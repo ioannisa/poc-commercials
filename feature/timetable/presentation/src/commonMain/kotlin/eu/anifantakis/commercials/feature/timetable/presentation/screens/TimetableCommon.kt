@@ -57,8 +57,16 @@ interface TimetableCommon {
      */
     fun loadCommercials(time: LocalTime, date: LocalDate)
 
-    /** Persists a placement of [spotId] into the (time, date) cell, then applies it. */
-    fun add(spotId: Long, time: LocalTime, date: LocalDate)
+    /**
+     * Persists a placement of [spotId] into the (time, date) cell, then applies
+     * it. [programId] (the operator's selected Τύπος Προγράμματος) matters only
+     * when the cell is WHITE - no break there, or an unpainted one: the first
+     * spot PAINTS the break with it and inherits it. A painted break ignores
+     * it - the spot takes the BREAK's programme. A first spot into a white
+     * cell also re-fetches the month, so the row and its fresh paint are
+     * server truth.
+     */
+    fun add(spotId: Long, time: LocalTime, date: LocalDate, programId: Long? = null)
 
     /**
      * Removes the most recent placement THIS SESSION added in the cell
@@ -68,6 +76,21 @@ interface TimetableCommon {
 
     /** Optimistic reorder + persist (the server 409s on stale ids). */
     fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>)
+
+    /**
+     * Creates an EMPTY, UNPAINTED break at (time, date) - the legacy console's
+     * "Πρόσθεση νέου διαλείμματος": it only holds a grid ROW, its cells stay
+     * white - then re-fetches the month so the new row shows up.
+     */
+    fun createBreak(time: LocalTime, date: LocalDate)
+
+    /**
+     * Re-fetches the current month's rows + cells, KEEPING the session's
+     * markers and already-loaded airings - unlike [loadMonth], which blanks
+     * first. For server-side changes that repaint cells in place (a programme
+     * recolored/renamed, a break created).
+     */
+    fun refreshMonth()
 }
 
 /** Flow-wide state - the `Common` infix is mandatory (ownership is visible). */
@@ -105,7 +128,14 @@ sealed interface TimetableCommonIntent {
     data class LoadMonth(val year: Int, val month: Int) : TimetableCommonIntent
     data class SetViewMode(val mode: GridViewMode) : TimetableCommonIntent
     data class LoadCommercials(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
-    data class Add(val spotId: Long, val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
+    data class Add(
+        val spotId: Long,
+        val time: LocalTime,
+        val date: LocalDate,
+        val programId: Long?,
+    ) : TimetableCommonIntent
     data class RemoveLast(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data class Reorder(val time: LocalTime, val date: LocalDate, val orderedIds: List<Long>) : TimetableCommonIntent
+    data class CreateBreak(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
+    data object RefreshMonth : TimetableCommonIntent
 }

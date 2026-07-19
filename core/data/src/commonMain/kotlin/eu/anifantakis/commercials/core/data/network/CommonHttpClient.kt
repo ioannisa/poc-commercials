@@ -123,6 +123,17 @@ abstract class CommonHttpClient(
         }.body<Res>()
     }
 
+    suspend inline fun <reified Req : Any> postEmpty(
+        path: String,
+        body: Req,
+    ): EmptyDataResult<DataError.Network> = dataCall {
+        client.post(path) {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }
+        Unit
+    }
+
     suspend inline fun <reified Req : Any> putEmpty(
         path: String,
         body: Req,

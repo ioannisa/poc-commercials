@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.server.auth.AuthUser
 import eu.anifantakis.commercials.server.auth.StationGrant
 import eu.anifantakis.commercials.server.auth.UserRole
+import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
 import eu.anifantakis.commercials.server.scheduler.CellRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
@@ -46,7 +47,23 @@ internal class FakeStationDataSource(
     override fun loadMonth(
         year: Int,
         month: Int,
-    ): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> = emptyList<CellRow>() to byKey
+    ): Pair<List<CellRow>, Map<Pair<LocalTime, LocalDate>, List<CommercialRow>>> {
+        // The cells ARE the breaks now (break-entity model), so the fake must
+        // serve them like the real loadMonthCells: one aggregate per key, the
+        // programme being the break's (which the seeder derived from the spots).
+        val cells = byKey.map { (key, spots) ->
+            CellRow(
+                time = key.first,
+                date = key.second,
+                spotCount = spots.size,
+                totalDurationSeconds = spots.sumOf { it.durationSeconds },
+                zoneColorArgb = 0,
+                programName = spots.firstNotNullOfOrNull { it.programName },
+                commercials = emptyList(),
+            )
+        }
+        return cells to byKey
+    }
 
     override fun searchParties(query: String, byTrader: Boolean): List<StationDb.PartyRow> = parties
     override fun partyActivity(code: String, byTrader: Boolean): List<StationDb.ActivityMonth> = emptyList()
@@ -55,9 +72,14 @@ internal class FakeStationDataSource(
     override fun contractStatus(code: String, byTrader: Boolean): List<StationDb.ContractStatusRow> = emptyList()
     override fun placementStats(): StationDb.PlacementStats = StationDb.PlacementStats(0, null, null)
 
-    override fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? {
+    override fun addPlacement(
+        spotId: Long,
+        time: LocalTime,
+        date: LocalDate,
+        programId: Long?,
+    ): AddPlacementResult {
         addedPlacement = Triple(spotId, time, date)
-        return null
+        return AddPlacementResult.UnknownSpot
     }
 
     override fun deletePlacement(placementId: Long): Boolean {

@@ -40,7 +40,7 @@ internal data class CellDto(
     val spotCount: Int,
     val totalDurationSeconds: Int,
     val zoneColorArgb: Int,
-    /** The programme airing at this slot (first placement's), when it has one. */
+    /** THE BREAK's programme (the break owns it server-side), when it has one. */
     val programName: String? = null,
 )
 
@@ -90,9 +90,40 @@ internal data class FinderSpotDto(
     val totalSeconds: Long = 0,
 )
 
-/** [time] is "HH:mm" and need NOT already have a break - putting a spot there creates it. */
+/**
+ * [time] is "HH:mm" and need NOT already have a break - putting a spot there
+ * creates it. [programId] (the operator's selected Τύπος Προγράμματος) matters
+ * only for a WHITE cell (no break, or an unpainted one): the first spot paints
+ * the break with it. A painted break ignores [programId]: the spot inherits
+ * the BREAK's programme, never the selection.
+ */
 @Serializable
-internal data class AddPlacementRequest(val spotId: Long, val time: String, val date: String)
+internal data class AddPlacementRequest(
+    val spotId: Long,
+    val time: String,
+    val date: String,
+    val programId: Long? = null,
+)
 
 @Serializable
 internal data class ReorderPlacementsRequest(val time: String, val date: String, val orderedIds: List<Long>)
+
+/** One programme of the station's catalog (the "Τύποι Προγράμματος" dropdown). */
+@Serializable
+internal data class ProgramDto(
+    val id: Long,
+    val name: String,
+    /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
+    val colorArgb: Int? = null,
+)
+
+@Serializable
+internal data class CreateProgramRequest(val name: String, val colorArgb: Int? = null)
+
+/** Nulls keep the current value - send only what changed. */
+@Serializable
+internal data class UpdateProgramRequest(val name: String? = null, val colorArgb: Int? = null)
+
+/** An EMPTY, UNPAINTED break at (time, date) - it holds a grid ROW. */
+@Serializable
+internal data class CreateBreakRequest(val time: String, val date: String)

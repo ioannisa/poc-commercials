@@ -31,9 +31,10 @@ import java.time.LocalDate
 object ListBreaksTool : McpTool {
     override val name = "list_breaks"
     override val description =
-        "Discover a station's breaks on a given day, ascending by time. A break exists where spots " +
-            "aired, so date='YYYY-MM-DD' is required. Each break carries its label, zone, that day's " +
-            "spot count, total duration and programme (customer accounts see only their own spots). Use " +
+        "Discover a station's breaks on a given day, ascending by time. Breaks exist per day (where " +
+            "spots aired, or where an operator scheduled an empty break), so date='YYYY-MM-DD' is " +
+            "required. Each break carries its label, zone, that day's spot count, total duration and " +
+            "the BREAK's programme (customer accounts see only their own spots). Use " +
             "onlyWithSpots=true to drop breaks with nothing visible to you, and after='HH:mm' to find " +
             "the NEXT break after a time (the first result). The 'label' values feed spots_in_break / " +
             "generate_break_report."
@@ -86,11 +87,14 @@ data class BreakInfo(
 )
 
 /**
- * The station's breaks on [date], ascending by air time - which is to say, the
- * DISTINCT times its airings landed on that day.
- * - customer-scoped when [customerScoped] (a CUSTOMER_VIEWER sees only THEIR spots).
- * - [onlyWithSpots] drops breaks with nothing visible to the caller. For staff every
- *   break has spots by construction; for a CUSTOMER_VIEWER it is the useful filter.
+ * The station's breaks on [date], ascending by air time - the day's CELLS,
+ * which are breaks-driven now: an operator-created EMPTY break appears with 0
+ * spots, and the programme is THE BREAK's own, never derived from a spot.
+ * - customer-scoped when [customerScoped] (a CUSTOMER_VIEWER sees only THEIR
+ *   spots, so their counts are recomputed from the filtered airings).
+ * - [onlyWithSpots] drops breaks with nothing visible to the caller - for staff
+ *   that is the operator-created empty breaks; for a CUSTOMER_VIEWER it is the
+ *   useful filter.
  * - [after] ("HH:mm") keeps only breaks later than that time; the FIRST result is the "next break".
  */
 internal fun listBreaks(
@@ -102,28 +106,27 @@ internal fun listBreaks(
 ): List<BreakInfo> {
     val afterMinutes = after?.let { parseHhMm(it) }
 
-    // ONE query. The month grid's keys ARE the breaks - a break is the time an
-    // airing landed on - so the day's breaks are read straight off them. (This
-    // used to fetch the station's break catalog and index the month by its ids.)
-    val (_, byKey) = access.data.loadMonth(date.year, date.monthValue)
-    val times = byKey.keys.filter { it.second == date }
-        .map { BreakTimeRow(it.first) }
-        .distinct()
+    // ONE query. The month grid's cells ARE the breaks, programme included.
+    val (cells, byKey) = access.data.loadMonth(date.year, date.monthValue)
+    val dayCells = cells.filter { it.date == date }
         .sortedBy { it.time }
-        .filter { afterMinutes == null || it.hour * 60 + it.minute > afterMinutes }
+        .filter {
+            afterMinutes == null || it.time.hour * 60 + it.time.minute > afterMinutes
+        }
 
-    return times.mapNotNull { b ->
-        var spots = byKey[b.time to date].orEmpty()
+    return dayCells.mapNotNull { cell ->
+        val row = BreakTimeRow(cell.time)
+        var spots = byKey[cell.time to date].orEmpty()
         if (customerScoped) spots = spots.filter { it.clientCode == access.grant.clientCode }
         if (onlyWithSpots && spots.isEmpty()) return@mapNotNull null
         BreakInfo(
-            label = b.label,
-            hour = b.hour,
-            minute = b.minute,
-            zone = b.zone.name,
-            spotCount = spots.size,
-            totalDurationSeconds = spots.sumOf { it.durationSeconds },
-            programName = spots.firstOrNull()?.programName,
+            label = row.label,
+            hour = row.hour,
+            minute = row.minute,
+            zone = row.zone.name,
+            spotCount = if (customerScoped) spots.size else cell.spotCount,
+            totalDurationSeconds = if (customerScoped) spots.sumOf { it.durationSeconds } else cell.totalDurationSeconds,
+            programName = cell.programName,
         )
     }
 }

@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.migration
 
+import eu.anifantakis.commercials.server.scheduler.BreakSeeder
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import java.sql.Connection
 import kotlin.random.Random
@@ -210,6 +211,10 @@ class LegacyTransformer(
         step("Rebuilding the month-grid index (app read path; nothing here uses it)...")
         rebuildGridIndex()
 
+        step("Building break entities (dominant programme per break; airings attach)...")
+        val breakEntities = seedBreakEntities()
+        log("  $breakEntities break entities built; every airing attached to one")
+
         writeMeta()
         // Finish the bar honestly: whatever TOTAL_STEPS says, the run is over.
         onStep(stepsDone, stepsDone, "")
@@ -415,16 +420,18 @@ class LegacyTransformer(
     // ─────────────────────────────────────────────────────────── breaks ──
 
     /**
-     * There is NO migrateBreaks(). A break is not an entity to be built - it is
-     * what `GROUP BY station_id, show_date, show_time` returns over the airings,
-     * exactly as the legacy app did it. This only REPORTS how many distinct break
-     * times the migrated airings landed on, for the migration summary.
+     * Break ENTITIES are built AFTER the airings, in one set-based pass
+     * ([seedBreakEntities] -> BreakSeeder in :persistence): each break's
+     * programme is chosen by DOMINANCE over its spots' legacy tags (majority;
+     * ties to the first spot), and every airing attaches via break_id. The
+     * airings keep their own per-spot program_id verbatim - even where it
+     * disagrees with the break's - so the legacy reports stay identical.
      *
-     * (What this replaced: a step that INSERTed one `break_slots` row per DISTINCT
-     * (station, HOUR, MINUTE) and then had migratePlacements join every airing
-     * straight back to it - a round trip whose only product was an id. It also
-     * collapsed seconds, so two airings 30 seconds apart became one break. The
-     * straight copy in migratePlacements cannot.)
+     * This is NOT the old `break_slots` catalog coming back: that keyed on
+     * (station, HOUR, MINUTE), collapsed seconds, and made migratePlacements
+     * join every airing back to it mid-copy. The copy stays a straight copy;
+     * the entities are stamped afterwards, and their key is the full slot
+     * (station, date, time).
      */
     /**
      * The indexes on `placements` that NOTHING in the migration reads, taken off
@@ -500,6 +507,19 @@ class LegacyTransformer(
                 "SELECT COUNT(*) FROM (SELECT DISTINCT station_id, show_time FROM $t.placements) bt"
             ).use { rs -> rs.next(); rs.getInt(1) }
         }
+
+    /**
+     * Break entities from the finished airings - see the "breaks" section note.
+     * The rule (and the SQL) is BreakSeeder's, shared with the server's in-place
+     * upgrade so the two paths can never pick different programmes. Returns the
+     * station-scoped entity count for the log.
+     */
+    private fun seedBreakEntities(): Long {
+        BreakSeeder.seed(c, targetSchemaName)
+        return c.createStatement().use { st ->
+            st.executeQuery("SELECT COUNT(*) FROM $t.breaks").use { rs -> rs.next(); rs.getLong(1) }
+        }
+    }
 
     // ─────────────────────────────────────────────────────── customers ──
 
@@ -1009,11 +1029,11 @@ class LegacyTransformer(
 
     /**
      * The airings - a STRAIGHT COPY of legacy `schedule`: showDate -> show_date,
-     * showTime -> show_time, showOrder -> position. Nothing is looked up, because
-     * there is no break to look up: a break is what a GROUP BY on show_time
-     * returns. (This step used to build a `break_slots` catalog from the DISTINCT
-     * times and then join every airing straight back to it to recover an id it had
-     * just thrown away.)
+     * showTime -> show_time, showOrder -> position. No break is looked up
+     * MID-COPY: break entities are stamped afterwards in one set-based pass
+     * ([seedBreakEntities]), so this insert stays a pure copy. (The old
+     * `break_slots` catalog used to be joined right here, per airing, to
+     * recover an id it had just thrown away.)
      *
      * The spot decides the station (legacy `schedule` carries no forTV of its own),
      * and it is stamped onto the airing: a group's stations share this schema, so
@@ -1287,7 +1307,7 @@ class LegacyTransformer(
          * whatever this says. A drift costs a slightly-off bar mid-run, never a
          * wrong one and never a crash.
          */
-        const val TOTAL_STEPS = 17
+        const val TOTAL_STEPS = 18
 
         const val SYNTHETIC_NOTE =
             "SYNTHETIC placeholder - real data lives in the ERP (Oracle) and was not part of the legacy MySQL dump"

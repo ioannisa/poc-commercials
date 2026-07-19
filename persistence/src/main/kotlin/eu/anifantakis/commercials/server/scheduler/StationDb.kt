@@ -25,10 +25,12 @@ import java.time.LocalTime
  * Skipping the check does not throw - it silently drops a radio spot into a TV
  * break.
  *
- * A BREAK is no longer among those ids: it is a TIME, and the station is stamped
- * on the airing from [stationId] here rather than taken from the client. Both
+ * A BREAK is not among those ids either: the client addresses it by TIME, and
+ * the station is stamped on the airing from [stationId] here rather than taken
+ * from the client. The break entity's `breaks.id` exists (placements FK it) but
+ * never leaves the server - resolution is always (station, date, time). Both
  * stations own an 11:00 break and they are different breaks - which the
- * `station_id` on every placement statement below is what keeps apart.
+ * `station_id` on every statement below is what keeps apart.
  *
  * The exceptions are the GROUP-scoped tables, where sharing IS the feature:
  * [customerByCode] and [searchParties] deliberately see the whole group, so the
@@ -751,29 +753,77 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * Appends [spotId] at the END of the (time, date) cell - next free position,
      * duration copied from the spot (like the legacy add). The (station_id,
      * show_date, show_time, position) unique key turns concurrent adds into a
-     * retry with the next position. Returns the new placement as the same row
-     * shape the month grid serves, or null if the spot does not exist ON THIS
-     * STATION.
+     * retry with the next position.
      *
-     * NOTHING has to exist at [time] first. The break is not looked up, because
-     * there is no break to look up - airing a spot at 23:55 IS what brings the
-     * 23:55 break into being (the legacy console's "Πρόσθεση νέου διαλείμματος -
-     * Ώρα:" box did exactly this). That is the flexibility the break catalog cost
-     * us: it could only ever accept a time some airing had already used.
+     * THE BREAK comes first. An airing belongs to a break now, so the slot's
+     * break is fetched - or created - and the programme rule is about PAINT:
      *
-     * The SPOT is still re-checked against the station - it arrives from the
-     * client and the group's stations share a database. The break used to be
-     * re-checked too, and that check is not lost: the station is now stamped on
-     * the airing from [stationId] here, not taken from the client at all.
+     *  - a PAINTED break (program_id set) simply receives the spot, and stamps
+     *    its OWN programme on it. The dogma: `spot.program_id ≡
+     *    break.program_id` on every new row. [programId] is deliberately
+     *    IGNORED here - adding to a painted cell never repaints it, exactly
+     *    like the legacy console.
+     *  - a WHITE cell - no break at the slot, OR a break with NO programme
+     *    (the console's "Πρόσθεση νέου διαλείμματος" creates them unpainted;
+     *    3 migrated breaks are too) - needs [programId] (the operator's
+     *    selected "Τύπος Προγράμματος"): the FIRST spot into a white cell is
+     *    what paints it. Without a selection the add is refused
+     *    ([AddPlacementResult.ProgramRequired]). Racing painters are settled
+     *    in SQL: the break's unique slot key for creation, `WHERE program_id
+     *    IS NULL` for adoption - then the break is re-read and whoever won is
+     *    inherited.
+     *
+     * The SPOT is re-checked against the station - it arrives from the client
+     * and the group's stations share a database - and so is the programme, for
+     * the same reason.
      */
-    fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? {
+    fun addPlacement(
+        spotId: Long,
+        time: LocalTime,
+        date: LocalDate,
+        programId: Long? = null,
+    ): AddPlacementResult {
         connection().use { c ->
             val duration = c.prepareStatement(
                 "SELECT duration_seconds FROM spots WHERE id = ? AND hidden = FALSE AND station_id = ?"
             ).use { ps ->
                 ps.setLong(1, spotId)
                 ps.setString(2, stationId)
-                ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else return null }
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) rs.getInt(1) else return AddPlacementResult.UnknownSpot
+                }
+            }
+
+            var brk = breakAt(c, time, date)
+            if (brk == null || brk.programId == null) {
+                // WHITE cell: the first spot paints it - a selection is required.
+                if (programId == null) return AddPlacementResult.ProgramRequired
+                if (!programExists(c, programId)) return AddPlacementResult.UnknownProgram
+                if (brk == null) {
+                    c.prepareStatement(
+                        "INSERT IGNORE INTO breaks(station_id, show_date, show_time, program_id) VALUES(?,?,?,?)"
+                    ).use { ps ->
+                        ps.setString(1, stationId)
+                        ps.setDate(2, java.sql.Date.valueOf(date))
+                        ps.setTime(3, java.sql.Time.valueOf(time))
+                        ps.setLong(4, programId)
+                        ps.executeUpdate()
+                    }
+                } else {
+                    // Adopt-if-still-unpainted: a concurrent first add may have
+                    // painted it already, and then THEIRS stands.
+                    c.prepareStatement(
+                        "UPDATE breaks SET program_id = ? WHERE id = ? AND program_id IS NULL"
+                    ).use { ps ->
+                        ps.setLong(1, programId)
+                        ps.setLong(2, brk.id)
+                        ps.executeUpdate()
+                    }
+                }
+                // Re-read rather than trust our write: whoever won the race,
+                // their programme is the break's - and the spot inherits THAT.
+                brk = breakAt(c, time, date)
+                    ?: throw SQLException("Break $time/$date vanished between create and read")
             }
 
             repeat(3) {
@@ -791,8 +841,9 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 try {
                     val id = c.prepareStatement(
                         """
-                        INSERT INTO placements(station_id, spot_id, show_date, show_time, position, duration_seconds)
-                        VALUES(?,?,?,?,?,?)
+                        INSERT INTO placements(station_id, spot_id, show_date, show_time, position,
+                                               duration_seconds, break_id, program_id)
+                        VALUES(?,?,?,?,?,?,?,?)
                         """.trimIndent(),
                         Statement.RETURN_GENERATED_KEYS
                     ).use { ps ->
@@ -802,10 +853,15 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                         ps.setTime(4, java.sql.Time.valueOf(time))
                         ps.setInt(5, nextPos)
                         ps.setInt(6, duration)
+                        ps.setLong(7, brk.id)
+                        // The dogma stamp: the break's programme, never the
+                        // caller's - and NULL when a seeded break has none.
+                        brk.programId?.let { ps.setLong(8, it) } ?: ps.setNull(8, java.sql.Types.BIGINT)
                         ps.executeUpdate()
                         ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
                     }
-                    return placementRow(c, id)
+                    val row = placementRow(c, id) ?: return AddPlacementResult.UnknownSpot
+                    return AddPlacementResult.Added(row)
                 } catch (e: SQLException) {
                     if (!isDuplicateKeyViolation(e)) throw e
                     // someone else took the position - recompute and retry
@@ -814,6 +870,132 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             throw SQLException("Could not allocate a position in the $time break / $date after 3 attempts")
         }
     }
+
+    /**
+     * Creates an EMPTY, UNPAINTED break at (time, date) - the legacy console's
+     * "Πρόσθεση νέου διαλείμματος: Ώρα" box, which the emergent model could
+     * not offer (a break only existed once an airing used its time). Its job
+     * is to make the TIME hold a ROW on the grid; the cells stay white, and
+     * the FIRST spot placed into one is what paints it (see [addPlacement]) -
+     * the selected programme applies then, not now.
+     *
+     * Returns EXISTS when the slot already has a break; nothing is touched.
+     */
+    fun createBreak(time: LocalTime, date: LocalDate): CreateBreakResult =
+        connection().use { c ->
+            val inserted = c.prepareStatement(
+                "INSERT IGNORE INTO breaks(station_id, show_date, show_time, program_id) VALUES(?,?,?,NULL)"
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.setDate(2, java.sql.Date.valueOf(date))
+                ps.setTime(3, java.sql.Time.valueOf(time))
+                ps.executeUpdate() > 0
+            }
+            if (inserted) CreateBreakResult.CREATED else CreateBreakResult.EXISTS
+        }
+
+    /** The break at a slot, if the slot has one. */
+    private fun breakAt(c: Connection, time: LocalTime, date: LocalDate): BreakRow? =
+        c.prepareStatement(
+            "SELECT id, program_id FROM breaks WHERE station_id = ? AND show_date = ? AND show_time = ?"
+        ).use { ps ->
+            ps.setString(1, stationId)
+            ps.setDate(2, java.sql.Date.valueOf(date))
+            ps.setTime(3, java.sql.Time.valueOf(time))
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                BreakRow(
+                    id = rs.getLong("id"),
+                    programId = rs.getLong("program_id").takeIf { !rs.wasNull() },
+                )
+            }
+        }
+
+    /** True if the programme exists, visible, ON THIS STATION (client-supplied id). */
+    private fun programExists(c: Connection, programId: Long): Boolean =
+        c.prepareStatement(
+            "SELECT 1 FROM programs WHERE id = ? AND station_id = ? AND hidden = FALSE"
+        ).use { ps ->
+            ps.setLong(1, programId)
+            ps.setString(2, stationId)
+            ps.executeQuery().use { it.next() }
+        }
+
+    // ─────────────────────────────── programme catalog (Τύποι Προγράμματος) ──
+
+    /** The station's visible programmes, for the console's dropdown. */
+    fun listPrograms(): List<ProgramRow> =
+        connection().use { c ->
+            c.prepareStatement(
+                "SELECT id, name, color_argb FROM programs WHERE station_id = ? AND hidden = FALSE ORDER BY name"
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            ProgramRow(
+                                id = rs.getLong("id"),
+                                name = rs.getString("name"),
+                                colorArgb = rs.getInt("color_argb").takeIf { !rs.wasNull() },
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    /** ΠΡΟΣΘ: a new programme on this station (no legacy_id - it is app-born). */
+    fun createProgram(name: String, colorArgb: Int?): ProgramRow =
+        connection().use { c ->
+            val id = c.prepareStatement(
+                "INSERT INTO programs(station_id, name, color_argb, hidden) VALUES(?,?,?,FALSE)",
+                Statement.RETURN_GENERATED_KEYS
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.setString(2, name)
+                colorArgb?.let { ps.setInt(3, it) } ?: ps.setNull(3, java.sql.Types.INTEGER)
+                ps.executeUpdate()
+                ps.generatedKeys.use { rs -> rs.next(); rs.getLong(1) }
+            }
+            ProgramRow(id = id, name = name, colorArgb = colorArgb)
+        }
+
+    /**
+     * ΔΙΟΡΘ / Χρώμα: rename and/or recolor. Nulls keep the current value.
+     * Recoloring repaints every cell whose break carries the programme - the
+     * colour is data ON the programme, not on the cells.
+     */
+    fun updateProgram(id: Long, name: String? = null, colorArgb: Int? = null): Boolean =
+        connection().use { c ->
+            c.prepareStatement(
+                """
+                UPDATE programs SET name = COALESCE(?, name), color_argb = COALESCE(?, color_argb)
+                WHERE id = ? AND station_id = ? AND hidden = FALSE
+                """.trimIndent()
+            ).use { ps ->
+                name?.let { ps.setString(1, it) } ?: ps.setNull(1, java.sql.Types.VARCHAR)
+                colorArgb?.let { ps.setInt(2, it) } ?: ps.setNull(2, java.sql.Types.INTEGER)
+                ps.setLong(3, id)
+                ps.setString(4, stationId)
+                ps.executeUpdate() > 0
+            }
+        }
+
+    /**
+     * ΑΦΑΙΡ: soft-delete - the programme leaves the dropdown but keeps its row,
+     * so breaks (and legacy spots) pointing at it keep their paint and their
+     * history. Nothing ever hard-deletes a programme.
+     */
+    fun hideProgram(id: Long): Boolean =
+        connection().use { c ->
+            c.prepareStatement(
+                "UPDATE programs SET hidden = TRUE WHERE id = ? AND station_id = ? AND hidden = FALSE"
+            ).use { ps ->
+                ps.setLong(1, id)
+                ps.setString(2, stationId)
+                ps.executeUpdate() > 0
+            }
+        }
 
     /** One placement in the month-grid row shape (same joins as loadMonth). */
     private fun placementRow(c: Connection, placementId: Long): CommercialRow? =
@@ -997,18 +1179,18 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
     /**
-     * THE BREAKS - and this query is the whole definition of one. A break is a
-     * time at which this station aired something, so the breaks of a period are
-     * the DISTINCT times its airings landed on, and nothing more. There is no
-     * catalog to read, to seed, or to keep in step with the data.
+     * THE BREAK TIMES of a period: the DISTINCT times of its airings, unioned
+     * with the times of its `breaks` rows - the second leg is what lets an
+     * operator-created EMPTY break (a scheduled slot nothing airs in yet) hold
+     * a row on the grid.
      *
-     * They are per PERIOD, not per station-forever, which is what makes the
-     * model flexible in the direction the operator cares about: a time used once
-     * in 2003 does not haunt the 2026 grid, and an operator can put a spot at any
-     * time at all without anyone having created that break first.
+     * They are still per PERIOD, not per station-forever: a time used once in
+     * 2003 does not haunt the 2026 grid, and putting a spot at an unused time
+     * still creates its break on the fly (see [addPlacement]).
      *
-     * Hidden airings and hidden spots are excluded, so a break cannot appear with
-     * nothing visible in it - the same filter [loadMonth] applies to the cells.
+     * Hidden airings and hidden spots are excluded, so an airing-only time
+     * cannot appear with nothing visible in it - the same filter [loadMonth]
+     * applies to the cells.
      */
     fun breakTimes(date: LocalDate): List<BreakTimeRow> =
         breakTimesIn(date, date.plusDays(1))
@@ -1066,18 +1248,28 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT DISTINCT p.show_time
-                  FROM placements p, spots s
-                 WHERE s.id = p.spot_id
-                   AND p.station_id = ?
-                   AND p.show_date >= ? AND p.show_date < ?
-                   AND p.hidden = FALSE AND s.hidden = FALSE
-                 ORDER BY p.show_time
+                SELECT DISTINCT show_time FROM (
+                    SELECT p.show_time
+                      FROM placements p, spots s
+                     WHERE s.id = p.spot_id
+                       AND p.station_id = ?
+                       AND p.show_date >= ? AND p.show_date < ?
+                       AND p.hidden = FALSE AND s.hidden = FALSE
+                    UNION
+                    SELECT b.show_time
+                      FROM breaks b
+                     WHERE b.station_id = ?
+                       AND b.show_date >= ? AND b.show_date < ?
+                ) t
+                 ORDER BY show_time
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, stationId)
                 ps.setDate(2, java.sql.Date.valueOf(start))
                 ps.setDate(3, java.sql.Date.valueOf(endExclusive))
+                ps.setString(4, stationId)
+                ps.setDate(5, java.sql.Date.valueOf(start))
+                ps.setDate(6, java.sql.Date.valueOf(endExclusive))
                 ps.executeQuery().use { rs ->
                     val out = mutableListOf<BreakTimeRow>()
                     while (rs.next()) out += BreakTimeRow(rs.getTime(1).toLocalTime())
@@ -1128,55 +1320,59 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      */
     fun loadMonthCells(year: Int, month: Int, onlyClientCode: String? = null): List<CellRow> {
         val (start, end) = monthRange(year, month)
-        // The cell's programme is the FIRST placement's that has one - the same
-        // rule loadMonth applies by walking the airings in position order and
-        // taking the first non-null. Ordering the nulls last reproduces it exactly.
-        // JOIN form throughout, NOT comma form. This statement is MIXED (it needs
-        // a LEFT JOIN for the programme, which a cell may not have), and in MySQL
-        // the comma binds LOOSER than JOIN - so an ON clause cannot see a
-        // comma-joined table and the query dies with "Unknown column 'p.program_id'
-        // in 'on clause'". Half-converting a mixed statement is the one thing the
-        // comma/WHERE style must not do.
-        val customerJoin =
-            if (onlyClientCode != null) "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?" else ""
+        // The cell's programme is THE BREAK'S - the one column the break entity
+        // owns (see GroupDb). The old "first placement that has one" windows are
+        // gone: per-spot tags still exist (reports read them) but never decide a
+        // cell's paint again.
+        val sql = if (onlyClientCode == null)
+            // Staff view is BREAKS-driven, so an operator-created EMPTY break
+            // shows as a 0-spot cell painted with its programme. The airings leg
+            // joins by the slot tuple, NOT break_id: (station, date, hidden,
+            // time) is the leftmost prefix of idx_placements_grid, so the
+            // covering index still answers this - and the tuple IS the break's
+            // identity anyway (uq_breaks_slot).
+            """
+            SELECT b.show_time, b.show_date,
+                   COUNT(s.id) AS spot_count,
+                   COALESCE(SUM(s.duration_seconds), 0) AS total_secs,
+                   MAX(pr.color_argb) AS program_color,
+                   MAX(pr.name) AS program_name
+            FROM breaks b
+            LEFT JOIN placements p ON p.station_id = b.station_id
+                                  AND p.show_date = b.show_date
+                                  AND p.show_time = b.show_time
+                                  AND p.hidden = FALSE
+            LEFT JOIN spots s ON s.id = p.spot_id AND s.hidden = FALSE
+            LEFT JOIN programs pr ON pr.id = b.program_id
+            WHERE b.station_id = ?
+              AND b.show_date >= ? AND b.show_date < ?
+            GROUP BY b.show_date, b.show_time
+            """.trimIndent()
+        else
+            // CUSTOMER_VIEWER: their spots decide WHICH cells exist and what
+            // the counts say (an empty break is not theirs to see), but the
+            // paint is still the break's programme - whoever is looking.
+            """
+            SELECT p.show_time, p.show_date,
+                   COUNT(*) AS spot_count,
+                   SUM(s.duration_seconds) AS total_secs,
+                   MAX(pr.color_argb) AS program_color,
+                   MAX(pr.name) AS program_name
+            FROM placements p
+            JOIN spots s ON s.id = p.spot_id
+            JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?
+            LEFT JOIN breaks b ON b.station_id = p.station_id
+                              AND b.show_date = p.show_date
+                              AND b.show_time = p.show_time
+            LEFT JOIN programs pr ON pr.id = b.program_id
+            WHERE p.station_id = ?
+              AND p.show_date >= ? AND p.show_date < ?
+              AND p.hidden = FALSE AND s.hidden = FALSE
+            GROUP BY p.show_date, p.show_time
+            """.trimIndent()
         val cells = mutableListOf<CellRow>()
         connection().use { c ->
-            c.prepareStatement(
-                """
-                SELECT x.show_time, x.show_date, COUNT(*) AS spot_count,
-                       SUM(x.duration_seconds) AS total_secs,
-                       MAX(CASE WHEN x.rn_color = 1 THEN x.color_argb END) AS program_color,
-                       MAX(CASE WHEN x.rn_name  = 1 THEN x.program_name END) AS program_name
-                FROM (
-                    SELECT p.show_time, p.show_date, s.duration_seconds,
-                           pr.color_argb, pr.name AS program_name,
-                           -- TWO row numbers, not one, and this is not a nicety:
-                           -- the colour and the name are chosen INDEPENDENTLY -
-                           -- "the first airing that has a colour" and "the first
-                           -- that has a name". A programme can carry a name and NO
-                           -- colour (four cells at 20:30 in Dec 2005 do exactly
-                           -- that), and taking both from the same lead row silently
-                           -- painted those cells with the zone fallback instead of
-                           -- the colour a later airing's programme supplies.
-                           ROW_NUMBER() OVER (
-                               PARTITION BY p.show_date, p.show_time
-                               ORDER BY (pr.color_argb IS NULL), p.position
-                           ) AS rn_color,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY p.show_date, p.show_time
-                               ORDER BY (pr.name IS NULL), p.position
-                           ) AS rn_name
-                    FROM placements p
-                    JOIN spots s ON s.id = p.spot_id
-                    $customerJoin
-                    LEFT JOIN programs pr ON pr.id = p.program_id
-                    WHERE p.station_id = ?
-                      AND p.show_date >= ? AND p.show_date < ?
-                      AND p.hidden = FALSE AND s.hidden = FALSE
-                ) x
-                GROUP BY x.show_date, x.show_time
-                """.trimIndent()
-            ).use { ps ->
+            c.prepareStatement(sql).use { ps ->
                 // ORDER MATTERS: the customer's `?` sits in the JOIN, which comes
                 // BEFORE the WHERE - bind it first or the station id lands on it.
                 var i = 1
@@ -1196,8 +1392,8 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                             date = date,
                             spotCount = spotCount,
                             totalDurationSeconds = rs.getInt("total_secs"),
-                            // Identical rule to loadMonth: the programme's colour
-                            // wins; the zone/weekend/density rules are the fallback.
+                            // The BREAK's programme colour wins; the
+                            // zone/weekend/density rules are the fallback.
                             zoneColorArgb = programColor ?: cellColorArgb(
                                 zone = zoneOf(time.hour),
                                 isWeekend = isWeekend,
@@ -1334,9 +1530,10 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * position) unique key and we treat that as "already seeded by someone
      * else". This is also correct across multiple server instances.
      *
-     * A demo station's breaks are not seeded - they APPEAR, because the invented
-     * airings land on [demoBreakTimes] and a break is nothing but a time some
-     * airing landed on.
+     * A demo station's breaks are seeded FROM its invented airings (BreakSeeder,
+     * right after the placements land): every airing must belong to a break row
+     * now. Their programme stays NULL - demo placements carry none - so demo
+     * cells keep their zone colours.
      */
     fun ensureMonthSeeded(year: Int, month: Int) {
         connection().use { c ->
@@ -1380,11 +1577,15 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                     ps.executeBatch()
                 }
                 c.commit()
+                // The invented airings need their break rows too (see the KDoc).
+                BreakSeeder.seed(c)
+                c.commit()
             } catch (e: SQLException) {
                 c.rollback()
                 // Another request already seeded this exact month concurrently
                 // (generation is deterministic, so the rows collide) - nothing
-                // to do. Anything else is a real failure.
+                // to do, breaks included: the winner seeds them. Anything else
+                // is a real failure.
                 if (!isDuplicateKeyViolation(e)) throw e
             } catch (e: Exception) {
                 c.rollback(); throw e
@@ -1411,3 +1612,31 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         return false
     }
 }
+
+/** A break's owned state: its internal id (never leaves the server) + programme. */
+private data class BreakRow(val id: Long, val programId: Long?)
+
+/** One programme of the station's catalog (the "Τύποι Προγράμματος" dropdown). */
+data class ProgramRow(val id: Long, val name: String, val colorArgb: Int?)
+
+/** Outcome of [StationDb.addPlacement]; the routes map each case to a status. */
+sealed interface AddPlacementResult {
+    /** The airing landed - [row] is the same row shape the month grid serves. */
+    data class Added(val row: CommercialRow) : AddPlacementResult
+
+    /** The spot does not exist (visible) on this station. */
+    data object UnknownSpot : AddPlacementResult
+
+    /**
+     * The cell is WHITE (no break at the slot, or an unpainted one) and no
+     * programme came along to paint it - the operator must pick a "Τύπος
+     * Προγράμματος" before placing the first spot.
+     */
+    data object ProgramRequired : AddPlacementResult
+
+    /** The supplied programme does not exist (visible) on this station. */
+    data object UnknownProgram : AddPlacementResult
+}
+
+/** Outcome of [StationDb.createBreak]. */
+enum class CreateBreakResult { CREATED, EXISTS }

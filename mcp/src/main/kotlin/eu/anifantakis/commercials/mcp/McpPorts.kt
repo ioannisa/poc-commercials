@@ -2,7 +2,7 @@ package eu.anifantakis.commercials.mcp
 
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailSource
-import eu.anifantakis.commercials.server.scheduler.CommercialRow
+import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
 import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.stations.SmtpConfig
 import java.io.File
@@ -32,7 +32,8 @@ interface StationDataSource : ScheduleEmailSource {
     fun placementStats(): StationDb.PlacementStats
 
     // ── writes ───────────────────────────────────────────────────────────────
-    fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow?
+    /** [programId] founds the break when the slot has none; see StationDb.addPlacement. */
+    fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate, programId: Long? = null): AddPlacementResult
     fun deletePlacement(placementId: Long): Boolean
     fun reorderPlacements(time: LocalTime, date: LocalDate, orderedIds: List<Long>): Boolean
     fun logEmail(entry: StationDb.EmailLogEntry): Long

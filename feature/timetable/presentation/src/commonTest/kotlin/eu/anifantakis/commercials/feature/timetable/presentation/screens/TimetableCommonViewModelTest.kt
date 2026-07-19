@@ -244,6 +244,12 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val vm = vm()
         vm.loadMonth(2026, 7); advanceUntilIdle()
 
+        // The cell was WHITE (no programme), so this add PAINTS its break and
+        // the reducer re-fetches the month for the fresh paint - serve the
+        // AFTER state, exactly as the server would report it.
+        schedule.monthResult = DataResult.Success(
+            month(cell(spots = listOf(placed(id = 100, durationSeconds = 45)), programName = "News"))
+        )
         vm.add(spotId = 5, time = TEST_TIME, date = TEST_DATE)
         advanceUntilIdle()
 
@@ -251,7 +257,8 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         val cell = state.cells[key]!!
         assertEquals(1, cell.spotCount)
         assertEquals(45, cell.totalDurationSeconds)
-        assertTrue(key in state.modifiedCells, "the added cell must carry the black marker")
+        assertEquals("News", cell.programName, "the refresh brings the break's fresh paint in")
+        assertTrue(key in state.modifiedCells, "the black marker survives the refresh")
         assertEquals(1, state.addedCounts[key], "one session add -> 'r' becomes enabled once")
     }
 

@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.mailer.SmtpMailer
 import eu.anifantakis.commercials.reports.dto.ReportRequest
 import eu.anifantakis.commercials.reports.engine.ReportEngine
 import eu.anifantakis.commercials.scheduleemail.ScheduleEmailAssembler.toSettings
+import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
 import eu.anifantakis.commercials.server.scheduler.CellRow
 import eu.anifantakis.commercials.server.scheduler.CommercialRow
 import eu.anifantakis.commercials.server.scheduler.StationDb
@@ -44,8 +45,8 @@ class StationDbDataSource(private val db: StationDb) : StationDataSource {
 
     override fun placementStats(): StationDb.PlacementStats = db.placementStats()
 
-    override fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate): CommercialRow? =
-        db.addPlacement(spotId, time, date)
+    override fun addPlacement(spotId: Long, time: LocalTime, date: LocalDate, programId: Long?): AddPlacementResult =
+        db.addPlacement(spotId, time, date, programId)
 
     override fun deletePlacement(placementId: Long): Boolean = db.deletePlacement(placementId)
 
