@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.server.di
 
+import eu.anifantakis.commercials.galaxy.GalaxyImportService
 import eu.anifantakis.commercials.migration.MigrationService
 import eu.anifantakis.commercials.server.auth.AuthDb
 import eu.anifantakis.commercials.server.aiusage.AiUsageDb
@@ -32,6 +33,9 @@ val serverModule = module {
     single<AiUsageDb>()
 
     single<MigrationService>()
+    // Classic DSL: the optional baseDir parameter (a File, test-only override)
+    // is not a graph type, so the typed form can't wire this constructor.
+    single { GalaxyImportService(get()) }
 
     // NOTE: the MCP tool backend's bindings live in :mcp's own `mcpModule`
     // (di/McpModule.kt) - Application.module() loads it alongside this one.

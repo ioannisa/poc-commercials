@@ -7,6 +7,8 @@ import eu.anifantakis.commercials.server.auth.OAuthDb
 import eu.anifantakis.commercials.server.routes.adminRoutes
 import eu.anifantakis.commercials.server.routes.aiRoutes
 import eu.anifantakis.commercials.migration.MigrationService
+import eu.anifantakis.commercials.galaxy.GalaxyImportService
+import eu.anifantakis.commercials.galaxy.galaxyRoutes
 import eu.anifantakis.commercials.migration.migrationRoutes
 import eu.anifantakis.commercials.server.routes.authRoutes
 import eu.anifantakis.commercials.server.routes.oAuthRoutes
@@ -46,6 +48,7 @@ private val API_TAGS = listOf(
     Tag("Schedule", "Commercials schedule: breaks, placements, and the spot finder."),
     Tag("Reports", "PDF report generation (single and batch) and the station report logo."),
     Tag("Migration", "Legacy-dump migration console: browse, start, flow-map, and reset."),
+    Tag("Galaxy", "Galaxy (new ERP) import bridge: delivery uploads, dry-run/apply, review list."),
     Tag("AI", "In-app AI assistant: chat (blocking + streaming), approved-mutation execution, per-user usage, and out-of-band report pickup."),
     Tag("Health", "Liveness and database-connectivity probes."),
     Tag("Updates", "Desktop auto-update: the published-version advertisement and its admin publishing controls."),
@@ -114,6 +117,7 @@ fun Application.configureRouting() {
     val oauthDb by inject<OAuthDb>()
     val registry by inject<StationRegistry>()
     val migrationService by inject<MigrationService>()
+    val galaxyImportService by inject<GalaxyImportService>()
     val mcpToolServices by inject<McpToolServices>()
     val aiUsageDb by inject<eu.anifantakis.commercials.server.aiusage.AiUsageDb>()
     val aiChatService = AiChatService(registry, mcpToolServices, aiUsageDb)
@@ -256,6 +260,7 @@ fun Application.configureRouting() {
             // User management + legacy migration (super administrator only)
             adminRoutes(authDb, oauthDb, registry)
             migrationRoutes(migrationService, requireAdmin = { requireAdmin() })
+            galaxyRoutes(galaxyImportService, requireAdmin = { requireAdmin() })
             stationAdminRoutes(registry, authDb)
 
             // Customer schedule emails (staff only)

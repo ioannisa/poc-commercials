@@ -77,6 +77,8 @@ class ServerKoinGraphTest {
         assertEquals(listOf("station-a", "station-b"), koin.get<StationRegistry>().ids)
         // :mcp's own module resolves against the server's persistence graph
         assertNotNull(koin.get<McpToolServices>())
+        // The Galaxy Bridge engine (:galaxy) resolves off the same registry
+        assertNotNull(koin.get<eu.anifantakis.commercials.galaxy.GalaxyImportService>())
 
         app.close()
     }
