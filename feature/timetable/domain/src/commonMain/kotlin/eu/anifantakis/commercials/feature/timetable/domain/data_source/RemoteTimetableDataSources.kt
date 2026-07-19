@@ -46,8 +46,6 @@ interface RemotePlacementsDataSource {
     ): DataResult<PlacedCommercial, DataError.Network>
     suspend fun remove(placementId: Long): EmptyDataResult<DataError.Network>
     suspend fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>): EmptyDataResult<DataError.Network>
-    /** An EMPTY, UNPAINTED break at (time, date) - it holds a grid ROW. */
-    suspend fun createBreak(time: LocalTime, date: LocalDate): EmptyDataResult<DataError.Network>
 }
 
 /** The programme catalog (Τύποι Προγράμματος): dropdown content + its CRUD. */

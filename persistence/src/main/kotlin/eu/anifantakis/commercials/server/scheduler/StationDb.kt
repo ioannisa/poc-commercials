@@ -871,29 +871,6 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
     }
 
-    /**
-     * Creates an EMPTY, UNPAINTED break at (time, date) - the legacy console's
-     * "Πρόσθεση νέου διαλείμματος: Ώρα" box, which the emergent model could
-     * not offer (a break only existed once an airing used its time). Its job
-     * is to make the TIME hold a ROW on the grid; the cells stay white, and
-     * the FIRST spot placed into one is what paints it (see [addPlacement]) -
-     * the selected programme applies then, not now.
-     *
-     * Returns EXISTS when the slot already has a break; nothing is touched.
-     */
-    fun createBreak(time: LocalTime, date: LocalDate): CreateBreakResult =
-        connection().use { c ->
-            val inserted = c.prepareStatement(
-                "INSERT IGNORE INTO breaks(station_id, show_date, show_time, program_id) VALUES(?,?,?,NULL)"
-            ).use { ps ->
-                ps.setString(1, stationId)
-                ps.setDate(2, java.sql.Date.valueOf(date))
-                ps.setTime(3, java.sql.Time.valueOf(time))
-                ps.executeUpdate() > 0
-            }
-            if (inserted) CreateBreakResult.CREATED else CreateBreakResult.EXISTS
-        }
-
     /** The break at a slot, if the slot has one. */
     private fun breakAt(c: Connection, time: LocalTime, date: LocalDate): BreakRow? =
         c.prepareStatement(
@@ -1118,16 +1095,45 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * sibling station simply does not match, so the delete is a no-op rather than
      * a cross-station wipe. (It used to need a join through `spots` to establish
      * that; the airing now says which station it aired on.)
+     *
+     * RETIRES THE BREAK once its last airing is gone: a slot that no longer
+     * holds a spot goes back to being a white cell, so the next first spot
+     * founds a FRESH break with the operator's chosen programme (rather than
+     * silently inheriting a stale one). A break with hidden airings still FKs
+     * them, so the delete only fires when nothing references the break at all.
      */
     fun deletePlacement(placementId: Long): Boolean =
         connection().use { c ->
-            c.prepareStatement(
+            // Capture the break BEFORE deleting, to retire it if this was its
+            // last airing.
+            val breakId = c.prepareStatement(
+                "SELECT break_id FROM placements WHERE id = ? AND station_id = ?"
+            ).use { ps ->
+                ps.setLong(1, placementId)
+                ps.setString(2, stationId)
+                ps.executeQuery().use { rs ->
+                    if (!rs.next()) return false
+                    rs.getLong("break_id").takeIf { !rs.wasNull() }
+                }
+            }
+            val deleted = c.prepareStatement(
                 "DELETE FROM placements WHERE id = ? AND station_id = ?"
             ).use { ps ->
                 ps.setLong(1, placementId)
                 ps.setString(2, stationId)
                 ps.executeUpdate() > 0
             }
+            if (deleted && breakId != null) {
+                c.prepareStatement(
+                    "DELETE FROM breaks WHERE id = ? AND NOT EXISTS " +
+                        "(SELECT 1 FROM placements WHERE break_id = ?)"
+                ).use { ps ->
+                    ps.setLong(1, breakId)
+                    ps.setLong(2, breakId)
+                    ps.executeUpdate()
+                }
+            }
+            deleted
         }
 
     /**
@@ -1179,18 +1185,17 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         }
 
     /**
-     * THE BREAK TIMES of a period: the DISTINCT times of its airings, unioned
-     * with the times of its `breaks` rows - the second leg is what lets an
-     * operator-created EMPTY break (a scheduled slot nothing airs in yet) hold
-     * a row on the grid.
+     * THE BREAK TIMES of a period: the DISTINCT times of its VISIBLE airings.
      *
-     * They are still per PERIOD, not per station-forever: a time used once in
-     * 2003 does not haunt the 2026 grid, and putting a spot at an unused time
-     * still creates its break on the fly (see [addPlacement]).
+     * Only occupied times - a spotless break has no row (an operator-created
+     * empty break is a transient CLIENT row, never persisted; see
+     * [addPlacement]/deletePlacement). They are per PERIOD, not per
+     * station-forever: a time used once in 2003 does not haunt the 2026 grid,
+     * and putting a spot at an unused time creates its break on the fly.
      *
-     * Hidden airings and hidden spots are excluded, so an airing-only time
-     * cannot appear with nothing visible in it - the same filter [loadMonth]
-     * applies to the cells.
+     * Hidden airings and hidden spots are excluded, so a time cannot appear
+     * with nothing visible in it - the same filter [loadMonth] applies to the
+     * cells.
      */
     fun breakTimes(date: LocalDate): List<BreakTimeRow> =
         breakTimesIn(date, date.plusDays(1))
@@ -1248,28 +1253,18 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         connection().use { c ->
             c.prepareStatement(
                 """
-                SELECT DISTINCT show_time FROM (
-                    SELECT p.show_time
-                      FROM placements p, spots s
-                     WHERE s.id = p.spot_id
-                       AND p.station_id = ?
-                       AND p.show_date >= ? AND p.show_date < ?
-                       AND p.hidden = FALSE AND s.hidden = FALSE
-                    UNION
-                    SELECT b.show_time
-                      FROM breaks b
-                     WHERE b.station_id = ?
-                       AND b.show_date >= ? AND b.show_date < ?
-                ) t
-                 ORDER BY show_time
+                SELECT DISTINCT p.show_time
+                  FROM placements p, spots s
+                 WHERE s.id = p.spot_id
+                   AND p.station_id = ?
+                   AND p.show_date >= ? AND p.show_date < ?
+                   AND p.hidden = FALSE AND s.hidden = FALSE
+                 ORDER BY p.show_time
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, stationId)
                 ps.setDate(2, java.sql.Date.valueOf(start))
                 ps.setDate(3, java.sql.Date.valueOf(endExclusive))
-                ps.setString(4, stationId)
-                ps.setDate(5, java.sql.Date.valueOf(start))
-                ps.setDate(6, java.sql.Date.valueOf(endExclusive))
                 ps.executeQuery().use { rs ->
                     val out = mutableListOf<BreakTimeRow>()
                     while (rs.next()) out += BreakTimeRow(rs.getTime(1).toLocalTime())
@@ -1325,12 +1320,14 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
         // gone: per-spot tags still exist (reports read them) but never decide a
         // cell's paint again.
         val sql = if (onlyClientCode == null)
-            // Staff view is BREAKS-driven, so an operator-created EMPTY break
-            // shows as a 0-spot cell painted with its programme. The airings leg
-            // joins by the slot tuple, NOT break_id: (station, date, hidden,
-            // time) is the leftmost prefix of idx_placements_grid, so the
-            // covering index still answers this - and the tuple IS the break's
-            // identity anyway (uq_breaks_slot).
+            // Staff view: the break owns the PAINT (its programme), but a CELL
+            // exists only where a VISIBLE spot airs - HAVING drops empty and
+            // hidden-only breaks so a spotless break never shows a row. (That is
+            // why "add break" is a transient CLIENT row, not a persisted empty
+            // break: an empty break has no cell, and deleting the last spot
+            // retires its break - see deletePlacement.) The airings leg joins by
+            // the slot tuple, NOT break_id: (station, date, hidden, time) is the
+            // leftmost prefix of idx_placements_grid.
             """
             SELECT b.show_time, b.show_date,
                    COUNT(s.id) AS spot_count,
@@ -1347,6 +1344,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             WHERE b.station_id = ?
               AND b.show_date >= ? AND b.show_date < ?
             GROUP BY b.show_date, b.show_time
+            HAVING COUNT(s.id) > 0
             """.trimIndent()
         else
             // CUSTOMER_VIEWER: their spots decide WHICH cells exist and what
@@ -1637,6 +1635,3 @@ sealed interface AddPlacementResult {
     /** The supplied programme does not exist (visible) on this station. */
     data object UnknownProgram : AddPlacementResult
 }
-
-/** Outcome of [StationDb.createBreak]. */
-enum class CreateBreakResult { CREATED, EXISTS }

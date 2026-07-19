@@ -10,7 +10,6 @@ import eu.anifantakis.commercials.feature.timetable.data.dto.AddPlacementRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.BreakSlotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
-import eu.anifantakis.commercials.feature.timetable.data.dto.CreateBreakRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.CreateProgramRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ProgramDto
@@ -95,15 +94,6 @@ class RemotePlacementsDataSourceImpl(private val api: ApiHttpClient) : RemotePla
         api.putEmpty(
             "/api/schedule/placements/order",
             ReorderPlacementsRequest(time.hhMm(), date.toString(), orderedIds),
-        )
-
-    override suspend fun createBreak(
-        time: LocalTime,
-        date: LocalDate,
-    ): EmptyDataResult<DataError.Network> =
-        api.postEmpty(
-            "/api/schedule/breaks",
-            CreateBreakRequest(time.hhMm(), date.toString()),
         )
 }
 

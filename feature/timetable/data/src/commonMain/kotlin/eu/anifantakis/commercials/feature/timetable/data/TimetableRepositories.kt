@@ -72,11 +72,6 @@ class PlacementsRepositoryImpl(
         date: LocalDate,
         orderedIds: List<Long>,
     ): EmptyDataResult<DataError.Network> = remoteDataSource.reorder(time, date, orderedIds)
-
-    override suspend fun createBreak(
-        time: LocalTime,
-        date: LocalDate,
-    ): EmptyDataResult<DataError.Network> = remoteDataSource.createBreak(time, date)
 }
 
 class ProgramsRepositoryImpl(

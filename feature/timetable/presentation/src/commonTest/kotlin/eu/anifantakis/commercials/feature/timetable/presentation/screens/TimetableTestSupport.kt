@@ -262,8 +262,6 @@ class FakePlacementsRepository : PlacementsRepository {
 
     /** The programme each add rode in with (position-matched to the adds). */
     val addProgramIds = mutableListOf<Long?>()
-    val breakCreates = mutableListOf<Pair<LocalTime, LocalDate>>()
-    var createBreakResult: EmptyDataResult<DataError.Network> = DataResult.Success(Unit)
 
     override suspend fun add(
         spotId: Long,
@@ -287,14 +285,6 @@ class FakePlacementsRepository : PlacementsRepository {
     ): EmptyDataResult<DataError.Network> {
         reorders += Triple(time, date, orderedIds)
         return reorderResult
-    }
-
-    override suspend fun createBreak(
-        time: LocalTime,
-        date: LocalDate,
-    ): EmptyDataResult<DataError.Network> {
-        breakCreates += (time to date)
-        return createBreakResult
     }
 }
 

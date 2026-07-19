@@ -36,12 +36,4 @@ interface PlacementsRepository {
 
     /** Persists a cell's ordering; list indexes become positions. */
     suspend fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>): EmptyDataResult<DataError.Network>
-
-    /**
-     * Creates an EMPTY, UNPAINTED break at (time, date) - the legacy console's
-     * "Πρόσθεση νέου διαλείμματος: Ώρα" box. It only holds a ROW on the grid;
-     * its cells stay white until a first spot (with a selected programme)
-     * paints each one.
-     */
-    suspend fun createBreak(time: LocalTime, date: LocalDate): EmptyDataResult<DataError.Network>
 }

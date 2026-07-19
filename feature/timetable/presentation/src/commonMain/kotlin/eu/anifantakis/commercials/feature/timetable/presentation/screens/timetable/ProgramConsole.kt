@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +38,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
+import eu.anifantakis.commercials.grids.SchedulerKey
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
@@ -70,6 +74,89 @@ import eu.anifantakis.commercials.grids.contrastTextColor
 
 /** Packed-ARGB programme colour -> Compose colour (same cast as the grid). */
 private fun programColor(argb: Int?): Color? = argb?.let { Color(it.toLong() and 0xFFFFFFFF) }
+
+/**
+ * The FOCUSED cell's break, shown the legacy-console way: the day/date/time on
+ * top ("ΣΑ 18/07 - 13:00") and, under it, the break PAINTED with its
+ * programme's colour (the name on it, text contrast by luminance) - so the
+ * operator sees at a glance which programme sits behind the cell they are on.
+ * A white/empty cell shows a blank swatch.
+ */
+@Composable
+internal fun SelectedBreakReadout(
+    state: TimetableState,
+    modifier: Modifier = Modifier,
+) {
+    val slot = state.breaks.getOrNull(state.selectedRow) ?: return
+    // selectedColumn is 0-based; a stale index past the month's end (navigating
+    // to a shorter month) simply yields no date and the readout hides.
+    val date = runCatching {
+        LocalDate(state.year, state.month, state.selectedColumn + 1)
+    }.getOrNull() ?: return
+
+    val cell = state.cells[SchedulerKey(slot.time, date)]
+    // The cell's zoneColor IS the break's programme colour (white when the
+    // break is unpainted or the day is empty) - exactly what the grid draws.
+    val brush = cell?.zoneColor?.takeIf { it != Color.White }
+    val programName = cell?.programName
+
+    // "ΣΑ 18/07 - 13:00": weekday abbr, zero-padded day/month, then the time.
+    val dd = date.dayOfMonth.toString().padStart(2, '0')
+    val mm = state.month.toString().padStart(2, '0')
+    val label = "${dayAbbrev(date.dayOfWeek)} $dd/$mm - ${slot.label}"
+
+    val shape = RoundedCornerShape(3.dp)
+    Column(
+        // FIXED width so the logo + station picker above never shift as the
+        // programme name changes length; the swatch always sits at its
+        // 2-line footprint.
+        modifier = modifier.width(READOUT_WIDTH),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(UIConst.paddingHairline),
+    ) {
+        AppText(label, AppTextStyle.NOTE, maxLines = 1)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Reserve TWO lines always (min, not fixed - so a larger font
+                // scale grows the box down, never clips the second line). A
+                // third line ellipsizes.
+                .heightIn(min = READOUT_TWO_LINE_HEIGHT)
+                .clip(shape)
+                .background(brush ?: MaterialTheme.colorScheme.surface, shape)
+                .border(1.dp, MaterialTheme.colorScheme.outline, shape)
+                .padding(horizontal = UIConst.paddingExtraSmall, vertical = UIConst.paddingHairline),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppText(
+                programName ?: "—",
+                AppTextStyle.NOTE,
+                color = brush?.let(::contrastTextColor) ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** The readout's fixed footprint: wide enough for the longest name in 2 lines. */
+private val READOUT_WIDTH = 236.dp
+private val READOUT_TWO_LINE_HEIGHT = 36.dp
+
+/** The 2-letter weekday abbreviation - the SAME strings the grid columns use. */
+@Composable
+private fun dayAbbrev(day: DayOfWeek): String = Strings[
+    when (day) {
+        DayOfWeek.MONDAY -> StringKey.DAY_SHORT_MONDAY
+        DayOfWeek.TUESDAY -> StringKey.DAY_SHORT_TUESDAY
+        DayOfWeek.WEDNESDAY -> StringKey.DAY_SHORT_WEDNESDAY
+        DayOfWeek.THURSDAY -> StringKey.DAY_SHORT_THURSDAY
+        DayOfWeek.FRIDAY -> StringKey.DAY_SHORT_FRIDAY
+        DayOfWeek.SATURDAY -> StringKey.DAY_SHORT_SATURDAY
+        else -> StringKey.DAY_SHORT_SUNDAY
+    }
+]
 
 /**
  * The classic Windows 48-colour picker rows - the palette the legacy console's

@@ -4,7 +4,6 @@ import eu.anifantakis.commercials.server.auth.UserRole
 import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
-import eu.anifantakis.commercials.server.scheduler.CreateBreakResult
 import eu.anifantakis.commercials.server.scheduler.GridViewMode
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
 import eu.anifantakis.commercials.server.scheduler.formatHhMm
@@ -165,13 +164,6 @@ data class UpdateProgramRequest(
     val colorArgb: Int? = null,
 )
 
-@Serializable
-data class CreateBreakRequest(
-    /** "HH:mm" */
-    val time: String,
-    /** ISO yyyy-MM-dd */
-    val date: String,
-)
 
 @Serializable
 data class ReorderPlacementsRequest(
@@ -527,36 +519,6 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             val deleted = withContext(Dispatchers.IO) { access.db.deletePlacement(id) }
             if (deleted) call.respond(HttpStatusCode.NoContent)
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No placement $id"))
-        }
-
-        // ── breaks (the console's "Πρόσθεση νέου διαλείμματος" box) ──────
-
-        /**
-         * Create an EMPTY, UNPAINTED break at (time, date) - it holds a grid ROW; the first spot placed into it paints it.
-         *
-         * Tag: Schedule
-         */
-        post("/schedule/breaks") {
-            val access = call.editorAccessOrRespond(registry) ?: return@post
-            val req = call.receive<CreateBreakRequest>()
-            val date = runCatching { LocalDate.parse(req.date) }.getOrNull()
-            if (date == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "date must be yyyy-MM-dd"))
-                return@post
-            }
-            val time = parseHhMmOrNull(req.time)
-            if (time == null) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "time must be HH:mm"))
-                return@post
-            }
-            val result = withContext(Dispatchers.IO) { access.db.createBreak(time, date) }
-            when (result) {
-                CreateBreakResult.CREATED -> call.respond(HttpStatusCode.Created)
-                CreateBreakResult.EXISTS -> call.respond(
-                    HttpStatusCode.Conflict,
-                    mapOf("error" to "A break already exists at ${req.time} on ${req.date}")
-                )
-            }
         }
 
         // ── programme catalog (the console's "Τύποι Προγράμματος" box) ──

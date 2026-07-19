@@ -641,6 +641,13 @@ private fun KeyboardEnabledHeader(
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.size(width = 132.dp, height = 34.dp),
                             )
+                            Spacer(modifier = Modifier.height(UIConst.paddingSmall))
+                            // The focused cell's break, painted with its
+                            // programme's colour, day/date/time above it (legacy).
+                            SelectedBreakReadout(
+                                state = state,
+                                modifier = Modifier.padding(top = UIConst.paddingExtraSmall),
+                            )
                         }
                     }
 

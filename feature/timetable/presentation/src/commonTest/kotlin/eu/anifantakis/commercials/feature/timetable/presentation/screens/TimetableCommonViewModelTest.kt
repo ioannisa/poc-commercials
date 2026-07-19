@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -260,6 +261,40 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         assertEquals("News", cell.programName, "the refresh brings the break's fresh paint in")
         assertTrue(key in state.modifiedCells, "the black marker survives the refresh")
         assertEquals(1, state.addedCounts[key], "one session add -> 'r' becomes enabled once")
+    }
+
+    @Test
+    fun createBreakAddsATransientClientRowAndPersistsNothing() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val newTime = LocalTime(23, 55)
+
+        vm.createBreak(newTime, TEST_DATE)
+        advanceUntilIdle()
+
+        assertTrue(
+            vm.commonState.value.breaks.any { it.time == newTime },
+            "the operator's added time shows a client row",
+        )
+        assertFalse(
+            vm.commonState.value.cells.keys.any { it.time == newTime },
+            "but no cell - the row is white until a spot founds the real break",
+        )
+        assertTrue(placements.addProgramIds.isEmpty(), "an added break is client-only - nothing is persisted")
+    }
+
+    @Test
+    fun createBreakSkipsATimeThatAlreadyHasARow() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val before = vm.commonState.value.breaks.size
+
+        vm.createBreak(TEST_TIME, TEST_DATE)   // TEST_TIME already holds a row
+        advanceUntilIdle()
+
+        assertEquals(before, vm.commonState.value.breaks.size, "an existing time adds no duplicate row")
     }
 
     @Test

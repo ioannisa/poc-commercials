@@ -2,6 +2,7 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Stable
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.core.presentation.global_state.BaseCommonViewModel
@@ -142,27 +143,36 @@ class TimetableCommonViewModel(
             is TimetableCommonIntent.Add -> {
                 val key = SchedulerKey(intent.time, intent.date)
                 val cell = commonState.value.cells[key]
-                // WHITE going in: no cell, or a cell without a programme -
-                // this add founds and/or PAINTS the break server-side.
-                val paintedBreak = cell == null || cell.programName == null
+                // WHITE going in: no cell, or a cell without a programme - this
+                // add FOUNDS/PAINTS the break server-side, so its fresh paint
+                // (the programme colour, which the optimistic apply cannot know)
+                // must come back from the server.
+                val wasWhite = cell == null || cell.programName == null
                 when (val result =
                     placementsRepository.add(intent.spotId, intent.time, intent.date, intent.programId)) {
                     is DataResult.Success -> {
                         applyAdd(key, result.data)
-                        // The row (maybe an off-scaffold time) and the fresh
-                        // paint are server truth - re-fetch, keeping markers.
-                        if (paintedBreak) refreshMonthKeepingMarkers()
+                        if (wasWhite) refreshMonthKeepingMarkers()
                     }
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
             }
 
             is TimetableCommonIntent.CreateBreak -> {
-                when (val result = placementsRepository.createBreak(intent.time, intent.date)) {
-                    // The new break holds a ROW (its cells stay white) - only
-                    // the server can place it among the scaffold - re-fetch.
-                    is DataResult.Success -> refreshMonthKeepingMarkers()
-                    is DataResult.Failure -> showSnackbar(result.error.toUiText())
+                // "Add new break" is a CLIENT-ONLY row - nothing is persisted. It
+                // just gives the operator a white row to place the first spot
+                // into; that first spot FOUNDS the real break (with a programme).
+                // An unused row therefore vanishes on the next month load / app
+                // restart - exactly the ephemerality the operator expects.
+                updateCommonState { st ->
+                    if (st.breaks.any { it.time == intent.time }) return@updateCommonState st
+                    val label = "${intent.time.hour.toString().padStart(2, '0')}:" +
+                        intent.time.minute.toString().padStart(2, '0')
+                    st.copy(
+                        breaks = (st.breaks + BreakSlot(time = intent.time, label = label))
+                            .sortedBy { it.time }
+                            .toImmutableList(),
+                    )
                 }
             }
 
@@ -221,8 +231,18 @@ class TimetableCommonViewModel(
                     if (old != null && old.commercials.isNotEmpty()) cell.copy(commercials = old.commercials)
                     else cell
                 }
+                val serverRows = result.data.rows.map { b -> b.toUi() }
+                val serverTimes = serverRows.mapTo(mutableSetOf()) { it.time }
+                // Keep the operator's CLIENT-ONLY "add break" rows across a
+                // refetch: a time the operator added that the server still does
+                // not know (no spot placed) and that holds no cell. Filling ONE
+                // transient row must not drop the others. (A month change goes
+                // through loadMonth, which blanks - so they vanish there.)
+                val transient = s.breaks.filter { row ->
+                    row.time !in serverTimes && merged.keys.none { it.time == row.time }
+                }
                 s.copy(
-                    breaks = result.data.rows.map { b -> b.toUi() }.toImmutableList(),
+                    breaks = (serverRows + transient).sortedBy { it.time }.toImmutableList(),
                     cells = merged.toImmutableMap(),
                 )
             }

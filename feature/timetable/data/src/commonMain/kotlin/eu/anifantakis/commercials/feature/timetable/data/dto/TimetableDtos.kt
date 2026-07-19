@@ -123,7 +123,3 @@ internal data class CreateProgramRequest(val name: String, val colorArgb: Int? =
 /** Nulls keep the current value - send only what changed. */
 @Serializable
 internal data class UpdateProgramRequest(val name: String? = null, val colorArgb: Int? = null)
-
-/** An EMPTY, UNPAINTED break at (time, date) - it holds a grid ROW. */
-@Serializable
-internal data class CreateBreakRequest(val time: String, val date: String)
