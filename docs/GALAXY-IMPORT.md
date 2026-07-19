@@ -106,14 +106,18 @@ WHERE galaxy_doc_key IS NOT NULL AND legacy_docid IS NULL;
    1,545 new, 565 off-reports), 55 items, 10,042 mirror lines; verified
    identical to the rehearsal clone; a re-run performs zero writes.
    219 review entries remain open in `galaxy-review.csv` (none blocking).
-4. ✅ **Galaxy Bridge screen** (2026-07-19, code-complete — pending an
-   in-app demo): `GalaxyImportService` + `/api/admin/galaxy` routes
+4. ✅ **Galaxy Bridge screen** (2026-07-19, VERIFIED end-to-end in the
+   desktop app — uploads, dry-run reproducing every CLI baseline, and a
+   live Apply through the confirmation dialog, all exercised by the owner):
+   `GalaxyImportService` + `/api/admin/galaxy` routes
    (status/start/reset/upload/review.csv) in `:galaxy`;
    `feature/galaxy-bridge` client triplet; menu entry in the super-admin
    maintenance card (Preferences). Deliveries upload as ZIPS from the
    operator's machine into the server's `galaxy-imports/` (dictionary
    uploads once, persists). v1 limitation: uploading needs the DESKTOP app
    (web shows a hint; HTML-overlay picker is a v2 item).
+   **Operator flow for every future delivery: zip → Upload delivery →
+   Dry run → read Results/Review → Apply.**
 5. ⬜ Channel 4 (`--company 003` → channel4 group) and Σητεία (`004`) once
    their groups are migrated
 6. ⬜ Final delivery upgrades: document GXID → `galaxy_id`, uncapped

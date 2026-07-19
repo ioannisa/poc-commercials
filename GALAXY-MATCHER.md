@@ -437,9 +437,13 @@ LOREAL/TEMPO check: galaxy_lines payer_customer_id=7 (TEMPO),
 advertiser_customer_id=2919 (LEE-3085) ✔ — the LEE↔Galaxy advertiser
 reconciliation the legacy migration never had.
 
-NOT yet applied to the live `commercials_crete_group` — awaiting owner
-review of the dry-run report/review CSV. Follow-ups: admin screen (mirror
-MigrationRoutes), channel4/sitia runs, GXID upgrade per §11.
+APPLIED to the live `commercials_crete_group` 2026-07-19 (787 customers /
+4,019 contracts / 55 items bridged; re-runs = zero writes). The **Galaxy
+Bridge admin screen** (§ docs/GALAXY-IMPORT.md) shipped the same day and
+was verified end-to-end by the owner: zip uploads, dry-run reproducing
+every CLI baseline, live Apply through its confirmation dialog.
+Remaining follow-ups: review-list resolution (219 open, none blocking),
+channel4/sitia runs (need their groups migrated), GXID upgrade per §11.
 
 ## 11. Instructions for the FINAL delivery (to hand to the Galaxy consultant)
 
