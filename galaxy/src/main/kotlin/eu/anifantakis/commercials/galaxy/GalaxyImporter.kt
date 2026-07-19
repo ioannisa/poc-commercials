@@ -215,7 +215,8 @@ class GalaxyImporter(
         step("Resolve item catalog")
         val itemSpotType = resolveItems(lines, s, apply)
 
-        step("Detect 9004↔9010 twins")
+        // ASCII on purpose: the log console's monospace font lacks the arrow glyph.
+        step("Detect 9004-9010 twins")
         val twinRows = detectTwins(lines, s)
 
         step("Reconcile documents")
