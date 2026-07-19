@@ -1,0 +1,152 @@
+# TEMPLATE — copy to `server.yaml` and fill in your own values.
+#
+#   cp server.yaml.example server.yaml
+#
+# `server.yaml` is git-ignored (it holds plaintext credentials by design), so
+# every deployment keeps its own copy out of version control. Replace every
+# CHANGE_ME below. Path override: -Dserver.config=<path> or COMMERCIALS_SERVER.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# central  (REQUIRED, standalone): the server's OWN schema - application
+#          users, tokens, and per-station grants. It must never double as a
+#          group schema; the server refuses to start if a group below points
+#          at the same database.
+#
+# groups   (OPTIONAL, 0..n): one entry per hosted company GROUP. A group owns
+#          ONE database and hosts 1..n stations inside it.
+#
+#          This mirrors the original app exactly: it kept one MySQL database
+#          per group and told the group's TV station apart from its radio
+#          station with a `forTV` 0/1 column. Customers, contracts and contract
+#          LINES are stored ONCE and shared, because one contract genuinely
+#          sells on several media - one advertiser buys 1 TV spot and 2 radio
+#          spots on the SAME contract. Spots, programmes and breaks are per
+#          station (they carry `station_id`, our generalization of `forTV`).
+#
+#          So: one legacy dump => one group database => 1..n stations. Group
+#          schemas may live on the same MySQL server (as below) or on entirely
+#          different ones - every group carries its own full jdbcUrl +
+#          credentials (plaintext by design; this file is server-side
+#          deployment config, keep it out of client bundles).
+#
+# A station's `id` is the stable key used in user grants and API calls, and it
+# must be unique across ALL groups; `name` is what users see in the station
+# dropdown. A station carries no connection details of its own - it IS a
+# station_id inside its group's database.
+#
+# emptyRowsFrom (OPTIONAL, "HH:mm", default "00:00"): from this time on, the
+#          hourly / half-hourly views print their grid rows even when EMPTY.
+#          Before it, only times that actually HAVE a break appear.
+#
+# Connection pools: each GROUP database gets its own HikariCP pool, shared by
+# every station in it. The optional file-wide `maxPoolSize` sets the default
+# ceiling for central and every group; `maxPoolSize` on any single block
+# overrides it. Defaults when unset: central 10, group 10.
+#
+# superAdmin (REQUIRED): the break-glass administrator. Deliberately PLAINTEXT
+# here - the operator can always look it up and can never be locked out (this
+# file IS its recovery). The database stores only a PBKDF2 hash, re-synced at
+# boot; rotate by editing the password here and restarting.
+#
+# smtp (OPTIONAL): outgoing mail for customer schedule emails. Resolution is
+# station -> group -> file-wide. Without any, email endpoints refuse with a
+# clear message.
+#
+# session (OPTIONAL): bearer-token lifetime. Defaults: expiration on, 90 days,
+# sliding. `expiration: false` = tokens never expire (revoked only by logout or
+# a password change).
+superAdmin:
+  username: admin
+  password: CHANGE_ME_super_admin_password
+  displayName: "Super Administrator"
+
+session:
+  expiration: true   # false = bearer tokens never expire (until logout / password change)
+  days: 90           # token lifetime in days when expiration is enabled
+  sliding: true      # true = window slides forward on use (idle timeout); false = fixed from login
+
+# Serve the interactive OpenAPI/Swagger UI at /swagger (default off). When on,
+# the API SHAPE (incl. admin routes) is browsable to anyone who can reach this
+# server; executing authenticated routes still needs a bearer token.
+swagger: false
+
+# Public origin of this server = the OAuth 2.1 issuer. Setting it mounts the
+# OAuth endpoints (/oauth/*, /.well-known/*) and the 401 challenge that native
+# MCP connectors (claude.ai, ChatGPT, ...) need. Leave UNSET to keep OAuth off
+# (PAT access still works). Production: the https:// origin your reverse proxy
+# serves; no trailing slash.
+# publicBaseUrl: "https://your-server.example.com"
+
+# Host-header allowlist for the MCP endpoints' DNS-rebinding guard. Localhost
+# entries keep Inspector / Claude Code working locally next to a tunnel host.
+# mcpAllowedHosts:
+#   - your-server.example.com
+#   - localhost
+#   - 127.0.0.1
+
+# In-app AI assistant. One optional block PER PROVIDER; every provider with an
+# apiKey becomes an option in the client's chat dropdown. Zero keys = feature
+# off. The server holds the keys and proxies every chat - a key never reaches a
+# client. `models` is optional for anthropic only (defaults to the built-in
+# trio); REQUIRED for openai/gemini.
+# ai:
+#   provider: anthropic          # default (preselected) provider in the dropdown
+#   anthropic:
+#     apiKey: "CHANGE_ME_anthropic_key"
+#   openai:
+#     apiKey: "CHANGE_ME_openai_key"
+#     models: [gpt-5.5, gpt-5.6-sol]
+#   gemini:
+#     apiKey: "CHANGE_ME_gemini_key"
+#     models: [gemini-flash-latest, gemini-pro-latest]
+#   maxTokens: 8192              # optional per-response output cap
+#   mutations: true             # chat may PREPARE (user-confirmed) schedule changes
+
+# Serve the BUILT web client at / from this server (one origin for page+API).
+# Build it with: ./gradlew :webApp:wasmJsBrowserDistribution . Unset = API only.
+webApp: "webApp/build/dist/wasmJs/productionExecutable"
+
+# Desktop installers served OPENLY at /downloads (the auto-update check runs
+# before login, so its download must too). Publishing a release: copy the
+# .dmg/.msi/.deb here, then PUT /api/admin/app-update pointing the installer
+# URLs at /downloads/<file>. Unset = not served. (This dir is git-ignored.)
+downloads: "downloads"
+
+# Set true ONLY when a reverse proxy terminates TLS in front of this server:
+# installs XForwardedHeaders so rate limiting / logs see the real client IP.
+# NEVER enable without a proxy - the headers are client-spoofable.
+behindReverseProxy: false
+
+# File-wide SMTP for customer schedule emails (a station/group block may override).
+# smtp:
+#   host: smtp.example.com
+#   port: 587
+#   username: CHANGE_ME_smtp_user
+#   password: CHANGE_ME_smtp_password
+#   from: "No Reply <noreply@example.com>"
+#   startTls: true
+
+# TEST safety valve: while set, EVERY customer schedule email is delivered HERE
+# instead of the real customer. REMOVE before any real send.
+# emailRedirectTo: "you@example.com"
+
+central:
+  jdbcUrl: "jdbc:mysql://localhost:3306/commercials_central?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+  username: root
+  password: CHANGE_ME_db_password
+
+groups:
+  - id: my-group
+    name: "My Broadcasting Group"
+    jdbcUrl: "jdbc:mysql://localhost:3306/commercials_my_group?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8"
+    username: root
+    password: CHANGE_ME_db_password
+    stations:
+      - id: my-tv
+        name: "My TV"
+        # logo: "/absolute/path/to/logo.png"   # printed on this station's reports
+        emptyRowsFrom: "07:00"
+      - id: my-radio
+        name: "My Radio"
+        emptyRowsFrom: "07:00"

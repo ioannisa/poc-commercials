@@ -21,3 +21,7 @@ node_modules/
 # Desktop installers the server hosts at /downloads (auto-update). Per-deployment
 # artifacts, often 100+ MB - built and copied in locally, never source.
 downloads/
+
+# Deployment config with plaintext credentials (DB/SMTP/admin/API keys). Each
+# deployment keeps its own; copy server.yaml.example to server.yaml to start.
+server.yaml
