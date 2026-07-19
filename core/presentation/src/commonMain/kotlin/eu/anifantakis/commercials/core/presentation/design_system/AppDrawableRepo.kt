@@ -52,10 +52,17 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.Loc
 import eu.anifantakis.commercials.core.presentation.design_system.components.LocalServerBaseUrl
 import eu.anifantakis.commercials.core.presentation.design_system.components.RemoteImage
 import commercials_manager.core.presentation.generated.resources.Res
-import commercials_manager.core.presentation.generated.resources.login_background_evening
-import commercials_manager.core.presentation.generated.resources.login_background_morning
-import commercials_manager.core.presentation.generated.resources.login_background_night
-import commercials_manager.core.presentation.generated.resources.login_background_noon
+import commercials_manager.core.presentation.generated.resources.login_background_00
+import commercials_manager.core.presentation.generated.resources.login_background_02
+import commercials_manager.core.presentation.generated.resources.login_background_06
+import commercials_manager.core.presentation.generated.resources.login_background_08
+import commercials_manager.core.presentation.generated.resources.login_background_10
+import commercials_manager.core.presentation.generated.resources.login_background_12
+import commercials_manager.core.presentation.generated.resources.login_background_14
+import commercials_manager.core.presentation.generated.resources.login_background_16
+import commercials_manager.core.presentation.generated.resources.login_background_18
+import commercials_manager.core.presentation.generated.resources.login_background_20
+import commercials_manager.core.presentation.generated.resources.login_background_22
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -149,26 +156,36 @@ object AppDrawableRepo {
     // ── Bundled image resources (drawn via AppImage, never AppIcon) ─────────
     /** Login screen background image (composeResources/drawable/login_background.png). */
     val loginBackground: DrawableResource get() {
-        val morningStart = LocalTime(6, 0)
-        val noonStart = LocalTime(10, 0)
-        val eveningStart = LocalTime(15, 0)
-        val nightStart = LocalTime(20, 0)
+        val time00 = LocalTime(0, 0)
+        val time02 = LocalTime(2, 0)
+        val time04 = LocalTime(4, 0)
+        val time06 = LocalTime(6, 0)
+        val time08 = LocalTime(8, 0)
+        val time10 = LocalTime(10, 0)
+        val time12 = LocalTime(12, 0)
+        val time14 = LocalTime(14, 0)
+        val time16 = LocalTime(16, 0)
+        val time18 = LocalTime(18, 0)
+        val time20 = LocalTime(20, 0)
+        val time22 = LocalTime(22, 0)
 
         val now: LocalTime = Clock.System.now()
             .toLocalDateTime(TimeZone.currentSystemDefault())
             .time
 
         return when (now) {
-            in morningStart..<noonStart -> Res.drawable.login_background_morning
-
-            // Between 10:00:00 and 14:59:59.999...
-            in noonStart..<eveningStart -> Res.drawable.login_background_noon
-
-            // Between 15:00:00 and 19:59:59.999...
-            in eveningStart..<nightStart -> Res.drawable.login_background_evening
-
-            // Everything else (20:00:00 to 05:59:59.999...) covers the night
-            else -> Res.drawable.login_background_night
+            in time00..<time02 -> Res.drawable.login_background_00
+            in time02..<time04 -> Res.drawable.login_background_02
+            in time04..<time06 -> Res.drawable.login_background_06
+            in time06..<time08 -> Res.drawable.login_background_08
+            in time08..<time10 -> Res.drawable.login_background_10
+            in time10..<time12 -> Res.drawable.login_background_12
+            in time12..<time14 -> Res.drawable.login_background_14
+            in time14..<time16 -> Res.drawable.login_background_16
+            in time16..<time18 -> Res.drawable.login_background_18
+            in time18..<time20 -> Res.drawable.login_background_20
+            in time20..<time22 -> Res.drawable.login_background_22
+            else -> Res.drawable.login_background_00
         }
     }
 
