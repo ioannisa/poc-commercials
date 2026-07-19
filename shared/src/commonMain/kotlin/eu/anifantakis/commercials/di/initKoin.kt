@@ -4,6 +4,7 @@ import eu.anifantakis.commercials.di.ai_chat.aiChatModule
 import eu.anifantakis.commercials.di.auth.authModule
 import eu.anifantakis.commercials.di.core.coreModule
 import eu.anifantakis.commercials.di.databases.databasesModule
+import eu.anifantakis.commercials.di.galaxy_bridge.galaxyBridgeModule
 import eu.anifantakis.commercials.di.migration_console.migrationConsoleModule
 import eu.anifantakis.commercials.di.preferences.preferencesModule
 import eu.anifantakis.commercials.di.schedule_email.scheduleEmailModule
@@ -28,6 +29,7 @@ val allModules: List<Module>
         preferencesModule,
         userManagementModule,
         migrationConsoleModule,
+        galaxyBridgeModule,
         databasesModule,
         platformModule,
     )

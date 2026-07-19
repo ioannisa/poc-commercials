@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.databases.domain.DatabasesRepository
+import eu.anifantakis.commercials.feature.galaxy_bridge.domain.GalaxyBridgeRepository
 import eu.anifantakis.commercials.feature.migration_console.domain.MigrationRepository
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import eu.anifantakis.commercials.reports.ReportService
@@ -34,6 +35,7 @@ class KoinGraphTest {
         assertNotNull(koin.get<ProgramsRepository>())
         assertNotNull(koin.get<UserManagementRepository>())
         assertNotNull(koin.get<MigrationRepository>())
+        assertNotNull(koin.get<GalaxyBridgeRepository>())
         assertNotNull(koin.get<DatabasesRepository>())
         assertNotNull(koin.get<ReportService>())
         assertNotNull(koin.get<eu.anifantakis.commercials.core.presentation.commands.CommandRegistry>())

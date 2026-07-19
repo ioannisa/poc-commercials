@@ -47,6 +47,8 @@ import eu.anifantakis.commercials.feature.user_management.presentation.screens.a
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
+import eu.anifantakis.commercials.feature.galaxy_bridge.presentation.GalaxyBridgeNavType
+import eu.anifantakis.commercials.feature.galaxy_bridge.presentation.galaxyBridgeEntries
 import eu.anifantakis.commercials.feature.migration_console.presentation.MigrationNavType
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
 import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
@@ -70,6 +72,7 @@ private val navConfig = navConfigOf(
     navHierarchy<PreferencesNavType>(),
     navHierarchy<UserManagementNavType>(),
     navHierarchy<MigrationNavType>(),
+    navHierarchy<GalaxyBridgeNavType>(),
     navHierarchy<DatabasesNavType>(),
 )
 
@@ -236,6 +239,7 @@ fun NavigationRoot() {
                     onAppUpdate = { showAdminAppUpdate = true },
                     onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
                     onMigration = { navigator.navigate(MigrationNavType.Migration) },
+                    onGalaxyBridge = { navigator.navigate(GalaxyBridgeNavType.GalaxyBridge) },
                     onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
                     // Swagger UI on whatever backend this build points at: derive
                     // it from the SAME base URL the API client uses (mirrors the
@@ -255,6 +259,8 @@ fun NavigationRoot() {
                 )
 
                 migrationEntries(navigator)
+
+                galaxyBridgeEntries(navigator)
 
                 databasesEntries(navigator)
             }

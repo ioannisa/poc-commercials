@@ -107,6 +107,9 @@ kotlin {
             implementation(projects.feature.migrationConsole.domain)
             implementation(projects.feature.migrationConsole.data)
             implementation(projects.feature.migrationConsole.presentation)
+            implementation(projects.feature.galaxyBridge.domain)
+            implementation(projects.feature.galaxyBridge.data)
+            implementation(projects.feature.galaxyBridge.presentation)
 
             // Cross-cutting UI modules used internally by :shared's own
             // composables (grid widgets, the report toolbar) - not re-exported,

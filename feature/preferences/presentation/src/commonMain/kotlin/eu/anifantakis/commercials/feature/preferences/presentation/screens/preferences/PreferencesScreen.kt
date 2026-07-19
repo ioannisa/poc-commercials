@@ -59,6 +59,7 @@ fun PreferencesScreenRoot(
     onAppUpdate: () -> Unit,
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
+    onGalaxyBridge: () -> Unit,
     onDatabases: () -> Unit,
     onOpenSwagger: () -> Unit,
     onAiChat: () -> Unit,
@@ -81,6 +82,7 @@ fun PreferencesScreenRoot(
                 PreferencesScreenNavIntent.OnAppUpdate -> onAppUpdate()
                 PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
+                PreferencesScreenNavIntent.OnGalaxyBridge -> onGalaxyBridge()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
                 PreferencesScreenNavIntent.OnOpenSwagger -> onOpenSwagger()
                 PreferencesScreenNavIntent.OnAiChat -> onAiChat()
@@ -103,6 +105,7 @@ private sealed interface PreferencesScreenNavIntent {
     data object OnAppUpdate : PreferencesScreenNavIntent
     data object OnManageUsers : PreferencesScreenNavIntent
     data object OnMigration : PreferencesScreenNavIntent
+    data object OnGalaxyBridge : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
     data object OnOpenSwagger : PreferencesScreenNavIntent
     data object OnAiChat : PreferencesScreenNavIntent
@@ -221,6 +224,7 @@ private fun PreferencesScreen(
                         PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_ADMIN_MCP], Strings[StringKey.PREFERENCES_ADMIN_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAdminMcp) }
                         PreferenceEntry(AppDrawableRepo.systemUpdate, Strings[StringKey.PREFERENCES_APP_UPDATE], Strings[StringKey.PREFERENCES_APP_UPDATE_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAppUpdate) }
                         PreferenceEntry(AppDrawableRepo.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
+                        PreferenceEntry(AppDrawableRepo.storage, Strings[StringKey.PREFERENCES_GALAXY_BRIDGE], Strings[StringKey.PREFERENCES_GALAXY_BRIDGE_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnGalaxyBridge) }
                         PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
                         PreferenceEntry(AppDrawableRepo.openInNew, Strings[StringKey.PREFERENCES_OPEN_SWAGGER], Strings[StringKey.PREFERENCES_OPEN_SWAGGER_DESC], enabled = swaggerEnabled) { onNavIntent(PreferencesScreenNavIntent.OnOpenSwagger) }
                     }
