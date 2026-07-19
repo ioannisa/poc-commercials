@@ -101,10 +101,14 @@ WHERE galaxy_doc_key IS NOT NULL AND legacy_docid IS NULL;
 1. ✅ Analysis + format verification (`GALAXY-MATCHER.md` §9–§11)
 2. ✅ Importer (`:galaxy`) built, unit-tested, rehearsed on a clone —
    887 parties / 4,084 docs → 2,474 matched + 1,545 new, idempotent re-run
-3. ⏳ **Owner reviews `galaxy-review.csv` → `--apply` on the LIVE
-   `commercials_crete_group`** ← we are here
-4. ⬜ Galaxy Bridge screen in the super admin app (service + `/api/admin/galaxy`
-   routes + KMP screen, modeled on the Migration Console)
+3. ✅ **APPLIED to the LIVE `commercials_crete_group` (2026-07-19)**:
+   787 customers bridged (+38 new), 4,019 contracts keyed (2,474 matched +
+   1,545 new, 565 off-reports), 55 items, 10,042 mirror lines; verified
+   identical to the rehearsal clone; a re-run performs zero writes.
+   219 review entries remain open in `galaxy-review.csv` (none blocking).
+4. ⬜ **Galaxy Bridge screen** in the super admin app (service +
+   `/api/admin/galaxy` routes + KMP screen, modeled on the Migration
+   Console) ← next
 5. ⬜ Channel 4 (`--company 003` → channel4 group) and Σητεία (`004`) once
    their groups are migrated
 6. ⬜ Final delivery upgrades: document GXID → `galaxy_id`, uncapped
