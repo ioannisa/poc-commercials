@@ -25,3 +25,6 @@ downloads/
 # Deployment config with plaintext credentials (DB/SMTP/admin/API keys). Each
 # deployment keeps its own; copy server.yaml.example to server.yaml to start.
 server.yaml
+
+# Galaxy Bridge uploads (client business data - lives on the server, never in git)
+galaxy-imports/
