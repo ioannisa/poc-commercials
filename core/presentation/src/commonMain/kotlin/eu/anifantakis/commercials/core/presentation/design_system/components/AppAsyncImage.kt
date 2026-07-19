@@ -29,6 +29,7 @@ import coil3.annotation.ExperimentalCoilApi
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
@@ -88,6 +89,7 @@ data class RemoteImage(
  * boolean soup (`showPlaceholder`/`simpleError`/`force` flags allow illegal
  * combinations; a sealed type cannot express one).
  */
+@Immutable
 sealed interface AppImagePlaceholder {
     /** Empty slot until the image lands. */
     data object None : AppImagePlaceholder
@@ -149,6 +151,7 @@ sealed interface AppImagePlaceholder {
  * funnel third-party hosts through an authenticated client: its default
  * headers would leak the bearer token to them.
  */
+@Suppress("ParamsComparedByRef")
 @Composable
 fun AppAsyncImage(
     url: String?,
@@ -175,6 +178,18 @@ fun AppAsyncImage(
             // The painter swap already happens at the draw layer; a crossfade
             // would force an animation frame per cell while a lazy grid fills.
             .crossfade(false)
+            // MEMORY-ONLY. Proven: on JVM/Desktop Coil's DISK cache collapsed two
+            // first-party urls that differ only by a query param (the station
+            // logo: `/api/reports/logo?station=crete-tv` vs `?station=radio-984`)
+            // onto ONE entry - so switching station kept serving the first logo,
+            // FROZEN, while the memory cache (and the whole wasm build, which has
+            // no disk cache) keyed them apart correctly and updated fine. The
+            // memory cache alone is right for our imagery (a handful of small,
+            // auth-gated logos); the disk layer bought a re-fetch skip on restart
+            // and cost correctness. Reproduced and verified headless before this
+            // was written (crete-tv 1880x290 vs radio-984 500x204).
+            .memoryCacheKey(url)
+            .diskCachePolicy(CachePolicy.DISABLED)
             .build()
     }
 

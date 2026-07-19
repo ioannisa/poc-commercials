@@ -25,6 +25,7 @@ dependencies {
     // SingleInstanceTest forks real JVMs - a single-instance guard cannot be
     // proven inside one process (see the test's KDoc).
     testImplementation(kotlin("test"))
+
 }
 
 tasks.withType<Test>().configureEach { useJUnitPlatform() }
