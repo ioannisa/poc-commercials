@@ -72,7 +72,6 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DayOfWeek
 import kotlin.math.roundToInt
 import kotlinx.datetime.LocalDate
-import kotlinx.coroutines.withTimeout
 
 /**
  * Lazy Scheduler Grid - Uses LazyColumn for virtualization (better performance)
@@ -401,8 +400,14 @@ fun LazySchedulerGrid(
                     // re-ran the whole viewport. The header needs its flag at
                     // composition (a Text colour); the cells need only "which of MY
                     // columns is selected, or -1", read in draw.
-                    val isRowSelected by remember { derivedStateOf { rowIndex == selectedRow } }
-                    val selectedColInRow = remember {
+                    //
+                    // KEYED on rowIndex: the rows are keyed by TIME, so inserting a
+                    // row (an "add break" client row) SHIFTS a kept row's index while
+                    // its composition survives. An unkeyed remember would freeze the
+                    // OLD index in the derived state, and the shifted row would light
+                    // up alongside the real selection - two selected cells at once.
+                    val isRowSelected by remember(rowIndex) { derivedStateOf { rowIndex == selectedRow } }
+                    val selectedColInRow = remember(rowIndex) {
                         derivedStateOf { if (selectedRow == rowIndex) selectedColumn else -1 }
                     }
 
