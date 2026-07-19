@@ -211,10 +211,16 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     -- sequential number (the one a user quotes on the phone).
                     galaxy_id VARCHAR(36) NULL,
                     galaxy_number BIGINT NULL,
+                    -- Natural Galaxy document key "companyid:doccode:docnumber" -
+                    -- the flat export carries no GXID yet (GALAXY-MATCHER.md §9.1),
+                    -- so the importer upserts on this until the final delivery
+                    -- adds the real UUID (which will land in galaxy_id).
+                    galaxy_doc_key VARCHAR(64) NULL,
                     KEY idx_contracts_number (number),
                     -- UNIQUE for the same reason as customers.legacy_id above.
                     UNIQUE KEY uq_contracts_legacy (legacy_docid),
                     UNIQUE KEY uq_contracts_galaxy (galaxy_id),
+                    UNIQUE KEY uq_contracts_galaxy_key (galaxy_doc_key),
                     KEY idx_contracts_galaxy_number (galaxy_number),
                     CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
                     CONSTRAINT fk_contracts_agency FOREIGN KEY (agency_id) REFERENCES customers(id)
@@ -244,8 +250,12 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
                     zone_val DECIMAL(10,2) NOT NULL DEFAULT 0,
                     -- Galaxy linkage: CommercEntryLines.GXID. NULL until stamped.
                     galaxy_id VARCHAR(36) NULL,
+                    -- Natural Galaxy line key "companyid:doccode:docnumber:ordinal"
+                    -- (see contracts.galaxy_doc_key - same no-GXID-yet story).
+                    galaxy_line_key VARCHAR(80) NULL,
                     UNIQUE KEY uq_contract_line (contract_id, line_no),
                     UNIQUE KEY uq_lines_galaxy (galaxy_id),
+                    UNIQUE KEY uq_lines_galaxy_key (galaxy_line_key),
                     CONSTRAINT fk_lines_contract FOREIGN KEY (contract_id)
                         REFERENCES contracts(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -590,6 +600,12 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         ensureIndex(c, "contract_lines", "uq_lines_galaxy", "galaxy_id", unique = true)
         ensureColumn(c, "spot_types", "galaxy_id", "VARCHAR(36) NULL")
         ensureIndex(c, "spot_types", "uq_spot_types_galaxy", "galaxy_id", unique = true)
+        // Natural Galaxy doc/line keys (no GXID in the flat export yet - see
+        // the CREATE TABLE notes and GALAXY-MATCHER.md §9.1).
+        ensureColumn(c, "contracts", "galaxy_doc_key", "VARCHAR(64) NULL")
+        ensureIndex(c, "contracts", "uq_contracts_galaxy_key", "galaxy_doc_key", unique = true)
+        ensureColumn(c, "contract_lines", "galaxy_line_key", "VARCHAR(80) NULL")
+        ensureIndex(c, "contract_lines", "uq_lines_galaxy_key", "galaxy_line_key", unique = true)
         // The BOOKED PROGRAMME (see the spots CREATE TABLE note). The dead
         // `spots.spot_type_id` is deliberately NOT ensured any more - a spot's
         // product is its contract LINE's, and leaving a plausible-looking column
