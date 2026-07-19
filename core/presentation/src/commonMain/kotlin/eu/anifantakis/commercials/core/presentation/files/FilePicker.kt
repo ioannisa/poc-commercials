@@ -21,3 +21,22 @@ expect val nativeFilePickerAvailable: Boolean
  * @param extension optional filter, without the dot (e.g. "sql").
  */
 expect suspend fun pickFileNative(title: String, extension: String?): String?
+
+/** A file picked for UPLOAD: its name and full content. */
+data class PickedFile(val name: String, val bytes: ByteArray)
+
+/**
+ * Whether [pickFileBytes] can produce a file on this platform. Unlike
+ * [pickFileNative] (which returns a CLIENT path, only useful against a
+ * co-located server), a byte pick feeds an UPLOAD, so it works against a
+ * remote server too. JVM desktop only for now; the admin upload flows hide
+ * their buttons where this is false.
+ */
+expect val bytePickerAvailable: Boolean
+
+/**
+ * Opens the native open-file dialog and returns the chosen file's name and
+ * CONTENT, or null if unavailable or cancelled.
+ * @param extension optional filter, without the dot (e.g. "zip").
+ */
+expect suspend fun pickFileBytes(title: String, extension: String?): PickedFile?

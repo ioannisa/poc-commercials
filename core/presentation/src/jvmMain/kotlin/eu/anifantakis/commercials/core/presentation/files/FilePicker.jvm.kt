@@ -29,3 +29,12 @@ actual suspend fun pickFileNative(title: String, extension: String?): String? =
         val name = dialog.file
         if (dir != null && name != null) File(dir, name).absolutePath else null
     }
+
+actual val bytePickerAvailable: Boolean = true
+
+actual suspend fun pickFileBytes(title: String, extension: String?): PickedFile? {
+    val path = pickFileNative(title, extension) ?: return null
+    val file = File(path)
+    // Reading happens off the Swing thread; uploads are a few MB zips.
+    return withContext(Dispatchers.IO) { PickedFile(file.name, file.readBytes()) }
+}

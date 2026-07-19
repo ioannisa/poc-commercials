@@ -5,3 +5,8 @@ package eu.anifantakis.commercials.core.presentation.files
 actual val nativeFilePickerAvailable: Boolean = false
 
 actual suspend fun pickFileNative(title: String, extension: String?): String? = null
+
+// Admin upload flows are a desktop concern; no byte picker on iOS.
+actual val bytePickerAvailable: Boolean = false
+
+actual suspend fun pickFileBytes(title: String, extension: String?): PickedFile? = null

@@ -21,12 +21,15 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.client.request.delete
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.http.Headers
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -204,6 +207,34 @@ abstract class CommonHttpClient(
         vararg query: Pair<String, Any?>,
     ): DataResult<String, RemoteError> = remoteCall {
         client.get(path) { query.forEach { (k, v) -> if (v != null) parameter(k, v) } }.bodyAsText()
+    }
+
+    /**
+     * POST one binary file as multipart/form-data (admin uploads - e.g. the
+     * Galaxy delivery zips). Same bearer/station stamping and error mapping
+     * as every other remote verb.
+     */
+    suspend inline fun <reified Res> postFileRemote(
+        path: String,
+        fileName: String,
+        bytes: ByteArray,
+        contentType: String = "application/zip",
+        vararg query: Pair<String, Any?>,
+    ): DataResult<Res, RemoteError> = remoteCall {
+        client.submitFormWithBinaryData(
+            url = path,
+            formData = formData {
+                append(
+                    "file", bytes,
+                    Headers.build {
+                        append(HttpHeaders.ContentType, contentType)
+                        append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+                    },
+                )
+            },
+        ) {
+            query.forEach { (k, v) -> if (v != null) parameter(k, v) }
+        }.body<Res>()
     }
 }
 
