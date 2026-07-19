@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.domain.util.map
 import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
+import eu.anifantakis.commercials.feature.user_management.domain.AppUpdateSettings
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -79,6 +80,20 @@ private data class McpSettingsDto(
 
 @Serializable
 private data class SetMcpEnabledDto(val enabled: Boolean? = null, val adminApprovalRequired: Boolean? = null)
+
+/**
+ * GET/PUT /api/admin/app-update. Server-side null = absent/untouched and
+ * blank = cleared; the FORM edits all five fields at once, so the PUT always
+ * sends every field (blank included) - full-replace semantics for the admin.
+ */
+@Serializable
+private data class AppUpdateSettingsDto(
+    val latest: String? = null,
+    val minSupported: String? = null,
+    val dmg: String? = null,
+    val msi: String? = null,
+    val deb: String? = null,
+)
 
 private fun AdminApiTokenDto.toDomain() =
     AdminApiToken(id, workstationName, userId, username, userRole, createdAt, lastUsedAt)
@@ -155,6 +170,29 @@ class RemoteUserManagementDataSourceImpl(private val api: ApiHttpClient) : Remot
 
     override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
         api.putRemoteEmpty("/api/admin/mcp-settings", SetMcpEnabledDto(enabled))
+
+    override suspend fun getAppUpdateSettings(): DataResult<AppUpdateSettings, RemoteError> =
+        api.getRemote<AppUpdateSettingsDto>("/api/admin/app-update").map {
+            AppUpdateSettings(
+                latest = it.latest.orEmpty(),
+                minSupported = it.minSupported.orEmpty(),
+                dmg = it.dmg.orEmpty(),
+                msi = it.msi.orEmpty(),
+                deb = it.deb.orEmpty(),
+            )
+        }
+
+    override suspend fun setAppUpdateSettings(settings: AppUpdateSettings): DataResult<Unit, RemoteError> =
+        api.putRemoteEmpty(
+            "/api/admin/app-update",
+            AppUpdateSettingsDto(
+                latest = settings.latest.trim(),
+                minSupported = settings.minSupported.trim(),
+                dmg = settings.dmg.trim(),
+                msi = settings.msi.trim(),
+                deb = settings.deb.trim(),
+            ),
+        )
 }
 
 @Serializable

@@ -76,6 +76,21 @@ data class McpSettings(
 )
 
 /**
+ * The desktop auto-update advertisement, as the admin edits it: the latest
+ * published version, the oldest still-supported one (older clients treat the
+ * update as MANDATORY), and one installer URL per package format (absolute,
+ * or server-relative like "/downloads/x.msi"). BLANK = unset: the field is
+ * cleared server-side and clients simply aren't offered that piece.
+ */
+data class AppUpdateSettings(
+    val latest: String = "",
+    val minSupported: String = "",
+    val dmg: String = "",
+    val msi: String = "",
+    val deb: String = "",
+)
+
+/**
  * Super-admin user management: list, create, reset password, edit
  * per-station grants, delete. Only the super administrator gets non-403
  * responses; their own account lives in server.yaml, not here.
@@ -128,6 +143,12 @@ interface UserManagementRepository {
     suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError>
 
     suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError>
+
+    /** The desktop auto-update advertisement (served openly by GET /version). */
+    suspend fun getAppUpdateSettings(): DataResult<AppUpdateSettings, RemoteError>
+
+    /** Publish the advertisement: the form replaces all fields (blank clears). */
+    suspend fun setAppUpdateSettings(settings: AppUpdateSettings): DataResult<Unit, RemoteError>
 }
 
 /** One aggregated AI usage row (lifetime totals per user x provider x model). */

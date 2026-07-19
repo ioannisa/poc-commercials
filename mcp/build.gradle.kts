@@ -17,7 +17,26 @@ plugins {
 }
 
 group = "eu.anifantakis.commercials"
-version = "1.0.0"
+// The MCP server is part of the SERVER deployment - it advertises the server's
+// version in its protocol handshake (CommercialsMcpServer.SERVER_VERSION reads
+// the generated resource below). Same source as /version: libs `server`.
+val serverVersion = libs.versions.server.get()
+version = serverVersion
+
+val generateMcpVersionResource by tasks.registering {
+    val v = serverVersion
+    val outDir = layout.buildDirectory.dir("generated/versionRes")
+    inputs.property("serverVersion", v)
+    outputs.dir(outDir)
+    doLast {
+        outDir.get().file("commercials-mcp-version.properties").asFile.apply {
+            parentFile.mkdirs()
+            writeText("version=$v\n")
+        }
+    }
+}
+// srcDir(TaskProvider) carries the task dependency - no explicit dependsOn.
+sourceSets["main"].resources.srcDir(generateMcpVersionResource)
 
 dependencies {
     // The official MCP Kotlin SDK (server) - its Server/Tool types are part of

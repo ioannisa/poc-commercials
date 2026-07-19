@@ -1,4 +1,14 @@
 [versions]
+# ── Product release versions (the app's OWN versions, not dependency versions) ──
+# The single source of truth every build script + baked runtime resource points
+# at. Two, because the desktop client and the server release INDEPENDENTLY (a
+# client update must not force a server redeploy). The "latest published" client
+# version is NOT here - that is runtime data in app_settings (PUT /api/admin/app-update).
+#   app    -> desktopApp packageVersion + AppBuildInfo (update comparison)
+#   server -> server build stamp (/version, OpenAPI doc) + MCP handshake + backend jars
+app = "1.0.0"
+server = "1.0.0"
+
 markdownRenderer = "0.43.0"
 agp = "9.3.0"
 android-compileSdk = "37"

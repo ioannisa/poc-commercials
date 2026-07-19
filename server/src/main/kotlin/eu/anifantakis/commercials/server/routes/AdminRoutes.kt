@@ -70,6 +70,24 @@ data class McpSettingsDto(
     val adminApprovalRequired: Boolean = false,
 )
 
+/**
+ * The desktop auto-update advertisement (app_settings-backed, served openly
+ * by GET /version). GET returns the current rows; PUT patches them PARTIALLY:
+ * null = leave untouched, blank = clear. Publishing a release is one call -
+ * no server restart, no server.yaml edit.
+ */
+@Serializable
+data class AppUpdateSettingsDto(
+    /** Latest published desktop version, e.g. "1.2.0". */
+    val latest: String? = null,
+    /** Oldest still-supported version: older clients treat the update as mandatory. */
+    val minSupported: String? = null,
+    /** Installer URLs - absolute, or relative to the server (e.g. "/downloads/CM-1.2.0.dmg"). */
+    val dmg: String? = null,
+    val msi: String? = null,
+    val deb: String? = null,
+)
+
 /** One OAuth grant (a native MCP connector a user logged in from), for admin oversight. */
 @Serializable
 data class AdminOAuthTokenDto(
@@ -376,6 +394,60 @@ fun Route.adminRoutes(authDb: AuthDb, oauthDb: OAuthDb, registry: StationRegistr
             withContext(Dispatchers.IO) {
                 request.enabled?.let { authDb.setMcpEnabled(it) }
                 request.adminApprovalRequired?.let { authDb.setOauthAdminApprovalRequired(it) }
+            }
+            call.respond(mapOf("status" to "updated"))
+        }
+    }
+
+    // The desktop auto-update advertisement (what GET /version serves).
+    route("/api/admin/app-update") {
+        /**
+         * Return the published desktop-app update advertisement.
+         *
+         * Tag: Updates
+         */
+        get {
+            if (!call.requireAdmin()) return@get
+            val ad = withContext(Dispatchers.IO) { authDb.appUpdateSettings() }
+            call.respond(
+                AppUpdateSettingsDto(
+                    latest = ad.latest,
+                    minSupported = ad.minSupported,
+                    dmg = ad.installers["dmg"],
+                    msi = ad.installers["msi"],
+                    deb = ad.installers["deb"],
+                )
+            )
+        }
+        /**
+         * Publish a desktop release: partially update the advertisement (null = untouched, blank = cleared).
+         *
+         * Tag: Updates
+         */
+        put {
+            if (!call.requireAdmin()) return@put
+            val request = call.receive<AppUpdateSettingsDto>()
+
+            // require -> IllegalArgumentException -> 400 via StatusPages.
+            fun requireVersion(name: String, v: String?) = require(
+                v == null || v.isBlank() || Regex("""\d+(\.\d+){1,3}""").matches(v.trim())
+            ) { "$name must be a dotted numeric version like 1.2.0 (was '$v')" }
+            fun requireUrl(name: String, u: String?) = require(
+                u == null || u.isBlank() || u.trim().startsWith("/") ||
+                    u.trim().startsWith("http://") || u.trim().startsWith("https://")
+            ) { "$name must be an http(s) URL or a server-relative path starting with '/' (was '$u')" }
+            requireVersion("latest", request.latest)
+            requireVersion("minSupported", request.minSupported)
+            requireUrl("dmg", request.dmg)
+            requireUrl("msi", request.msi)
+            requireUrl("deb", request.deb)
+
+            withContext(Dispatchers.IO) {
+                request.latest?.let { authDb.putSetting(AuthDb.SETTING_APP_LATEST_VERSION, it.trim()) }
+                request.minSupported?.let { authDb.putSetting(AuthDb.SETTING_APP_MIN_SUPPORTED, it.trim()) }
+                request.dmg?.let { authDb.putSetting(AuthDb.SETTING_APP_INSTALLER_DMG, it.trim()) }
+                request.msi?.let { authDb.putSetting(AuthDb.SETTING_APP_INSTALLER_MSI, it.trim()) }
+                request.deb?.let { authDb.putSetting(AuthDb.SETTING_APP_INSTALLER_DEB, it.trim()) }
             }
             call.respond(mapOf("status" to "updated"))
         }

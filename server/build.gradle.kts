@@ -10,7 +10,27 @@ plugins {
 }
 
 group = "eu.anifantakis.commercials"
-version = "1.0.0"
+// The server's own build stamp (libs.versions.toml `server`), also baked into
+// a generated resource so the running process can report itself on the open
+// /version route (routes/VersionRoutes.kt). Independent of the DESKTOP app's
+// version: client releases don't force server redeploys or vice versa.
+val serverVersion = libs.versions.server.get()
+version = serverVersion
+
+val generateVersionResource by tasks.registering {
+    val v = serverVersion
+    val outDir = layout.buildDirectory.dir("generated/versionRes")
+    inputs.property("serverVersion", v)
+    outputs.dir(outDir)
+    doLast {
+        outDir.get().file("commercials-server-version.properties").asFile.apply {
+            parentFile.mkdirs()
+            writeText("version=$v\n")
+        }
+    }
+}
+// srcDir(TaskProvider) carries the task dependency - no explicit dependsOn.
+sourceSets["main"].resources.srcDir(generateVersionResource)
 
 application {
     mainClass.set("eu.anifantakis.commercials.server.ApplicationKt")

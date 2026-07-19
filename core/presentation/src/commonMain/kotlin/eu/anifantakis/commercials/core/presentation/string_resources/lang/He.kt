@@ -409,6 +409,8 @@ internal class He : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "טרם נרשם שימוש ב-AI."
         StringKey.PREFERENCES_ADMIN_MCP -> "פיקוח MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "כל האסימונים + המתג הכללי"
+        StringKey.PREFERENCES_APP_UPDATE -> "גרסאות היישום"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "פרסום גרסת שולחן העבודה המוצעת ללקוחות"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "תיעוד API (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "פתח את דף ה-OpenAPI של השרת בדפדפן"
         StringKey.ADMIN_MCP_TITLE -> "פיקוח MCP"
@@ -498,6 +500,23 @@ internal class He : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "PDF נשמר: "
         StringKey.REPORT_CANCELLED -> "בוטל"
         StringKey.REPORT_NOT_AVAILABLE -> "(דוחות אינם זמינים בפלטפורמה זו)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "עדכון זמין"
+        StringKey.UPDATE_REQUIRED_TITLE -> "נדרש עדכון"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "גרסה {0} זמינה (ברשותך {1}). להתקין עכשיו?"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "הגרסה שלך ({1}) אינה נתמכת עוד. יש לעדכן לגרסה {0} כדי להמשיך."
+        StringKey.UPDATE_INSTALL -> "הורדה והתקנה"
+        StringKey.UPDATE_LATER -> "מאוחר יותר"
+        StringKey.UPDATE_EXIT -> "יציאה"
+        StringKey.UPDATE_DOWNLOADING -> "מוריד עדכון…"
+        StringKey.UPDATE_FAILED -> "ההורדה נכשלה: {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "גרסאות היישום"
+        StringKey.ADMIN_UPDATE_HINT -> "מה שמפורסם כאן מוגש דרך ‎/version לכל לקוח שולחן עבודה בעת ההפעלה. שדה ריק פשוט אינו מוצע. קישורי התקנה יכולים להיות כתובות URL מלאות או נתיבי שרת כמו ‎/downloads/file.msi."
+        StringKey.ADMIN_UPDATE_LATEST -> "הגרסה האחרונה"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "גרסה נתמכת מינימלית (לקוחות ישנים יותר חייבים לעדכן)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "גרסה מספרית עם נקודות, למשל 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "פורסם - הלקוחות יראו זאת בבדיקת ההפעלה הבאה"
 
         StringKey.UNMATCHED -> ""
     }

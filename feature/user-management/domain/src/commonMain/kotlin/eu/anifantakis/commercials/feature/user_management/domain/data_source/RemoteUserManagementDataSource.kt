@@ -30,4 +30,6 @@ interface RemoteUserManagementDataSource {
     suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError>
     suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError>
     suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError>
+    suspend fun getAppUpdateSettings(): DataResult<AppUpdateSettings, RemoteError>
+    suspend fun setAppUpdateSettings(settings: AppUpdateSettings): DataResult<Unit, RemoteError>
 }

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -146,6 +147,7 @@ object AppDrawableRepo {
     val refresh: ImageVector @Composable get() = Icons.Default.Refresh
     val save: ImageVector @Composable get() = Icons.Default.Save
     val settings: ImageVector @Composable get() = Icons.Default.Settings
+    val systemUpdate: ImageVector @Composable get() = Icons.Default.SystemUpdateAlt
     /** The AI "sparkles" mark - the chat assistant's launcher icon. */
     val autoAwesome: ImageVector @Composable get() = Icons.Default.AutoAwesome
     val storage: ImageVector @Composable get() = Icons.Default.Storage

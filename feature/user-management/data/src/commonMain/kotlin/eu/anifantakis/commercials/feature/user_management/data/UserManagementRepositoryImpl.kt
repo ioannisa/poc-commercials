@@ -3,6 +3,7 @@ package eu.anifantakis.commercials.feature.user_management.data
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
+import eu.anifantakis.commercials.feature.user_management.domain.AppUpdateSettings
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -65,4 +66,10 @@ class UserManagementRepositoryImpl(
 
     override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> =
         remoteDataSource.setMcpEnabled(enabled)
+
+    override suspend fun getAppUpdateSettings(): DataResult<AppUpdateSettings, RemoteError> =
+        remoteDataSource.getAppUpdateSettings()
+
+    override suspend fun setAppUpdateSettings(settings: AppUpdateSettings): DataResult<Unit, RemoteError> =
+        remoteDataSource.setAppUpdateSettings(settings)
 }

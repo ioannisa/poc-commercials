@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.feature.user_management.data.data_source.Remot
 import eu.anifantakis.commercials.feature.user_management.domain.UserManagementRepository
 import eu.anifantakis.commercials.feature.user_management.domain.data_source.RemoteUserManagementDataSource
 import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_mcp.AdminMcpViewModel
+import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_update.AdminAppUpdateViewModel
 import eu.anifantakis.commercials.feature.user_management.presentation.screens.user_management.UserManagementViewModel
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModelOf
@@ -16,4 +17,5 @@ val userManagementModule = module {
     singleOf(::UserManagementRepositoryImpl).bind<UserManagementRepository>()
     viewModelOf(::UserManagementViewModel)
     viewModelOf(::AdminMcpViewModel)
+    viewModelOf(::AdminAppUpdateViewModel)
 }

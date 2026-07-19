@@ -32,6 +32,10 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Localizatio
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.di.initKoin
+import eu.anifantakis.commercials.update.AppBuildInfo
+import eu.anifantakis.commercials.update.UpdateCheck
+import eu.anifantakis.commercials.update.UpdateDecision
+import eu.anifantakis.commercials.update.UpdateOverlay
 import eu.anifantakis.commercials.window.AppMenuBar
 import eu.anifantakis.commercials.window.SingleInstance
 import eu.anifantakis.commercials.window.WindowStateStore
@@ -142,6 +146,20 @@ fun main() {
                 LocalizationManager.currentLanguage.collect { SingleInstance.publishLanguage(it.code) }
             }
 
+            // Auto-update check, OFF the startup path: best-effort fetch of the
+            // open /version advertisement, compared against this build's baked
+            // version. Any failure resolves to "no update" (UpdateCheck's KDoc)
+            // - the app never waits on it, and the dialog only appears when
+            // there is something actionable for THIS OS.
+            var update by remember { mutableStateOf<UpdateDecision.Available?>(null) }
+            LaunchedEffect(Unit) {
+                val baseUrl = AppConfig.require().serverBaseUrl
+                val decision = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    UpdateCheck.fetch(baseUrl)?.let { UpdateCheck.decide(AppBuildInfo.version, it, baseUrl) }
+                }
+                if (decision is UpdateDecision.Available) update = decision
+            }
+
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(isLoading, enter = fadeIn(), exit = fadeOut()) {
                     Box(
@@ -168,6 +186,18 @@ fun main() {
                 }
 
                 AnimatedVisibility(!isLoading, enter = fadeIn()) { App() }
+            }
+
+            // Rendered via Dialog() so it layers over whatever the app shows,
+            // login screen included - a below-minSupported client must be
+            // stopped BEFORE anyone works on an unsupported version.
+            update?.let { u ->
+                UpdateOverlay(
+                    update = u,
+                    currentVersion = AppBuildInfo.version,
+                    onDismiss = { update = null },
+                    onExitApp = ::exitApplication,
+                )
             }
         }
     }

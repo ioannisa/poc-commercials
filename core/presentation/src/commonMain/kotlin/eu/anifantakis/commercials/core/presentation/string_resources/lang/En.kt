@@ -404,6 +404,8 @@ internal class En : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "No AI usage recorded yet."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP oversight"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "All tokens + the global switch"
+        StringKey.PREFERENCES_APP_UPDATE -> "Application versions"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "Publish the desktop release clients are offered"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API Docs (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Open the server's OpenAPI page in the browser"
         StringKey.ADMIN_MCP_TITLE -> "MCP oversight"
@@ -493,6 +495,23 @@ internal class En : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "PDF saved: "
         StringKey.REPORT_CANCELLED -> "Cancelled"
         StringKey.REPORT_NOT_AVAILABLE -> "(Reports not available on this platform)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "Update available"
+        StringKey.UPDATE_REQUIRED_TITLE -> "Update required"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "Version {0} is available (you have {1}). Install it now?"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "Your version ({1}) is no longer supported. Please update to {0} to continue."
+        StringKey.UPDATE_INSTALL -> "Download & install"
+        StringKey.UPDATE_LATER -> "Later"
+        StringKey.UPDATE_EXIT -> "Exit"
+        StringKey.UPDATE_DOWNLOADING -> "Downloading update…"
+        StringKey.UPDATE_FAILED -> "The download failed: {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "Application versions"
+        StringKey.ADMIN_UPDATE_HINT -> "What you publish here is served by /version to every desktop client at startup. A blank field is simply not offered. Installer links may be absolute URLs or server paths like /downloads/file.msi."
+        StringKey.ADMIN_UPDATE_LATEST -> "Latest version"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "Minimum supported version (older clients must update)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "Dotted numeric version, e.g. 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "Published - clients see it at their next startup check"
 
         StringKey.UNMATCHED -> ""
     }

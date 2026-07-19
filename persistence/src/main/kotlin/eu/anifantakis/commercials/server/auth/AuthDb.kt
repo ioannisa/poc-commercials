@@ -52,26 +52,37 @@ class AuthDb(
     @Provided private val hosting: HostingConfig,
 ) {
 
-    private companion object {
-        const val PBKDF2_ITERATIONS = 100_000
-        const val PBKDF2_KEY_BITS = 256
-        const val MIN_PASSWORD_LENGTH = 6
+    companion object {
+        private const val PBKDF2_ITERATIONS = 100_000
+        private const val PBKDF2_KEY_BITS = 256
+        private const val MIN_PASSWORD_LENGTH = 6
 
         /** Email password-reset code: six digits, no letters (so it is language-
          *  and keyboard-agnostic - a Greek/English layout can't mistype it). */
-        const val RESET_CODE_DIGITS = 6
+        private const val RESET_CODE_DIGITS = 6
         /** Wrong tries allowed with no delay before the escalating lock kicks in. */
-        const val RESET_FREE_ATTEMPTS = 5
+        private const val RESET_FREE_ATTEMPTS = 5
         /** First lock after the free tries are spent; each further wrong try ×3. */
-        const val RESET_BASE_LOCK_SECONDS = 10L
-        const val RESET_LOCK_MULTIPLIER = 3
+        private const val RESET_BASE_LOCK_SECONDS = 10L
+        private const val RESET_LOCK_MULTIPLIER = 3
 
         /** A generated temporary password (admin reset / new account). */
-        const val TEMP_PASSWORD_LENGTH = 12
+        private const val TEMP_PASSWORD_LENGTH = 12
 
         /** Crockford-style alphabet: no I/L/O/U to avoid transcription errors. */
-        const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ0123456789"
-        val USERNAME_FORMAT = Regex("[a-zA-Z0-9._-]{3,64}")
+        private const val CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ0123456789"
+        private val USERNAME_FORMAT = Regex("[a-zA-Z0-9._-]{3,64}")
+
+        // app_settings keys of the desktop auto-update advertisement. PUBLIC
+        // (unlike everything above): the admin PUT route patches them per-key
+        // via putSetting, and the open /version route serves them - this is
+        // operational state edited at runtime, deliberately NOT server.yaml
+        // config (which is bootstrap-only and needs a restart to change).
+        const val SETTING_APP_LATEST_VERSION = "app.latestVersion"
+        const val SETTING_APP_MIN_SUPPORTED = "app.minSupportedVersion"
+        const val SETTING_APP_INSTALLER_DMG = "app.installer.dmg"
+        const val SETTING_APP_INSTALLER_MSI = "app.installer.msi"
+        const val SETTING_APP_INSTALLER_DEB = "app.installer.deb"
     }
 
     private val secureRandom = SecureRandom()
@@ -171,7 +182,7 @@ class AuthDb(
                     """
                     CREATE TABLE IF NOT EXISTS app_settings (
                         setting_key VARCHAR(64) PRIMARY KEY,
-                        setting_value VARCHAR(255) NOT NULL
+                        setting_value VARCHAR(255) NOT NULL 
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                     """.trimIndent()
                 )
@@ -1084,17 +1095,7 @@ class AuthDb(
     /** The global MCP/API kill switch (default ON when unset). */
     fun isMcpEnabled(): Boolean = db.connection().use { mcpEnabled(it) }
 
-    fun setMcpEnabled(enabled: Boolean) {
-        db.connection().use { c ->
-            c.prepareStatement(
-                "INSERT INTO app_settings(setting_key, setting_value) VALUES('mcp_enabled', ?) AS new " +
-                    "ON DUPLICATE KEY UPDATE setting_value = new.setting_value"
-            ).use { ps ->
-                ps.setString(1, enabled.toString())
-                ps.executeUpdate()
-            }
-        }
-    }
+    fun setMcpEnabled(enabled: Boolean) = putSetting("mcp_enabled", enabled.toString())
 
     private fun mcpEnabled(c: Connection): Boolean = getSetting(c, "mcp_enabled") != "false"
 
@@ -1102,16 +1103,57 @@ class AuthDb(
     fun isOauthAdminApprovalRequired(): Boolean =
         db.connection().use { getSetting(it, "oauth_admin_approval") == "true" }
 
-    fun setOauthAdminApprovalRequired(required: Boolean) {
+    fun setOauthAdminApprovalRequired(required: Boolean) =
+        putSetting("oauth_admin_approval", required.toString())
+
+    /**
+     * One app_settings row, or null when unset. The generic accessor pair
+     * (with [putSetting]) for admin-managed OPERATIONAL state - values a
+     * running server edits live, as opposed to server.yaml bootstrap config.
+     */
+    fun getSetting(key: String): String? = db.connection().use { getSetting(it, key) }
+
+    /** Upserts one app_settings row. A BLANK value counts as unset on read. */
+    fun putSetting(key: String, value: String) {
         db.connection().use { c ->
             c.prepareStatement(
-                "INSERT INTO app_settings(setting_key, setting_value) VALUES('oauth_admin_approval', ?) AS new " +
+                "INSERT INTO app_settings(setting_key, setting_value) VALUES(?, ?) AS new " +
                     "ON DUPLICATE KEY UPDATE setting_value = new.setting_value"
             ).use { ps ->
-                ps.setString(1, required.toString())
+                ps.setString(1, key)
+                ps.setString(2, value)
                 ps.executeUpdate()
             }
         }
+    }
+
+    /**
+     * The desktop auto-update advertisement (served by the open /version
+     * route): the latest published desktop version, the oldest still-supported
+     * one (older clients treat the update as MANDATORY), and the installer
+     * URL per package format. All unset until an admin publishes a release
+     * via PUT /api/admin/app-update - the client no-ops on absent fields.
+     */
+    data class AppUpdateSettings(
+        val latest: String?,
+        val minSupported: String?,
+        /** "dmg" / "msi" / "deb" → URL; relative ones ("/downloads/x.msi") are
+         *  resolved by the CLIENT against its own server.baseUrl, so the same
+         *  rows work on localhost, the tunnel hostname, or any future domain. */
+        val installers: Map<String, String>,
+    )
+
+    fun appUpdateSettings(): AppUpdateSettings = db.connection().use { c ->
+        fun read(key: String) = getSetting(c, key)?.trim()?.takeIf { it.isNotEmpty() }
+        AppUpdateSettings(
+            latest = read(SETTING_APP_LATEST_VERSION),
+            minSupported = read(SETTING_APP_MIN_SUPPORTED),
+            installers = buildMap {
+                read(SETTING_APP_INSTALLER_DMG)?.let { put("dmg", it) }
+                read(SETTING_APP_INSTALLER_MSI)?.let { put("msi", it) }
+                read(SETTING_APP_INSTALLER_DEB)?.let { put("deb", it) }
+            },
+        )
     }
 
     /** The per-user "confirm new AI connections from my e-mail" opt-in + the address it needs. */

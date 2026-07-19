@@ -404,6 +404,8 @@ internal class De : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "Noch keine KI-Nutzung erfasst."
         StringKey.PREFERENCES_ADMIN_MCP -> "MCP-Übersicht"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Alle Tokens + der globale Schalter"
+        StringKey.PREFERENCES_APP_UPDATE -> "Anwendungsversionen"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "Die den Clients angebotene Desktop-Version veröffentlichen"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "API-Doku (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "OpenAPI-Seite des Servers im Browser öffnen"
         StringKey.ADMIN_MCP_TITLE -> "MCP-Übersicht"
@@ -493,6 +495,23 @@ internal class De : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "PDF gespeichert: "
         StringKey.REPORT_CANCELLED -> "Abgebrochen"
         StringKey.REPORT_NOT_AVAILABLE -> "(Berichte auf dieser Plattform nicht verfügbar)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "Update verfügbar"
+        StringKey.UPDATE_REQUIRED_TITLE -> "Update erforderlich"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "Version {0} ist verfügbar (Sie haben {1}). Jetzt installieren?"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "Ihre Version ({1}) wird nicht mehr unterstützt. Bitte aktualisieren Sie auf {0}, um fortzufahren."
+        StringKey.UPDATE_INSTALL -> "Herunterladen & installieren"
+        StringKey.UPDATE_LATER -> "Später"
+        StringKey.UPDATE_EXIT -> "Beenden"
+        StringKey.UPDATE_DOWNLOADING -> "Update wird heruntergeladen…"
+        StringKey.UPDATE_FAILED -> "Der Download ist fehlgeschlagen: {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "Anwendungsversionen"
+        StringKey.ADMIN_UPDATE_HINT -> "Was hier veröffentlicht wird, liefert /version beim Start an jeden Desktop-Client. Ein leeres Feld wird schlicht nicht angeboten. Installer-Links können absolute URLs oder Server-Pfade wie /downloads/file.msi sein."
+        StringKey.ADMIN_UPDATE_LATEST -> "Neueste Version"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "Mindestens unterstützte Version (ältere Clients müssen aktualisieren)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "Numerische Version mit Punkten, z. B. 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "Veröffentlicht - Clients sehen es bei der nächsten Startprüfung"
 
         StringKey.UNMATCHED -> ""
     }

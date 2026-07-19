@@ -404,6 +404,8 @@ internal class El : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "Δεν έχει καταγραφεί χρήση AI ακόμα."
         StringKey.PREFERENCES_ADMIN_MCP -> "Εποπτεία MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Όλα τα tokens + ο γενικός διακόπτης"
+        StringKey.PREFERENCES_APP_UPDATE -> "Εκδόσεις εφαρμογής"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "Δημοσίευση της έκδοσης desktop που προσφέρεται στους clients"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Τεκμηρίωση API (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Άνοιγμα της σελίδας OpenAPI του server στον browser"
         StringKey.ADMIN_MCP_TITLE -> "Εποπτεία MCP"
@@ -493,6 +495,23 @@ internal class El : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "Το PDF αποθηκεύτηκε: "
         StringKey.REPORT_CANCELLED -> "Ακυρώθηκε"
         StringKey.REPORT_NOT_AVAILABLE -> "(Οι αναφορές δεν είναι διαθέσιμες σε αυτή την πλατφόρμα)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "Διαθέσιμη ενημέρωση"
+        StringKey.UPDATE_REQUIRED_TITLE -> "Απαιτείται ενημέρωση"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "Η έκδοση {0} είναι διαθέσιμη (έχετε την {1}). Να εγκατασταθεί τώρα;"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "Η έκδοσή σας ({1}) δεν υποστηρίζεται πλέον. Ενημερώστε στην {0} για να συνεχίσετε."
+        StringKey.UPDATE_INSTALL -> "Λήψη & εγκατάσταση"
+        StringKey.UPDATE_LATER -> "Αργότερα"
+        StringKey.UPDATE_EXIT -> "Έξοδος"
+        StringKey.UPDATE_DOWNLOADING -> "Λήψη ενημέρωσης…"
+        StringKey.UPDATE_FAILED -> "Η λήψη απέτυχε: {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "Εκδόσεις εφαρμογής"
+        StringKey.ADMIN_UPDATE_HINT -> "Ό,τι δημοσιεύεται εδώ σερβίρεται από το /version σε κάθε desktop client κατά την εκκίνηση. Κενό πεδίο απλώς δεν προσφέρεται. Τα links εγκαταστατών μπορούν να είναι απόλυτα URLs ή διαδρομές του server όπως /downloads/file.msi."
+        StringKey.ADMIN_UPDATE_LATEST -> "Τελευταία έκδοση"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "Ελάχιστη υποστηριζόμενη έκδοση (παλαιότεροι clients πρέπει να ενημερωθούν)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "Αριθμητική έκδοση με τελείες, π.χ. 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "Δημοσιεύτηκε - οι clients θα το δουν στον επόμενο έλεγχο εκκίνησης"
 
         StringKey.UNMATCHED -> ""
     }

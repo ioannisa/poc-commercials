@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.util.RemoteError
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalStateContainer
 import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.feature.user_management.domain.AiUsageEntry
+import eu.anifantakis.commercials.feature.user_management.domain.AppUpdateSettings
 import eu.anifantakis.commercials.feature.user_management.domain.AdminApiToken
 import eu.anifantakis.commercials.feature.user_management.domain.AdminOAuthToken
 import eu.anifantakis.commercials.feature.user_management.domain.ManagedUser
@@ -108,6 +109,8 @@ class UserManagementViewModelTest {
         override suspend fun reassignApiToken(workstation: String, targetUserId: Long): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
         override suspend fun getMcpSettings(): DataResult<McpSettings, RemoteError> = DataResult.Success(McpSettings(true, 0))
         override suspend fun setMcpEnabled(enabled: Boolean): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
+        override suspend fun getAppUpdateSettings(): DataResult<AppUpdateSettings, RemoteError> = DataResult.Success(AppUpdateSettings())
+        override suspend fun setAppUpdateSettings(settings: AppUpdateSettings): DataResult<Unit, RemoteError> = DataResult.Success(Unit)
     }
 
     @Test

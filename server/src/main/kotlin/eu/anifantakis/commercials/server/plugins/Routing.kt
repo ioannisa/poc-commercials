@@ -15,6 +15,7 @@ import eu.anifantakis.commercials.server.routes.stationAdminRoutes
 import eu.anifantakis.commercials.server.routes.demoRoutes
 import eu.anifantakis.commercials.server.routes.reportRoutes
 import eu.anifantakis.commercials.server.routes.scheduleRoutes
+import eu.anifantakis.commercials.server.routes.versionRoute
 import eu.anifantakis.commercials.server.scheduler.CentralDb
 import eu.anifantakis.commercials.server.stations.StationRegistry
 import io.ktor.http.ContentType
@@ -47,6 +48,7 @@ private val API_TAGS = listOf(
     Tag("Migration", "Legacy-dump migration console: browse, start, flow-map, and reset."),
     Tag("AI", "In-app AI assistant: chat (blocking + streaming), approved-mutation execution, per-user usage, and out-of-band report pickup."),
     Tag("Health", "Liveness and database-connectivity probes."),
+    Tag("Updates", "Desktop auto-update: the published-version advertisement and its admin publishing controls."),
 )
 
 private val SPEC_JSON = Json { encodeDefaults = false; explicitNulls = false }
@@ -63,7 +65,7 @@ private val SWAGGER_SPEC_SOURCE = OpenApiDocSource.Routing(
     serializeModel = { doc -> SPEC_JSON.encodeToString(OpenApiDoc.serializer(), doc.copy(tags = API_TAGS)) },
 )
 private val SWAGGER_BASE_DOC = OpenApiDoc.Builder().apply {
-    info = OpenApiInfo("Commercials Manager API", "1.0.0")
+    info = OpenApiInfo("Commercials Manager API", eu.anifantakis.commercials.server.config.ServerBuildInfo.version)
 }.build()
 
 /** Read a bundled Stoplight asset from resources/stoplight/ (vendored, no CDN). */
@@ -155,6 +157,23 @@ fun Application.configureRouting() {
             }
         }
 
+        // Desktop installers at /downloads (server.yaml `downloads:`). OPEN,
+        // like /version which advertises these URLs: a client below
+        // minSupported downloads its installer before anyone can log in.
+        // The exact prefix beats the web client's "/" tailcard.
+        registry.downloadsPath?.let { path ->
+            val dir = java.io.File(path)
+            if (dir.isDirectory) {
+                staticFiles("/downloads", dir)
+                log.info("Serving desktop installers from '${dir.absolutePath}' at /downloads")
+            } else {
+                log.warn(
+                    "server.yaml downloads points at '$path' but it is not a directory - " +
+                        "installers NOT mounted."
+                )
+            }
+        }
+
         // Interactive API docs at /swagger, rendered by Stoplight Elements from
         // the runtime-generated OpenAPI spec. Gated by the `swagger` flag in
         // server.yaml (default off) - a per-deployment toggle, so the super-admin
@@ -211,6 +230,10 @@ fun Application.configureRouting() {
         get("/health") {
             call.respondText("OK")
         }
+
+        // Open by design (see versionRoute's KDoc): a client below minSupported
+        // must learn it - and fetch the installer - BEFORE login.
+        versionRoute(authDb)
 
         authRoutes(authDb, oauthDb, registry)
 

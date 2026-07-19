@@ -6,7 +6,30 @@ plugins {
     alias(libs.plugins.kotlinJvm)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    // @Serializable on the /version response DTO (see update/UpdateCheck.kt)
+    alias(libs.plugins.kotlinSerialization)
 }
+
+// The single release version of the desktop app (libs.versions.toml `app`):
+// it becomes the installer's packageVersion AND is baked into a generated
+// resource so the RUNNING app can compare itself against the server-advertised
+// latest (update/AppBuildInfo.kt). One source, no drift.
+val appVersion = libs.versions.app.get()
+
+val generateVersionResource by tasks.registering {
+    val version = appVersion
+    val outDir = layout.buildDirectory.dir("generated/versionRes")
+    inputs.property("appVersion", version)
+    outputs.dir(outDir)
+    doLast {
+        outDir.get().file("commercials-app-version.properties").asFile.apply {
+            parentFile.mkdirs()
+            writeText("version=$version\n")
+        }
+    }
+}
+// srcDir(TaskProvider) carries the task dependency - no explicit dependsOn.
+sourceSets["main"].resources.srcDir(generateVersionResource)
 
 dependencies {
     implementation(projects.shared)
@@ -21,6 +44,9 @@ dependencies {
     implementation(libs.filekit.dialogs)
     // Window-geometry persistence (Plain mode - x/y/w/h are not secrets)
     implementation(libs.ksafe)
+    // Parsing the open /version endpoint (auto-update check); the HTTP call
+    // itself uses the JDK's java.net.http - no client engine needed here.
+    implementation(libs.kotlinx.serialization.json)
 
     // SingleInstanceTest forks real JVMs - a single-instance guard cannot be
     // proven inside one process (see the test's KDoc).
@@ -85,7 +111,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "Commercials Manager 2"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
             includeAllModules = true
 
             windows {

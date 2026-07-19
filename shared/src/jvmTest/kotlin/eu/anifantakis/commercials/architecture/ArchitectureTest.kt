@@ -318,21 +318,28 @@ class ArchitectureTest {
     }
 
     /**
-     * Exactly ONE OS-detection point in the client codebase: the jvm actual
-     * of detectUiPlatform. Everything else consumes a capability derived from
-     * it (DesktopPlatformCapabilities, tokens) - a second `os.name` read is a
-     * second source of truth waiting to disagree.
+     * ONE OS-detection point per concern in the client codebase - everything
+     * else consumes a capability derived from it; a second `os.name` read for
+     * the same concern is a second source of truth waiting to disagree:
+     * - LOOK: the jvm actual of detectUiPlatform (UiPlatform, tokens).
+     * - DISTRIBUTION: the desktop shell's HostOs (which installer format the
+     *   auto-updater downloads/launches). Separate door on purpose: UiPlatform
+     *   is internal to the design system, and widening it for a non-look
+     *   concern would couple the updater to the theme.
      */
     @Test
-    fun `os name is read exactly once`() {
-        val sanctioned = "core/presentation/src/jvmMain/kotlin/eu/anifantakis/commercials/" +
-            "core/presentation/design_system/platform/UiPlatform.jvm.kt"
+    fun `os name is read only at sanctioned detection points`() {
+        val sanctioned = setOf(
+            "core/presentation/src/jvmMain/kotlin/eu/anifantakis/commercials/" +
+                "core/presentation/design_system/platform/UiPlatform.jvm.kt",
+            "desktopApp/src/main/kotlin/eu/anifantakis/commercials/update/HostOs.kt",
+        )
         val clientRoots = (uiRoots + entryAppRoots + listOf(dir("shared/src"))).roots()
         val offenders = clientRoots.flatMap { it.ktFiles() }
-            .filter { it.relativeTo(repoRoot).path != sanctioned }
+            .filter { it.relativeTo(repoRoot).path !in sanctioned }
             .flatMap { f -> f.lineHits { "System.getProperty(\"os.name\")" in it } }
         if (offenders.isNotEmpty()) fail(
-            "os.name is read outside the sanctioned detection point " +
+            "os.name is read outside the sanctioned detection points " +
                 "($sanctioned) - consume a derived capability instead:\n" +
                 offenders.joinToString("\n")
         )

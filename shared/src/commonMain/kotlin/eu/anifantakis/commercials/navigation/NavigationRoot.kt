@@ -43,6 +43,7 @@ import eu.anifantakis.commercials.feature.auth.presentation.AuthNavType
 import eu.anifantakis.commercials.feature.auth.presentation.screens.api_tokens.ApiTokensDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.screens.change_password.ChangePasswordDialogRoot
 import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_mcp.AdminMcpDialogRoot
+import eu.anifantakis.commercials.feature.user_management.presentation.screens.admin_update.AdminAppUpdateDialogRoot
 import eu.anifantakis.commercials.feature.auth.presentation.authEntries
 import eu.anifantakis.commercials.feature.databases.presentation.DatabasesNavType
 import eu.anifantakis.commercials.feature.databases.presentation.databasesEntries
@@ -136,6 +137,11 @@ fun NavigationRoot() {
     if (showAdminMcp) {
         AdminMcpDialogRoot(onDismiss = { showAdminMcp = false })
     }
+    // Desktop auto-update publishing (super admin): edits what /version serves.
+    var showAdminAppUpdate by remember { mutableStateOf(false) }
+    if (showAdminAppUpdate) {
+        AdminAppUpdateDialogRoot(onDismiss = { showAdminAppUpdate = false })
+    }
     // Temp-password login (admin reset / fresh account): trap the user on a
     // mandatory, non-escapable change-password dialog until they set their own.
     // A successful change clears the session and the revision observer above
@@ -227,6 +233,7 @@ fun NavigationRoot() {
                     onChangePassword = { showChangePassword = true },
                     onApiTokens = { showApiTokens = true },
                     onAdminMcp = { showAdminMcp = true },
+                    onAppUpdate = { showAdminAppUpdate = true },
                     onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
                     onMigration = { navigator.navigate(MigrationNavType.Migration) },
                     onDatabases = { navigator.navigate(DatabasesNavType.Databases) },

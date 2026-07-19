@@ -232,6 +232,17 @@ data class HostingConfig(
     val webApp: String? = null,
 
     /**
+     * Directory holding the desktop installers advertised by /version, served
+     * OPENLY at `/downloads` (the update check runs before login, so its
+     * download must too). Unset = not served. Publishing a release is: copy
+     * the .dmg/.msi/.deb here, then point the app.installer.* settings at
+     * `/downloads/<file>` via PUT /api/admin/app-update - relative URLs
+     * resolve against each client's own server.baseUrl, so the same rows
+     * work on localhost, the tunnel hostname, or any future domain.
+     */
+    val downloads: String? = null,
+
+    /**
      * Public origin of this server (e.g. `"https://mcp.example.gr"`) - the
      * OAuth 2.1 `issuer`. Setting it MOUNTS the OAuth endpoints (under
      * `/oauth` and the `/.well-known` discovery documents) and the 401
@@ -579,6 +590,9 @@ class StationRegistry(@Provided hosting: HostingConfig) {
 
     /** Directory of the built web client to serve at `/`; null = API only. */
     val webAppPath: String? = hosting.webApp?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Directory of desktop installers to serve at `/downloads`; null = not served. */
+    val downloadsPath: String? = hosting.downloads?.trim()?.takeIf { it.isNotEmpty() }
 
     /** One pool + one schema per GROUP. */
     private val pools = ConcurrentHashMap<String, GroupDb>()

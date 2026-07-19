@@ -17,3 +17,7 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Desktop installers the server hosts at /downloads (auto-update). Per-deployment
+# artifacts, often 100+ MB - built and copied in locally, never source.
+downloads/

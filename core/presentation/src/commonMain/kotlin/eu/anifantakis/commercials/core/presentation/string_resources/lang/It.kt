@@ -404,6 +404,8 @@ internal class It : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "Nessun utilizzo IA registrato."
         StringKey.PREFERENCES_ADMIN_MCP -> "Supervisione MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tutti i token + l'interruttore globale"
+        StringKey.PREFERENCES_APP_UPDATE -> "Versioni dell'applicazione"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "Pubblica la versione desktop offerta ai client"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Doc API (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Apri la pagina OpenAPI del server nel browser"
         StringKey.ADMIN_MCP_TITLE -> "Supervisione MCP"
@@ -493,6 +495,23 @@ internal class It : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "PDF salvato: "
         StringKey.REPORT_CANCELLED -> "Annullato"
         StringKey.REPORT_NOT_AVAILABLE -> "(Report non disponibili su questa piattaforma)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "Aggiornamento disponibile"
+        StringKey.UPDATE_REQUIRED_TITLE -> "Aggiornamento richiesto"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "La versione {0} è disponibile (hai la {1}). Installarla ora?"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "La tua versione ({1}) non è più supportata. Aggiorna alla {0} per continuare."
+        StringKey.UPDATE_INSTALL -> "Scarica e installa"
+        StringKey.UPDATE_LATER -> "Più tardi"
+        StringKey.UPDATE_EXIT -> "Esci"
+        StringKey.UPDATE_DOWNLOADING -> "Download dell'aggiornamento…"
+        StringKey.UPDATE_FAILED -> "Download non riuscito: {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "Versioni dell'applicazione"
+        StringKey.ADMIN_UPDATE_HINT -> "Ciò che pubblichi qui viene servito da /version a ogni client desktop all'avvio. Un campo vuoto semplicemente non viene offerto. I link degli installer possono essere URL assoluti o percorsi del server come /downloads/file.msi."
+        StringKey.ADMIN_UPDATE_LATEST -> "Ultima versione"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "Versione minima supportata (i client più vecchi devono aggiornare)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "Versione numerica puntata, ad es. 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "Pubblicato - i client lo vedranno al prossimo controllo all'avvio"
 
         StringKey.UNMATCHED -> ""
     }

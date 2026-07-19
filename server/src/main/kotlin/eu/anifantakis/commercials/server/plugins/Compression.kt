@@ -25,22 +25,24 @@ import io.ktor.server.plugins.compression.minimumSize
  * of staring at nothing; 329 KB is a quarter of one.
  *
  * `minimumSize` keeps us from paying the CPU to compress a 200-byte error body.
- * The SSE endpoint (`/mcp`) is deliberately EXCLUDED: compression buffers, and
- * buffering a server-sent-event stream defeats the point of streaming it.
+ * Two subtrees are deliberately EXCLUDED:
+ * - `/mcp` (SSE): compression buffers, and buffering a server-sent-event
+ *   stream defeats the point of streaming it.
+ * - `/downloads` (desktop installers): dmg/msi/deb are already-compressed
+ *   containers - gzip over a ~150 MB stream costs real CPU and saves nothing.
  */
 fun Application.configureCompression() {
     install(Compression) {
         gzip {
             priority = 1.0
             minimumSize(1024)
-            // SSE must not be buffered - see the note above. The condition lives
-            // on the encoder (Ktor has none at the plugin level).
-            condition { !request.local.uri.startsWith("/mcp") }
+            // The exclusions live on the encoder (Ktor has none at the plugin level).
+            condition { !request.local.uri.startsWith("/mcp") && !request.local.uri.startsWith("/downloads") }
         }
         deflate {
             priority = 0.9
             minimumSize(1024)
-            condition { !request.local.uri.startsWith("/mcp") }
+            condition { !request.local.uri.startsWith("/mcp") && !request.local.uri.startsWith("/downloads") }
         }
     }
 }

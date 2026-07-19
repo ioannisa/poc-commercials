@@ -20,7 +20,9 @@ plugins {
 }
 
 group = "eu.anifantakis.commercials"
-version = "1.0.0"
+// Backend jar coordinate (not published) - sourced from the catalog so no
+// bare version literal survives anywhere. See libs.versions.toml `server`.
+version = libs.versions.server.get()
 
 dependencies {
     implementation(libs.angus.mail)

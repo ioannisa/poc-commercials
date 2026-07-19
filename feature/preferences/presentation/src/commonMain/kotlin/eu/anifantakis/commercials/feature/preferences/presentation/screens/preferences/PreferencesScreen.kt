@@ -56,6 +56,7 @@ fun PreferencesScreenRoot(
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
     onAdminMcp: () -> Unit,
+    onAppUpdate: () -> Unit,
     onManageUsers: () -> Unit,
     onMigration: () -> Unit,
     onDatabases: () -> Unit,
@@ -77,6 +78,7 @@ fun PreferencesScreenRoot(
                 PreferencesScreenNavIntent.OnChangePassword -> onChangePassword()
                 PreferencesScreenNavIntent.OnApiTokens -> onApiTokens()
                 PreferencesScreenNavIntent.OnAdminMcp -> onAdminMcp()
+                PreferencesScreenNavIntent.OnAppUpdate -> onAppUpdate()
                 PreferencesScreenNavIntent.OnManageUsers -> onManageUsers()
                 PreferencesScreenNavIntent.OnMigration -> onMigration()
                 PreferencesScreenNavIntent.OnDatabases -> onDatabases()
@@ -98,6 +100,7 @@ private sealed interface PreferencesScreenNavIntent {
     data object OnChangePassword : PreferencesScreenNavIntent
     data object OnApiTokens : PreferencesScreenNavIntent
     data object OnAdminMcp : PreferencesScreenNavIntent
+    data object OnAppUpdate : PreferencesScreenNavIntent
     data object OnManageUsers : PreferencesScreenNavIntent
     data object OnMigration : PreferencesScreenNavIntent
     data object OnDatabases : PreferencesScreenNavIntent
@@ -216,6 +219,7 @@ private fun PreferencesScreen(
                         Spacer(Modifier.height(UIConst.paddingExtraSmall))
                         PreferenceEntry(AppDrawableRepo.manageAccounts, Strings[StringKey.PREFERENCES_MANAGE_USERS], Strings[StringKey.PREFERENCES_MANAGE_USERS_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnManageUsers) }
                         PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_ADMIN_MCP], Strings[StringKey.PREFERENCES_ADMIN_MCP_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAdminMcp) }
+                        PreferenceEntry(AppDrawableRepo.systemUpdate, Strings[StringKey.PREFERENCES_APP_UPDATE], Strings[StringKey.PREFERENCES_APP_UPDATE_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnAppUpdate) }
                         PreferenceEntry(AppDrawableRepo.storage, Strings[StringKey.PREFERENCES_MIGRATION], Strings[StringKey.PREFERENCES_MIGRATION_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnMigration) }
                         PreferenceEntry(AppDrawableRepo.dns, Strings[StringKey.PREFERENCES_DATABASES], Strings[StringKey.PREFERENCES_DATABASES_DESC]) { onNavIntent(PreferencesScreenNavIntent.OnDatabases) }
                         PreferenceEntry(AppDrawableRepo.openInNew, Strings[StringKey.PREFERENCES_OPEN_SWAGGER], Strings[StringKey.PREFERENCES_OPEN_SWAGGER_DESC], enabled = swaggerEnabled) { onNavIntent(PreferencesScreenNavIntent.OnOpenSwagger) }

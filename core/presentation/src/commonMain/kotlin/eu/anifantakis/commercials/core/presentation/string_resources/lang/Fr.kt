@@ -404,6 +404,8 @@ internal class Fr : LanguageStrings {
         StringKey.ADMIN_MCP_NO_AI_USAGE -> "Aucune utilisation IA enregistrée."
         StringKey.PREFERENCES_ADMIN_MCP -> "Supervision MCP"
         StringKey.PREFERENCES_ADMIN_MCP_DESC -> "Tous les jetons + l'interrupteur global"
+        StringKey.PREFERENCES_APP_UPDATE -> "Versions de l'application"
+        StringKey.PREFERENCES_APP_UPDATE_DESC -> "Publier la version desktop proposée aux clients"
         StringKey.PREFERENCES_OPEN_SWAGGER -> "Doc API (Swagger)"
         StringKey.PREFERENCES_OPEN_SWAGGER_DESC -> "Ouvrir la page OpenAPI du serveur dans le navigateur"
         StringKey.ADMIN_MCP_TITLE -> "Supervision MCP"
@@ -493,6 +495,23 @@ internal class Fr : LanguageStrings {
         StringKey.REPORT_PDF_SAVED_PREFIX -> "PDF enregistré : "
         StringKey.REPORT_CANCELLED -> "Annulé"
         StringKey.REPORT_NOT_AVAILABLE -> "(Rapports non disponibles sur cette plateforme)"
+
+        // ── Desktop auto-update ──────────────────────────────────────────
+        StringKey.UPDATE_AVAILABLE_TITLE -> "Mise à jour disponible"
+        StringKey.UPDATE_REQUIRED_TITLE -> "Mise à jour requise"
+        StringKey.UPDATE_AVAILABLE_MESSAGE -> "La version {0} est disponible (vous avez la {1}). L'installer maintenant ?"
+        StringKey.UPDATE_REQUIRED_MESSAGE -> "Votre version ({1}) n'est plus prise en charge. Veuillez mettre à jour vers la {0} pour continuer."
+        StringKey.UPDATE_INSTALL -> "Télécharger et installer"
+        StringKey.UPDATE_LATER -> "Plus tard"
+        StringKey.UPDATE_EXIT -> "Quitter"
+        StringKey.UPDATE_DOWNLOADING -> "Téléchargement de la mise à jour…"
+        StringKey.UPDATE_FAILED -> "Le téléchargement a échoué : {0}"
+        StringKey.ADMIN_UPDATE_TITLE -> "Versions de l'application"
+        StringKey.ADMIN_UPDATE_HINT -> "Ce qui est publié ici est servi par /version à chaque client desktop au démarrage. Un champ vide n'est simplement pas proposé. Les liens d'installation peuvent être des URL absolues ou des chemins serveur comme /downloads/file.msi."
+        StringKey.ADMIN_UPDATE_LATEST -> "Dernière version"
+        StringKey.ADMIN_UPDATE_MIN_SUPPORTED -> "Version minimale prise en charge (les clients plus anciens doivent mettre à jour)"
+        StringKey.ADMIN_UPDATE_VERSION_FORMAT -> "Version numérique à points, p. ex. 1.2.0"
+        StringKey.ADMIN_UPDATE_SAVED -> "Publié - les clients le verront à leur prochaine vérification au démarrage"
 
         StringKey.UNMATCHED -> ""
     }

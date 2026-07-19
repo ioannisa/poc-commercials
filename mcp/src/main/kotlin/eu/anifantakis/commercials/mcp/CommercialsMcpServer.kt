@@ -6,6 +6,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
+import java.util.Properties
 
 /**
  * Builds the Commercials Manager MCP [Server]. A fresh server is built per
@@ -36,4 +37,16 @@ fun buildCommercialsMcpServer(caller: McpCaller, services: McpToolServices): Ser
 }
 
 internal const val SERVER_NAME: String = "commercials-manager"
-internal const val SERVER_VERSION: String = "1.0.0"
+
+/**
+ * Advertised to every MCP client in the protocol handshake. Baked from the
+ * `server` catalog version by mcp/build.gradle.kts (the MCP server IS part of
+ * the server deployment), so it never drifts from what /version reports.
+ */
+internal val SERVER_VERSION: String by lazy {
+    object {}.javaClass.classLoader
+        .getResourceAsStream("commercials-mcp-version.properties")
+        ?.use { s -> Properties().apply { load(s) }.getProperty("version") }
+        ?.takeIf { it.isNotBlank() }
+        ?: "0.0.0" // resource missing = a build-script regression, not a runtime error
+}

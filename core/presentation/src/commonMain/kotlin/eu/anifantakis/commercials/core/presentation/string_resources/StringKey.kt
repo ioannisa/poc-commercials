@@ -440,6 +440,8 @@ enum class StringKey(val json: String = "") {
     ADMIN_MCP_NO_AI_USAGE,
     PREFERENCES_ADMIN_MCP,
     PREFERENCES_ADMIN_MCP_DESC,
+    PREFERENCES_APP_UPDATE,
+    PREFERENCES_APP_UPDATE_DESC,
     PREFERENCES_OPEN_SWAGGER,
     PREFERENCES_OPEN_SWAGGER_DESC,
     ADMIN_MCP_TITLE,
@@ -527,6 +529,25 @@ enum class StringKey(val json: String = "") {
     REPORT_PDF_SAVED_PREFIX,
     REPORT_CANCELLED,
     REPORT_NOT_AVAILABLE,
+
+    // ── Desktop auto-update (resolved in the desktop shell, outside App()) ──
+    UPDATE_AVAILABLE_TITLE,
+    UPDATE_REQUIRED_TITLE,
+    UPDATE_AVAILABLE_MESSAGE,     // {0} = new version, {1} = current version
+    UPDATE_REQUIRED_MESSAGE,      // {0} = new version, {1} = current version
+    UPDATE_INSTALL,
+    UPDATE_LATER,
+    UPDATE_EXIT,
+    UPDATE_DOWNLOADING,
+    UPDATE_FAILED,                // {0} = reason
+
+    // Admin publishing of the advertisement (super-admin preferences dialog)
+    ADMIN_UPDATE_TITLE,
+    ADMIN_UPDATE_HINT,
+    ADMIN_UPDATE_LATEST,
+    ADMIN_UPDATE_MIN_SUPPORTED,
+    ADMIN_UPDATE_VERSION_FORMAT,
+    ADMIN_UPDATE_SAVED,
 
     /** Fallback for an unrecognized server-sent key. */
     UNMATCHED;
