@@ -1295,6 +1295,24 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
     }
 
     /**
+     * WHOSE airings a month-grid cell counts - the "Προβολή Βάσει…" scope, and
+     * the CUSTOMER_VIEWER grant (which is [ByCustomer] applied by the route,
+     * not by choice). Null = everything.
+     */
+    sealed interface CellFilter {
+        /** Cells whose BREAK carries the programme (the break owns its paint). */
+        data class ByProgram(val programId: Long) : CellFilter
+        /** The spots OWNED by this customer code (legacy cusID). */
+        data class ByCustomer(val code: String) : CellFilter
+        /** The spots under contracts PAID by this code (legacy traid - agencies). */
+        data class ByTrader(val code: String) : CellFilter
+        /** The selected line's WHOLE contract - every line of it. */
+        data class ByContract(val lineId: Long) : CellFilter
+        /** One spot (the finder's armed message). */
+        data class BySpot(val spotId: Long) : CellFilter
+    }
+
+    /**
      * THE MONTH GRID - the little boxes, and nothing else.
      *
      * A box shows a spot COUNT and a total DURATION, so that is all this fetches:
@@ -1308,18 +1326,22 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * 98ms. The airings are fetched only when something actually wants them:
      * opening a break, or printing (see [loadCommercials]).
      *
-     * [onlyClientCode] is the CUSTOMER_VIEWER scope, and it must be applied HERE,
-     * inside the aggregate. The route used to filter the airings in Kotlin and
-     * recompute the counts from what survived; with no airings to filter, a
-     * customer would otherwise be shown everybody's numbers.
+     * [filter] must be applied HERE, inside the aggregate: with no airings coming
+     * back there is nothing left to filter in Kotlin - recomputing counts from
+     * survivors is exactly the CUSTOMER_VIEWER lesson (the route used to filter
+     * airings and recount; a customer would otherwise see everybody's numbers).
+     * A placement-scoped filter also decides WHICH cells exist at all: a break
+     * with none of the filtered spots simply has no row, so the grid shows the
+     * operator only where the selection actually airs.
      */
-    fun loadMonthCells(year: Int, month: Int, onlyClientCode: String? = null): List<CellRow> {
+    fun loadMonthCells(year: Int, month: Int, filter: CellFilter? = null): List<CellRow> {
         val (start, end) = monthRange(year, month)
         // The cell's programme is THE BREAK'S - the one column the break entity
         // owns (see GroupDb). The old "first placement that has one" windows are
         // gone: per-spot tags still exist (reports read them) but never decide a
         // cell's paint again.
-        val sql = if (onlyClientCode == null)
+        val breakRooted = filter == null || filter is CellFilter.ByProgram
+        val sql = if (breakRooted)
             // Staff view: the break owns the PAINT (its programme), but a CELL
             // exists only where a VISIBLE spot airs - HAVING drops empty and
             // hidden-only breaks so a spotless break never shows a row. (That is
@@ -1328,6 +1350,9 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             // retires its break - see deletePlacement.) The airings leg joins by
             // the slot tuple, NOT break_id: (station, date, hidden, time) is the
             // leftmost prefix of idx_placements_grid.
+            //
+            // ByProgram stays on this shape: the programme is the BREAK's, so the
+            // filter picks whole cells (their counts intact), never single spots.
             """
             SELECT b.show_time, b.show_date,
                    COUNT(s.id) AS spot_count,
@@ -1343,13 +1368,15 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             LEFT JOIN programs pr ON pr.id = b.program_id
             WHERE b.station_id = ?
               AND b.show_date >= ? AND b.show_date < ?
+              ${if (filter is CellFilter.ByProgram) "AND b.program_id = ?" else ""}
             GROUP BY b.show_date, b.show_time
             HAVING COUNT(s.id) > 0
             """.trimIndent()
         else
-            // CUSTOMER_VIEWER: their spots decide WHICH cells exist and what
-            // the counts say (an empty break is not theirs to see), but the
-            // paint is still the break's programme - whoever is looking.
+            // Placement-scoped filters (customer/trader/contract/spot): the
+            // MATCHING spots decide which cells exist and what the counts say
+            // (a break with none of them is not a cell), but the paint is still
+            // the break's programme - whoever is looking.
             """
             SELECT p.show_time, p.show_date,
                    COUNT(*) AS spot_count,
@@ -1358,7 +1385,19 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                    MAX(pr.name) AS program_name
             FROM placements p
             JOIN spots s ON s.id = p.spot_id
-            JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?
+            ${when (filter) {
+                is CellFilter.ByCustomer -> "JOIN customers cu ON cu.id = s.customer_id AND cu.code = ?"
+                is CellFilter.ByTrader ->
+                    """JOIN contract_lines cl ON cl.id = s.contract_line_id
+            JOIN contracts ct ON ct.id = cl.contract_id
+            JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"""
+                is CellFilter.ByContract ->
+                    // The selected LINE addresses its contract; every sibling
+                    // line's spots count - «Συμβολαίου», not «Είδους».
+                    """JOIN contract_lines cl ON cl.id = s.contract_line_id
+            JOIN contract_lines sel ON sel.id = ? AND sel.contract_id = cl.contract_id"""
+                else -> ""
+            }}
             LEFT JOIN breaks b ON b.station_id = p.station_id
                               AND b.show_date = p.show_date
                               AND b.show_time = p.show_time
@@ -1366,18 +1405,30 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             WHERE p.station_id = ?
               AND p.show_date >= ? AND p.show_date < ?
               AND p.hidden = FALSE AND s.hidden = FALSE
+              ${if (filter is CellFilter.BySpot) "AND p.spot_id = ?" else ""}
             GROUP BY p.show_date, p.show_time
             """.trimIndent()
         val cells = mutableListOf<CellRow>()
         connection().use { c ->
             c.prepareStatement(sql).use { ps ->
-                // ORDER MATTERS: the customer's `?` sits in the JOIN, which comes
-                // BEFORE the WHERE - bind it first or the station id lands on it.
+                // ORDER MATTERS: the join-leg `?`s (customer/trader code, the
+                // selected line) sit BEFORE the WHERE - bind them first or the
+                // station id lands on them.
                 var i = 1
-                if (onlyClientCode != null) ps.setString(i++, onlyClientCode)
+                when (filter) {
+                    is CellFilter.ByCustomer -> ps.setString(i++, filter.code)
+                    is CellFilter.ByTrader -> ps.setString(i++, filter.code)
+                    is CellFilter.ByContract -> ps.setLong(i++, filter.lineId)
+                    else -> Unit
+                }
                 ps.setString(i++, stationId)
                 ps.setDate(i++, java.sql.Date.valueOf(start))
-                ps.setDate(i, java.sql.Date.valueOf(end))
+                ps.setDate(i++, java.sql.Date.valueOf(end))
+                when (filter) {
+                    is CellFilter.ByProgram -> ps.setLong(i, filter.programId)
+                    is CellFilter.BySpot -> ps.setLong(i, filter.spotId)
+                    else -> Unit
+                }
                 ps.executeQuery().use { rs ->
                     while (rs.next()) {
                         val time = rs.getTime("show_time").toLocalTime()

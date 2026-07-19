@@ -6,6 +6,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.BreakSlotInfo
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -25,9 +26,16 @@ interface ScheduleRepository {
 
     /**
      * The month's grid: one aggregate per cell (count + duration + colour). It
-     * carries NO airings - see [getCommercials].
+     * carries NO airings - see [getCommercials]. [filter] is the "Προβολή
+     * Βάσει…" scope: the counts (and therefore which cells exist at all) are
+     * recomputed server-side to just the matching airings; null = Όλα.
      */
-    suspend fun getMonth(year: Int, month: Int, mode: GridViewMode): DataResult<MonthSchedule, DataError.Network>
+    suspend fun getMonth(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+        filter: ScheduleFilter? = null,
+    ): DataResult<MonthSchedule, DataError.Network>
 
     /**
      * The airings, for a slice: the whole month, one day ([date]), one break

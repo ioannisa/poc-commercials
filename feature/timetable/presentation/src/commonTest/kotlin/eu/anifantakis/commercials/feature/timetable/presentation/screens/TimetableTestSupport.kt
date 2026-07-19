@@ -28,6 +28,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleCell
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -220,8 +221,10 @@ class FakeScheduleRepository : ScheduleRepository {
         year: Int,
         month: Int,
         mode: GridViewMode,
+        filter: ScheduleFilter?,
     ): DataResult<MonthSchedule, DataError.Network> {
         monthLoads += mode
+        monthFilters += filter
         return when (val result = monthResult) {
             is DataResult.Success -> DataResult.Success(
                 result.data.copy(cells = result.data.cells.map { it.copy(commercials = emptyList()) })
@@ -232,6 +235,9 @@ class FakeScheduleRepository : ScheduleRepository {
 
     /** Every mode the grid was loaded with - one entry per round trip. */
     val monthLoads = mutableListOf<GridViewMode>()
+
+    /** The «Προβολή Βάσει…» scope of each round trip (position-matched to [monthLoads]). */
+    val monthFilters = mutableListOf<ScheduleFilter?>()
 
     /** The stocked airings, narrowed to the slice asked for (both filters optional). */
     override suspend fun getCommercials(
@@ -347,6 +353,8 @@ class FakeTimetableCommon : TimetableCommon {
     /** ONE verb now loads the month's cells AND its rows - there is no loadBreaks. */
     val loads = mutableListOf<Pair<Int, Int>>()
     val viewModes = mutableListOf<GridViewMode>()
+    /** Every «Προβολή Βάσει…» scope a screen handed over (nulls included). */
+    val filters = mutableListOf<ScheduleFilter?>()
     /** The cells whose AIRINGS a screen asked for - the Break Console asks for its own, on open. */
     val commercialLoads = mutableListOf<Pair<LocalTime, LocalDate>>()
     val adds = mutableListOf<Triple<Long, LocalTime, LocalDate>>()
@@ -360,6 +368,7 @@ class FakeTimetableCommon : TimetableCommon {
     override fun clear() { clears++ }
     override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
     override fun setViewMode(mode: GridViewMode) { viewModes += mode }
+    override fun setFilter(filter: ScheduleFilter?) { filters += filter }
     override fun loadCommercials(time: LocalTime, date: LocalDate) { commercialLoads += (time to date) }
     override fun add(spotId: Long, time: LocalTime, date: LocalDate, programId: Long?) {
         adds += Triple(spotId, time, date)

@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -42,6 +43,15 @@ class TimetableCommonViewModel(
     /** Session-added placements per cell, newest last - what 'r' removes. */
     private val addedByCell = mutableMapOf<SchedulerKey, MutableList<PlacedCommercial>>()
 
+    /**
+     * The times of the operator's CLIENT-ONLY "add break" rows (createBreak
+     * persists nothing). Tracked EXPLICITLY, because a refresh cannot infer
+     * them from "rows the server did not return": under a «Προβολή Βάσει…»
+     * filter the server legitimately returns fewer rows, and inferring would
+     * resurrect every one the filter hides. Cleared with the month.
+     */
+    private val clientRowTimes = mutableSetOf<LocalTime>()
+
     // ── contract verbs: enqueue only - execution is serialized intents ─────
 
     override fun clear() = dispatch(TimetableCommonIntent.Clear)
@@ -51,6 +61,9 @@ class TimetableCommonViewModel(
 
     override fun setViewMode(mode: GridViewMode) =
         dispatch(TimetableCommonIntent.SetViewMode(mode))
+
+    override fun setFilter(filter: ScheduleFilter?) =
+        dispatch(TimetableCommonIntent.SetFilter(filter))
 
     override fun loadCommercials(time: LocalTime, date: LocalDate) =
         dispatch(TimetableCommonIntent.LoadCommercials(time, date))
@@ -75,6 +88,7 @@ class TimetableCommonViewModel(
         when (intent) {
             TimetableCommonIntent.Clear -> {
                 addedByCell.clear()
+                clientRowTimes.clear()
                 updateCommonState { TimetableCommonState() }
             }
 
@@ -85,13 +99,19 @@ class TimetableCommonViewModel(
                 // rows used to survive here, back when they were a station-wide
                 // grid; they are the month's own now.)
                 addedByCell.clear()
+                clientRowTimes.clear()
                 val mode = commonState.value.viewMode
-                updateCommonState { TimetableCommonState(viewMode = mode, year = intent.year, month = intent.month) }
+                // The view mode AND the armed filter survive the blank - both
+                // are the operator's choices, not the month's data.
+                val filter = commonState.value.filter
+                updateCommonState {
+                    TimetableCommonState(viewMode = mode, filter = filter, year = intent.year, month = intent.month)
+                }
                 // ONE call for the whole grid. The rows and the cells came from two
                 // endpoints fetched back-to-back, which made the screen wait for two
                 // sequential round trips and had the server scan the same month
                 // twice - the rows ARE the distinct times of the cells.
-                when (val result = scheduleRepository.getMonth(intent.year, intent.month, mode)) {
+                when (val result = scheduleRepository.getMonth(intent.year, intent.month, mode, filter)) {
                     is DataResult.Success -> updateCommonState { st ->
                         st.copy(
                             breaks = result.data.rows.map { b -> b.toUi() }.toImmutableList(),
@@ -110,10 +130,25 @@ class TimetableCommonViewModel(
                 if (st.viewMode == intent.mode) return
                 updateCommonState { it.copy(viewMode = intent.mode) }
                 // Only the ROWS change: the cells are the same airings whichever
-                // view is on, so the month is not re-fetched.
+                // view is on, so the month is not re-fetched. UNLESS a filter is
+                // armed: /api/breaks knows nothing of it and would resurrect
+                // every break the filter hides, so the filtered month (rows +
+                // cells from one scan) is re-fetched instead.
                 val year = st.year
                 val month = st.month
-                if (year != null && month != null) loadRows(year, month, intent.mode)
+                if (year != null && month != null) {
+                    if (st.filter == null) loadRows(year, month, intent.mode)
+                    else refreshMonthKeepingMarkers()
+                }
+            }
+
+            is TimetableCommonIntent.SetFilter -> {
+                if (commonState.value.filter == intent.filter) return
+                updateCommonState { it.copy(filter = intent.filter) }
+                // Same airings, different SCOPE: refresh in place (keeping the
+                // session's markers and loaded airings) rather than blanking -
+                // the operator is narrowing what they look at, not navigating.
+                refreshMonthKeepingMarkers()
             }
 
             is TimetableCommonIntent.LoadCommercials -> {
@@ -164,6 +199,7 @@ class TimetableCommonViewModel(
                 // into; that first spot FOUNDS the real break (with a programme).
                 // An unused row therefore vanishes on the next month load / app
                 // restart - exactly the ephemerality the operator expects.
+                clientRowTimes += intent.time
                 updateCommonState { st ->
                     if (st.breaks.any { it.time == intent.time }) return@updateCommonState st
                     val label = "${intent.time.hour.toString().padStart(2, '0')}:" +
@@ -221,7 +257,7 @@ class TimetableCommonViewModel(
         val st = commonState.value
         val year = st.year ?: return
         val month = st.month ?: return
-        when (val result = scheduleRepository.getMonth(year, month, st.viewMode)) {
+        when (val result = scheduleRepository.getMonth(year, month, st.viewMode, st.filter)) {
             is DataResult.Success -> updateCommonState { s ->
                 val fresh = result.data.cells.associate { c -> c.toUi() }
                 // The fresh cells carry no airings; keep the ones already loaded
@@ -236,10 +272,14 @@ class TimetableCommonViewModel(
                 // Keep the operator's CLIENT-ONLY "add break" rows across a
                 // refetch: a time the operator added that the server still does
                 // not know (no spot placed) and that holds no cell. Filling ONE
-                // transient row must not drop the others. (A month change goes
-                // through loadMonth, which blanks - so they vanish there.)
+                // transient row must not drop the others. Only the EXPLICITLY
+                // tracked times qualify - "rows the server did not return" also
+                // describes every row a «Προβολή Βάσει…» filter hides, and
+                // those must go. (A month change goes through loadMonth, which
+                // blanks - so they vanish there.)
                 val transient = s.breaks.filter { row ->
-                    row.time !in serverTimes && merged.keys.none { it.time == row.time }
+                    row.time in clientRowTimes &&
+                        row.time !in serverTimes && merged.keys.none { it.time == row.time }
                 }
                 s.copy(
                     breaks = (serverRows + transient).sortedBy { it.time }.toImmutableList(),

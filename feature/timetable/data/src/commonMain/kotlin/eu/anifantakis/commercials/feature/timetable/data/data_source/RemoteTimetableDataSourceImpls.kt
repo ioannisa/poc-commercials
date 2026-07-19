@@ -29,6 +29,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpo
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -52,9 +53,19 @@ class RemoteScheduleDataSourceImpl(private val api: ApiHttpClient) : RemoteSched
         year: Int,
         month: Int,
         mode: GridViewMode,
+        filter: ScheduleFilter?,
     ): DataResult<MonthSchedule, DataError.Network> =
-        api.get<ScheduleDto>("/api/schedule", "year" to year, "month" to month, "mode" to mode.name)
-            .map { it.toDomain() }
+        api.get<ScheduleDto>(
+            "/api/schedule",
+            "year" to year, "month" to month, "mode" to mode.name,
+            // "Προβολή Βάσει…" - at most ONE of these is non-null (the server
+            // 400s on combinations); nulls are dropped by the client.
+            "programId" to (filter as? ScheduleFilter.ByProgram)?.programId,
+            "partyCode" to (filter as? ScheduleFilter.ByParty)?.code,
+            "partyKind" to (filter as? ScheduleFilter.ByParty)?.kind?.wire,
+            "lineId" to (filter as? ScheduleFilter.ByContract)?.lineId,
+            "spotId" to (filter as? ScheduleFilter.BySpot)?.spotId,
+        ).map { it.toDomain() }
 
     override suspend fun getCommercials(
         year: Int,

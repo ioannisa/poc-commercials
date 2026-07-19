@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -47,6 +48,16 @@ interface TimetableCommon {
      * around them.
      */
     fun setViewMode(mode: GridViewMode)
+
+    /**
+     * Arms (or clears, with null) the "Προβολή Βάσει…" scope and re-fetches the
+     * current month under it, KEEPING the session's markers. The filter then
+     * rides every month load until changed - it is the operator's choice, like
+     * the view mode. The cells' counts (and which cells exist at all) become
+     * the filter's; a cell's AIRINGS stay unfiltered - opening a break always
+     * shows its whole content.
+     */
+    fun setFilter(filter: ScheduleFilter?)
 
     /**
      * Loads ONE cell's airings and merges them into the store.
@@ -109,6 +120,8 @@ data class TimetableCommonState(
     val breaks: ImmutableList<BreakSlot> = persistentListOf(),
     /** Which rows are drawn when empty. Survives month navigation - it is the operator's choice. */
     val viewMode: GridViewMode = GridViewMode.CONDENSED,
+    /** The armed "Προβολή Βάσει…" scope; survives month navigation like [viewMode]. */
+    val filter: ScheduleFilter? = null,
     /** The month on screen - what [TimetableCommon.setViewMode] reloads the rows for. */
     val year: Int? = null,
     val month: Int? = null,
@@ -127,6 +140,7 @@ sealed interface TimetableCommonIntent {
     data object Clear : TimetableCommonIntent
     data class LoadMonth(val year: Int, val month: Int) : TimetableCommonIntent
     data class SetViewMode(val mode: GridViewMode) : TimetableCommonIntent
+    data class SetFilter(val filter: ScheduleFilter?) : TimetableCommonIntent
     data class LoadCommercials(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data class Add(
         val spotId: Long,

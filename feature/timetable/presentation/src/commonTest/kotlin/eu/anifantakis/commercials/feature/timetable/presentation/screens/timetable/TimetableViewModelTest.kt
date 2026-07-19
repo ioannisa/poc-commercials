@@ -15,6 +15,7 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePro
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_DATE
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_TIME
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonState
@@ -172,6 +173,79 @@ class TimetableViewModelTest : TimetableTestBase() {
 
         assertEquals(listOf(GridViewMode.HOURLY), common.viewModes, "'Προβολή κάθε' goes up to the shared owner")
         assertEquals(loadsBefore, common.loads.size, "only the rows change - the month is not re-fetched")
+    }
+
+    // ── «Προβολή Βάσει…» - the Show based on… radio group ──────────────
+
+    @Test
+    fun showBasedOnProgramArmsTheFilterWithTheSelectedProgramme() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.SelectProgram(7))
+        vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.PROGRAM))
+        advanceUntilIdle()
+
+        assertEquals(ShowBasedOn.PROGRAM, vm.state.showBasedOn)
+        assertEquals(
+            ScheduleFilter.ByProgram(7),
+            common.filters.last(),
+            "the radio reads its subject from the «Τύποι Προγράμματος» dropdown and hands it to the shared owner",
+        )
+    }
+
+    @Test
+    fun showBasedOnWithoutItsSubjectFiltersNothingAndHints() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        val effects = mutableListOf<GlobalEffect>()
+        backgroundScope.launch { globalContainer.effects.collect { effects += it } }
+
+        vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.CUSTOMER))
+        advanceUntilIdle()
+
+        assertEquals(null, common.filters.last(), "no party selected yet - armed, but the grid stays unfiltered")
+        assertEquals(
+            1,
+            effects.count { it is GlobalEffect.SnackBarMessage },
+            "and the hint says where the subject comes from (the Εύρεση console)",
+        )
+    }
+
+    /** The mode can be armed FIRST: the filter lands the moment its subject does - and leaves with it. */
+    @Test
+    fun armedMessageModeFollowsTheSpotSelection() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.MESSAGE))
+        advanceUntilIdle()
+        assertEquals(null, common.filters.last())
+
+        vm.onAction(
+            TimetableIntent.FinderSpotSelected(
+                ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)
+            )
+        )
+        advanceUntilIdle()
+        assertEquals(ScheduleFilter.BySpot(42), common.filters.last(), "arming the spot lands the filter")
+
+        vm.onAction(TimetableIntent.ClearFinder)
+        advanceUntilIdle()
+        assertEquals(null, common.filters.last(), "clearing the finder takes the subject - and the scope - away")
+    }
+
+    @Test
+    fun showBasedOnAllDisarmsAnActiveFilter() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.SelectProgram(7))
+        vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.PROGRAM))
+        advanceUntilIdle()
+        assertEquals(ScheduleFilter.ByProgram(7), common.filters.last())
+
+        vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.ALL))
+        advanceUntilIdle()
+
+        assertEquals(null, common.filters.last(), "Όλα hands a null scope up - the grid shows everything again")
     }
 
     @Test

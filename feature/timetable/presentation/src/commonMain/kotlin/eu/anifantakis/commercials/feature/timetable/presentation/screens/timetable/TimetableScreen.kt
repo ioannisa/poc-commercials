@@ -15,7 +15,6 @@ import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppGroupBox
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppPendingBox
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
@@ -408,6 +407,24 @@ private fun viewModeOptions(): List<AppSelectionOption<GridViewMode>> {
 }
 
 /**
+ * The «Προβολή Βάσει…» options - whose airings the grid counts. Remembered
+ * against the language, like [viewModeOptions] and for the same reason.
+ */
+@Composable
+private fun showBasedOnOptions(): List<AppSelectionOption<ShowBasedOn>> {
+    val language = LocalLanguage.current
+    return remember(language) {
+        listOf(
+            AppSelectionOption(ShowBasedOn.ALL, StringKey.TIMETABLE_BASED_ON_ALL.localized()),
+            AppSelectionOption(ShowBasedOn.PROGRAM, StringKey.TIMETABLE_BASED_ON_PROGRAM.localized()),
+            AppSelectionOption(ShowBasedOn.CUSTOMER, StringKey.TIMETABLE_BASED_ON_CUSTOMER.localized()),
+            AppSelectionOption(ShowBasedOn.CONTRACT, StringKey.TIMETABLE_BASED_ON_CONTRACT.localized()),
+            AppSelectionOption(ShowBasedOn.MESSAGE, StringKey.TIMETABLE_BASED_ON_MESSAGE.localized()),
+        )
+    }
+}
+
+/**
  * Shows which station's data is on screen. With a single grant it's a plain
  * label; with several it becomes a dropdown - selecting one asks the ViewModel
  * to switch, and the session revision it raises refetches the data and
@@ -613,11 +630,21 @@ private fun KeyboardEnabledHeader(
                             modifier = Modifier.fillMaxHeight(),
                             verticalArrangement = Arrangement.Center,
                         )
-                        // "Προβολή Βάσει…" - the view filter, not migrated yet.
-                        AppPendingBox(
-                            title = Strings[StringKey.TIMETABLE_VIEW_BASED_ON_TITLE],
-                            modifier = Modifier.fillMaxHeight(),
-                        )
+                        // "Προβολή Βάσει…" (real): WHOSE airings the cells
+                        // count. The radios read their subject from the
+                        // header's other selections - the programme dropdown,
+                        // or the Εύρεση console's party/contract/spot - which
+                        // only editors have, so viewer roles get no box.
+                        if (state.canEdit) {
+                            AppRadioColumn(
+                                title = Strings[StringKey.TIMETABLE_VIEW_BASED_ON_TITLE],
+                                options = showBasedOnOptions(),
+                                selected = state.showBasedOn,
+                                onSelect = { onIntent(TimetableIntent.ShowBasedOnChanged(it)) },
+                                modifier = Modifier.fillMaxHeight(),
+                                verticalArrangement = Arrangement.Center,
+                            )
+                        }
 
                         // Station selector ABOVE its logo, right after the boxes
                         // (where the legacy draws its brand mark): switching

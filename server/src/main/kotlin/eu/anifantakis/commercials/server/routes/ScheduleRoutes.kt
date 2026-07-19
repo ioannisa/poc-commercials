@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.server.plugins.StationAccess
 import eu.anifantakis.commercials.server.plugins.stationAccessOrRespond
 import eu.anifantakis.commercials.server.scheduler.AddPlacementResult
 import eu.anifantakis.commercials.server.scheduler.GridViewMode
+import eu.anifantakis.commercials.server.scheduler.StationDb
 import eu.anifantakis.commercials.server.scheduler.breakZoneColorArgb
 import eu.anifantakis.commercials.server.scheduler.formatHhMm
 import eu.anifantakis.commercials.server.stations.StationRegistry
@@ -236,6 +237,12 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          * never read a single one. Whoever actually wants an airing asks for it:
          * `/schedule/commercials` below.
          *
+         * "Προβολή Βάσει…": at most ONE of programId | partyCode(+partyKind) |
+         * lineId | spotId narrows the counts to the matching airings - and,
+         * with them, which cells (and condensed rows) exist at all. lineId
+         * selects its WHOLE contract; partyKind is 'customer' (spot owner,
+         * default) or 'trader' (contract payer).
+         *
          * Tag: Schedule
          */
         get("/schedule") {
@@ -257,11 +264,46 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
 
             val access = call.stationAccessOrRespond(registry) ?: return@get
 
+            // The console's "Προβολή Βάσει…" filter. Parsed for everyone, but a
+            // CUSTOMER_VIEWER's grant OVERRIDES it below - their scope is not
+            // negotiable through query parameters.
+            val programId = call.request.queryParameters["programId"]?.toLongOrNull()
+            val partyCode = call.request.queryParameters["partyCode"]
+            val lineId = call.request.queryParameters["lineId"]?.toLongOrNull()
+            val spotId = call.request.queryParameters["spotId"]?.toLongOrNull()
+            val requested: StationDb.CellFilter? = when {
+                listOfNotNull(programId, partyCode, lineId, spotId).size > 1 -> {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        mapOf("error" to "pass at most one of programId, partyCode, lineId, spotId")
+                    )
+                    return@get
+                }
+                programId != null -> StationDb.CellFilter.ByProgram(programId)
+                partyCode != null -> when (call.request.queryParameters["partyKind"] ?: "customer") {
+                    "customer" -> StationDb.CellFilter.ByCustomer(partyCode)
+                    "trader" -> StationDb.CellFilter.ByTrader(partyCode)
+                    else -> {
+                        call.respond(
+                            HttpStatusCode.BadRequest,
+                            mapOf("error" to "partyKind must be 'customer' or 'trader'")
+                        )
+                        return@get
+                    }
+                }
+                lineId != null -> StationDb.CellFilter.ByContract(lineId)
+                spotId != null -> StationDb.CellFilter.BySpot(spotId)
+                else -> null
+            }
+
             // CUSTOMER_VIEWER scoping goes INTO the aggregate: with no airings
             // coming back there is nothing left to filter in Kotlin, and a
             // customer must never be shown everybody's counts.
             val grant = access.grant
-            val onlyClientCode = grant.clientCode?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
+            val filter = grant.clientCode
+                ?.takeIf { grant.role == UserRole.CUSTOMER_VIEWER }
+                ?.let { StationDb.CellFilter.ByCustomer(it) }
+                ?: requested
 
             // ONE scan of the month. The rows are derived from the cells' own times
             // (see gridRowsFrom) - fetching them separately meant scanning the same
@@ -270,7 +312,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
             // JDBC is blocking - keep it off Ktor's request threads.
             val (cells, rows) = withContext(Dispatchers.IO) {
                 access.db.ensureMonthSeeded(year, month)
-                val c = access.db.loadMonthCells(year, month, onlyClientCode)
+                val c = access.db.loadMonthCells(year, month, filter)
                 c to access.db.gridRowsFrom(c.map { it.time }.distinct(), mode)
             }
 

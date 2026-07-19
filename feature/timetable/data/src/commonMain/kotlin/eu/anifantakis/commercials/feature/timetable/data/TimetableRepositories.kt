@@ -19,6 +19,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpo
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -42,7 +43,8 @@ class ScheduleRepositoryImpl(
         year: Int,
         month: Int,
         mode: GridViewMode,
-    ): DataResult<MonthSchedule, DataError.Network> = remoteDataSource.getMonth(year, month, mode)
+        filter: ScheduleFilter?,
+    ): DataResult<MonthSchedule, DataError.Network> = remoteDataSource.getMonth(year, month, mode, filter)
 
     override suspend fun getCommercials(
         year: Int,

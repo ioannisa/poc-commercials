@@ -70,6 +70,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 
@@ -102,6 +103,8 @@ data class TimetableState(
      * radio group.
      */
     val viewMode: GridViewMode = GridViewMode.CONDENSED,
+    /** The «Προβολή Βάσει…» radio - which selection scopes the grid's counts. */
+    val showBasedOn: ShowBasedOn = ShowBasedOn.ALL,
     val cells: ImmutableMap<SchedulerKey, SchedulerCellData> = persistentMapOf(),
     /** The Σύνολα footer - derived from [cells], never in a composable. */
     val dailyTotals: ImmutableMap<StableDate, DailyStats> = persistentMapOf(),
@@ -151,6 +154,16 @@ data class TimetableState(
 /** The programme-console dialogs (one per legacy button). */
 enum class ProgramDialog { ADD, EDIT, REMOVE, COLOR }
 
+/**
+ * The «Προβολή Βάσει…» radio group - WHOSE airings the grid counts. Each mode
+ * (except ALL) reads its subject from a selection the operator makes elsewhere
+ * in the header: PROGRAM from the «Τύποι Προγράμματος» dropdown, the rest from
+ * the Εύρεση console (party / contract line / armed spot). A mode whose
+ * subject is not selected yet filters nothing - it ARMS, and the filter lands
+ * the moment the selection does.
+ */
+enum class ShowBasedOn { ALL, PROGRAM, CUSTOMER, CONTRACT, MESSAGE }
+
 sealed interface TimetableIntent {
     data object PreviousMonth : TimetableIntent
     data object NextMonth : TimetableIntent
@@ -166,6 +179,8 @@ sealed interface TimetableIntent {
      * unaffected - the same airings are there whichever view is on.
      */
     data class ViewModeChanged(val mode: GridViewMode) : TimetableIntent
+    /** The «Προβολή Βάσει…» radio group: re-scopes the month's COUNTS. */
+    data class ShowBasedOnChanged(val mode: ShowBasedOn) : TimetableIntent
     /** [spotCount] only decides WHETHER the cell opens; it never travels on. */
     data class OpenCell(
         val time: LocalTime,
@@ -377,6 +392,21 @@ class TimetableViewModel(
 
             is TimetableIntent.ViewModeChanged -> common.setViewMode(intent.mode)
 
+            is TimetableIntent.ShowBasedOnChanged -> {
+                _state.update { it.copy(showBasedOn = intent.mode) }
+                // A mode without its subject selected yet only ARMS: the grid
+                // stays unfiltered, and the hint says where the subject comes
+                // from. The filter lands when the selection does (syncFilter
+                // runs again on every selection change).
+                if (intent.mode != ShowBasedOn.ALL && effectiveFilter() == null) {
+                    showSnackbar(
+                        if (intent.mode == ShowBasedOn.PROGRAM) StringKey.TIMETABLE_SELECT_PROGRAM_FIRST
+                        else StringKey.TIMETABLE_FILTER_NEEDS_FINDER
+                    )
+                }
+                syncFilter()
+            }
+
             TimetableIntent.ToggleShowTimes -> {
                 val newValue = !_state.value.showSpotTimes
                 prefs.showSpotTimes = newValue
@@ -392,8 +422,10 @@ class TimetableViewModel(
             is TimetableIntent.AddSpotAt -> addSpotAt(intent.time, intent.date)
             is TimetableIntent.RemoveLastAt -> common.removeLast(intent.time, intent.date)
 
-            is TimetableIntent.SelectProgram ->
+            is TimetableIntent.SelectProgram -> {
                 _state.update { it.copy(selectedProgramId = intent.programId) }
+                syncFilter()
+            }
 
             is TimetableIntent.OpenProgramDialog -> {
                 // ΔΙΟΡΘ/ΑΦΑΙΡ/Χρώμα act ON the selection; ΠΡΟΣΘ never needs one.
@@ -417,7 +449,11 @@ class TimetableViewModel(
 
             TimetableIntent.OpenFinder -> _state.update { it.copy(showFinder = true) }
             TimetableIntent.CloseFinder -> _state.update { it.copy(showFinder = false) }
-            TimetableIntent.ClearFinder -> _state.update { it.copy(finder = FinderUiState()) }
+            TimetableIntent.ClearFinder -> {
+                _state.update { it.copy(finder = FinderUiState()) }
+                // A finder-scoped «Προβολή Βάσει…» just lost its subject.
+                syncFilter()
+            }
 
             is TimetableIntent.FinderKindChanged -> {
                 if (_state.value.finder.kind != intent.kind) {
@@ -435,10 +471,39 @@ class TimetableViewModel(
 
             is TimetableIntent.FinderPartySelected -> selectParty(intent.party)
             is TimetableIntent.FinderLineSelected -> selectLine(intent.line)
-            is TimetableIntent.FinderSpotSelected ->
+            is TimetableIntent.FinderSpotSelected -> {
                 _state.update { it.copy(finder = it.finder.copy(selectedSpot = intent.spot)) }
+                syncFilter()
+            }
         }
     }
+
+    // ── «Προβολή Βάσει…» (the Show based on… filter) ────────────────────
+
+    /**
+     * The armed mode's subject, read from the CURRENT selections - or null
+     * when the mode is ALL or its subject is not selected (yet): an armed mode
+     * without a subject shows everything rather than nothing.
+     */
+    private fun effectiveFilter(): ScheduleFilter? {
+        val s = _state.value
+        return when (s.showBasedOn) {
+            ShowBasedOn.ALL -> null
+            ShowBasedOn.PROGRAM -> s.selectedProgramId?.let { ScheduleFilter.ByProgram(it) }
+            ShowBasedOn.CUSTOMER -> s.finder.selectedParty?.let {
+                ScheduleFilter.ByParty(it.code, s.finder.selectedKind)
+            }
+            ShowBasedOn.CONTRACT -> s.finder.selectedLine?.let { ScheduleFilter.ByContract(it.lineId) }
+            ShowBasedOn.MESSAGE -> s.finder.selectedSpot?.let { ScheduleFilter.BySpot(it.spotId) }
+        }
+    }
+
+    /**
+     * Re-derives the filter and hands it to the common store, which refetches
+     * only on an actual change - so this is safe to call after EVERY selection
+     * tick that could move the filter's subject.
+     */
+    private fun syncFilter() = common.setFilter(effectiveFilter())
 
     // ── data loading ────────────────────────────────────────────────────
 
@@ -459,13 +524,18 @@ class TimetableViewModel(
         if (!session.role.canEdit) return
         viewModelScope.launch {
             when (val result = programsRepository.list()) {
-                is DataResult.Success -> _state.update { st ->
-                    val programs = result.data.toImmutableList()
-                    val keep = selectId ?: st.selectedProgramId
-                    st.copy(
-                        programs = programs,
-                        selectedProgramId = keep?.takeIf { id -> programs.any { it.id == id } },
-                    )
+                is DataResult.Success -> {
+                    _state.update { st ->
+                        val programs = result.data.toImmutableList()
+                        val keep = selectId ?: st.selectedProgramId
+                        st.copy(
+                            programs = programs,
+                            selectedProgramId = keep?.takeIf { id -> programs.any { it.id == id } },
+                        )
+                    }
+                    // The selection may have moved (a fresh create arming the
+                    // brush) or dropped (the id vanished from the catalog).
+                    syncFilter()
                 }
                 is DataResult.Failure -> showSnackbar(result.error.toUiText())
             }
@@ -698,6 +768,8 @@ class TimetableViewModel(
                     // Soft delete: painted cells keep their colours (the server
                     // keeps the row) - only the dropdown loses the entry.
                     _state.update { it.copy(programDialog = null, selectedProgramId = null) }
+                    // A programme-scoped «Προβολή Βάσει…» just lost its subject.
+                    syncFilter()
                     loadPrograms()
                 }
                 is DataResult.Failure -> showSnackbar(result.error.toUiText())
@@ -789,6 +861,9 @@ class TimetableViewModel(
                 )
             )
         }
+        // The party moved - and with it (via the resets above) the selected
+        // line and spot, whichever of them the armed mode reads.
+        syncFilter()
         viewModelScope.launch {
             when (val result = finderRepository.contractLines(party.code, _state.value.finder.selectedKind)) {
                 is DataResult.Success -> _state.update {
@@ -813,6 +888,7 @@ class TimetableViewModel(
                 )
             )
         }
+        syncFilter()
         viewModelScope.launch {
             when (val result = finderRepository.lineSpots(line.lineId)) {
                 is DataResult.Success -> _state.update {

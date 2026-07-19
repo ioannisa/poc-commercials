@@ -1,5 +1,6 @@
 package eu.anifantakis.commercials.feature.timetable.domain.model
 
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -75,6 +76,32 @@ data class Program(
     /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
     val colorArgb: Int? = null,
 )
+
+/**
+ * ≙ the legacy console's "Προβολή Βάσει…" - WHOSE airings the month grid
+ * counts. Null = Όλα.
+ *
+ * It travels to the server, because the grid's cells are AGGREGATES: with no
+ * airings on the client there is nothing left to filter here, so the counts
+ * must be recomputed inside the same scan that produces them (exactly the
+ * CUSTOMER_VIEWER precedent - see the /api/schedule route).
+ */
+sealed interface ScheduleFilter {
+    /** Cells whose BREAK carries the programme (the break owns its paint). */
+    data class ByProgram(val programId: Long) : ScheduleFilter
+
+    /**
+     * The finder's selected party: a CUSTOMER counts their own spots, a
+     * TRADER the spots under contracts they pay - the triangular split.
+     */
+    data class ByParty(val code: String, val kind: PartyKind) : ScheduleFilter
+
+    /** The selected line's WHOLE contract (every line of it - «Συμβολαίου»). */
+    data class ByContract(val lineId: Long) : ScheduleFilter
+
+    /** One spot (the finder's armed message - «Μηνύματος»). */
+    data class BySpot(val spotId: Long) : ScheduleFilter
+}
 
 /**
  * A month's grid: its ROWS and its CELLS, from ONE call.

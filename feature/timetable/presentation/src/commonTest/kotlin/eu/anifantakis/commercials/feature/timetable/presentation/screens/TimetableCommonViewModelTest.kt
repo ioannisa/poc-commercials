@@ -1,10 +1,12 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -236,6 +238,91 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
         advanceUntilIdle()
 
         assertEquals(fetches, schedule.breaksFetches, "re-selecting the current view must not refetch")
+    }
+
+    // ── «Προβολή Βάσει…» (the shared filter) ──────────────────────────────
+
+    @Test
+    fun setFilterRefetchesTheMonthUnderTheNewScope() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(
+            month(cell(spots = listOf(placed(10), placed(11))), cell(time = LocalTime(12, 0), spots = listOf(placed(12))))
+        )
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+
+        // The "server" now answers with the customer's slice: one cell, one spot.
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        val filter = ScheduleFilter.ByParty("CUS10", PartyKind.CUSTOMER)
+        vm.setFilter(filter)
+        advanceUntilIdle()
+
+        assertEquals(filter, vm.commonState.value.filter)
+        assertEquals(
+            listOf<ScheduleFilter?>(null, filter),
+            schedule.monthFilters,
+            "arming the filter re-fetches the month UNDER it - the counts are the server's, never a client subtraction",
+        )
+        assertEquals(1, vm.commonState.value.cells.size, "cells the scope has nothing in are gone")
+        assertEquals(1, vm.commonState.value.cells[key]?.spotCount, "and the counts are the scope's")
+        assertEquals(1, vm.commonState.value.breaks.size, "the rows follow the filtered cells")
+    }
+
+    @Test
+    fun setFilterWithTheScopeAlreadyOnIsANoOp() = runTest(testDispatcher) {
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val fetches = schedule.monthLoads.size
+
+        vm.setFilter(null)   // Όλα is already on
+        advanceUntilIdle()
+
+        assertEquals(fetches, schedule.monthLoads.size, "re-selecting the current scope must not refetch")
+    }
+
+    /** The filter is the operator's choice, like the view mode - it survives month navigation. */
+    @Test
+    fun theArmedFilterRidesEveryMonthLoad() = runTest(testDispatcher) {
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val filter = ScheduleFilter.BySpot(42)
+        vm.setFilter(filter); advanceUntilIdle()
+
+        vm.loadMonth(2026, 8)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf<ScheduleFilter?>(null, filter, filter),
+            schedule.monthFilters,
+            "August is fetched under the SAME scope the operator armed in July",
+        )
+        assertEquals(filter, vm.commonState.value.filter, "and the state still carries it")
+    }
+
+    /**
+     * "Προβολή κάθε" under an armed filter cannot take the rows-only shortcut:
+     * /api/breaks knows nothing of the filter and would resurrect every break
+     * the scope hides - so the FILTERED month (rows + cells, one scan) is
+     * re-fetched instead.
+     */
+    @Test
+    fun setViewModeUnderAFilterRefetchesTheFilteredMonthNotTheRawRows() = runTest(testDispatcher) {
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(10)))))
+        val vm = vm()
+        vm.loadMonth(2026, 7); advanceUntilIdle()
+        val filter = ScheduleFilter.ByProgram(3)
+        vm.setFilter(filter); advanceUntilIdle()
+        val rowFetches = schedule.breaksFetches
+
+        vm.setViewMode(GridViewMode.HOURLY)
+        advanceUntilIdle()
+
+        assertEquals(rowFetches, schedule.breaksFetches, "the unfiltered rows endpoint is never asked")
+        assertEquals(
+            listOf<ScheduleFilter?>(null, filter, filter),
+            schedule.monthFilters,
+            "the view switch re-fetched the month, still under the armed scope",
+        )
+        assertEquals(GridViewMode.HOURLY, schedule.monthLoads.last(), "in the NEW view")
     }
 
     @Test

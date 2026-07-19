@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpo
 import eu.anifantakis.commercials.feature.timetable.domain.model.MonthSchedule
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
+import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 
@@ -26,7 +27,12 @@ interface RemoteScheduleDataSource {
         month: Int,
         mode: GridViewMode,
     ): DataResult<List<BreakSlotInfo>, DataError.Network>
-    suspend fun getMonth(year: Int, month: Int, mode: GridViewMode): DataResult<MonthSchedule, DataError.Network>
+    suspend fun getMonth(
+        year: Int,
+        month: Int,
+        mode: GridViewMode,
+        filter: ScheduleFilter? = null,
+    ): DataResult<MonthSchedule, DataError.Network>
     suspend fun getCommercials(
         year: Int,
         month: Int,

@@ -53,6 +53,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.Localizatio
 @Composable
 fun LegacyToolbarMock() {
     var mode by remember { mutableStateOf("break") }
+    var basedOn by remember { mutableStateOf("all") }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
         Row(
             modifier = Modifier.fillMaxWidth()
@@ -138,7 +139,20 @@ fun LegacyToolbarMock() {
                         modifier = Modifier.fillMaxHeight(),
                         verticalArrangement = Arrangement.Center,
                     )
-                    AppPendingBox(title = "Προβολή Βάσει…", modifier = Modifier.fillMaxHeight())
+                    AppRadioColumn(
+                        title = "Προβολή Βάσει…",
+                        options = listOf(
+                            AppSelectionOption("all", "Όλα"),
+                            AppSelectionOption("program", "Προγράμματος"),
+                            AppSelectionOption("customer", "Πελάτη"),
+                            AppSelectionOption("contract", "Συμβολαίου"),
+                            AppSelectionOption("message", "Μηνύματος"),
+                        ),
+                        selected = basedOn,
+                        onSelect = { basedOn = it },
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.Center,
+                    )
                     // Station selector OVER its logo, right after the boxes.
                     Column(
                         modifier = Modifier.fillMaxHeight(),

@@ -104,7 +104,17 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_ADD_BREAK_TITLE,
     TIMETABLE_PROGRAM_TYPES_TITLE,
     TIMETABLE_BREAK_FOR_TITLE,
+    // «Προβολή Βάσει…» - whose airings the grid counts. Each option (except
+    // Όλα) reads its subject from another header selection: the programme
+    // dropdown, or the finder's party / contract line / armed spot.
     TIMETABLE_VIEW_BASED_ON_TITLE,
+    TIMETABLE_BASED_ON_ALL,
+    TIMETABLE_BASED_ON_PROGRAM,
+    TIMETABLE_BASED_ON_CUSTOMER,
+    TIMETABLE_BASED_ON_CONTRACT,
+    TIMETABLE_BASED_ON_MESSAGE,
+    // Arming a finder-scoped option before anything is selected in Εύρεση.
+    TIMETABLE_FILTER_NEEDS_FINDER,
     TIMETABLE_PROGRAM_SELECT_PLACEHOLDER,
     TIMETABLE_PROGRAM_EDIT,
     TIMETABLE_PROGRAM_ADD,
