@@ -80,6 +80,9 @@ dependencies {
     // Legacy-dump migration engine/service/CLI (server implements its MigrationHost port)
     implementation(projects.migration)
 
+    // Galaxy (new ERP) import engine/CLI - ongoing sync, separate from :migration
+    implementation(projects.galaxy)
+
     // Database layer (server.yaml, HikariCP pools, station/central schemas,
     // auth persistence) - brings the MySQL driver at runtime
     implementation(projects.persistence)
@@ -148,4 +151,14 @@ tasks.register<JavaExec>("migrateCli") {
     description = "Runs the legacy-dump migration CLI"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("eu.anifantakis.commercials.server.migration.MigrationToolKt")
+}
+
+// Galaxy (new ERP) import - dry-run by default:
+//   ./gradlew :server:galaxyImportCli --args="--galaxy-dir ... --old-export-dir ... --schema ..."
+tasks.register<JavaExec>("galaxyImportCli") {
+    group = "migration"
+    description = "Runs the Galaxy ERP import CLI (dry-run unless --apply)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("eu.anifantakis.commercials.server.galaxy.GalaxyImportToolKt")
+    standardInput = System.`in`
 }
