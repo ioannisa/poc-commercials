@@ -6,14 +6,32 @@ data migration.
 
 ## Source overview
 
-| Dump | Size | `schedule` rows | Notes |
+| Dump | Size | `schedule` rows | Identity (fingerprinted 2026-07-19, see GALAXY-MATCHER.md §10) |
 |---|---|---|---|
-| commercials.sql | 1.7 GB | ~4,141,000 | Main outlet; 4 extra zone-programming tables |
-| commercials2.sql | 37 MB | ~282,000 | |
-| commercials3.sql | 1.1 MB | ~5,100 | Partial/small retained window |
-| commercials4.sql | 208 KB | ~600 | Press listings variant ("ΚΑΤΑΧΩΡΗΣΗ") |
-| commercials5.sql | 1.7 MB | ~16,400 | |
-| commercials6.sql | 5.6 MB | ~10,600 | |
+| commercials.sql | 1.7 GB | ~4,141,000 | **ΚρήτηTV + Radio984** (ΙΚΑΡΟΣ ΑΕ); forTV 1=TV, 0=radio; 4 extra zone-programming tables |
+| commercials2.sql | 37 MB | ~282,000 | **CHANNEL 4** (ΚΡΗΤΙΚΗ ΡΑΔΙΟΤΗΛΕΟΡΑΣΗ ΑΕ, ΑΦΜ 094259345) — live |
+| commercials3.sql | 1.1 MB | ~5,100 | 2010(/2014) **election spots** TV+radio — dead archive |
+| commercials4.sql | 208 KB | ~600 | 2010 **election press listings** ("ΚΑΤΑΧΩΡΗΣΗ", ΟΛΟΣΕΛΙΔΕΣ) — dead archive |
+| commercials5.sql | 1.7 MB | ~16,400 | ΚρήτηTV **self-promo/trailers** DB (ΑΝΤΙΘΕΣΕΙΣ, ΚΑΛΟ ΜΕΣΗΜΕΡΙ…) — not commercial |
+| commercials6.sql | 5.6 MB | ~10,600 | **SITIA TV** — live |
+
+**Staleness (measured 2026-07-19; dumps snapshot = 2026-06-29 05:30):**
+
+| Dump | Last schedule write | Last docref (ERP) sync | Scheduling horizon |
+|---|---|---|---|
+| commercials | 2026-06-28 (eve of dump) | 2026-06-28 | showDates to **2027-06-30** |
+| commercials2 | 2026-06-26 | 2026-06-16 | to 2026-07-15, 5–13 spots/day |
+| commercials6 | 2026-06-26 | 2026-06-23 | to 2026-07-15, 6–15 spots/day |
+| commercials5 | 2026-05-27 | 2025-09-09 | to 2026-06-30, ~40-56/day (trailers) |
+| commercials3 | **2010-11-12** | 2014-04-03 | dead since Nov 2010 |
+| commercials4 | 2014-04-02 | 2017-12-07 | dead since Nov 2010 |
+
+⇒ All three STATION DBs (commercials, 2, 6) were in daily use right up to the
+dump — none abandoned; only the 2010 election DBs are dead. docref syncs ran
+in June 2026 on all three ⇒ their SEN instances likely still run alongside
+Galaxy. Channel4/Sitia are low-volume (~5–15 placements/day vs hundreds on
+the main). Main's `roh_print_history` stops at 2007-02-06 (ΡΟΗ printing from
+the legacy app long abandoned/purged).
 
 - MySQL **5.7.26**, engines **MyISAM** (plus one InnoDB, one MEMORY), charset
   **utf8 (utf8mb3)**. Zero-dates (`0000-00-00`) are used as "not set".

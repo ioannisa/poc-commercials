@@ -201,20 +201,14 @@ company codes — small enough to hand-review the mapping table once.
 
 ---
 
-## 6. OPEN ITEMS — requested from the client, blockers marked
+## 6. OPEN ITEMS — ALL 5 RESOLVED by the galaxy2 delivery (2026-07-18), see §9
 
-1. **Header row (or column list) for COMMERCIALENTRY** — §3 is inferred.
-   *Blocker for a robust importer.*
-2. **Re-export `CommercEntryLines` with Greek intact** (cp1253 or UTF-8). The
-   current file replaced every Greek char with literal `?`. Item names are
-   recoverable via the ITEM join; free text (comments, GXSTRINGFIELD1) is not.
-3. **TRADEENTRY export** (or at least document issue date + series/number
-   columns) — issue date is NOT in the current export; f2 references TRADEENTRY.
-4. **Document-type dictionary** — the 10 UUIDs of f8 (which types are
-   contracts/orders vs invoices vs credit notes) so the importer can filter.
-   *Blocker: without it we cannot tell συμβόλαια from τιμολόγια.*
-5. **Role-group semantics** — which of A/B/C is payer (→ `agency_id`) vs
-   advertiser (→ `customer_id`). *Blocker for triangular correctness.*
+1. ~~Header row for COMMERCIALENTRY~~ ✅ galaxy2 flat export has headers (§9.1).
+2. ~~Greek destroyed in CommercEntryLines~~ ✅ galaxy2 is clean cp1253.
+3. ~~Document issue date~~ ✅ galaxy2 `date` column, 100% filled (§9.4).
+4. ~~Document-type dictionary~~ ✅ `GXCOMMENTRYTYPE.txt` delivered (§9.2).
+5. ~~Role-group semantics~~ ✅ resolved empirically + verified on the known
+   LOREAL/TEMPO case (§9.3).
 
 ---
 
@@ -258,3 +252,228 @@ was performed (never touch the dev server on :8080).
   especially §3 once headers arrive.
 - The analysis scripts were throwaway python (this file preserves all results);
   sample data stays in `~/Downloads/ctv/ss/galaxy/` — do not move or commit it.
+
+---
+
+## 9. galaxy2 delivery (2026-07-18, analyzed 2026-07-19) — SUPERSEDES §1–§3 for the importer
+
+Location: `~/Downloads/ctv/ss/galaxy2/`. This is NOT a raw table dump — it is a
+pre-joined **flat query export**, one row per document line, WITH headers:
+
+| File | Rows | What |
+|---|---|---|
+| `COMMERCIALENTRY.txt` | 15,894 lines = 7,856 docs | tab-delimited flat export, 27 named columns |
+| `GXCOMMENTRYTYPE.txt` | 126 | full document-type dictionary |
+| `CUSTOMER.csv` / `TRADERSITE.csv` | 1,000 / 1,001 | ⚠ **TOP-1000 capped** (see 9.6) |
+| `ITEMPERCOMP.csv` | 143 | items per company (matches old GXITEMCOMPANYPROP) |
+| `commersialentry.csv` | 100 | semicolon sample of the txt, same header |
+
+### 9.1 Format & parsing rules (differ from the old raw export!)
+
+- cp1253, tab-delimited, `\r\n` row terminator; **quoted fields contain literal
+  `\n` AND literal TABs** (one row splits into 31 columns on naive split) —
+  the parser MUST do CSV-style quote handling (strip outer `"`, unescape `""`)
+  over tab-delimited text, joining rows/fields until the closing quote.
+- Money/qty format is **Greek locale** (`8.000,00` = 8000.00) — NOT the old
+  ×10¹² integer format. Dates are `dd/MM/yyyy`.
+- Columns: companycode/companyname/companyid, custcode/custname/custid, date,
+  salesmancode/salesmanname, docnumber, doccode, Type, itemname,
+  «Διαφημιζόμενος / Διαφημιστής» Code/Name, TradeNum (== docnumber), item_ID,
+  item_code, item_name (== itemname), aqty, bqty, Seconds, Spot, Τheme,
+  Comments, Zone, Value.
+- **Zone and Τheme columns are junk** (all `'0'`); the real theme/period is
+  free multi-line text embedded INSIDE `itemname` after the catalog name.
+- `Spot` = number of spots, `Seconds` = duration; `aqty` semantics vary
+  (≠ Spot on 70% of rows) — do not treat aqty as spot count.
+- **No document GXID in this export** (only companyid/custid/item_ID UUIDs).
+  Natural key = **(companyid, doccode, docnumber)** — docnumber alone is NOT
+  unique. `contracts.galaxy_id`/`galaxy_number` (§7) were designed for the raw
+  format; either adapt schema or request a GXID column in the final delivery.
+
+### 9.2 Document types
+
+Only the contract family is present — all 19 doccodes used are
+`GXCOMMERCENTRYKIND=1` (no invoices; their side pre-filtered). Series: 9xxx
+and 1xxx exist per company (series semantics not fully clear, non-blocking).
+Row counts: Συμβόλαιο Πελάτη 6,905 + από SEN 2,535 · Εντολή Διαφήμισης 1,542 +
+από SEN 1,406 · Τριγωνικό 971 + από SEN 1,377 · Κλείσιμο Εκκρεμοτήτων 789 ·
+Εκλογικά 136 · Δώρα 184 · Ακύρωση 16 (negative values) · Διόρθωση 33.
+⚠ dictionary GXCODEs are NOT unique across GXDOMAIN (1001 = Συμβόλαιο in
+domain 1, Παραγγελία Προμηθευτή in another) — filter dictionary by domain=1 or
+trust the export's `Type` column.
+
+### 9.3 TRIANGULAR SEMANTICS — RESOLVED (verified on LOREAL/TEMPO, contract 645)
+
+The «Διαφημιζόμενος / Διαφημιστής» column means "the OTHER party" and flips
+role per document type:
+
+| Type | `custcode` = | extra column = |
+|---|---|---|
+| Συμβόλαιο Πελάτη (9001/1001/9101) | the customer | empty (non-triangular) |
+| Εντολή Διαφήμισης (9004/1004/9104) | **AGENCY (payer/TRA)** | **ADVERTISER (LEE)** |
+| Τριγωνικό Πελάτη native (9010) | advertiser | == custcode (agency NOT shown) |
+| Τριγωνικό από SEN (9110) | **ADVERTISER** | **AGENCY** — inverse of 9004! |
+
+Verified: 9004 → cust=TEMPO OMD (01000012), adv=L'OREAL (30001582);
+9110 → cust=L'OREAL, adv=TEMPO OMD. ✔
+
+⚠ **DOUBLE-COUNT TRAP**: native flow issues TWO documents per campaign —
+Εντολή (9004, to agency) + Τριγωνικό (9010, to advertiser) with IDENTICAL
+values (791/971 9010-rows are exact copies of a 9004 row; yearly sums match to
+the cent). Import ONLY the 9004 leg (it carries both roles); use 9010 for
+cross-check. 9110 (SEN) has no twin — import it directly.
+
+### 9.4 Dates
+
+`date` = document issue date, 100% filled, range 2022-01-01..2026-12-31.
+The 308 future-dated rows are legitimately pre-issued monthly docs (e.g. ΔΕΗ
+internet per month) — import as-is.
+
+### 9.5 Matching waterfall (measured vs `commercials_crete_group`, 3,170 customers)
+
+1,374 party codes referenced by documents (20,946 refs):
+
+| Step | Codes | % of refs |
+|---|---|---|
+| direct code match | 649 | 64.3% |
+| VAT match (LPAD-9, unique both sides) | 311 | +18.9% → **83.2%** |
+| VAT ambiguous → review list | 3 | 30000051, 30030747, 30031088 (→ LEE-5983 dup) |
+| NEW customers, TIN known → INSERT | 405 | |
+| NEW, no TIN info | 6 | micro-customers, 46 refs |
+
+### 9.6 The 1000-row cap and its rescue
+
+`CUSTOMER.csv`/`TRADERSITE.csv` are TOP-1000 cuts. **Fully rescued by the OLD
+raw export** (`~/Downloads/ctv/ss/galaxy/customer/`): all 1,362 custids of the
+flat export exist in old `customer.txt`; TINs available for 1,306/1,361 codes
+via the TRADER join. Importer should use OLD export as the party dictionary +
+new CUSTOMER.csv as secondary for Galaxy-born customers. Request uncapped
+exports for the final delivery.
+
+### 9.7 Items
+
+Two code worlds: `Σxxx` (SEN codes — companies 001/003/004) and `73xxx`
+(Galaxy-native — company 002 press). 53/83 flat-export item codes match our
+`spot_types` after digit-normalization (strip `Σ`, dots); the unmatched are
+almost all press items (καταχωρήσεις, ένθετα, αγγελίες) — out of scope.
+
+## 10. Company ↔ legacy dump ↔ group DB mapping (RESOLVED 2026-07-19)
+
+Fingerprinted from `~/Downloads/commercials/commercials/*.sql` (`generic`
+station label, `messages` content, activity dates):
+
+| Galaxy company | Legacy dump | Identity | Target DB |
+|---|---|---|---|
+| **001 ΙΚΑΡΟΣ ΡΑΔΙΟΤΗΛΕΟΠΤΙΚΕΣ** (10,042 rows, ALL «από SEN» docs) | commercials.sql (1.8 GB; forTV 1=TV/0=radio) | ΚρήτηTV + Radio984 | `commercials_crete_group` (migrated) |
+| **003 ΚΡΗΤΙΚΗ ΡΑΔΙΟΤΗΛΕΟΡΑΣΗ ΑΕ** (607) | commercials2.sql (38 MB, live) | **CHANNEL 4** («CHANNEL 4u», ΑΦΜ 094259345) | `commercials_channel4` (skeleton, 7 customers) |
+| **004 ΣΗΤΕΙΑ TV** (353) | commercials6.sql (5.8 MB, live) | SITIA TV | no group DB yet |
+| **002 ΚΥΚΛΟΣ ΑΕ** (4,892, press/internet 73xxx) | (commercials4.sql is its 2010 election-listings cousin) | newspaper — no scheduler | **OUT OF SCOPE** |
+| — | commercials3.sql | 2010(/2014) ELECTION spots TV+radio — dead archive | skip |
+| — | commercials5.sql | ΚρήτηTV self-promo/trailers DB — not commercial | skip |
+
+⚠ Naming trap: «ΚΡΗΤΙΚΗ ΡΑΔΙΟΤΗΛΕΟΡΑΣΗ» = Channel 4, NOT ΚρήτηTV (that's
+ΙΚΑΡΟΣ). The `generic` company block is copy-pasted garbage across dumps
+(SITIA TV's dump carries ΚΡΗΤΙΚΗ's block); only the last-column station label
+is trustworthy.
+
+**Importer scope**: filter flat export by `companyid`; import 001→crete_group,
+003→channel4, 004→(future sitia). Keep it a SEPARATE subsystem from the legacy
+`migration/` (user decision 2026-07-19) — legacy migration = dumps+SEN→our DB;
+Galaxy import = ongoing ERP sync.
+
+### 10.1 Galaxy/SEN coverage per company (measured 2026-07-19)
+
+Galaxy is ONE multi-company installation with a SHARED party registry
+(003/004 party codes overlap 001's by ~50%). Per-company depth:
+001 → 4,283 docs/887 parties incl. 5,420 «από SEN» rows; 003 Channel4 →
+303 docs/55 parties, **ZERO SEN history**; 004 Sitia → 190 docs/56 parties,
+zero SEN; 002 press → 3,079 docs. **Only company 001's SEN history was
+migrated into Galaxy** — Channel4/Sitia trails start 2022.
+
+**SEN is single-company for us**: our exports (`~/Downloads/ctv/ss/SEN/`)
+have `CMPID=1` on every cus row. PROOF Channel4 used a SEPARATE SEN
+instance: its legacy `docref` docids (1,745) looked up in our sld.csv →
+1,184 collide with DIFFERENT 2004-era documents, 561 absent, 1 coincidental
+match. Same SEN product/dictionaries (dotid 450=ΣΥΜΒΟΛΑΙΟ etc.), different
+id space and data. The «ΕΚΛΟΓΩΝ - ΝΕΑ ΚΡΗΤΗ» doc type in our sen_sdt is
+cloned parametrisation, not newspaper data.
+
+⇒ Full picture per group = TWO sources: crete_group (legacy migration + SEN
+enrichment + Galaxy 2022+) · channel4/sitia (their legacy dump migration +
+Galaxy 2022+, NO SEN step — we don't hold their SEN instances' exports).
+
+**Remaining open (non-blocking)**: see §11 — the full request list for the
+final delivery.
+
+## 12. IMPORTER IMPLEMENTED (2026-07-19) — module `:galaxy`
+
+Separate subsystem from `migration/` (user decision). Kotlin/JVM module
+`galaxy/` (`GalaxyExports.kt` quote-aware parser · `GalaxyImporter.kt`
+reconcile/upsert engine · `GalaxyImportCli.kt`), server shim
+`server/.../galaxy/GalaxyImportTool.kt`, Gradle task:
+
+```
+./gradlew :server:galaxyImportCli --args="\
+  --galaxy-dir ~/Downloads/ctv/ss/galaxy2 \
+  --old-export-dir ~/Downloads/ctv/ss/galaxy/customer \
+  --schema commercials_crete_group --company 001 \
+  --user root --password rootpass123 [--apply]"
+```
+
+Dry-run default; `--apply` first runs `GroupDb.bootstrap()` (adds the new
+`contracts.galaxy_doc_key` / `contract_lines.galaxy_line_key` columns —
+schema single-sourced in persistence/GroupDb.kt). Engine: party waterfall
+(code → LPAD-9 VAT → insert; multi-claims of one row go to review unstamped),
+item digit-bridge, 9004↔9010 twin skip, contract reconciliation on
+(number, payer, doc-family, YEAR) with fixed-point claiming, `galaxy_*`
+mirror tables (advertiser linkage lives in `galaxy_lines`), review CSV.
+
+**Verified on a clone (`commercials_galaxy_test`, company 001)**: 887 parties
+→ 578 code + 269 VAT + 38 inserted + 2 ambiguous + 41 multi-claim reviews;
+53 spot_types stamped + 2 inserted; 197 twin docs skipped (651 lines), 111
+untwinned flagged; 4,084 docs → **2,474 matched & stamped + 1,545 inserted
+(565 off-reports) + 65 ambiguous**. Re-run = ZERO writes (idempotent).
+LOREAL/TEMPO check: galaxy_lines payer_customer_id=7 (TEMPO),
+advertiser_customer_id=2919 (LEE-3085) ✔ — the LEE↔Galaxy advertiser
+reconciliation the legacy migration never had.
+
+NOT yet applied to the live `commercials_crete_group` — awaiting owner
+review of the dry-run report/review CSV. Follow-ups: admin screen (mirror
+MigrationRoutes), channel4/sitia runs, GXID upgrade per §11.
+
+## 11. Instructions for the FINAL delivery (to hand to the Galaxy consultant)
+
+Drafted 2026-07-19. Nothing here blocks development — the importer starts on
+the current sample (§11.4).
+
+**A. Required**
+1. **Uncapped CUSTOMER/TRADERSITE exports** — current files are TOP-1000 cuts
+   (CUSTOMER.csv exactly 1,000 rows; old raw export had 4,091 traders). Need
+   ALL traders/customers + ALL sites/addresses.
+2. **Document GXID (and ideally line GXID) columns in the flat export** —
+   currently no document UUID; needed for robust idempotent upsert. Until
+   then we key on (companyid, doccode, docnumber, line-ordinal).
+3. **Format stability for periodic deliveries** — same columns/order, header
+   row always, tab-delimited, cp1253 (UTF-8 welcome), full snapshot each time.
+
+**B. Useful**
+4. Link column Τριγωνικό (9010) ↔ its Εντολή (9004) twin; and in 9010 emit
+   the AGENCY in the «Διαφημιζόμενος/Διαφημιστής» column (as 9110 does)
+   instead of repeating the customer.
+5. Cancellation reference on 1030 «Ακύρωση» docs (which doc is cancelled).
+6. Real Τheme/Zone values in their columns (currently '0'; the actual text is
+   free-form inside itemname).
+
+**C. Questions (answers only, no export changes)**
+7. What distinguishes 9xxx from 1xxx doc series within a company?
+8. Exact semantics of `aqty` (≠ Spot count on ~70% of lines).
+9. Confirm 2022-01-01 = Galaxy go-live / full history; and that SEN history
+   was migrated only for ΙΚΑΡΟΣ (deliberately not for ΚΡΗΤΙΚΗ/ΣΗΤΕΙΑ).
+
+### 11.4 Why development starts NOW despite the cap
+
+The 1000-row cap is fully bridged by the OLD raw export (§9.6): every custid
+referenced by the flat export exists in old `customer.txt`, with TINs for
+1,306/1,361 codes via TRADER. Importer architecture: party dictionary =
+OLD export (primary) + capped CUSTOMER.csv (secondary, Galaxy-born rows);
+swap to the uncapped file when it arrives — source changes, logic doesn't.
