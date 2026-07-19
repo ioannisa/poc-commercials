@@ -779,7 +779,7 @@ private fun MessagesBox(
         // width so a large spot description has room; the X clears the finder.
         var spotMenu by remember { mutableStateOf(false) }
         Row(
-            modifier = Modifier.fillMaxWidth().widthIn(min = 460.dp),
+            modifier = Modifier.fillMaxWidth().widthIn(min = 360.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AppButton(

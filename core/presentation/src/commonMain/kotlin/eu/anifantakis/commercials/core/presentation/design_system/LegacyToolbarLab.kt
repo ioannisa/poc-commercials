@@ -77,7 +77,7 @@ fun LegacyToolbarMock() {
                     Spacer(Modifier.height(UIConst.paddingExtraSmall))
                     // Εύρεση + the WIDE dropdown on ONE row (no extra height).
                     Row(
-                        modifier = Modifier.fillMaxWidth().widthIn(min = 460.dp),
+                        modifier = Modifier.fillMaxWidth().widthIn(min = 360.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         AppButton(text = "Εύρεση", onClick = {}, variant = AppButtonVariant.SECONDARY)
