@@ -140,6 +140,7 @@ internal class El : LanguageStrings {
         StringKey.FINDER_COL_USED_SECS -> "Αναλωμένα Secs"
         StringKey.FINDER_CLEAR -> "Καθαρισμός"
         StringKey.FINDER_SELECT -> "Επιλογή"
+        StringKey.FINDER_NO_ROWS -> "Δεν υπάρχουν εγγραφές"
 
         StringKey.COMMON_BACK -> "Πίσω"
         StringKey.COMMON_COPY -> "Αντιγραφή"

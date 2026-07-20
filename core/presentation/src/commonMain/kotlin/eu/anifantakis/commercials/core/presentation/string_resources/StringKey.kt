@@ -163,6 +163,9 @@ enum class StringKey(val json: String = "") {
     FINDER_COL_USED_SECS,
     FINDER_CLEAR,
     FINDER_SELECT,
+    // Empty state of the console's three grids (the grid toolkit is a leaf and
+    // takes no StringKey - its own default is English).
+    FINDER_NO_ROWS,
 
     // ── Days / genitive months / clipboard / commercial detail ──────────
     COMMON_BACK,

@@ -27,7 +27,6 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,8 +42,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LocalContentColor
@@ -53,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
+import eu.anifantakis.commercials.core.domain.party_search.Party
 import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.commands.AppCommand
 import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
@@ -73,8 +72,13 @@ import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.BreakZone
+import eu.anifantakis.commercials.grids.ColumnDef
 import eu.anifantakis.commercials.grids.ContextMenuEntry
+import eu.anifantakis.commercials.grids.EnhancedDataGrid
 import eu.anifantakis.commercials.grids.LazySchedulerGrid
+import eu.anifantakis.commercials.grids.SelectionMode
+import eu.anifantakis.commercials.grids.StickyRowsConfig
+import eu.anifantakis.commercials.grids.rememberEnhancedDataGridState
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.formatTime
@@ -95,6 +99,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
 /**
@@ -930,73 +935,47 @@ private fun SpotFinderDialog(
                     }
                 )
             }
-            HeaderRow(
-                Strings[StringKey.FINDER_COL_CODE] to 0.14f, Strings[StringKey.FINDER_COL_NAME] to 0.44f,
-                Strings[StringKey.FINDER_COL_VAT] to 0.14f, Strings[StringKey.FINDER_COL_PHONE] to 0.14f, Strings[StringKey.FINDER_COL_SPOTS] to 0.14f,
-            )
             // While a search runs the matches fill the table; the
             // chosen party stays pinned as its single (highlighted) row.
-            val partyRows = finder.results.ifEmpty { listOfNotNull(finder.selectedParty) }
-            LazyColumn(Modifier.fillMaxWidth().weight(0.24f)) {
-                items(partyRows, key = { it.code }) { c ->
-                    val isSel = c.code == finder.selectedParty?.code && finder.results.isEmpty()
-                    TableRow(
-                        selected = isSel,
-                        onClick = { onIntent(TimetableIntent.FinderPartySelected(c)) },
-                        c.code to 0.14f,
-                        c.name to 0.44f,
-                        (c.vatNumber ?: "") to 0.14f,
-                        (c.phone ?: "") to 0.14f,
-                        "${c.spotCount}" to 0.14f,
-                    )
-                }
+            val partyRows = remember(finder.results, finder.selectedParty) {
+                finder.results.ifEmpty { listOfNotNull(finder.selectedParty) }.toImmutableList()
             }
+            FinderTable(
+                items = partyRows,
+                columns = partyColumns(),
+                selectedKey = finder.selectedParty?.code?.takeIf { finder.results.isEmpty() },
+                rowKey = { it.code },
+                onRowClick = { onIntent(TimetableIntent.FinderPartySelected(it)) },
+                modifier = Modifier.fillMaxWidth().weight(0.24f),
+            )
 
             // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
             SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
-            HeaderRow(
-                Strings[StringKey.FINDER_COL_CONTRACT] to 0.16f, Strings[StringKey.FINDER_COL_LINE] to 0.06f, Strings[StringKey.FINDER_COL_DESCRIPTION] to 0.34f,
-                Strings[StringKey.FINDER_COL_SPOTS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_SECS_BOUGHT] to 0.12f, Strings[StringKey.FINDER_COL_ISSUE_DATE] to 0.20f,
-            )
             if (finder.loadingLines) {
                 AppSpinner()
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
-                items(finder.lines, key = { it.lineId }) { line ->
-                    TableRow(
-                        selected = line.lineId == finder.selectedLine?.lineId,
-                        onClick = { onIntent(TimetableIntent.FinderLineSelected(line)) },
-                        line.contractNumber to 0.16f,
-                        "${line.lineNo}" to 0.06f,
-                        (if (line.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]) to 0.34f,
-                        "${line.placements}" to 0.12f,
-                        "${line.totalSeconds}" to 0.12f,
-                        line.dateLabel() to 0.20f,
-                    )
-                }
-            }
+            FinderTable(
+                items = finder.lines,
+                columns = contractColumns(),
+                selectedKey = finder.selectedLine?.lineId,
+                rowKey = { it.lineId },
+                onRowClick = { onIntent(TimetableIntent.FinderLineSelected(it)) },
+                modifier = Modifier.fillMaxWidth().weight(0.3f),
+            )
 
             // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
             SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
-            HeaderRow(
-                Strings[StringKey.FINDER_COL_MSG_DESCRIPTION] to 0.52f, Strings[StringKey.FINDER_COL_DURATION] to 0.16f,
-                Strings[StringKey.FINDER_COL_USED_SPOTS] to 0.16f, Strings[StringKey.FINDER_COL_USED_SECS] to 0.16f,
-            )
             if (finder.loadingSpots) {
                 AppSpinner()
             }
-            LazyColumn(Modifier.fillMaxWidth().weight(0.3f)) {
-                items(finder.spots, key = { it.spotId }) { spot ->
-                    TableRow(
-                        selected = spot.spotId == finder.selectedSpot?.spotId,
-                        onClick = { onIntent(TimetableIntent.FinderSpotSelected(spot)) },
-                        spot.description to 0.52f,
-                        "${spot.durationSeconds}" to 0.16f,
-                        "${spot.placements}" to 0.16f,
-                        "${spot.totalSeconds}" to 0.16f,
-                    )
-                }
-            }
+            FinderTable(
+                items = finder.spots,
+                columns = spotColumns(),
+                selectedKey = finder.selectedSpot?.spotId,
+                rowKey = { it.spotId },
+                onRowClick = { onIntent(TimetableIntent.FinderSpotSelected(it)) },
+                modifier = Modifier.fillMaxWidth().weight(0.3f),
+            )
 
             // ═══ Επιλογή / Άκυρο (bottom-right, like the original) ══
             Row(
@@ -1044,49 +1023,216 @@ private fun SectionTitle(text: String) {
     )
 }
 
+/**
+ * One section of the Εύρεση console, on the SAME [EnhancedDataGrid] the Break
+ * Console uses - so the two consoles share resizable/reorderable columns, the
+ * sticky header, sortable headers, scrollbars and keyboard navigation instead
+ * of the hand-rolled weight tables this dialog used to draw.
+ *
+ * The finder's selection is the VIEWMODEL's ([selectedKey]), not the grid's:
+ * a click dispatches, and the grid's own highlight is re-derived whenever the
+ * list changes ([items] is the effect's key). Matching by KEY, not by index,
+ * is what survives the party list collapsing to its single chosen row.
+ */
 @Composable
-private fun HeaderRow(vararg columns: Pair<String, Float>) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 6.dp, vertical = 3.dp)
-    ) {
-        for ((label, weight) in columns) {
-            AppText(
-                label, AppTextStyle.TABLE_HEADER,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(weight)
-            )
+private fun <T> FinderTable(
+    items: ImmutableList<T>,
+    columns: ImmutableList<ColumnDef<T>>,
+    selectedKey: Any?,
+    rowKey: (T) -> Any,
+    onRowClick: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val state = rememberEnhancedDataGridState(columns)
+    // Keyed on the LIST (and on the selection appearing/vanishing) - never on
+    // WHICH row is selected. A click is already highlighted by the grid itself,
+    // at its OWN index; re-deriving that index from the source list would put
+    // the highlight on the wrong row whenever a sortable header is active. What
+    // still needs syncing is the list changing underneath: the party table
+    // collapsing to its single chosen row, a new search, a cleared finder.
+    LaunchedEffect(items, selectedKey == null) {
+        val index = selectedKey?.let { key -> items.indexOfFirst { rowKey(it) == key } } ?: -1
+        if (index >= 0) {
+            state.selectedRows = setOf(index)
+            state.focusedRow = index
+        } else {
+            state.clearSelection()
         }
+    }
+    val empty = Strings[StringKey.FINDER_NO_ROWS]
+    EnhancedDataGrid(
+        items = items,
+        columns = columns,
+        modifier = modifier,
+        state = state,
+        selectionMode = SelectionMode.SINGLE,
+        // The console packs three tables into one dialog, so it runs denser
+        // than the Break Console's full-screen grid.
+        scale = AppTheme.fontSizeStep.factor,
+        rowHeight = 26.dp,
+        headerHeight = 30.dp,
+        showRowNumbers = false,
+        stickyRows = StickyRowsConfig(stickyHeader = true, stickyFooter = false),
+        onRowClick = { item, _ -> onRowClick(item) },
+        rowKey = rowKey,
+        emptyContent = {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                AppText(empty, AppTextStyle.NOTE, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+    )
+}
+
+/*
+ * The three finder tables' columns. Remembered against the language (headers
+ * resolve through the non-composable .localized()) and the font-size step -
+ * the grid scales its own type and rows, but column WIDTHS live here, so a
+ * bigger step has to rebuild them wider or the text merely ellipsizes.
+ */
+
+@Composable
+private fun partyColumns(): ImmutableList<ColumnDef<Party>> {
+    val language = LocalLanguage.current
+    val scale = AppTheme.fontSizeStep.factor
+    return remember(language, scale) {
+        persistentListOf(
+            ColumnDef<Party>(
+                id = "code",
+                header = StringKey.FINDER_COL_CODE.localized(),
+                width = 120.dp * scale,
+                extractor = { it.code },
+            ),
+            ColumnDef(
+                id = "name",
+                header = StringKey.FINDER_COL_NAME.localized(),
+                width = 380.dp * scale,
+                extractor = { it.name },
+            ),
+            ColumnDef(
+                id = "vat",
+                header = StringKey.FINDER_COL_VAT.localized(),
+                width = 130.dp * scale,
+                extractor = { it.vatNumber ?: "" },
+            ),
+            ColumnDef(
+                id = "phone",
+                header = StringKey.FINDER_COL_PHONE.localized(),
+                width = 140.dp * scale,
+                extractor = { it.phone ?: "" },
+            ),
+            ColumnDef(
+                id = "spots",
+                header = StringKey.FINDER_COL_SPOTS.localized(),
+                width = 90.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.spotCount.toString() },
+                comparator = compareBy { it.spotCount },
+            ),
+        )
     }
 }
 
 @Composable
-private fun TableRow(
-    selected: Boolean,
-    onClick: () -> Unit,
-    vararg cells: Pair<String, Float>,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                else MaterialTheme.colorScheme.surface
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for ((value, weight) in cells) {
-            AppText(
-                value,
-                if (selected) AppTextStyle.TABLE_CELL_STRONG else AppTextStyle.TABLE_CELL,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(weight)
-            )
-        }
+private fun contractColumns(): ImmutableList<ColumnDef<ContractLine>> {
+    val language = LocalLanguage.current
+    val scale = AppTheme.fontSizeStep.factor
+    val gift = Strings[StringKey.FINDER_GIFT_LINE]
+    val pending = Strings[StringKey.FINDER_ERP_PENDING]
+    return remember(language, scale, gift, pending) {
+        persistentListOf(
+            ColumnDef<ContractLine>(
+                id = "contract",
+                header = StringKey.FINDER_COL_CONTRACT.localized(),
+                width = 110.dp * scale,
+                extractor = { it.contractNumber },
+                // Contract numbers are numeric strings: "703" must not sort
+                // before "89" the way lexicographic ordering would put it.
+                comparator = compareBy({ it.contractNumber.toLongOrNull() ?: Long.MAX_VALUE }, { it.lineNo }),
+            ),
+            ColumnDef(
+                id = "line",
+                header = StringKey.FINDER_COL_LINE.localized(),
+                width = 70.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.lineNo.toString() },
+                comparator = compareBy { it.lineNo },
+            ),
+            ColumnDef(
+                id = "description",
+                header = StringKey.FINDER_COL_DESCRIPTION.localized(),
+                width = 300.dp * scale,
+                extractor = { if (it.isGift) gift else pending },
+            ),
+            ColumnDef(
+                id = "placements",
+                header = StringKey.FINDER_COL_SPOTS_BOUGHT.localized(),
+                width = 120.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.placements.toString() },
+                comparator = compareBy { it.placements },
+            ),
+            ColumnDef(
+                id = "seconds",
+                header = StringKey.FINDER_COL_SECS_BOUGHT.localized(),
+                width = 120.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.totalSeconds.toString() },
+                comparator = compareBy { it.totalSeconds },
+            ),
+            ColumnDef(
+                id = "date",
+                header = StringKey.FINDER_COL_ISSUE_DATE.localized(),
+                width = 210.dp * scale,
+                extractor = { it.dateLabel() },
+            ),
+        )
+    }
+}
+
+@Composable
+private fun spotColumns(): ImmutableList<ColumnDef<ContractLineSpot>> {
+    val language = LocalLanguage.current
+    val scale = AppTheme.fontSizeStep.factor
+    return remember(language, scale) {
+        persistentListOf(
+            ColumnDef<ContractLineSpot>(
+                id = "description",
+                header = StringKey.FINDER_COL_MSG_DESCRIPTION.localized(),
+                width = 520.dp * scale,
+                extractor = { it.description },
+            ),
+            ColumnDef(
+                id = "duration",
+                header = StringKey.FINDER_COL_DURATION.localized(),
+                width = 130.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.durationSeconds.toString() },
+                comparator = compareBy { it.durationSeconds },
+            ),
+            ColumnDef(
+                id = "usedSpots",
+                header = StringKey.FINDER_COL_USED_SPOTS.localized(),
+                width = 140.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.placements.toString() },
+                comparator = compareBy { it.placements },
+            ),
+            ColumnDef(
+                id = "usedSecs",
+                header = StringKey.FINDER_COL_USED_SECS.localized(),
+                width = 140.dp * scale,
+                alignment = TextAlign.End,
+                headerAlignment = TextAlign.End,
+                extractor = { it.totalSeconds.toString() },
+                comparator = compareBy { it.totalSeconds },
+            ),
+        )
     }
 }
 

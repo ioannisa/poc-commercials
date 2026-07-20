@@ -140,6 +140,7 @@ internal class De : LanguageStrings {
         StringKey.FINDER_COL_USED_SECS -> "Verwendete Sek."
         StringKey.FINDER_CLEAR -> "Leeren"
         StringKey.FINDER_SELECT -> "Auswählen"
+        StringKey.FINDER_NO_ROWS -> "Keine Einträge"
 
         StringKey.COMMON_BACK -> "Zurück"
         StringKey.COMMON_COPY -> "Kopieren"

@@ -140,6 +140,7 @@ internal class It : LanguageStrings {
         StringKey.FINDER_COL_USED_SECS -> "Sec. utilizzati"
         StringKey.FINDER_CLEAR -> "Svuota"
         StringKey.FINDER_SELECT -> "Seleziona"
+        StringKey.FINDER_NO_ROWS -> "Nessuna riga"
 
         StringKey.COMMON_BACK -> "Indietro"
         StringKey.COMMON_COPY -> "Copia"

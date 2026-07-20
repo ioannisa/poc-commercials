@@ -145,6 +145,7 @@ internal class He : LanguageStrings {
         StringKey.FINDER_COL_USED_SECS -> "שניות בשימוש"
         StringKey.FINDER_CLEAR -> "ניקוי"
         StringKey.FINDER_SELECT -> "בחירה"
+        StringKey.FINDER_NO_ROWS -> "אין רשומות"
 
         StringKey.COMMON_BACK -> "חזרה"
         StringKey.COMMON_COPY -> "העתקה"
