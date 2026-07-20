@@ -16,6 +16,7 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppGroupBox
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppLoadingIndicator
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
@@ -92,6 +93,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.number
@@ -905,6 +907,7 @@ private fun SpotFinderDialog(
         onDismissRequest = { onIntent(TimetableIntent.CloseFinder) },
         modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.92f),
     ) {
+        Box {
         Column(Modifier.padding(UIConst.paddingCompact)) {
             AppText(Strings[StringKey.FINDER_CONSOLE_TITLE], AppTextStyle.ITEM_TITLE)
 
@@ -951,9 +954,6 @@ private fun SpotFinderDialog(
 
             // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
             SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
-            if (finder.loadingLines) {
-                AppSpinner()
-            }
             FinderTable(
                 items = finder.lines,
                 columns = contractColumns(),
@@ -965,9 +965,6 @@ private fun SpotFinderDialog(
 
             // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
             SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
-            if (finder.loadingSpots) {
-                AppSpinner()
-            }
             FinderTable(
                 items = finder.spots,
                 columns = spotColumns(),
@@ -1002,8 +999,26 @@ private fun SpotFinderDialog(
                 )
             }
         }
+
+        // Drilling down (party -> contracts -> messages) used to push a spinner
+        // INTO the column, so every click shoved the sections below it down and
+        // back - the "jumps". An overlay changes no layout at all, and the
+        // grace period means the usual sub-100ms load shows nothing whatsoever;
+        // only a genuinely slow one dims the console.
+        AppLoadingIndicator(
+            isLoading = finder.loadingLines || finder.loadingSpots,
+            appearAfter = FINDER_SPINNER_GRACE,
+        )
+        }
     }
 }
+
+/**
+ * How long a finder drill-down may take before it is worth telling the user
+ * about. Comfortably above the measured local round trip, comfortably below
+ * the ~1s where an unexplained wait starts to feel broken.
+ */
+private val FINDER_SPINNER_GRACE = 250.milliseconds
 
 /**
  * The contracts table's date cell: the ERP issue date, or the contract's

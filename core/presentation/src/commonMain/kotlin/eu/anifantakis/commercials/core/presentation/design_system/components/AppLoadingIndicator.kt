@@ -13,6 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.coroutines.delay
+import kotlin.time.Duration
 
 /**
  * The app's blocking progress overlay (golden-standard component): full-screen
@@ -32,14 +39,33 @@ import androidx.compose.ui.tooling.preview.Preview
  * dispatcher, so the actual back-blocking for critical loads lives in the
  * navigation host (NavigationRoot guards its onBack on
  * `GlobalState.isCriticalLoading`), keeping this component pure-common.
+ *
+ * [appearAfter] is the ANTI-FLASH grace period: a load that finishes inside it
+ * shows nothing at all, instead of a scrim that blinks on and off. Zero by
+ * default, so existing call sites keep their current behaviour; give it ~250ms
+ * wherever the operation is USUALLY fast (a local query, a warm cache) and the
+ * overlay would otherwise flicker on every interaction.
  */
 @Composable
 fun AppLoadingIndicator(
     isLoading: Boolean,
     isCritical: Boolean = false,
     modifier: Modifier = Modifier,
+    appearAfter: Duration = Duration.ZERO,
 ) {
-    if (isLoading) {
+    // Held OUTSIDE the isLoading branch: the moment loading stops, the effect
+    // restarts and re-arms the delay, so a burst of quick loads can never
+    // accumulate into a scrim that appears after the work is done.
+    var elapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(isLoading, appearAfter) {
+        elapsed = false
+        if (isLoading) {
+            if (appearAfter > Duration.ZERO) delay(appearAfter)
+            elapsed = true
+        }
+    }
+
+    if (isLoading && elapsed) {
         val processing = Strings[StringKey.COMMON_PROCESSING]
         val waitText = Strings[
             if (isCritical) StringKey.COMMON_PLEASE_WAIT_NO_BACK else StringKey.COMMON_PLEASE_WAIT
