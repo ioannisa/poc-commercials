@@ -19,13 +19,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import eu.anifantakis.commercials.core.presentation.design_system.components.window.AppWindowHost
+import eu.anifantakis.commercials.core.presentation.design_system.components.window.LocalAppWindowHost
+import eu.anifantakis.commercials.core.presentation.design_system.components.window.rememberAppWindowHostState
 import eu.anifantakis.commercials.core.data.config.AppConfig
 import eu.anifantakis.commercials.core.data.session.AuthSession
 import eu.anifantakis.commercials.core.presentation.commands.AppCommand
@@ -55,7 +63,7 @@ import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.feature.preferences.presentation.PreferencesNavType
 import eu.anifantakis.commercials.feature.preferences.presentation.preferencesEntries
-import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailDialogRoot
+import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.TimetableNavType
 import eu.anifantakis.commercials.feature.timetable.presentation.timetableEntries
 import eu.anifantakis.commercials.feature.user_management.presentation.UserManagementNavType
@@ -66,6 +74,9 @@ import org.koin.compose.koinInject
 // One line per FEATURE hierarchy (not per route): the sealed base's CLOSED
 // generated serializer covers every route of the feature on all targets -
 // adding a route inside a feature changes nothing here.
+/** ONE composer window app-wide: the toolbar and the menu bar both focus it. */
+private const val SCHEDULE_EMAIL_WINDOW_ID = "schedule-email-composer"
+
 private val navConfig = navConfigOf(
     navHierarchy<AuthNavType>(),
     navHierarchy<TimetableNavType>(),
@@ -105,12 +116,19 @@ fun NavigationRoot() {
     }
     val navigator = remember { Navigator(backStack) }
 
+    // Floating in-canvas windows (design-system AppWindowHost): screens open
+    // them via LocalAppWindowHost/LocalWindowNavigator; each window carries
+    // its OWN keyed ViewModel scope (lifecycle 2.11.0 ViewModelStoreProvider).
+    val windowHost = rememberAppWindowHostState()
+
     // If the session becomes invalid at any point (e.g. the server rejects our
     // token with 401 - the auth layer clears it), bounce back to Login instead
     // of sitting on a screen that can't load data.
     val authRevision by authSession.revision.collectAsState()
     LaunchedEffect(authRevision) {
         if (!authSession.isLoggedIn && navigator.current() != AuthNavType.Login) {
+            // Windows hold authed ViewModels - destroy them with the session.
+            windowHost.closeAll()
             navigator.resetTo(AuthNavType.Login)
         }
     }
@@ -124,9 +142,21 @@ fun NavigationRoot() {
     // and navigation - the conversation survives both.
     var showAiChat by remember { mutableStateOf(false) }
 
-    var showEmailDialog by remember { mutableStateOf(false) }
-    if (showEmailDialog) {
-        SendScheduleEmailDialogRoot(onDismiss = { showEmailDialog = false })
+    // The schedule-email composer is a floating WINDOW, not a show/hide
+    // boolean: composing an email is long work the operator may want to park
+    // (minimize) or set beside the schedule (undock) while checking what
+    // actually aired. Its keyed scope is also what makes a reopen start
+    // empty - see SendScheduleEmailScreenRoot's KDoc.
+    val openEmailWindow = {
+        windowHost.open(
+            id = SCHEDULE_EMAIL_WINDOW_ID,
+            title = UiText.Res(StringKey.EMAIL_SEND_TITLE),
+            modal = true,
+            undockable = true,
+            minSize = DpSize(520.dp, 420.dp),
+        ) {
+            SendScheduleEmailScreenRoot(onClose = { windowHost.close(SCHEDULE_EMAIL_WINDOW_ID) })
+        }
     }
     var showChangePassword by remember { mutableStateOf(false) }
     if (showChangePassword) {
@@ -188,6 +218,69 @@ fun NavigationRoot() {
         showChangePassword = true
     }
 
+    // Hoisted out of NavDisplay so BOTH hosts share one screen catalog: the
+    // fullscreen NavDisplay below, and any floating window opened on a NavKey
+    // route (WindowNavigator) - a screen never knows which one it runs in.
+    val entries = entryProvider {
+
+        authEntries(
+            onLoggedIn = { navigator.resetTo(TimetableNavType.TimetableFlow) },
+        )
+
+        timetableEntries(
+            onOpenEmailDialog = openEmailWindow,
+            onLogout = {
+                scope.launch {
+                    authRepository.logout()   // revokes the token server-side, clears the session
+                    navigator.resetTo(AuthNavType.Login)
+                }
+            },
+            onPreferences = { navigator.navigate(PreferencesNavType.Preferences) },
+            onAiChat = { showAiChat = !showAiChat },
+        )
+
+        preferencesEntries(
+            navigator = navigator,
+            isAdmin = { authSession.isAdmin },
+            swaggerEnabled = { authSession.swaggerEnabled },
+            aiChatEnabled = { authSession.aiChatProviders.isNotEmpty() },
+            onChangePassword = { showChangePassword = true },
+            onApiTokens = { showApiTokens = true },
+            onAdminMcp = { showAdminMcp = true },
+            onAppUpdate = { showAdminAppUpdate = true },
+            onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
+            onMigration = { navigator.navigate(MigrationNavType.Migration) },
+            onGalaxyBridge = { navigator.navigate(GalaxyBridgeNavType.GalaxyBridge) },
+            onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
+            // Swagger UI on whatever backend this build points at: derive
+            // it from the SAME base URL the API client uses (mirrors the
+            // "/mcp" sibling-URL pattern), so it follows the environment.
+            onOpenSwagger = {
+                uriHandler.openUri(
+                    AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
+                )
+            },
+            onAiChat = { showAiChat = true },
+        )
+
+        userManagementEntries(
+            navigator = navigator,
+            // the super admin sees every hosted station in their session
+            stationChoices = { authSession.stations.map { it.id to it.name } },
+        )
+
+        migrationEntries(navigator)
+
+        galaxyBridgeEntries(navigator)
+
+        databasesEntries(navigator)
+    }
+    val windowNavigator = rememberWindowNavigator(windowHost, entries)
+
+    CompositionLocalProvider(
+        LocalAppWindowHost provides windowHost,
+        LocalWindowNavigator provides windowNavigator,
+    ) {
     ApplicationScaffold { scaffoldPadding ->
         // The AI companion OVERLAYS the content (Box layering) instead of
         // squeezing it: the app below never reflows, and whatever the panel
@@ -210,60 +303,7 @@ fun NavigationRoot() {
                 slideInHorizontally(motion.mediumSpec(a11y)) { -forward * it } + fadeIn(motion.mediumSpec(a11y)) togetherWith
                         slideOutHorizontally(motion.mediumSpec(a11y)) { forward * it } + fadeOut(motion.mediumSpec(a11y))
             },
-            entryProvider = entryProvider {
-
-                authEntries(
-                    onLoggedIn = { navigator.resetTo(TimetableNavType.TimetableFlow) },
-                )
-
-                timetableEntries(
-                    onOpenEmailDialog = { showEmailDialog = true },
-                    onLogout = {
-                        scope.launch {
-                            authRepository.logout()   // revokes the token server-side, clears the session
-                            navigator.resetTo(AuthNavType.Login)
-                        }
-                    },
-                    onPreferences = { navigator.navigate(PreferencesNavType.Preferences) },
-                    onAiChat = { showAiChat = !showAiChat },
-                )
-
-                preferencesEntries(
-                    navigator = navigator,
-                    isAdmin = { authSession.isAdmin },
-                    swaggerEnabled = { authSession.swaggerEnabled },
-                    aiChatEnabled = { authSession.aiChatProviders.isNotEmpty() },
-                    onChangePassword = { showChangePassword = true },
-                    onApiTokens = { showApiTokens = true },
-                    onAdminMcp = { showAdminMcp = true },
-                    onAppUpdate = { showAdminAppUpdate = true },
-                    onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
-                    onMigration = { navigator.navigate(MigrationNavType.Migration) },
-                    onGalaxyBridge = { navigator.navigate(GalaxyBridgeNavType.GalaxyBridge) },
-                    onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
-                    // Swagger UI on whatever backend this build points at: derive
-                    // it from the SAME base URL the API client uses (mirrors the
-                    // "/mcp" sibling-URL pattern), so it follows the environment.
-                    onOpenSwagger = {
-                        uriHandler.openUri(
-                            AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
-                        )
-                    },
-                    onAiChat = { showAiChat = true },
-                )
-
-                userManagementEntries(
-                    navigator = navigator,
-                    // the super admin sees every hosted station in their session
-                    stationChoices = { authSession.stations.map { it.id to it.name } },
-                )
-
-                migrationEntries(navigator)
-
-                galaxyBridgeEntries(navigator)
-
-                databasesEntries(navigator)
-            }
+            entryProvider = entries
         )
 
         // The companion, as the TOP layer: an in-app slide-over on every
@@ -277,6 +317,10 @@ fun NavigationRoot() {
             providers = { authSession.aiChatProviders },
             onClose = { showAiChat = false },
         )
+
+        // Floating windows, ABOVE the AI companion (a modal window must be
+        // able to block it too) and below only the biometric gate.
+        AppWindowHost(windowHost)
 
         // The biometric lock screen - the TOPMOST layer: nothing underneath
         // is visible or clickable until the prompt passes. Fallback: sign in
@@ -294,6 +338,7 @@ fun NavigationRoot() {
             )
         }
         }
+    }
     }
 }
 

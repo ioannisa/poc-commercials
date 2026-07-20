@@ -1,10 +1,15 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Immutable
+import eu.anifantakis.commercials.core.domain.party_search.Party
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -102,7 +107,60 @@ interface TimetableCommon {
      * recolored/renamed, a break created).
      */
     fun refreshMonth()
+
+    // ── the Εύρεση selection ─────────────────────────────────────────────
+    // Shared state by the membership test: the finder WINDOW mutates it, the
+    // grid screen reads it (the Μηνύματα header, the 'a' key, the «Προβολή
+    // Βάσει…» subjects). Each verb applies its downstream resets ATOMICALLY
+    // in the serialized reducer - the window never read-modify-writes a
+    // selection snapshot across its awaits.
+
+    /** A new party: resets the line, the spot and the spot list with it. */
+    fun selectFinderParty(party: Party, kind: PartyKind)
+
+    /** A new contract line: resets the spot and the spot list. */
+    fun selectFinderLine(line: ContractLine)
+
+    /** The [selectFinderLine]'s spots, once fetched - the header dropdown reads them too. */
+    fun setFinderSpots(spots: List<ContractLineSpot>)
+
+    /** Arms (or, with null, disarms) the spot the grid's 'a' key places. */
+    fun selectFinderSpot(spot: ContractLineSpot?)
+
+    /** Drops the whole selection - the Μηνύματα X and the console's ΚΑΘΑΡΙΣΜΟΣ. */
+    fun clearFinder()
+
+    /**
+     * Arms (or clears, with null) the «Τύποι Προγράμματος» BRUSH.
+     *
+     * Shared for the same reason the finder selection is: the Τύποι
+     * Προγράμματος console PICKS it, but two other places READ it - the grid's
+     * 'a' key, where the first spot into a white cell paints the break with
+     * it, and the «Προβολή Βάσει… Πρόγραμμα» filter. Deleting the armed
+     * programme must therefore travel through here, or the grid stays scoped
+     * to a programme that no longer exists.
+     */
+    fun selectProgram(program: Program?)
 }
+
+/**
+ * The Εύρεση selection the flow shares: what the finder window picked, what
+ * the grid header displays, what 'a' places, what the armed «Προβολή Βάσει…»
+ * modes read their subject from. The finder's SEARCH state (query, results,
+ * contract lines, busy flags) is deliberately NOT here - only the window
+ * renders it, so it stays in the window's own ViewModel.
+ */
+@Immutable
+data class FinderSelection(
+    val party: Party? = null,
+    /** The kind [party] was selected under - later radio toggles must not reinterpret it. */
+    val kind: PartyKind = PartyKind.CUSTOMER,
+    val line: ContractLine? = null,
+    /** The armed spot - what the grid's 'a' key places. */
+    val spot: ContractLineSpot? = null,
+    /** The [line]'s spots - the grid header's armed-spot dropdown switches among them. */
+    val spots: ImmutableList<ContractLineSpot> = persistentListOf(),
+)
 
 /** Flow-wide state - the `Common` infix is mandatory (ownership is visible). */
 @Immutable
@@ -130,6 +188,16 @@ data class TimetableCommonState(
     val modifiedCells: ImmutableSet<SchedulerKey> = persistentSetOf(),
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
+    /** The Εύρεση selection - see [FinderSelection]. */
+    val finderSelection: FinderSelection = FinderSelection(),
+    /**
+     * The armed «Τύποι Προγράμματος» brush: what PAINTS the break when the
+     * first spot lands in a white cell, and the subject of the
+     * «Προβολή Βάσει… Πρόγραμμα» filter. The whole Program, not just its id,
+     * because the grid header renders its NAME and COLOUR and no longer holds
+     * the catalog - the console window does. Null = nothing armed.
+     */
+    val armedProgram: Program? = null,
 )
 
 /**
@@ -152,4 +220,10 @@ sealed interface TimetableCommonIntent {
     data class Reorder(val time: LocalTime, val date: LocalDate, val orderedIds: List<Long>) : TimetableCommonIntent
     data class CreateBreak(val time: LocalTime, val date: LocalDate) : TimetableCommonIntent
     data object RefreshMonth : TimetableCommonIntent
+    data class SelectFinderParty(val party: Party, val kind: PartyKind) : TimetableCommonIntent
+    data class SelectFinderLine(val line: ContractLine) : TimetableCommonIntent
+    data class SetFinderSpots(val spots: List<ContractLineSpot>) : TimetableCommonIntent
+    data class SelectFinderSpot(val spot: ContractLineSpot?) : TimetableCommonIntent
+    data object ClearFinder : TimetableCommonIntent
+    data class SelectProgram(val program: Program?) : TimetableCommonIntent
 }

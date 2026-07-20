@@ -61,6 +61,8 @@ data class ScheduleCell(
     val zoneColorArgb: Int,
     /** THE BREAK's programme (the break owns it server-side), when it has one. */
     val programName: String? = null,
+    /** Its IDENTITY - a name is not a key, so acting on it (arming the brush) needs this. */
+    val programId: Long? = null,
     val commercials: List<PlacedCommercial>,
 )
 

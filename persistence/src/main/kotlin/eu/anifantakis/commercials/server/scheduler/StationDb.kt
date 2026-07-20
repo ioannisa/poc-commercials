@@ -1471,7 +1471,8 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                    COUNT(s.id) AS spot_count,
                    COALESCE(SUM(s.duration_seconds), 0) AS total_secs,
                    MAX(pr.color_argb) AS program_color,
-                   MAX(pr.name) AS program_name
+                   MAX(pr.name) AS program_name,
+                   MAX(pr.id) AS program_id
             FROM breaks b
             LEFT JOIN placements p ON p.station_id = b.station_id
                                   AND p.show_date = b.show_date
@@ -1495,7 +1496,8 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                    COUNT(*) AS spot_count,
                    SUM(s.duration_seconds) AS total_secs,
                    MAX(pr.color_argb) AS program_color,
-                   MAX(pr.name) AS program_name
+                   MAX(pr.name) AS program_name,
+                   MAX(pr.id) AS program_id
             FROM placements p
             JOIN spots s ON s.id = p.spot_id
             ${when (filter) {
@@ -1574,6 +1576,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                                 spotCount = spotCount,
                             ),
                             programName = rs.getString("program_name"),
+                            programId = rs.getLong("program_id").takeIf { !rs.wasNull() },
                             commercials = emptyList(),
                         )
                     }

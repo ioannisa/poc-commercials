@@ -68,6 +68,8 @@ data class CellDto(
     val zoneColorArgb: Int,
     /** THE BREAK's programme (its owned state - see GroupDb), when it has one. */
     val programName: String? = null,
+    /** Its IDENTITY - a name is not a key, so anything acting on it needs this. */
+    val programId: Long? = null,
 )
 
 /**
@@ -343,6 +345,7 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                             totalDurationSeconds = cell.totalDurationSeconds,
                             zoneColorArgb = cell.zoneColorArgb,
                             programName = cell.programName,
+                            programId = cell.programId,
                         )
                     },
                 )

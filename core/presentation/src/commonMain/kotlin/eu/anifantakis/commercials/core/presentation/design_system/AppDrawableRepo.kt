@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.Minimize
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
@@ -137,6 +138,8 @@ object AppDrawableRepo {
     val keyboardArrowDown: ImageVector @Composable get() = Icons.Default.KeyboardArrowDown
     val keyboardArrowUp: ImageVector @Composable get() = Icons.Default.KeyboardArrowUp
     val lock: ImageVector @Composable get() = Icons.Default.Lock
+    /** Floating-window title bar: park into the taskbar strip. */
+    val minimize: ImageVector @Composable get() = Icons.Default.Minimize
     val lockReset: ImageVector @Composable get() = Icons.Default.LockReset
     val manageAccounts: ImageVector @Composable get() = Icons.Default.ManageAccounts
     val moreVert: ImageVector @Composable get() = Icons.Default.MoreVert

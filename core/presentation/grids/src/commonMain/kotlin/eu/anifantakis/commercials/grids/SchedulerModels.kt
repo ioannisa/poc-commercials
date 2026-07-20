@@ -74,6 +74,12 @@ data class SchedulerCellData(
     val isHighlighted: Boolean = false,
     /** The programme airing at this slot (first placement's), when it has one. */
     val programName: String? = null,
+    /**
+     * Its IDENTITY. The grid itself never uses it - it is carried so a SCREEN
+     * can act on "this cell's programme" (the timetable arms it as the brush)
+     * without resolving by name, which is not a key.
+     */
+    val programId: Long? = null,
     val commercials: ImmutableList<CommercialItem> = persistentListOf()
 ) {
     val formattedDuration: String

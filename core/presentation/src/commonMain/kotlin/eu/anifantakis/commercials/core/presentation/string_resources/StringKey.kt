@@ -121,6 +121,10 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_PROGRAM_REMOVE,
     TIMETABLE_PROGRAM_COLOR,
     TIMETABLE_PROGRAM_NAME_LABEL,
+    /** The catalog window's type-to-narrow box. */
+    TIMETABLE_PROGRAM_FILTER,
+    /** The readout's discreet offer: arm this cell's programme as the brush. */
+    TIMETABLE_ARM_CELL_PROGRAM,
     TIMETABLE_PROGRAM_ADD_TITLE,
     TIMETABLE_PROGRAM_EDIT_TITLE,
     TIMETABLE_PROGRAM_REMOVE_TITLE,
@@ -256,6 +260,17 @@ enum class StringKey(val json: String = "") {
     EMAIL_PREVIEW_TITLE,
     EMAIL_TO,
     EMAIL_SEND_BUTTON,
+    // Column headers of the composer's grids (activity / spots / history).
+    EMAIL_COL_YEAR,
+    EMAIL_COL_MONTH,
+    EMAIL_COL_SPOTS,
+    EMAIL_COL_SPOT,
+    EMAIL_COL_SENT_AT,
+    EMAIL_COL_PERIOD,
+    EMAIL_COL_RECIPIENT,
+    EMAIL_COL_SENT_BY,
+    /** Shown beside the month picker until a month is chosen. */
+    EMAIL_PICK_MONTH_FIRST,
 
     // ── Preferences screen / Login screen ───────────────────────────────
     PREFERENCES_TITLE,
@@ -601,6 +616,14 @@ enum class StringKey(val json: String = "") {
     ADMIN_UPDATE_MIN_SUPPORTED,
     ADMIN_UPDATE_VERSION_FORMAT,
     ADMIN_UPDATE_SAVED,
+
+    // ── Floating windows (design-system window chrome) ──────────────────
+    WINDOW_MINIMIZE,
+    WINDOW_RESTORE,
+    /** Drop the scrim: work beside the app instead of on top of it. */
+    WINDOW_UNDOCK,
+    /** Put the scrim back: the window becomes a blocking dialog again. */
+    WINDOW_DOCK,
 
     /** Fallback for an unrecognized server-sent key. */
     UNMATCHED;

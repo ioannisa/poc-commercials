@@ -42,6 +42,7 @@ internal data class CellDto(
     val zoneColorArgb: Int,
     /** THE BREAK's programme (the break owns it server-side), when it has one. */
     val programName: String? = null,
+    val programId: Long? = null,
 )
 
 /** The whole grid in ONE response: its ROWS and its CELLS (one scan, one round trip). */

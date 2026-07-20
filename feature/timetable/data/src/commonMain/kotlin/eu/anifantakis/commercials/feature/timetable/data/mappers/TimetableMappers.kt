@@ -35,6 +35,7 @@ internal fun CellDto.toDomain(): ScheduleCell = ScheduleCell(
     totalDurationSeconds = totalDurationSeconds,
     zoneColorArgb = zoneColorArgb,
     programName = programName,
+    programId = programId,
     // The grid does not carry airings - see CellDto. They are merged in later
     // for the one cell that gets opened, or fetched straight for a report.
     commercials = emptyList(),

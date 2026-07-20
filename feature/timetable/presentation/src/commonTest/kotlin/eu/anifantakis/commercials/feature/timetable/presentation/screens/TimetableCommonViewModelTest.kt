@@ -5,7 +5,9 @@ import eu.anifantakis.commercials.core.domain.util.DataError
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.presentation.global_state.GlobalEffect
 import eu.anifantakis.commercials.grids.SchedulerKey
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -457,4 +459,32 @@ class TimetableCommonViewModelTest : TimetableTestBase() {
             "the same failure must surface once, through the global snackbar - never twice, never silently",
         )
     }
+    /**
+     * A month change blanks the month's DATA and keeps the operator's
+     * CHOICES. This regressed twice: LoadMonth used to rebuild the state from
+     * a hand-listed set of survivors (viewMode + filter), so every choice
+     * added afterwards - the Εύρεση selection, then the Τύποι Προγράμματος
+     * brush - was silently wiped, disarming the grid's 'a' key the moment the
+     * operator paged to another month.
+     */
+    @Test
+    fun changingMonthKeepsTheOperatorsChoicesAndBlanksTheMonthsData() = runTest(testDispatcher) {
+        val vm = vm()
+        vm.setViewMode(GridViewMode.HOURLY)
+        vm.selectFinderSpot(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1))
+        vm.selectProgram(Program(id = 7, name = "News", colorArgb = null))
+        advanceUntilIdle()
+
+        schedule.monthResult = DataResult.Success(month(cell(spots = listOf(placed(1)))))
+        vm.loadMonth(2026, 8)
+        advanceUntilIdle()
+
+        val st = vm.commonState.value
+        assertEquals(42L, st.finderSelection.spot?.spotId, "the armed spot survives - 'a' must keep working")
+        assertEquals(7L, st.armedProgram?.id, "so does the brush that paints a white cell")
+        assertEquals(GridViewMode.HOURLY, st.viewMode)
+        assertEquals(8, st.month, "and the month itself moved")
+        assertTrue(st.modifiedCells.isEmpty(), "the previous month's session markers are gone")
+    }
+
 }

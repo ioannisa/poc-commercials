@@ -146,21 +146,32 @@ class SendScheduleEmailViewModelTest : ScheduleEmailTestBase() {
         job.cancel()
     }
 
+    /**
+     * "A reopened form starts fresh" used to be this ViewModel's job: it
+     * outlived the show/hide dialog, so the Root fired a `Reset` intent on
+     * every open. Since the screen moved into a floating window with its own
+     * KEYED ViewModel scope, closing the window destroys this instance and
+     * reopening builds a new one - so the guarantee is structural, and the
+     * intent that faked it is gone.
+     *
+     * What is asserted here is this half of the contract: a finished send is
+     * INSTANCE state, so a new instance cannot inherit it. That the window
+     * actually produces a new instance is covered by
+     * AppWindowKoinScopingTest in :core:presentation.
+     */
     @Test
-    fun resetClearsAFinishedSendSoAReopenedDialogStartsFresh() = runTest(testDispatcher) {
-        val vm = vm()
-        vm.onAction(SendScheduleEmailIntent.PartySelected(party("CUS1", email = "c@acme.gr")))
+    fun aFinishedSendIsInstanceStateSoAFreshViewModelStartsEmpty() = runTest(testDispatcher) {
+        val used = vm()
+        used.onAction(SendScheduleEmailIntent.PartySelected(party("CUS1", email = "c@acme.gr")))
         advanceUntilIdle()
-        vm.onAction(SendScheduleEmailIntent.MarkSent("Το email εστάλη."))
-        assertEquals("Το email εστάλη.", vm.state.done)
+        used.onAction(SendScheduleEmailIntent.MarkSent("Το email εστάλη."))
+        assertEquals("Το email εστάλη.", used.state.done)
 
-        // The ViewModel outlives the dialog; reopening fires Reset, which must wipe the
-        // "sent" confirmation AND the previous party so the form is empty again.
-        vm.onAction(SendScheduleEmailIntent.Reset)
+        val reopened = vm()
 
-        assertEquals(null, vm.state.done, "the sent confirmation is gone")
-        assertEquals(null, vm.state.selectedParty, "the previous party is cleared")
-        assertEquals("", vm.state.recipient)
+        assertEquals(null, reopened.state.done, "no sent confirmation carries over")
+        assertEquals(null, reopened.state.selectedParty, "nor the previous party")
+        assertEquals("", reopened.state.recipient)
     }
 
     @Test
