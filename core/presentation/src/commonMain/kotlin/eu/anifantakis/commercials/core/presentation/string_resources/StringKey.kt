@@ -602,6 +602,10 @@ enum class StringKey(val json: String = "") {
     ADMIN_UPDATE_VERSION_FORMAT,
     ADMIN_UPDATE_SAVED,
 
+    // ── Floating windows (design-system window chrome) ──────────────────
+    WINDOW_MINIMIZE,
+    WINDOW_RESTORE,
+
     /** Fallback for an unrecognized server-sent key. */
     UNMATCHED;
 

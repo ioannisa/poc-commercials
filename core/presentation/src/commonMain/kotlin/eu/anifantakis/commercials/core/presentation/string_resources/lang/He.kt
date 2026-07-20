@@ -204,6 +204,8 @@ internal class He : LanguageStrings {
         StringKey.DETAIL_MENU_DETAILS -> "פרטים"
 
         StringKey.COMMON_CLOSE -> "סגירה"
+        StringKey.WINDOW_MINIMIZE -> "מזעור"
+        StringKey.WINDOW_RESTORE -> "שחזור"
         StringKey.MONTH_SHORT_JANUARY -> "ינו"
         StringKey.MONTH_SHORT_FEBRUARY -> "פבר"
         StringKey.MONTH_SHORT_MARCH -> "מרץ"

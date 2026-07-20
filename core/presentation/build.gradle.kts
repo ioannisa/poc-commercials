@@ -42,5 +42,12 @@ kotlin {
             // The native FileDialog is shown on the AWT event thread
             implementation(libs.kotlinx.coroutinesSwing)
         }
+        // Headless Compose UI tests (runComposeUiTest): the floating-window
+        // scoping contract (keyed ViewModel survival across minimize, clearKey
+        // on close) is BEHAVIOR - a compile pass cannot vouch for it.
+        jvmTest.dependencies {
+            implementation(libs.compose.uiTest)
+            implementation(compose.desktop.currentOs)
+        }
     }
 }

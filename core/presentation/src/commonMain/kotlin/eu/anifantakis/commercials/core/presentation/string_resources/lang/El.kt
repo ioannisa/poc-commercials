@@ -199,6 +199,8 @@ internal class El : LanguageStrings {
         StringKey.DETAIL_MENU_DETAILS -> "Λεπτομέρειες"
 
         StringKey.COMMON_CLOSE -> "Κλείσιμο"
+        StringKey.WINDOW_MINIMIZE -> "Ελαχιστοποίηση"
+        StringKey.WINDOW_RESTORE -> "Επαναφορά"
         StringKey.MONTH_SHORT_JANUARY -> "Ιαν"
         StringKey.MONTH_SHORT_FEBRUARY -> "Φεβ"
         StringKey.MONTH_SHORT_MARCH -> "Μαρ"

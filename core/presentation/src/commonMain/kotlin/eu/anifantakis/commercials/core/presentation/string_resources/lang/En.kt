@@ -199,6 +199,8 @@ internal class En : LanguageStrings {
         StringKey.DETAIL_MENU_DETAILS -> "Details"
 
         StringKey.COMMON_CLOSE -> "Close"
+        StringKey.WINDOW_MINIMIZE -> "Minimize"
+        StringKey.WINDOW_RESTORE -> "Restore"
         StringKey.MONTH_SHORT_JANUARY -> "Jan"
         StringKey.MONTH_SHORT_FEBRUARY -> "Feb"
         StringKey.MONTH_SHORT_MARCH -> "Mar"
