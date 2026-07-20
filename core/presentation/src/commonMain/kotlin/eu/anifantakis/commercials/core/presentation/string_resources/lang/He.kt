@@ -104,6 +104,8 @@ internal class He : LanguageStrings {
         StringKey.TIMETABLE_PROGRAM_REMOVE -> "הסרה"
         StringKey.TIMETABLE_PROGRAM_COLOR -> "צבע"
         StringKey.TIMETABLE_PROGRAM_NAME_LABEL -> "שם התוכנית"
+        StringKey.TIMETABLE_PROGRAM_FILTER -> "סינון תוכניות"
+        StringKey.TIMETABLE_ARM_CELL_PROGRAM -> "לחיצה כפולה לבחירת תוכנית זו"
         StringKey.TIMETABLE_PROGRAM_ADD_TITLE -> "הוספת תוכנית"
         StringKey.TIMETABLE_PROGRAM_EDIT_TITLE -> "עריכת תוכנית"
         StringKey.TIMETABLE_PROGRAM_REMOVE_TITLE -> "הסרת תוכנית"

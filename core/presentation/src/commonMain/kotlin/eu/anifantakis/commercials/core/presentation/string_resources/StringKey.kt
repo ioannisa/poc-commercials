@@ -121,6 +121,10 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_PROGRAM_REMOVE,
     TIMETABLE_PROGRAM_COLOR,
     TIMETABLE_PROGRAM_NAME_LABEL,
+    /** The catalog window's type-to-narrow box. */
+    TIMETABLE_PROGRAM_FILTER,
+    /** The readout's discreet offer: arm this cell's programme as the brush. */
+    TIMETABLE_ARM_CELL_PROGRAM,
     TIMETABLE_PROGRAM_ADD_TITLE,
     TIMETABLE_PROGRAM_EDIT_TITLE,
     TIMETABLE_PROGRAM_REMOVE_TITLE,

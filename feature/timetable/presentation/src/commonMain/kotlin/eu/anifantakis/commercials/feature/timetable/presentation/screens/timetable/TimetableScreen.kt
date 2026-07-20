@@ -109,6 +109,7 @@ fun TimetableScreenRoot(
     onPreferences: () -> Unit,
     onAiChat: () -> Unit,
     onOpenSpotFinder: () -> Unit,
+    onOpenProgramTypes: () -> Unit,
 ) {
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
@@ -145,6 +146,7 @@ fun TimetableScreenRoot(
                 TimetableScreenNavIntent.OnPreferences -> onPreferences()
                 TimetableScreenNavIntent.OnAiChat -> onAiChat()
                 TimetableScreenNavIntent.OnOpenSpotFinder -> onOpenSpotFinder()
+                TimetableScreenNavIntent.OnOpenProgramTypes -> onOpenProgramTypes()
             }
         },
     )
@@ -163,6 +165,8 @@ private sealed interface TimetableScreenNavIntent {
     data object OnAiChat : TimetableScreenNavIntent
     /** The Εύρεση console - a floating window, so opening it is NAVIGATION. */
     data object OnOpenSpotFinder : TimetableScreenNavIntent
+    /** «Τύποι Προγράμματος» - likewise its own window now. */
+    data object OnOpenProgramTypes : TimetableScreenNavIntent
 }
 
 @Composable
@@ -207,10 +211,6 @@ private fun TimetableScreen(
             onIntent = onIntent,
             onNavIntent = onNavIntent,
         )
-
-        // The programme console's ΔΙΟΡΘ/ΠΡΟΣΘ/ΑΦΑΙΡ/Χρώμα dialogs (opened from
-        // the header's «Τύποι Προγράμματος» box).
-        ProgramDialogHost(state = state, onIntent = onIntent)
 
         // The scheduler grid with keyboard navigation (using LazyColumn for performance)
         LazySchedulerGrid(
@@ -602,9 +602,11 @@ private fun KeyboardEnabledHeader(
                                     onIntent = onIntent,
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
-                                ProgramTypesBox(
+                                ProgramBrushBox(
                                     state = state,
-                                    onIntent = onIntent,
+                                    onOpenConsole = {
+                                        onNavIntent(TimetableScreenNavIntent.OnOpenProgramTypes)
+                                    },
                                     modifier = Modifier.weight(1f).fillMaxWidth(),
                                 )
                             }
@@ -664,6 +666,7 @@ private fun KeyboardEnabledHeader(
                             // programme's colour, day/date/time above it (legacy).
                             SelectedBreakReadout(
                                 state = state,
+                                onArmProgram = { onIntent(TimetableIntent.ArmCellProgram(it)) },
                                 modifier = Modifier.padding(top = UIConst.paddingExtraSmall),
                             )
                         }

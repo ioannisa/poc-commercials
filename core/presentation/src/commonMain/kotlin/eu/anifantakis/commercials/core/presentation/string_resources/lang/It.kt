@@ -99,6 +99,8 @@ internal class It : LanguageStrings {
         StringKey.TIMETABLE_PROGRAM_REMOVE -> "RIM"
         StringKey.TIMETABLE_PROGRAM_COLOR -> "Colore"
         StringKey.TIMETABLE_PROGRAM_NAME_LABEL -> "Nome del programma"
+        StringKey.TIMETABLE_PROGRAM_FILTER -> "Filtra programmi"
+        StringKey.TIMETABLE_ARM_CELL_PROGRAM -> "Doppio clic per usare questo programma"
         StringKey.TIMETABLE_PROGRAM_ADD_TITLE -> "Aggiungi programma"
         StringKey.TIMETABLE_PROGRAM_EDIT_TITLE -> "Modifica programma"
         StringKey.TIMETABLE_PROGRAM_REMOVE_TITLE -> "Rimuovi programma"

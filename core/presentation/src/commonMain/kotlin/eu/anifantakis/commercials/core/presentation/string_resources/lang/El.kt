@@ -99,6 +99,8 @@ internal class El : LanguageStrings {
         StringKey.TIMETABLE_PROGRAM_REMOVE -> "ΑΦΑΙΡ"
         StringKey.TIMETABLE_PROGRAM_COLOR -> "Χρώμα"
         StringKey.TIMETABLE_PROGRAM_NAME_LABEL -> "Όνομα προγράμματος"
+        StringKey.TIMETABLE_PROGRAM_FILTER -> "Φίλτρο προγραμμάτων"
+        StringKey.TIMETABLE_ARM_CELL_PROGRAM -> "Διπλό κλικ για επιλογή αυτού του προγράμματος"
         StringKey.TIMETABLE_PROGRAM_ADD_TITLE -> "Πρόσθεση προγράμματος"
         StringKey.TIMETABLE_PROGRAM_EDIT_TITLE -> "Διόρθωση προγράμματος"
         StringKey.TIMETABLE_PROGRAM_REMOVE_TITLE -> "Αφαίρεση προγράμματος"

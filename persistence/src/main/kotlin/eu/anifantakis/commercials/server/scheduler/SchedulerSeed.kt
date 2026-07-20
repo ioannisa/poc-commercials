@@ -50,6 +50,13 @@ data class CellRow(
     val zoneColorArgb: Int,
     /** The programme airing at this slot (first placement's), when it has one. */
     val programName: String? = null,
+    /**
+     * The programme's IDENTITY, not just its label. Needed because a name is
+     * not a key - two programmes may share one, and a rename moves it - so
+     * anything that acts on "this cell's programme" (arming it as the brush,
+     * scoping «Προβολή Βάσει… Πρόγραμμα») must key on the id.
+     */
+    val programId: Long? = null,
     val commercials: List<CommercialRow>
 )
 

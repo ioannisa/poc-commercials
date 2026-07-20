@@ -14,10 +14,13 @@ import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.PlacedCommercial
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
@@ -100,6 +103,9 @@ class TimetableCommonViewModel(
 
     override fun clearFinder() = dispatch(TimetableCommonIntent.ClearFinder)
 
+    override fun selectProgram(program: Program?) =
+        dispatch(TimetableCommonIntent.SelectProgram(program))
+
     // ── the single reducer ──────────────────────────────────────────────────
 
     override suspend fun reduce(intent: TimetableCommonIntent) {
@@ -119,11 +125,26 @@ class TimetableCommonViewModel(
                 addedByCell.clear()
                 clientRowTimes.clear()
                 val mode = commonState.value.viewMode
-                // The view mode AND the armed filter survive the blank - both
-                // are the operator's choices, not the month's data.
                 val filter = commonState.value.filter
-                updateCommonState {
-                    TimetableCommonState(viewMode = mode, filter = filter, year = intent.year, month = intent.month)
+                // Blank the month's DATA; keep the operator's CHOICES.
+                //
+                // Written as copy-and-clear rather than building a fresh state
+                // from a list of survivors, because the list-of-survivors form
+                // is what broke it: it kept only viewMode/filter, so every
+                // choice added later - the Εύρεση selection, then the Τύποι
+                // Προγράμματος brush - was silently wiped on a month change,
+                // disarming the 'a' key. This way a new choice field survives
+                // by DEFAULT, and forgetting to blank a data field is the loud
+                // error instead of the silent one.
+                updateCommonState { st ->
+                    st.copy(
+                        year = intent.year,
+                        month = intent.month,
+                        breaks = persistentListOf(),
+                        cells = persistentMapOf(),
+                        modifiedCells = persistentSetOf(),
+                        addedCounts = persistentMapOf(),
+                    )
                 }
                 // ONE call for the whole grid. The rows and the cells came from two
                 // endpoints fetched back-to-back, which made the screen wait for two
@@ -270,6 +291,10 @@ class TimetableCommonViewModel(
 
             TimetableCommonIntent.ClearFinder -> updateCommonState {
                 it.copy(finderSelection = FinderSelection())
+            }
+
+            is TimetableCommonIntent.SelectProgram -> updateCommonState {
+                it.copy(armedProgram = intent.program)
             }
 
             is TimetableCommonIntent.Reorder -> {

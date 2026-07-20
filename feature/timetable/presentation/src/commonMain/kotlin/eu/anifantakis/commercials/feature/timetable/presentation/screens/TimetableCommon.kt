@@ -9,6 +9,7 @@ import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -128,6 +129,18 @@ interface TimetableCommon {
 
     /** Drops the whole selection - the Μηνύματα X and the console's ΚΑΘΑΡΙΣΜΟΣ. */
     fun clearFinder()
+
+    /**
+     * Arms (or clears, with null) the «Τύποι Προγράμματος» BRUSH.
+     *
+     * Shared for the same reason the finder selection is: the Τύποι
+     * Προγράμματος console PICKS it, but two other places READ it - the grid's
+     * 'a' key, where the first spot into a white cell paints the break with
+     * it, and the «Προβολή Βάσει… Πρόγραμμα» filter. Deleting the armed
+     * programme must therefore travel through here, or the grid stays scoped
+     * to a programme that no longer exists.
+     */
+    fun selectProgram(program: Program?)
 }
 
 /**
@@ -177,6 +190,14 @@ data class TimetableCommonState(
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
     /** The Εύρεση selection - see [FinderSelection]. */
     val finderSelection: FinderSelection = FinderSelection(),
+    /**
+     * The armed «Τύποι Προγράμματος» brush: what PAINTS the break when the
+     * first spot lands in a white cell, and the subject of the
+     * «Προβολή Βάσει… Πρόγραμμα» filter. The whole Program, not just its id,
+     * because the grid header renders its NAME and COLOUR and no longer holds
+     * the catalog - the console window does. Null = nothing armed.
+     */
+    val armedProgram: Program? = null,
 )
 
 /**
@@ -204,4 +225,5 @@ sealed interface TimetableCommonIntent {
     data class SetFinderSpots(val spots: List<ContractLineSpot>) : TimetableCommonIntent
     data class SelectFinderSpot(val spot: ContractLineSpot?) : TimetableCommonIntent
     data object ClearFinder : TimetableCommonIntent
+    data class SelectProgram(val program: Program?) : TimetableCommonIntent
 }

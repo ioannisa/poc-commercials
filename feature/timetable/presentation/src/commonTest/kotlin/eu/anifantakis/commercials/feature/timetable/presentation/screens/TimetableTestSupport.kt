@@ -303,7 +303,11 @@ class FakeProgramsRepository : ProgramsRepository {
     val updates = mutableListOf<Triple<Long, String?, Int?>>()
     val removed = mutableListOf<Long>()
 
-    override suspend fun list(): DataResult<List<Program>, DataError.Network> = DataResult.Success(programs)
+    /** Set to exercise the catalog's failure branch. */
+    var listFailure: DataError.Network? = null
+
+    override suspend fun list(): DataResult<List<Program>, DataError.Network> =
+        listFailure?.let { DataResult.Failure(it) } ?: DataResult.Success(programs)
 
     override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> {
         created += name to colorArgb
@@ -456,6 +460,13 @@ class FakeTimetableCommon : TimetableCommon {
     override fun clearFinder() {
         finderClears++
         _commonState.update { it.copy(finderSelection = FinderSelection()) }
+    }
+
+    val programSelections = mutableListOf<Program?>()
+
+    override fun selectProgram(program: Program?) {
+        programSelections += program
+        _commonState.update { it.copy(armedProgram = program) }
     }
 }
 

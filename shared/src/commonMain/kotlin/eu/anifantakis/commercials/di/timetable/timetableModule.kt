@@ -20,6 +20,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailViewModel
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.program_types.ProgramTypesViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.spot_finder.SpotFinderViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableViewModel
 import org.koin.core.module.dsl.singleOf
@@ -48,7 +49,6 @@ val timetableModule = module {
     viewModel { params ->
         TimetableViewModel(
             scheduleRepository = get(),
-            programsRepository = get(),
             common = params.get(),
             prefs = get(),
             session = get(),
@@ -56,6 +56,17 @@ val timetableModule = module {
             logoCache = get(),
             refreshBus = get(),
             screenContext = get(),
+        )
+    }
+
+    // The Τύποι Προγράμματος catalog - its own screen in a floating window,
+    // resolved against the WINDOW's keyed ViewModel scope. Owns the catalog
+    // and the CRUD; the armed brush goes up through the TimetableCommon
+    // contract (params), so the grid's 'a' key sees the same one.
+    viewModel { params ->
+        ProgramTypesViewModel(
+            repository = get(),
+            common = params.get(),
         )
     }
 

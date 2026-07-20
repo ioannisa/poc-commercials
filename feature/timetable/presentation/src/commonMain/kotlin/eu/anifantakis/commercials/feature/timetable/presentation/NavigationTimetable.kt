@@ -24,6 +24,7 @@ import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.program_types.ProgramTypesScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.spot_finder.SpotFinderScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
@@ -69,6 +70,9 @@ private val stepNavConfig = navConfigOf(navHierarchy<TimetableStepNavType>())
 
 /** ONE finder window app-wide: reopening focuses it (same ViewModel scope). */
 private const val SPOT_FINDER_WINDOW_ID = "timetable-spot-finder"
+
+/** Likewise ONE catalog window: reopening focuses it (same ViewModel scope). */
+private const val PROGRAM_TYPES_WINDOW_ID = "timetable-program-types"
 
 /**
  * ONE root entry for the whole flow. App-owned concerns (the schedule-email
@@ -145,7 +149,10 @@ private fun TimetableFlowHost(
                 // -level chrome, a sibling of NavDisplay). Leaving the grid
                 // closes it - which also clears its keyed ViewModel scope.
                 DisposableEffect(windowHost) {
-                    onDispose { windowHost.close(SPOT_FINDER_WINDOW_ID) }
+                    onDispose {
+                        windowHost.close(SPOT_FINDER_WINDOW_ID)
+                        windowHost.close(PROGRAM_TYPES_WINDOW_ID)
+                    }
                 }
                 TimetableScreenRoot(
                     viewModel = koinViewModel { parametersOf(common) },
@@ -156,6 +163,22 @@ private fun TimetableFlowHost(
                     onLogout = onLogout,
                     onPreferences = onPreferences,
                     onAiChat = onAiChat,
+                    onOpenProgramTypes = {
+                        windowHost.open(
+                            id = PROGRAM_TYPES_WINDOW_ID,
+                            title = UiText.Res(StringKey.TIMETABLE_PROGRAM_TYPES_TITLE),
+                            // Docked like the Εύρεση; undock to watch cells
+                            // repaint while recolouring a programme.
+                            modal = true,
+                            undockable = true,
+                            minSize = DpSize(420.dp, 360.dp),
+                        ) {
+                            ProgramTypesScreenRoot(
+                                viewModel = koinViewModel { parametersOf(common as TimetableCommon) },
+                                onClose = { windowHost.close(PROGRAM_TYPES_WINDOW_ID) },
+                            )
+                        }
+                    },
                     onOpenSpotFinder = {
                         windowHost.open(
                             id = SPOT_FINDER_WINDOW_ID,

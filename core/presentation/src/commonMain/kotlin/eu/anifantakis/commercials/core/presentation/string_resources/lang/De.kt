@@ -99,6 +99,8 @@ internal class De : LanguageStrings {
         StringKey.TIMETABLE_PROGRAM_REMOVE -> "ENTF"
         StringKey.TIMETABLE_PROGRAM_COLOR -> "Farbe"
         StringKey.TIMETABLE_PROGRAM_NAME_LABEL -> "Programmname"
+        StringKey.TIMETABLE_PROGRAM_FILTER -> "Programme filtern"
+        StringKey.TIMETABLE_ARM_CELL_PROGRAM -> "Doppelklick, um dieses Programm zu übernehmen"
         StringKey.TIMETABLE_PROGRAM_ADD_TITLE -> "Programm hinzufügen"
         StringKey.TIMETABLE_PROGRAM_EDIT_TITLE -> "Programm bearbeiten"
         StringKey.TIMETABLE_PROGRAM_REMOVE_TITLE -> "Programm entfernen"

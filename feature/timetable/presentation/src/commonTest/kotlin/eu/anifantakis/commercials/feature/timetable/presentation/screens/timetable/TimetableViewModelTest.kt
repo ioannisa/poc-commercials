@@ -3,13 +3,13 @@ package eu.anifantakis.commercials.feature.timetable.presentation.screens.timeta
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
+import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.CommercialsQuery
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_CLOCK
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
@@ -59,7 +59,6 @@ class TimetableViewModelTest : TimetableTestBase() {
      * print. That is the only reason this fake is here.
      */
     private val schedule = FakeScheduleRepository()
-    private val programs = FakeProgramsRepository()
 
     private fun vm(
         prefs: FakeTimetablePreferences = FakeTimetablePreferences(),
@@ -67,7 +66,7 @@ class TimetableViewModelTest : TimetableTestBase() {
         reportService: FakeReportService = reports,
         logoCache: StationLogoCache = FakeStationLogoCache(),
     ) = TimetableViewModel(
-        schedule, programs, common, prefs, session, reportService, logoCache, TEST_CLOCK
+        schedule, common, prefs, session, reportService, logoCache, TEST_CLOCK
     )
 
     /**
@@ -88,6 +87,9 @@ class TimetableViewModelTest : TimetableTestBase() {
     }
 
     private val key = SchedulerKey(TEST_TIME, TEST_DATE)
+
+    /** The armed brush, as the Τύποι Προγράμματος window would hand it over. */
+    private fun program(id: Long) = Program(id = id, name = "News", colorArgb = null)
 
     private fun station(id: String, name: String) =
         StationAccess(id = id, name = name, role = AppRole.NORMAL_USER.name)
@@ -177,7 +179,7 @@ class TimetableViewModelTest : TimetableTestBase() {
     fun showBasedOnProgramArmsTheFilterWithTheSelectedProgramme() = runTest(testDispatcher) {
         val vm = vm()
         advanceUntilIdle()
-        vm.onAction(TimetableIntent.SelectProgram(7))
+        common.selectProgram(program(7))
         vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.PROGRAM))
         advanceUntilIdle()
 
@@ -233,7 +235,7 @@ class TimetableViewModelTest : TimetableTestBase() {
     fun showBasedOnAllDisarmsAnActiveFilter() = runTest(testDispatcher) {
         val vm = vm()
         advanceUntilIdle()
-        vm.onAction(TimetableIntent.SelectProgram(7))
+        common.selectProgram(program(7))
         vm.onAction(TimetableIntent.ShowBasedOnChanged(ShowBasedOn.PROGRAM))
         advanceUntilIdle()
         assertEquals(ScheduleFilter.ByProgram(7), common.filters.last())
@@ -505,12 +507,11 @@ class TimetableViewModelTest : TimetableTestBase() {
 
     @Test
     fun addSpotAtOnAWhiteCellCarriesTheSelectedProgramme() = runTest(testDispatcher) {
-        programs.programs = listOf(
-            eu.anifantakis.commercials.feature.timetable.domain.model.Program(id = 7, name = "News", colorArgb = null)
-        )
         val vm = vm()
-        advanceUntilIdle()   // loadPrograms lands
-        vm.onAction(TimetableIntent.SelectProgram(7))
+        advanceUntilIdle()
+        // The brush is the FLOW's now - the Τύποι Προγράμματος window arms it,
+        // this screen only consumes it.
+        common.selectProgram(program(7))
         vm.onAction(TimetableIntent.FinderSpotSelected(ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)))
 
         vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
@@ -567,4 +568,40 @@ class TimetableViewModelTest : TimetableTestBase() {
         assertEquals(listOf(TEST_TIME to TEST_DATE), common.removes)
         assertTrue(common.adds.isEmpty())
     }
+    /**
+     * "Paint the next break like this one": the readout offers the SELECTED
+     * cell's programme, and arming it goes straight up to the flow. The
+     * catalog window is not involved and need not be open - which is only
+     * possible because the cell now carries the programme's ID, not just its
+     * name (a name is not a key: two programmes may share one).
+     */
+    @Test
+    fun armingTheSelectedCellsProgrammeDelegatesToTheFlow() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        val fromCell = Program(id = 9, name = "ΚΡΗΤΗ ΣΗΜΕΡΑ", colorArgb = 0xFFFFC0CB.toInt())
+
+        vm.onAction(TimetableIntent.ArmCellProgram(fromCell))
+        advanceUntilIdle()
+
+        assertEquals(fromCell, common.programSelections.last(), "the whole Program travels, id included")
+        assertEquals(9L, vm.state.armedProgram?.id, "and comes back down merged - the header repaints")
+    }
+
+    /** Armed that way, the brush must paint a white cell exactly like a catalog pick. */
+    @Test
+    fun aProgrammeArmedFromACellPaintsAWhiteCell() = runTest(testDispatcher) {
+        val vm = vm()
+        advanceUntilIdle()
+        vm.onAction(TimetableIntent.ArmCellProgram(Program(id = 9, name = "News", colorArgb = null)))
+        vm.onAction(TimetableIntent.FinderSpotSelected(
+            ContractLineSpot(spotId = 42, description = "x", durationSeconds = 30, placements = 1)
+        ))
+        advanceUntilIdle()
+
+        vm.onAction(TimetableIntent.AddSpotAt(time = TEST_TIME, date = TEST_DATE))
+
+        assertEquals(listOf<Long?>(9L), common.addProgramIds, "the cell-armed brush paints, like any other")
+    }
+
 }

@@ -99,6 +99,8 @@ internal class En : LanguageStrings {
         StringKey.TIMETABLE_PROGRAM_REMOVE -> "DEL"
         StringKey.TIMETABLE_PROGRAM_COLOR -> "Colour"
         StringKey.TIMETABLE_PROGRAM_NAME_LABEL -> "Programme name"
+        StringKey.TIMETABLE_PROGRAM_FILTER -> "Filter programmes"
+        StringKey.TIMETABLE_ARM_CELL_PROGRAM -> "Double-click to use this programme"
         StringKey.TIMETABLE_PROGRAM_ADD_TITLE -> "Add programme"
         StringKey.TIMETABLE_PROGRAM_EDIT_TITLE -> "Edit programme"
         StringKey.TIMETABLE_PROGRAM_REMOVE_TITLE -> "Remove programme"
