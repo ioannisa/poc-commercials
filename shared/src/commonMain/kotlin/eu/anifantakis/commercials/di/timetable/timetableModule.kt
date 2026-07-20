@@ -18,6 +18,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.data_source.RemoteSch
 import eu.anifantakis.commercials.feature.timetable.domain.PlacementsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.ScheduleReportsController
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.program_types.ProgramTypesViewModel
@@ -46,14 +47,16 @@ val timetableModule = module {
     // handed to the per-screen ViewModels below via parametersOf.
     viewModelOf(::TimetableCommonViewModel)
 
+    // Report assembly + the slice fetch + the platform report service. A
+    // stateless per-run factory (kmp-developer: controllers are factories).
+    factory { ScheduleReportsController(get(), get(), get()) }
+
     viewModel { params ->
         TimetableViewModel(
-            scheduleRepository = get(),
+            reports = get(),
             common = params.get(),
             prefs = get(),
             session = get(),
-            reportService = get(),
-            logoCache = get(),
             refreshBus = get(),
             screenContext = get(),
         )

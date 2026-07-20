@@ -5,6 +5,7 @@ import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.CommercialsQuery
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.ScheduleReportsController
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_CLOCK
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeScheduleRepository
@@ -66,7 +67,11 @@ class TimetableViewModelTest : TimetableTestBase() {
         reportService: FakeReportService = reports,
         logoCache: StationLogoCache = FakeStationLogoCache(),
     ) = TimetableViewModel(
-        schedule, common, prefs, session, reportService, logoCache, TEST_CLOCK
+        // The REAL controller over the fakes: the report assertions below still
+        // observe FakeReportService and FakeScheduleRepository, so they keep
+        // testing the same end-to-end behaviour across the new seam.
+        ScheduleReportsController(schedule, reportService, logoCache),
+        common, prefs, session, TEST_CLOCK,
     )
 
     /**

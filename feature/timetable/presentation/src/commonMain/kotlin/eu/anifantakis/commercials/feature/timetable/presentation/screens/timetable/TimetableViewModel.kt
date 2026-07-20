@@ -1,11 +1,9 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
 
-import eu.anifantakis.commercials.core.presentation.helper.UiText
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
-import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.core.domain.context.ActiveScreenContext
@@ -14,11 +12,13 @@ import eu.anifantakis.commercials.core.domain.auth.UserSession
 import eu.anifantakis.commercials.core.presentation.global_state.BaseGlobalViewModel
 import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
-import eu.anifantakis.commercials.core.presentation.string_resources.localized
-import eu.anifantakis.commercials.core.presentation.util.toUiText
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.MonthReportMode
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.ReportContext
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.ReportOutcome
+import eu.anifantakis.commercials.feature.timetable.presentation.reports.ScheduleReportsController
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FinderSelection
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.grids.BreakSlot
@@ -26,16 +26,8 @@ import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.DailyStats
 import eu.anifantakis.commercials.grids.StableDate
-import eu.anifantakis.commercials.grids.formatTime
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
-import eu.anifantakis.commercials.reports.ReportDataFactory
-import eu.anifantakis.commercials.reports.ReportPayload
-import eu.anifantakis.commercials.reports.ReportService
-import eu.anifantakis.commercials.reports.StationLogoCache
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportConfig
-import eu.anifantakis.commercials.reports.models.ReportResult
 import eu.anifantakis.commercials.reports.print
-import eu.anifantakis.commercials.reports.toReportPayload
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -64,8 +56,6 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
-import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
-import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
 
 @Immutable
 data class TimetableState(
@@ -216,16 +206,14 @@ sealed interface TimetableEffect {
 @Stable
 class TimetableViewModel(
     /**
-     * Reports only. The grid reads the shared store; the PRINTED reports need the
-     * airings, which the grid deliberately does not carry (see cellsWithCommercials),
-     * so they fetch their own slice on demand.
+     * Reports: assembly, the slice fetch and the report service all live in
+     * the controller. This screen keeps only the busy flag and the ONE
+     * snackbar policy - it decides WHEN a report runs, never HOW.
      */
-    private val scheduleRepository: ScheduleRepository,
+    private val reports: ScheduleReportsController,
     private val common: TimetableCommon,
     private val prefs: TimetablePreferences,
     private val session: UserSession,
-    private val reportService: ReportService,
-    private val logoCache: StationLogoCache,
     /**
      * The clock the grid opens on. Injectable ONLY so tests can pin it: the month
      * the screen starts on is read from here, and a test fixture pinned to a fixed
@@ -246,7 +234,7 @@ class TimetableViewModel(
             year = today.year,
             month = today.month.number,
             showSpotTimes = prefs.showSpotTimes,
-            reportsAvailable = reportService.isReportGenerationAvailable(),
+            reportsAvailable = reports.isAvailable(),
         ).withSessionFacts()
     )
     val state by _state
@@ -347,17 +335,13 @@ class TimetableViewModel(
             // what re-seeds the facts and reloads (one path, not two).
             is TimetableIntent.SelectStation -> session.selectStation(intent.stationId)
 
-            is TimetableIntent.PrintDay -> printDay(intent.date)
-            is TimetableIntent.PrintBreak -> printBreak(intent.time, intent.date)
-            is TimetableIntent.PrintBreakMonth -> printBreakMonth(intent.time)
+            is TimetableIntent.PrintDay -> report { reports.printDay(it, intent.date) }
+            is TimetableIntent.PrintBreak -> report { reports.printBreak(it, intent.time, intent.date) }
+            is TimetableIntent.PrintBreakMonth -> report { reports.printBreakAcrossMonth(it, intent.time) }
 
-            TimetableIntent.PreviewMonth -> runMonthReport { reportService.preview(it) }
-            TimetableIntent.PrintMonth -> runMonthReport { reportService.print(it) }
-            TimetableIntent.ExportMonthPdf -> {
-                val s = _state.value
-                val fileName = "ProgramFlow_${s.year}-${s.month.toString().padStart(2, '0')}.pdf"
-                runMonthReport { reportService.exportToPdf(it, fileName) }
-            }
+            TimetableIntent.PreviewMonth -> report { reports.runMonth(it, MonthReportMode.PREVIEW) }
+            TimetableIntent.PrintMonth -> report { reports.runMonth(it, MonthReportMode.PRINT) }
+            TimetableIntent.ExportMonthPdf -> report { reports.runMonth(it, MonthReportMode.EXPORT_PDF) }
 
             is TimetableIntent.SelectionChanged ->
                 _state.update { it.copy(selectedRow = intent.row, selectedColumn = intent.column) }
@@ -461,114 +445,24 @@ class TimetableViewModel(
     // ── printing (payload assembly + the report service live HERE) ───────
 
     /**
-     * The cells a report needs - the grid's aggregates with the airings MERGED IN
-     * for just the slice being printed.
+     * Runs a report and surfaces its one message, if it has one.
      *
-     * The grid's own cells carry no airings (it draws counts; a month's worth was
-     * 7.79 MB - see ScheduleRepository.getCommercials), so a report fetches its
-     * own slice: one day, one break, one break across the month, or the whole
-     * month. Returns null on a network failure, having already told the user.
+     * The busy flag stays HERE, not in the controller: it disables the
+     * toolbar, so it is screen state - and its try/finally is load-bearing,
+     * because a save dialog can throw or be cancelled and the buttons must
+     * never stay disabled because of it.
      */
-    private suspend fun cellsWithCommercials(
-        date: LocalDate? = null,
-        time: LocalTime? = null,
-    ): ImmutableMap<SchedulerKey, SchedulerCellData>? {
-        val s = _state.value
-        return when (val result = scheduleRepository.getCommercials(s.year, s.month, date, time)) {
-            is DataResult.Success -> {
-                val fetched = result.data
-                s.cells.mapValues { (key, cell) ->
-                    val coms = fetched[key.time to key.date]
-                    if (coms == null) cell
-                    else cell.copy(commercials = coms.map { it.toUi() }.toImmutableList())
-                }.toImmutableMap()
-            }
-            is DataResult.Failure -> {
-                showSnackbar(result.error.toUiText())
-                null
-            }
-        }
-    }
-
-    private fun printDay(date: LocalDate) {
-        viewModelScope.launch {
-            val cells = cellsWithCommercials(date = date) ?: return@launch
-            val data = ReportDataFactory.createProgramFlowData(date, _state.value.breaks, cells)
-            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(logoCache.reportConfig()))
-        }
-    }
-
-    private fun printBreak(time: LocalTime, date: LocalDate) {
-        val slot = _state.value.breaks.firstOrNull { it.time == time } ?: return
-        viewModelScope.launch {
-            val cells = cellsWithCommercials(date = date, time = time) ?: return@launch
-            val cell = cells[SchedulerKey(time, date)] ?: return@launch
-            val data = ReportDataFactory.createBreakProgramFlowData(
-                date = date,
-                breakTimeLabel = formatTime(slot.time.hour, slot.time.minute),
-                commercials = cell.commercials,
-                programName = cell.programName,
-            )
-            if (data.items.isNotEmpty()) reportService.print(data.toReportPayload(logoCache.reportConfig()))
-        }
-    }
-
-    /**
-     * The toolbar's three actions differ only in [action]: same month, same
-     * payloads, same outcome policy. An empty month never reaches the service,
-     * and every result surfaces through the app's ONE global snackbar - the
-     * toolbar itself renders no messages.
-     */
-    private fun runMonthReport(action: suspend (List<ReportPayload>) -> ReportResult) {
-        val s = _state.value
-        if (s.reportBusy) return
-
+    private fun report(block: suspend (ReportContext) -> ReportOutcome) {
+        if (_state.value.reportBusy) return
         viewModelScope.launch {
             _state.update { it.copy(reportBusy = true) }
             try {
-                // The whole month's airings - the ONE report that genuinely wants
-                // them all, and it is an explicit user action, not a screen load.
-                val cells = cellsWithCommercials() ?: return@launch
-                val data = ReportDataFactory
-                    .createMonthProgramFlowData(s.year, s.month, s.breaks, cells)
-                if (data.isEmpty()) {
-                    showSnackbar(StringKey.REPORT_NO_SPOTS)
-                    return@launch
-                }
-                // ONE lookup for the whole month, not one per day: the logo is the
-                // station's, and on desktop resolving it can mean a round trip.
-                val config = logoCache.reportConfig()
-                val payloads = data.map { it.toReportPayload(config) }
-                when (val result = action(payloads)) {
-                    // The engine's own text is authoritative - never translated.
-                    is ReportResult.Success -> showSnackbar(
-                        UiText.Dynamic(
-                            result.filePath?.let { path -> StringKey.REPORT_PDF_SAVED_PREFIX.localized() + path }
-                                ?: result.message
-                        )
-                    )
-                    is ReportResult.Error -> showSnackbar(UiText.Dynamic(result.message))
-                    ReportResult.Cancelled -> showSnackbar(StringKey.REPORT_CANCELLED)
-                }
+                val s = _state.value
+                val outcome = block(ReportContext(s.year, s.month, s.breaks, s.cells))
+                if (outcome is ReportOutcome.Notify) showSnackbar(outcome.message)
             } finally {
-                // A save dialog can throw or be cancelled; the buttons must
-                // never stay disabled because of it.
                 _state.update { it.copy(reportBusy = false) }
             }
-        }
-    }
-
-    private fun printBreakMonth(time: LocalTime) {
-        val s = _state.value
-        val slot = s.breaks.firstOrNull { it.time == time } ?: return
-        viewModelScope.launch {
-            // Just this break, across the month - not the month's every airing.
-            val cells = cellsWithCommercials(time = time) ?: return@launch
-            val config = logoCache.reportConfig()
-            val payloads = ReportDataFactory
-                .createMonthProgramFlowData(s.year, s.month, listOf(slot), cells)
-                .map { it.toReportPayload(config) }
-            if (payloads.isNotEmpty()) reportService.print(payloads)
         }
     }
 
