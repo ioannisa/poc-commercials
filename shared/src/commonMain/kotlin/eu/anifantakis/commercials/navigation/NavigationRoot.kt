@@ -61,8 +61,6 @@ import eu.anifantakis.commercials.feature.migration_console.presentation.Migrati
 import eu.anifantakis.commercials.feature.migration_console.presentation.migrationEntries
 import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
-import eu.anifantakis.commercials.feature.preferences.presentation.PreferencesNavType
-import eu.anifantakis.commercials.feature.preferences.presentation.preferencesEntries
 import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.TimetableNavType
 import eu.anifantakis.commercials.feature.timetable.presentation.timetableEntries
@@ -80,7 +78,6 @@ private const val SCHEDULE_EMAIL_WINDOW_ID = "schedule-email-composer"
 private val navConfig = navConfigOf(
     navHierarchy<AuthNavType>(),
     navHierarchy<TimetableNavType>(),
-    navHierarchy<PreferencesNavType>(),
     navHierarchy<UserManagementNavType>(),
     navHierarchy<MigrationNavType>(),
     navHierarchy<GalaxyBridgeNavType>(),
@@ -141,6 +138,12 @@ fun NavigationRoot() {
     // and live while chatting. Hosted here so the ViewModel outlives toggling
     // and navigation - the conversation survives both.
     var showAiChat by remember { mutableStateOf(false) }
+
+    // Settings is the OTHER companion panel, and for the same reason: theme
+    // and text size apply live, so you want the app visible behind them.
+    // Both panels dock to the SAME edge, so opening one parks the other -
+    // side by side they would overlap, and the app has one end edge.
+    var showPreferences by remember { mutableStateOf(false) }
 
     // The schedule-email composer is a floating WINDOW, not a show/hide
     // boolean: composing an email is long work the operator may want to park
@@ -235,32 +238,14 @@ fun NavigationRoot() {
                     navigator.resetTo(AuthNavType.Login)
                 }
             },
-            onPreferences = { navigator.navigate(PreferencesNavType.Preferences) },
-            onAiChat = { showAiChat = !showAiChat },
-        )
-
-        preferencesEntries(
-            navigator = navigator,
-            isAdmin = { authSession.isAdmin },
-            swaggerEnabled = { authSession.swaggerEnabled },
-            aiChatEnabled = { authSession.aiChatProviders.isNotEmpty() },
-            onChangePassword = { showChangePassword = true },
-            onApiTokens = { showApiTokens = true },
-            onAdminMcp = { showAdminMcp = true },
-            onAppUpdate = { showAdminAppUpdate = true },
-            onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
-            onMigration = { navigator.navigate(MigrationNavType.Migration) },
-            onGalaxyBridge = { navigator.navigate(GalaxyBridgeNavType.GalaxyBridge) },
-            onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
-            // Swagger UI on whatever backend this build points at: derive
-            // it from the SAME base URL the API client uses (mirrors the
-            // "/mcp" sibling-URL pattern), so it follows the environment.
-            onOpenSwagger = {
-                uriHandler.openUri(
-                    AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
-                )
+            onPreferences = {
+                showPreferences = !showPreferences
+                if (showPreferences) showAiChat = false
             },
-            onAiChat = { showAiChat = true },
+            onAiChat = {
+                showAiChat = !showAiChat
+                if (showAiChat) showPreferences = false
+            },
         )
 
         userManagementEntries(
@@ -316,6 +301,38 @@ fun NavigationRoot() {
             windowWidth = this@BoxWithConstraints.maxWidth,
             providers = { authSession.aiChatProviders },
             onClose = { showAiChat = false },
+        )
+
+        // Settings: the same slide-over treatment, and hidden the moment the
+        // session ends - it fronts account and super-admin maintenance.
+        PreferencesCompanionHost(
+            visible = showPreferences && authSession.isLoggedIn,
+            windowWidth = this@BoxWithConstraints.maxWidth,
+            isAdmin = { authSession.isAdmin },
+            swaggerEnabled = { authSession.swaggerEnabled },
+            aiChatEnabled = { authSession.aiChatProviders.isNotEmpty() },
+            onClose = { showPreferences = false },
+            onNavigateAway = { showPreferences = false },
+            onChangePassword = { showChangePassword = true },
+            onApiTokens = { showApiTokens = true },
+            onAdminMcp = { showAdminMcp = true },
+            onAppUpdate = { showAdminAppUpdate = true },
+            onManageUsers = { navigator.navigate(UserManagementNavType.UserManagement) },
+            onMigration = { navigator.navigate(MigrationNavType.Migration) },
+            onGalaxyBridge = { navigator.navigate(GalaxyBridgeNavType.GalaxyBridge) },
+            onDatabases = { navigator.navigate(DatabasesNavType.Databases) },
+            // Swagger UI on whatever backend this build points at: derive it
+            // from the SAME base URL the API client uses (mirrors the "/mcp"
+            // sibling-URL pattern), so it follows the environment.
+            onOpenSwagger = {
+                uriHandler.openUri(
+                    AppConfig.require().serverBaseUrl.trimEnd('/') + "/swagger"
+                )
+            },
+            onAiChat = {
+                showPreferences = false
+                showAiChat = true
+            },
         )
 
         // Floating windows, ABOVE the AI companion (a modal window must be

@@ -18,4 +18,15 @@ enum class FontSizePreference { XSMALL, SMALL, MEDIUM, LARGE, XLARGE }
 interface UserPreferences {
     var theme: ThemePreference
     var fontSize: FontSizePreference
+
+    /**
+     * The settings panel's width in dp - it is drag-resizable, and the width
+     * is a silent choice: remembered, never shown as a setting itself.
+     */
+    var panelWidthDp: Int
+
+    companion object {
+        /** Wider than the chat's 400: the settings cards carry two columns. */
+        const val DEFAULT_PANEL_WIDTH_DP = 460
+    }
 }

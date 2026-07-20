@@ -45,4 +45,10 @@ class KSafeUserPreferences(@Provided private val ksafe: KSafe) : UserPreferences
             storedFontSize = value.name
         }
 
+    // No Compose mirror: the panel owns its live width while dragging and
+    // only commits on release, so nothing needs to recompose off this.
+    override var panelWidthDp: Int by ksafe(
+        UserPreferences.DEFAULT_PANEL_WIDTH_DP,
+        key = "preferences_panel_width",
+    )
 }

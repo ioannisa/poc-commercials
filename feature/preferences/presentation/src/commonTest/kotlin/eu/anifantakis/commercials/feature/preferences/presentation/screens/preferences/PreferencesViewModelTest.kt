@@ -48,6 +48,8 @@ class PreferencesViewModelTest {
     private class FakeUserPreferences(
         override var theme: ThemePreference = ThemePreference.SYSTEM,
         override var fontSize: FontSizePreference = FontSizePreference.MEDIUM,
+        // Panel geometry: the ViewModel never touches it, the host does.
+        override var panelWidthDp: Int = UserPreferences.DEFAULT_PANEL_WIDTH_DP,
     ) : UserPreferences
 
     private class FakeAppLanguageStore(override var languageCode: String = "") : AppLanguageStore

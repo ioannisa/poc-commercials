@@ -498,7 +498,7 @@ private fun AiChatScreen(
             )
             onCollapse?.let {
                 AppIconButton(
-                    label = Strings[StringKey.AI_CHAT_COLLAPSE],
+                    label = Strings[StringKey.COMMON_COLLAPSE],
                     icon = AppDrawableRepo.keyboardArrowRight,
                     onClick = it,
                 )
