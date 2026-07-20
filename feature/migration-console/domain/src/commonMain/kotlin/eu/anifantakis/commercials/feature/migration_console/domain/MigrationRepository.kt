@@ -93,9 +93,19 @@ data class MigrationProgress(
     val label: String,
     val done: Long,
     val total: Long,
+    /**
+     * WITHIN-step progress, when the running step is big enough to measure
+     * its inside (the placements bulk load alone parks the step bar at 18/18
+     * for minutes). [subTotal] 0 = the step reports none - no sub-bar.
+     */
+    val subDone: Long = 0,
+    val subTotal: Long = 0,
 ) {
     /** 0f..1f, or null when there is nothing honest to show. */
     val fraction: Float? get() = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
+
+    /** The running step's own 0f..1f, or null when it reports none. */
+    val subFraction: Float? get() = if (subTotal > 0) (subDone.toFloat() / subTotal).coerceIn(0f, 1f) else null
 }
 
 data class MigrationStatus(

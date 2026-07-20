@@ -165,7 +165,10 @@ class SenErpEnricher(
         // classes no z_commercials row ever did, and they must gain their
         // STI name/code in the same run.
         step("Recovering the contract lines z_commercials missed")
-        if (ssd != null) recoverMissingContractLines(apply, s)
+        if (ssd != null) {
+            recoverMissingContractLines(apply, s)
+            fillNullItemLines(apply)
+        }
         step("Contract lines: agreed quantities")
         if (ssd != null) enrichLineQuantities(ssd, apply, s)
         else log("ssd.csv absent - product lines + quantities skipped")
@@ -738,6 +741,66 @@ class SenErpEnricher(
      * Idempotent: every step is a NOT EXISTS insert or a targeted re-point, so
      * re-running the enricher changes nothing.
      */
+    /**
+     * Stamp the ERP item on NULL-item lines that sit at a REAL lineno.
+     *
+     * The transformer creates such lines from the airings' own charge key
+     * (schedule.docID+lineno) for documents z_commercials never carried - the
+     * LINE must exist for the placement linking, but only ssd knows what the
+     * line SELLS. [recoverMissingContractLines] cannot fill them: its insert
+     * is NOT EXISTS-guarded, and these lines exist. Idempotent - a stamped
+     * line has spot_type_id set and drops out of the WHERE.
+     */
+    private fun fillNullItemLines(apply: Boolean) {
+        val fillable = c.createStatement().use { st ->
+            st.executeQuery(
+                """
+                SELECT COUNT(*) FROM $schema.contract_lines cl, $schema.contracts ct, $schema.sen_ssd ssd
+                WHERE ct.id = cl.contract_id
+                  AND ssd.DOCID = ct.legacy_docid AND ssd.LINENO = cl.line_no
+                  AND cl.spot_type_id IS NULL AND cl.line_no < 1000 AND ssd.MCIID > 0
+                """.trimIndent()
+            ).use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+        if (fillable == 0) {
+            log("  null-item lines: nothing for ssd to fill")
+            return
+        }
+        if (!apply) {
+            log("  null-item lines: would stamp the ERP item on $fillable charge-key lines  [DRY RUN]")
+            return
+        }
+        // Item classes these lines reference but the catalog lacks (same seed
+        // recoverMissingContractLines runs - repeated here because its early
+        // return skips it when no document is line-LESS, only item-less).
+        c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                INSERT INTO $schema.spot_types(legacy_id, name)
+                SELECT DISTINCT ssd.MCIID, ''
+                FROM $schema.sen_ssd ssd
+                WHERE ssd.MCIID > 0
+                  AND NOT EXISTS (
+                      SELECT 1 FROM $schema.spot_types sty WHERE sty.legacy_id = ssd.MCIID
+                  )
+                """.trimIndent()
+            )
+        }
+        val stamped = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                UPDATE $schema.contract_lines cl
+                JOIN $schema.contracts ct ON ct.id = cl.contract_id
+                JOIN $schema.sen_ssd ssd ON ssd.DOCID = ct.legacy_docid AND ssd.LINENO = cl.line_no
+                JOIN $schema.spot_types sty ON sty.legacy_id = ssd.MCIID
+                SET cl.spot_type_id = sty.id
+                WHERE cl.spot_type_id IS NULL AND cl.line_no < 1000
+                """.trimIndent()
+            )
+        }
+        log("  null-item lines: $stamped charge-key lines got their ERP item from ssd")
+    }
+
     private fun recoverMissingContractLines(apply: Boolean, s: Summary) {
         // Which contracts are still stuck on a synthetic line?
         val stuck = c.createStatement().use { st ->

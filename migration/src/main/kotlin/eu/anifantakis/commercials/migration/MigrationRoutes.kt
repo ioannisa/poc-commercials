@@ -114,6 +114,9 @@ data class MigrationProgressDto(
     val label: String,
     val done: Long,
     val total: Long,
+    /** Within-step progress; [subTotal] 0 = the running step reports none. */
+    val subDone: Long = 0,
+    val subTotal: Long = 0,
 )
 
 @Serializable
@@ -246,7 +249,7 @@ fun Route.migrationRoutes(
 private fun MigrationService.Snapshot.toDto() = MigrationStatusDto(
     state = state.name,
     log = log,
-    progress = progress?.let { MigrationProgressDto(it.phase, it.label, it.done, it.total) },
+    progress = progress?.let { MigrationProgressDto(it.phase, it.label, it.done, it.total, it.subDone, it.subTotal) },
     flows = flows.map { MigrationFlowInfoDto(it.forTv, it.spots, it.placements) },
     summary = summary?.let {
         MigrationSummaryDto(

@@ -40,9 +40,23 @@ object BreakSeeder {
      * [schema] qualifies the tables for callers whose connection sits on a
      * different default schema (the migration works cross-schema); null means
      * "the connection's own" (the server's in-place upgrade).
+     *
+     * [from]/[untilExclusive] optionally bound the airings scanned - the
+     * migration chunks by year so its progress bar can move (a break's voters
+     * all share its show_date, so a date bound can never split an election).
+     * Null bounds = the whole table, exactly as before.
      */
-    fun seed(c: Connection, schema: String? = null) {
+    fun seed(
+        c: Connection,
+        schema: String? = null,
+        from: java.time.LocalDate? = null,
+        untilExclusive: java.time.LocalDate? = null,
+    ) {
         val q = schema?.let { "`$it`." } ?: ""
+        val bounds = buildString {
+            if (from != null) append(" AND p.show_date >= '$from'")
+            if (untilExclusive != null) append(" AND p.show_date < '$untilExclusive'")
+        }
         c.createStatement().use { s ->
             // One (station, date, time) group per break; rank each group's
             // programmes by (has one at all, visible-spot count, first
@@ -74,6 +88,7 @@ object BreakSeeder {
                                ) AS first_position
                         FROM ${q}placements p
                         JOIN ${q}spots s ON s.id = p.spot_id
+                        WHERE 1=1$bounds
                         GROUP BY p.station_id, p.show_date, p.show_time, p.program_id
                     ) g
                 ) ranked
@@ -87,7 +102,7 @@ object BreakSeeder {
                                  AND b.show_date = p.show_date
                                  AND b.show_time = p.show_time
                 SET p.break_id = b.id
-                WHERE p.break_id IS NULL
+                WHERE p.break_id IS NULL$bounds
                 """.trimIndent()
             )
         }

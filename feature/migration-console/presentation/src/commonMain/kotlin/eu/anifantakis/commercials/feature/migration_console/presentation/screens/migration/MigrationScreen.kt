@@ -441,6 +441,17 @@ private fun MigrationScreen(
                     caption = "${migrationPhaseLabel(p.phase)} — ${p.label}",
                     detail = migrationProgressDetail(p),
                 )
+                // WITHIN the running step, when it is big enough to measure
+                // its inside: the placements bulk load alone parks the step
+                // bar at 18/18 for minutes, and this is what still moves.
+                p.subFraction?.let { sub ->
+                    Spacer(Modifier.height(UIConst.paddingExtraSmall))
+                    AppProgressBar(
+                        fraction = sub,
+                        caption = Strings[StringKey.MIGRATION_STEP_PROGRESS],
+                        detail = "${p.subDone}/${p.subTotal}",
+                    )
+                }
                 Spacer(Modifier.height(UIConst.paddingSmall))
             }
 

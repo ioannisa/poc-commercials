@@ -328,6 +328,7 @@ internal class Fr : LanguageStrings {
         StringKey.MIGRATION_ERROR -> "Erreur : {0}"
         StringKey.MIGRATION_START_ANOTHER -> "Démarrer une autre migration"
         StringKey.MIGRATION_PROGRESS -> "Progression"
+        StringKey.MIGRATION_STEP_PROGRESS -> "Étape en cours"
         StringKey.MIGRATION_PHASE_REPLAY -> "Lecture du dump"
         StringKey.MIGRATION_PHASE_TRANSFORM -> "Transformation"
         StringKey.MIGRATION_PHASE_ENRICH -> "Enrichissement depuis l'ERP"

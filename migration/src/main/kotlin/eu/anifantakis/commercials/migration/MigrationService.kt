@@ -106,6 +106,14 @@ class MigrationService(private val registry: StationRegistry) {
         val done: Long,
         /** 0 = no honest total; show an indeterminate bar. */
         val total: Long,
+        /**
+         * WITHIN-step progress, for the steps big enough to measure their
+         * inside (the verbatim copies, the placements bulk load, the
+         * break-entity build). Same honesty rule: [subTotal] 0 = the running
+         * step reports none, hide the sub-bar.
+         */
+        val subDone: Long = 0,
+        val subTotal: Long = 0,
     )
 
     data class StartRequest(
@@ -329,6 +337,12 @@ class MigrationService(private val registry: StationRegistry) {
                         log = { log("  $it") },
                         onStep = { done, total, label ->
                             progress = Progress("TRANSFORM", label, done.toLong(), total.toLong())
+                        },
+                        // Rides on the CURRENT step's Progress - onStep always
+                        // fires first (step() resets the sub to 0/0), so the
+                        // copy never resurrects a stale phase or label.
+                        onSubProgress = { done, total ->
+                            progress = progress?.copy(subDone = done, subTotal = total)
                         },
                     ).run()
                     req.senDirPath?.let { senDir ->

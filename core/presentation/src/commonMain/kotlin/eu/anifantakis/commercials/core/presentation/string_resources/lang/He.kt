@@ -333,6 +333,7 @@ internal class He : LanguageStrings {
         StringKey.MIGRATION_ERROR -> "שגיאה: {0}"
         StringKey.MIGRATION_START_ANOTHER -> "התחלת העברה נוספת"
         StringKey.MIGRATION_PROGRESS -> "התקדמות"
+        StringKey.MIGRATION_STEP_PROGRESS -> "השלב הנוכחי"
         StringKey.MIGRATION_PHASE_REPLAY -> "קריאת הגיבוי"
         StringKey.MIGRATION_PHASE_TRANSFORM -> "המרה"
         StringKey.MIGRATION_PHASE_ENRICH -> "העשרה מה-ERP"

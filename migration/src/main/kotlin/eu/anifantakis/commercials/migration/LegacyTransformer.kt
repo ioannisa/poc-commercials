@@ -44,6 +44,14 @@ class LegacyTransformer(
      * says which one. Default no-op: the CLI prints text and wants none.
      */
     private val onStep: (done: Int, total: Int, label: String) -> Unit = { _, _, _ -> },
+    /**
+     * WITHIN-step progress, for the steps big enough to deserve one (the
+     * verbatim copies, the placements bulk load, the break-entity build - a
+     * step bar alone sits at "18/18" for minutes on a 4M-row dump). Same
+     * honesty rule as the step bar: (0, 0) means the running step offers no
+     * measurable inside, and the UI must hide the sub-bar, not guess.
+     */
+    private val onSubProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
 ) {
     private val s = "`$scratchSchema`"
     private val t = "`$targetSchema`"
@@ -62,6 +70,9 @@ class LegacyTransformer(
      */
     private fun step(label: String) {
         stepsDone++
+        // A new step voids the previous step's sub-progress at once - a full
+        // sub-bar must never linger over a step that reports none.
+        onSubProgress(0, 0)
         onStep(stepsDone, maxOf(TOTAL_STEPS, stepsDone), label)
         log(label)
     }
@@ -513,9 +524,27 @@ class LegacyTransformer(
      * The rule (and the SQL) is BreakSeeder's, shared with the server's in-place
      * upgrade so the two paths can never pick different programmes. Returns the
      * station-scoped entity count for the log.
+     *
+     * Chunked BY YEAR purely for the sub-progress (the dominant-programme scan
+     * over 4M airings is the transform's slowest tail): a break's voters all
+     * share its show_date, so a year boundary can never split an election.
      */
     private fun seedBreakEntities(): Long {
-        BreakSeeder.seed(c, targetSchemaName)
+        val years = mutableListOf<Int>()
+        c.createStatement().use { st ->
+            st.executeQuery("SELECT DISTINCT YEAR(show_date) FROM $t.placements ORDER BY 1").use { rs ->
+                while (rs.next()) years += rs.getInt(1)
+            }
+        }
+        onSubProgress(0, years.size.toLong())
+        years.forEachIndexed { i, year ->
+            BreakSeeder.seed(
+                c, targetSchemaName,
+                from = java.time.LocalDate.of(year, 1, 1),
+                untilExclusive = java.time.LocalDate.of(year + 1, 1, 1),
+            )
+            onSubProgress((i + 1).toLong(), years.size.toLong())
+        }
         return c.createStatement().use { st ->
             st.executeQuery("SELECT COUNT(*) FROM $t.breaks").use { rs -> rs.next(); rs.getLong(1) }
         }
@@ -699,31 +728,58 @@ class LegacyTransformer(
     // ─────────────────────────────────────────────────────── contracts ──
 
     /**
-     * One target contract per legacy contract/document id referenced by the
-     * migrated spots. `docref` supplies real docno/dotid/customer when the
+     * One target contract per legacy contract/document id the dump CHARGES
+     * anything to. `docref` supplies real docno/dotid/customer when the
      * ERP shadow row survived; otherwise the contract is synthesized around
      * the spot's own customer.
      *
-     * ONE row per document, ACROSS the flows: `GROUP BY m.contractID` now folds
-     * a document used by both the TV and the radio messages into a single
-     * contract. That is the whole point - contract 500 keeps its TV line and its
-     * radio lines together, and the ΣΥΜΒΟΛΑΙΑ views can finally answer "how much
-     * of this deal has aired" without adding up two schemas.
+     * THREE sources, unioned - and the union is load-bearing:
+     *
+     *  - `messages.contractID`: each message's CURRENT default link;
+     *  - `schedule.docID`: the PER-AIRING charges. This is the fix of
+     *    2026-07-20: when the ERP renews a deal the legacy re-links the
+     *    message to the NEW document, so a fully-consumed document can be
+     *    referenced by NO message any more while its airings still charge it
+     *    in `schedule`. Sourcing contracts from messages alone silently
+     *    dropped 2,434 such documents on the crete dump - and their 536k
+     *    airings (~20%!) then fell back to each spot's default line, i.e.
+     *    the WRONG contract (ΖΩΓΡΑΦΑΚΗ doc 703 was the tell);
+     *  - `z_commercials.docid`: documents the ERP line view carries - a deal
+     *    sold but never aired here still deserves its row (never-aired).
+     *
+     * ONE row per document, ACROSS the flows: the GROUP BY folds a document
+     * used by both the TV and the radio messages into a single contract. That
+     * is the whole point - contract 500 keeps its TV line and its radio lines
+     * together, and the ΣΥΜΒΟΛΑΙΑ views can finally answer "how much of this
+     * deal has aired" without adding up two schemas.
      */
     private fun migrateContracts(): Pair<Int, Int> {
-        data class Row(val docId: Long, val traid: Long?, val docNo: String?, val dotId: Int?, val fallbackCus: Long, val isGift: Boolean)
+        data class Row(val docId: Long, val traid: Long?, val docNo: String?, val dotId: Int?, val fallbackCus: Long?, val isGift: Boolean)
 
         val rows = mutableListOf<Row>()
         c.createStatement().use { st ->
             st.executeQuery(
                 """
-                SELECT m.contractID, MIN(d.traid), MIN(d.docno), MIN(d.dotid), MIN(GREATEST(m.cusID,0)), MAX(COALESCE(sl.isGift,0))
-                FROM $s.messages m
-                $flowJoin
-                LEFT JOIN $s.docref d ON d.docid = m.contractID
+                SELECT u.docid, MIN(d.traid), MIN(d.docno), MIN(d.dotid), MIN(u.cus), MAX(COALESCE(sl.isGift,0))
+                FROM (
+                    SELECT m.contractID AS docid, GREATEST(m.cusID,0) AS cus
+                    FROM $s.messages m
+                    $flowJoin
+                    WHERE m.contractID > 0
+                    UNION ALL
+                    SELECT DISTINCT sch.docID, GREATEST(m.cusID,0)
+                    FROM $s.schedule sch
+                    JOIN $s.messages m ON m.id = sch.messageID
+                    $flowJoin
+                    WHERE sch.docID > 0
+                    UNION ALL
+                    -- NULL cus on purpose: MIN() ignores it, so a document seen
+                    -- only here resolves its payer through docref alone.
+                    SELECT DISTINCT z.docid, NULL FROM $s.z_commercials z WHERE z.docid > 0
+                ) u
+                LEFT JOIN $s.docref d ON d.docid = u.docid
                 LEFT JOIN $s.sld sl ON sl.dotid = d.dotid
-                WHERE m.contractID > 0
-                GROUP BY m.contractID
+                GROUP BY u.docid
                 """.trimIndent()
             ).use { rs ->
                 while (rs.next()) {
@@ -732,14 +788,28 @@ class LegacyTransformer(
                         traid = rs.getLong(2).takeIf { !rs.wasNull() && it > 0 },
                         docNo = rs.getString(3)?.ifBlank { null },
                         dotId = rs.getInt(4).takeIf { !rs.wasNull() },
-                        fallbackCus = rs.getLong(5),
+                        fallbackCus = rs.getLong(5).takeIf { !rs.wasNull() && it > 0 },
                         isGift = rs.getInt(6) == 1,
                     )
                 }
             }
         }
 
+        // The payer must resolve to a MIGRATED customer, or the INSERT's
+        // subselect turns NULL and the whole batch dies on the NOT NULL
+        // column. Docs from messages always resolve (migrateCustomers built
+        // the customers from those very cusIDs); a z_commercials-only doc
+        // may name a payer this dump never aired for - skip it LOUDLY.
+        val knownCustomers = HashSet<Long>()
+        c.createStatement().use { st ->
+            st.executeQuery("SELECT legacy_id FROM $t.customers WHERE legacy_id IS NOT NULL").use { rs ->
+                while (rs.next()) knownCustomers += rs.getLong(1)
+            }
+        }
+
         var synthetic = 0
+        var skippedNoPayer = 0
+        var inserted = 0
         c.prepareStatement(
             """
             INSERT INTO $t.contracts(legacy_docid, number, doc_type, is_gift, customer_id, synthetic)
@@ -747,17 +817,27 @@ class LegacyTransformer(
             """.trimIndent()
         ).use { ps ->
             for (r in rows) {
+                val payer = r.traid?.takeIf { it in knownCustomers }
+                    ?: r.fallbackCus?.takeIf { it in knownCustomers }
+                if (payer == null) {
+                    skippedNoPayer++
+                    continue
+                }
                 val isSynthetic = r.docNo == null
                 if (isSynthetic) synthetic++
+                inserted++
                 ps.setLong(1, r.docId)
                 ps.setString(2, r.docNo ?: "LEGACY-${r.docId}")
                 if (r.dotId != null) ps.setInt(3, r.dotId) else ps.setNull(3, java.sql.Types.INTEGER)
                 ps.setBoolean(4, r.isGift)
-                ps.setLong(5, r.traid ?: r.fallbackCus)
+                ps.setLong(5, payer)
                 ps.setBoolean(6, isSynthetic)
                 ps.addBatch()
             }
             ps.executeBatch()
+        }
+        if (skippedNoPayer > 0) {
+            log("  ⚠ $skippedNoPayer documents skipped: payer unknown to this dump (z_commercials/docref-only docs)")
         }
 
         // Legacy calendar_excluded_docs: documents kept OFF printed reports.
@@ -776,7 +856,7 @@ class LegacyTransformer(
             }
         }
 
-        return rows.size to synthetic
+        return inserted to synthetic
     }
 
     /**
@@ -801,6 +881,24 @@ class LegacyTransformer(
                 )
             }
         } else 0
+        val charged = c.createStatement().use { st ->
+            st.executeUpdate(
+                """
+                -- schedule.docID+lineno is the per-airing charge key, so every
+                -- (document, lineno) pair it names must exist as a LINE - or
+                -- migratePlacements silently falls back to the spot's default,
+                -- crediting the wrong contract. Honest NULL item at the REAL
+                -- lineno; the SEN enricher stamps the item from ssd afterwards.
+                INSERT IGNORE INTO $t.contract_lines(contract_id, line_no, spot_type_id)
+                SELECT DISTINCT tc.id, sch.lineno, NULL
+                FROM $s.schedule sch
+                JOIN $s.messages m ON m.id = sch.messageID
+                $flowJoin
+                JOIN $t.contracts tc ON tc.legacy_docid = sch.docID
+                WHERE sch.docID > 0 AND sch.lineno > 0
+                """.trimIndent()
+            )
+        }
         val fallback = c.createStatement().use { st ->
             st.executeUpdate(
                 """
@@ -823,8 +921,8 @@ class LegacyTransformer(
                 """.trimIndent()
             )
         }
-        log("  $real product lines from z_commercials + $fallback fallback lines (line_no >= 1000)")
-        return real + fallback
+        log("  $real product lines from z_commercials + $charged charge-key lines from schedule + $fallback fallback lines (line_no >= 1000)")
+        return real + charged + fallback
     }
 
     /**
@@ -874,7 +972,16 @@ class LegacyTransformer(
      * (the app's email_log keeps the capped bodies; the summaries here are
      * complete).
      */
+    /** The verbatim-copy list - named once, so the sub-progress total is honest. */
+    private val verbatimTables = listOf(
+        "messages", "schedule", "programtypes", "docref", "z_commercials", "cus", "sld",
+        "calendar_excluded_docs", "commercials_calendar_final", "roh_comments",
+        "roh_print_history", "zones", "zonefillers", "emailhistory",
+    )
+
     private fun copyLegacyTables() {
+        val total = verbatimTables.count { tableExists(it) }.toLong()
+        var done = 0L
         fun copy(table: String, filter: String = "", columns: String = "*") {
             if (!tableExists(table)) return
             val rows = c.createStatement().use { st ->
@@ -890,6 +997,7 @@ class LegacyTransformer(
                 st.executeUpdate("INSERT INTO $t.$table SELECT $columns FROM $s.$table $filter")
             }
             log("  %-28s %,d rows (verbatim)".format(table, rows))
+            onSubProgress(++done, total)
         }
         copy("messages")
         copy("schedule")
@@ -1052,30 +1160,63 @@ class LegacyTransformer(
      * join did) is also strictly more faithful: it can no longer fold two airings
      * a few seconds apart into one break.
      */
-    private fun migratePlacements(): Int =
+    private fun migratePlacements(): Int {
+        // CHUNKED BY YEAR, for the sub-progress: this is the pipeline's biggest
+        // single statement (4M+ rows), and a step bar alone just sits on it.
+        // Year chunks are CORRECT by construction - the ROW_NUMBER partitions
+        // are (station, date, time), and a date never spans two years - and
+        // the bar advances by REAL rows (each chunk's own count), not by a
+        // guess. The dump's schedule has no index leading on showDate
+        // (forACTIVITIES buries it third), so the chunks get one first -
+        // one-off cost, then every chunk is a range scan.
         c.createStatement().use { st ->
-            st.executeUpdate(
-                """
-                INSERT INTO $t.placements(legacy_id, station_id, spot_id, show_date, show_time, position,
-                                          duration_seconds, contract_line_id, program_id, played, hidden)
-                SELECT sch.id, ts.station_id, ts.id, sch.showDate, sch.showTime,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY ts.station_id, sch.showDate, sch.showTime
-                           ORDER BY sch.showOrder, sch.id
-                       ) - 1,
-                       sch.durationSecs, pcl.id, tp.id, sch.played, sch.hideSchedule
-                FROM $s.schedule sch
-                JOIN $t.spots ts ON ts.legacy_id = sch.messageID
-                -- the airing's ACTUAL charge: schedule.docID + lineno name the
-                -- product line directly (NULL falls back to the spot's default)
-                LEFT JOIN $t.contracts pct ON pct.legacy_docid = sch.docID
-                LEFT JOIN $t.contract_lines pcl ON pcl.contract_id = pct.id AND pcl.line_no = sch.lineno
-                LEFT JOIN $t.programs tp ON tp.legacy_id = sch.programID
-                                        AND tp.station_id = ts.station_id
-                WHERE sch.showDate >= '1900-01-01'
-                """.trimIndent()
-            )
+            try {
+                st.executeUpdate("CREATE INDEX idx_mig_showdate ON $s.schedule(showDate)")
+            } catch (_: java.sql.SQLException) {
+                // already there - a resumed run against the same scratch
+            }
         }
+        val years = mutableListOf<Pair<Int, Long>>()
+        c.createStatement().use { st ->
+            st.executeQuery(
+                "SELECT YEAR(showDate), COUNT(*) FROM $s.schedule WHERE showDate >= '1900-01-01' GROUP BY YEAR(showDate) ORDER BY 1"
+            ).use { rs ->
+                while (rs.next()) years += rs.getInt(1) to rs.getLong(2)
+            }
+        }
+        val totalRows = years.sumOf { it.second }
+        var doneRows = 0L
+        var inserted = 0
+        onSubProgress(0, totalRows)
+        for ((year, rows) in years) {
+            inserted += c.createStatement().use { st ->
+                st.executeUpdate(
+                    """
+                    INSERT INTO $t.placements(legacy_id, station_id, spot_id, show_date, show_time, position,
+                                              duration_seconds, contract_line_id, program_id, played, hidden)
+                    SELECT sch.id, ts.station_id, ts.id, sch.showDate, sch.showTime,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY ts.station_id, sch.showDate, sch.showTime
+                               ORDER BY sch.showOrder, sch.id
+                           ) - 1,
+                           sch.durationSecs, pcl.id, tp.id, sch.played, sch.hideSchedule
+                    FROM $s.schedule sch
+                    JOIN $t.spots ts ON ts.legacy_id = sch.messageID
+                    -- the airing's ACTUAL charge: schedule.docID + lineno name the
+                    -- product line directly (NULL falls back to the spot's default)
+                    LEFT JOIN $t.contracts pct ON pct.legacy_docid = sch.docID
+                    LEFT JOIN $t.contract_lines pcl ON pcl.contract_id = pct.id AND pcl.line_no = sch.lineno
+                    LEFT JOIN $t.programs tp ON tp.legacy_id = sch.programID
+                                            AND tp.station_id = ts.station_id
+                    WHERE sch.showDate >= '$year-01-01' AND sch.showDate < '${year + 1}-01-01'
+                    """.trimIndent()
+                )
+            }
+            doneRows += rows
+            onSubProgress(doneRows, totalRows)
+        }
+        return inserted
+    }
 
     // ───────────────────────────────────────────────── comments / audit ──
 

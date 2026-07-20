@@ -328,6 +328,7 @@ internal class It : LanguageStrings {
         StringKey.MIGRATION_ERROR -> "Errore: {0}"
         StringKey.MIGRATION_START_ANOTHER -> "Avvia un'altra migrazione"
         StringKey.MIGRATION_PROGRESS -> "Avanzamento"
+        StringKey.MIGRATION_STEP_PROGRESS -> "Passo corrente"
         StringKey.MIGRATION_PHASE_REPLAY -> "Lettura del dump"
         StringKey.MIGRATION_PHASE_TRANSFORM -> "Trasformazione"
         StringKey.MIGRATION_PHASE_ENRICH -> "Arricchimento dall'ERP"

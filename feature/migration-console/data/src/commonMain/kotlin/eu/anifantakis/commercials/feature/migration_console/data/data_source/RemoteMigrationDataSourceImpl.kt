@@ -65,6 +65,9 @@ private data class ProgressDto(
     val label: String,
     val done: Long,
     val total: Long,
+    /** Within-step progress; 0 total = the running step reports none. */
+    val subDone: Long = 0,
+    val subTotal: Long = 0,
 )
 
 @Serializable
@@ -120,7 +123,7 @@ private fun SummaryDto.toDomain() = MigrationSummary(
 private fun StatusDto.toDomain() = MigrationStatus(
     state = state,
     log = log,
-    progress = progress?.let { MigrationProgress(it.phase, it.label, it.done, it.total) },
+    progress = progress?.let { MigrationProgress(it.phase, it.label, it.done, it.total, it.subDone, it.subTotal) },
     flows = flows.map { MigrationFlowInfo(it.forTv, it.spots, it.placements) },
     summary = summary?.toDomain(),
     error = error,

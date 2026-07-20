@@ -328,6 +328,7 @@ internal class El : LanguageStrings {
         StringKey.MIGRATION_ERROR -> "Σφάλμα: {0}"
         StringKey.MIGRATION_START_ANOTHER -> "Έναρξη νέας μεταφοράς"
         StringKey.MIGRATION_PROGRESS -> "Πρόοδος"
+        StringKey.MIGRATION_STEP_PROGRESS -> "Τρέχον βήμα"
         StringKey.MIGRATION_PHASE_REPLAY -> "Ανάγνωση του dump"
         StringKey.MIGRATION_PHASE_TRANSFORM -> "Μετασχηματισμός"
         StringKey.MIGRATION_PHASE_ENRICH -> "Εμπλουτισμός από το ERP"
