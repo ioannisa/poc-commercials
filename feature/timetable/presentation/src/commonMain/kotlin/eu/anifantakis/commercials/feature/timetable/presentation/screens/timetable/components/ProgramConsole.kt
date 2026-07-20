@@ -1,4 +1,4 @@
-package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable
+package eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,25 +9,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -53,12 +44,12 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppGroupBox
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIcon
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.Strings
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableIntent
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableState
 import eu.anifantakis.commercials.grids.contrastTextColor
 
 /*
