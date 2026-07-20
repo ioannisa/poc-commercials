@@ -576,19 +576,43 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
      * hiding it everywhere would make it unreachable.
      */
     fun partyContractLines(code: String, byTrader: Boolean): List<ContractLineRow> {
-        // The line's spots are LEFT-joined (a spot-less line must survive), so
-        // the party filter cannot hang off them on the trader path - it hangs
-        // off the contract. On the customer path a spot-less line has no
-        // customer of its own, so it falls back to the contract's customer.
-        val partyFilter =
-            if (byTrader) "JOIN customers cu ON cu.id = ct.customer_id AND cu.code = ?"
-            else "JOIN customers cu ON cu.code = ?"
-        val spotJoin =
-            if (byTrader) "LEFT JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ?"
-            else "LEFT JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ? AND s.customer_id = cu.id"
-        val keep =
-            if (byTrader) "s.id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id)"
-            else "s.id IS NOT NULL OR (NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id) AND ct.customer_id = cu.id)"
+        // ANCHORED ON THE PARTY, in both arms - that is the whole performance
+        // story of this query. It used to drive off `contract_lines` with the
+        // party filter and a correlated NOT EXISTS in the WHERE, so every click
+        // scanned all 31k lines (~100ms flat, whoever was selected). Each arm
+        // now starts from an indexed party column:
+        //
+        //  - arm 1, the lines that HAVE a spot here: the customer path enters
+        //    through spots.customer_id, the trader path through
+        //    contracts.customer_id (the payer - the triangular split);
+        //  - arm 2, the escape hatch for a line SOLD but with no creative yet:
+        //    the party's own contracts, so the NOT EXISTS runs over a handful
+        //    of lines instead of the table. Identical on both paths - a
+        //    spot-less line has no customer but its contract does.
+        //
+        // The arms are disjoint by construction (has spots / has none), so
+        // UNION ALL needs no dedup pass.
+        val withSpots =
+            if (byTrader)
+                """
+                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
+                       cl.line_no, cl.desired_qty, COUNT(DISTINCT s.id) AS spot_count
+                FROM customers cu
+                JOIN contracts ct ON ct.customer_id = cu.id
+                JOIN contract_lines cl ON cl.contract_id = ct.id
+                JOIN spots s ON s.contract_line_id = cl.id AND s.hidden = FALSE AND s.station_id = ?
+                WHERE cu.code = ?
+                """.trimIndent()
+            else
+                """
+                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
+                       cl.line_no, cl.desired_qty, COUNT(DISTINCT s.id) AS spot_count
+                FROM customers cu
+                JOIN spots s ON s.customer_id = cu.id AND s.hidden = FALSE AND s.station_id = ?
+                JOIN contract_lines cl ON cl.id = s.contract_line_id
+                JOIN contracts ct ON ct.id = cl.contract_id
+                WHERE cu.code = ?
+                """.trimIndent()
 
         return connection().use { c ->
             // ── phase 1: the party's LINES (cheap - no placements touched) ──
@@ -599,20 +623,27 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             )
             val bare = c.prepareStatement(
                 """
-                SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
-                       cl.line_no, cl.desired_qty,
-                       COUNT(DISTINCT s.id) AS spot_count
-                FROM contract_lines cl
-                JOIN contracts ct ON ct.id = cl.contract_id
-                $partyFilter
-                $spotJoin
-                WHERE ($keep)
-                GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date, cl.line_no, cl.desired_qty
-                ORDER BY ct.number, cl.line_no
+                SELECT * FROM (
+                    $withSpots
+                    GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
+                             cl.line_no, cl.desired_qty
+                    UNION ALL
+                    SELECT cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
+                           cl.line_no, cl.desired_qty, 0
+                    FROM customers cu
+                    JOIN contracts ct ON ct.customer_id = cu.id
+                    JOIN contract_lines cl ON cl.contract_id = ct.id
+                    WHERE cu.code = ?
+                      AND NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id)
+                ) u
+                ORDER BY number, line_no
                 """.trimIndent()
             ).use { ps ->
-                ps.setString(1, code)
-                ps.setString(2, stationId)
+                // Bind order follows the TEXT: the station sits in arm 1's spot
+                // join (before its WHERE) on both paths, then the two codes.
+                ps.setString(1, stationId)
+                ps.setString(2, code)
+                ps.setString(3, code)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
