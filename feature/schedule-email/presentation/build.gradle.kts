@@ -7,6 +7,10 @@ kotlin {
         commonMain.dependencies {
             api(projects.feature.scheduleEmail.domain)
             api(projects.core.presentation)
+            // EnhancedDataGrid: the composer's activity / spot / history lists
+            // are TABLES, so they use the same grid the timetable consoles do
+            // (resizable + sortable columns, sticky header, scrollbars).
+            implementation(projects.core.presentation.grids)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

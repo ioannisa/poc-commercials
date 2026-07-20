@@ -19,7 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import eu.anifantakis.commercials.core.presentation.helper.UiText
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
@@ -59,7 +63,7 @@ import eu.anifantakis.commercials.feature.preferences.domain.FontSizePreference
 import eu.anifantakis.commercials.feature.preferences.domain.UserPreferences
 import eu.anifantakis.commercials.feature.preferences.presentation.PreferencesNavType
 import eu.anifantakis.commercials.feature.preferences.presentation.preferencesEntries
-import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailDialogRoot
+import eu.anifantakis.commercials.feature.schedule_email.presentation.screens.send_schedule_email.SendScheduleEmailScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.TimetableNavType
 import eu.anifantakis.commercials.feature.timetable.presentation.timetableEntries
 import eu.anifantakis.commercials.feature.user_management.presentation.UserManagementNavType
@@ -70,6 +74,9 @@ import org.koin.compose.koinInject
 // One line per FEATURE hierarchy (not per route): the sealed base's CLOSED
 // generated serializer covers every route of the feature on all targets -
 // adding a route inside a feature changes nothing here.
+/** ONE composer window app-wide: the toolbar and the menu bar both focus it. */
+private const val SCHEDULE_EMAIL_WINDOW_ID = "schedule-email-composer"
+
 private val navConfig = navConfigOf(
     navHierarchy<AuthNavType>(),
     navHierarchy<TimetableNavType>(),
@@ -135,9 +142,21 @@ fun NavigationRoot() {
     // and navigation - the conversation survives both.
     var showAiChat by remember { mutableStateOf(false) }
 
-    var showEmailDialog by remember { mutableStateOf(false) }
-    if (showEmailDialog) {
-        SendScheduleEmailDialogRoot(onDismiss = { showEmailDialog = false })
+    // The schedule-email composer is a floating WINDOW, not a show/hide
+    // boolean: composing an email is long work the operator may want to park
+    // (minimize) or set beside the schedule (undock) while checking what
+    // actually aired. Its keyed scope is also what makes a reopen start
+    // empty - see SendScheduleEmailScreenRoot's KDoc.
+    val openEmailWindow = {
+        windowHost.open(
+            id = SCHEDULE_EMAIL_WINDOW_ID,
+            title = UiText.Res(StringKey.EMAIL_SEND_TITLE),
+            modal = true,
+            undockable = true,
+            minSize = DpSize(520.dp, 420.dp),
+        ) {
+            SendScheduleEmailScreenRoot(onClose = { windowHost.close(SCHEDULE_EMAIL_WINDOW_ID) })
+        }
     }
     var showChangePassword by remember { mutableStateOf(false) }
     if (showChangePassword) {
@@ -209,7 +228,7 @@ fun NavigationRoot() {
         )
 
         timetableEntries(
-            onOpenEmailDialog = { showEmailDialog = true },
+            onOpenEmailDialog = openEmailWindow,
             onLogout = {
                 scope.launch {
                     authRepository.logout()   // revokes the token server-side, clears the session

@@ -87,7 +87,6 @@ sealed interface SendScheduleEmailIntent {
     /** Clears everything for a fresh dialog. Fired when the dialog (re)opens - the
      *  ViewModel outlives the dialog, so without this a reopened dialog would still
      *  show the previous send's "sent" confirmation instead of an empty form. */
-    data object Reset : SendScheduleEmailIntent
 }
 
 sealed interface SendScheduleEmailEffect {
@@ -171,11 +170,6 @@ class SendScheduleEmailViewModel(
             }
 
             is SendScheduleEmailIntent.MarkSent -> _state.update { it.copy(done = intent.status) }
-
-            SendScheduleEmailIntent.Reset -> {
-                searchJob?.cancel()
-                _state.value = SendScheduleEmailState()
-            }
         }
     }
 

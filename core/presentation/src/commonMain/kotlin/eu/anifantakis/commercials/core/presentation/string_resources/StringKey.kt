@@ -256,6 +256,17 @@ enum class StringKey(val json: String = "") {
     EMAIL_PREVIEW_TITLE,
     EMAIL_TO,
     EMAIL_SEND_BUTTON,
+    // Column headers of the composer's grids (activity / spots / history).
+    EMAIL_COL_YEAR,
+    EMAIL_COL_MONTH,
+    EMAIL_COL_SPOTS,
+    EMAIL_COL_SPOT,
+    EMAIL_COL_SENT_AT,
+    EMAIL_COL_PERIOD,
+    EMAIL_COL_RECIPIENT,
+    EMAIL_COL_SENT_BY,
+    /** Shown beside the month picker until a month is chosen. */
+    EMAIL_PICK_MONTH_FIRST,
 
     // ── Preferences screen / Login screen ───────────────────────────────
     PREFERENCES_TITLE,
