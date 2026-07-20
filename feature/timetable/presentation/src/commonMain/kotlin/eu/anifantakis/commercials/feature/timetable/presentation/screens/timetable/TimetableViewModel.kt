@@ -5,9 +5,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewModelScope
-import eu.anifantakis.commercials.core.domain.party_search.Party
-import eu.anifantakis.commercials.core.domain.party_search.PartyKind
-import eu.anifantakis.commercials.core.domain.party_search.PartySearchRepository
 import eu.anifantakis.commercials.core.domain.util.DataResult
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
@@ -19,12 +16,11 @@ import eu.anifantakis.commercials.core.presentation.helper.toComposeState
 import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
 import eu.anifantakis.commercials.core.presentation.string_resources.localized
 import eu.anifantakis.commercials.core.presentation.util.toUiText
-import eu.anifantakis.commercials.feature.timetable.domain.FinderRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.TimetablePreferences
-import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.Program
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FinderSelection
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
@@ -49,9 +45,7 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.onStart
@@ -73,24 +67,6 @@ import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.domain.model.ScheduleFilter
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.toUi
-
-/** The Εύρεση console's state - part of the timetable (one workflow). */
-@Immutable
-data class FinderUiState(
-    val kind: PartyKind = PartyKind.CUSTOMER,
-    val query: String = "",
-    val results: ImmutableList<Party> = persistentListOf(),
-    val searching: Boolean = false,
-    val selectedParty: Party? = null,
-    /** The kind the selection was made under - toggling radios later must not reinterpret it. */
-    val selectedKind: PartyKind = PartyKind.CUSTOMER,
-    val lines: ImmutableList<ContractLine> = persistentListOf(),
-    val loadingLines: Boolean = false,
-    val selectedLine: ContractLine? = null,
-    val spots: ImmutableList<ContractLineSpot> = persistentListOf(),
-    val loadingSpots: Boolean = false,
-    val selectedSpot: ContractLineSpot? = null,
-)
 
 @Immutable
 data class TimetableState(
@@ -114,8 +90,13 @@ data class TimetableState(
     val selectedColumn: Int = 0,
     /** Cells show spot COUNT or summed spot TIME (legacy popup option, persisted). */
     val showSpotTimes: Boolean = false,
-    val showFinder: Boolean = false,
-    val finder: FinderUiState = FinderUiState(),
+    /**
+     * The Εύρεση selection, MIRRORED from the flow's common state - the
+     * finder WINDOW owns picking it (see screens/spot_finder), this screen
+     * renders it (the Μηνύματα header) and consumes it (the 'a' key, the
+     * «Προβολή Βάσει…» subjects).
+     */
+    val finder: FinderSelection = FinderSelection(),
     /** How many session-added placements each cell holds ('r' enablement). */
     val addedCounts: ImmutableMap<SchedulerKey, Int> = persistentMapOf(),
 
@@ -219,13 +200,10 @@ sealed interface TimetableIntent {
      */
     data object AddBreak : TimetableIntent
 
-    data object OpenFinder : TimetableIntent
-    data object CloseFinder : TimetableIntent
+    // The Εύρεση pieces that stayed on the GRID after the finder became its
+    // own screen: the Μηνύματα header's X and its armed-spot dropdown. The
+    // search/drill-down intents live in screens/spot_finder.
     data object ClearFinder : TimetableIntent
-    data class FinderKindChanged(val kind: PartyKind) : TimetableIntent
-    data class FinderQueryChanged(val query: String) : TimetableIntent
-    data class FinderPartySelected(val party: Party) : TimetableIntent
-    data class FinderLineSelected(val line: ContractLine) : TimetableIntent
     data class FinderSpotSelected(val spot: ContractLineSpot?) : TimetableIntent
 }
 
@@ -238,16 +216,15 @@ sealed interface TimetableEffect {
 }
 
 /**
- * The timetable SCREEN's ViewModel (grid + its finder dialog). The cells
- * live behind the flow-shared [TimetableCommon] CONTRACT: their slice of
- * state is observed and merged below, and every cell MUTATION is delegated
- * through its verbs (star topology - screen ViewModels never talk to each
- * other, and never see the concrete CommonViewModel).
+ * The timetable SCREEN's ViewModel (the grid and its header chrome; the
+ * Εύρεση console is its own screen now - screens/spot_finder). The cells
+ * AND the finder selection live behind the flow-shared [TimetableCommon]
+ * CONTRACT: their slices are observed and merged below, and every mutation
+ * is delegated through its verbs (star topology - screen ViewModels never
+ * talk to each other, and never see the concrete CommonViewModel).
  */
 @Stable
 class TimetableViewModel(
-    private val finderRepository: FinderRepository,
-    private val partySearch: PartySearchRepository,
     /**
      * Reports only. The grid reads the shared store; the PRINTED reports need the
      * airings, which the grid deliberately does not carry (see cellsWithCommercials),
@@ -292,12 +269,11 @@ class TimetableViewModel(
     private val eventChannel = Channel<TimetableEffect>()
     val events = eventChannel.receiveAsFlow()
 
-    private var searchJob: Job? = null
-
     init {
         // The common ViewModel is the single truth for the month's rows and
-        // cells; mirror it into this screen's state so the grid renders straight
-        // from TimetableState.
+        // cells - AND for the Εύρεση selection, which the finder WINDOW
+        // mutates; mirror both into this screen's state so the grid renders
+        // straight from TimetableState.
         viewModelScope.launch {
             common.commonState.collect { cs ->
                 _state.update {
@@ -308,8 +284,15 @@ class TimetableViewModel(
                         dailyTotals = calculateDailyTotals(cs.cells).toImmutableMap(),
                         modifiedCells = cs.modifiedCells,
                         addedCounts = cs.addedCounts,
+                        finder = cs.finderSelection,
                     )
                 }
+                // The finder's selection may have just moved (or dropped) the
+                // armed «Προβολή Βάσει…» mode's subject - re-derive. Guarded
+                // by comparison (and setFilter self-guards too), so the tick
+                // this very call raises converges instead of looping.
+                val derived = effectiveFilter()
+                if (derived != cs.filter) common.setFilter(derived)
             }
         }
 
@@ -447,34 +430,10 @@ class TimetableViewModel(
                 _state.update { it.copy(newBreakTime = intent.value) }
             TimetableIntent.AddBreak -> addBreak()
 
-            TimetableIntent.OpenFinder -> _state.update { it.copy(showFinder = true) }
-            TimetableIntent.CloseFinder -> _state.update { it.copy(showFinder = false) }
-            TimetableIntent.ClearFinder -> {
-                _state.update { it.copy(finder = FinderUiState()) }
-                // A finder-scoped «Προβολή Βάσει…» just lost its subject.
-                syncFilter()
-            }
-
-            is TimetableIntent.FinderKindChanged -> {
-                if (_state.value.finder.kind != intent.kind) {
-                    _state.update {
-                        it.copy(finder = it.finder.copy(kind = intent.kind, results = persistentListOf()))
-                    }
-                    debouncedSearch()
-                }
-            }
-
-            is TimetableIntent.FinderQueryChanged -> {
-                _state.update { it.copy(finder = it.finder.copy(query = intent.query)) }
-                debouncedSearch()
-            }
-
-            is TimetableIntent.FinderPartySelected -> selectParty(intent.party)
-            is TimetableIntent.FinderLineSelected -> selectLine(intent.line)
-            is TimetableIntent.FinderSpotSelected -> {
-                _state.update { it.copy(finder = it.finder.copy(selectedSpot = intent.spot)) }
-                syncFilter()
-            }
+            // Both delegate UP: the selection is shared state, and the filter
+            // re-derivation rides the commonState tick these verbs raise.
+            TimetableIntent.ClearFinder -> common.clearFinder()
+            is TimetableIntent.FinderSpotSelected -> common.selectFinderSpot(intent.spot)
         }
     }
 
@@ -490,11 +449,11 @@ class TimetableViewModel(
         return when (s.showBasedOn) {
             ShowBasedOn.ALL -> null
             ShowBasedOn.PROGRAM -> s.selectedProgramId?.let { ScheduleFilter.ByProgram(it) }
-            ShowBasedOn.CUSTOMER -> s.finder.selectedParty?.let {
-                ScheduleFilter.ByParty(it.code, s.finder.selectedKind)
+            ShowBasedOn.CUSTOMER -> s.finder.party?.let {
+                ScheduleFilter.ByParty(it.code, s.finder.kind)
             }
-            ShowBasedOn.CONTRACT -> s.finder.selectedLine?.let { ScheduleFilter.ByContract(it.lineId) }
-            ShowBasedOn.MESSAGE -> s.finder.selectedSpot?.let { ScheduleFilter.BySpot(it.spotId) }
+            ShowBasedOn.CONTRACT -> s.finder.line?.let { ScheduleFilter.ByContract(it.lineId) }
+            ShowBasedOn.MESSAGE -> s.finder.spot?.let { ScheduleFilter.BySpot(it.spotId) }
         }
     }
 
@@ -688,7 +647,7 @@ class TimetableViewModel(
 
     private fun addSpotAt(time: LocalTime, date: LocalDate) {
         val s = _state.value
-        val spot = s.finder.selectedSpot ?: return   // 'a' is armed by the finder
+        val spot = s.finder.spot ?: return   // 'a' is armed by the finder
         // A WHITE cell - no break there, or an UNPAINTED one (a «Πρόσθεση νέου
         // διαλείμματος» row) - is painted by its FIRST spot, so the legacy rule
         // applies: pick a Τύπος Προγράμματος first. A painted cell ignores the
@@ -820,85 +779,4 @@ class TimetableViewModel(
         return LocalTime(hh, mm)
     }
 
-    // ── finder (Εύρεση console) ─────────────────────────────────────────
-
-    /** 600ms after the last keystroke, min 3 chars - the legacy contract. */
-    private fun debouncedSearch() {
-        searchJob?.cancel()
-        val query = _state.value.finder.query.trim()
-        if (query.length < 3) {
-            _state.update { it.copy(finder = it.finder.copy(results = persistentListOf(), searching = false)) }
-            return
-        }
-        searchJob = viewModelScope.launch {
-            delay(600)
-            _state.update { it.copy(finder = it.finder.copy(searching = true)) }
-            when (val result = partySearch.search(query, _state.value.finder.kind)) {
-                is DataResult.Success -> _state.update {
-                    it.copy(finder = it.finder.copy(results = result.data.toImmutableList(), searching = false))
-                }
-                is DataResult.Failure -> {
-                    showSnackbar(result.error.toUiText())
-                    _state.update { it.copy(finder = it.finder.copy(searching = false)) }
-                }
-            }
-        }
-    }
-
-    private fun selectParty(party: Party) {
-        _state.update {
-            it.copy(
-                finder = it.finder.copy(
-                    selectedParty = party,
-                    selectedKind = it.finder.kind,
-                    query = "",
-                    results = persistentListOf(),
-                    lines = persistentListOf(),
-                    loadingLines = true,
-                    selectedLine = null,
-                    spots = persistentListOf(),
-                    selectedSpot = null,
-                )
-            )
-        }
-        // The party moved - and with it (via the resets above) the selected
-        // line and spot, whichever of them the armed mode reads.
-        syncFilter()
-        viewModelScope.launch {
-            when (val result = finderRepository.contractLines(party.code, _state.value.finder.selectedKind)) {
-                is DataResult.Success -> _state.update {
-                    it.copy(finder = it.finder.copy(lines = result.data.toImmutableList(), loadingLines = false))
-                }
-                is DataResult.Failure -> {
-                    showSnackbar(result.error.toUiText())
-                    _state.update { it.copy(finder = it.finder.copy(loadingLines = false)) }
-                }
-            }
-        }
-    }
-
-    private fun selectLine(line: ContractLine) {
-        _state.update {
-            it.copy(
-                finder = it.finder.copy(
-                    selectedLine = line,
-                    spots = persistentListOf(),
-                    loadingSpots = true,
-                    selectedSpot = null,
-                )
-            )
-        }
-        syncFilter()
-        viewModelScope.launch {
-            when (val result = finderRepository.lineSpots(line.lineId)) {
-                is DataResult.Success -> _state.update {
-                    it.copy(finder = it.finder.copy(spots = result.data.toImmutableList(), loadingSpots = false))
-                }
-                is DataResult.Failure -> {
-                    showSnackbar(result.error.toUiText())
-                    _state.update { it.copy(finder = it.finder.copy(loadingSpots = false)) }
-                }
-            }
-        }
-    }
 }

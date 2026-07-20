@@ -1,7 +1,11 @@
 package eu.anifantakis.commercials.feature.timetable.presentation.screens
 
 import androidx.compose.runtime.Stable
+import eu.anifantakis.commercials.core.domain.party_search.Party
+import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.domain.util.DataResult
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
+import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
@@ -81,6 +85,20 @@ class TimetableCommonViewModel(
         dispatch(TimetableCommonIntent.CreateBreak(time, date))
 
     override fun refreshMonth() = dispatch(TimetableCommonIntent.RefreshMonth)
+
+    override fun selectFinderParty(party: Party, kind: PartyKind) =
+        dispatch(TimetableCommonIntent.SelectFinderParty(party, kind))
+
+    override fun selectFinderLine(line: ContractLine) =
+        dispatch(TimetableCommonIntent.SelectFinderLine(line))
+
+    override fun setFinderSpots(spots: List<ContractLineSpot>) =
+        dispatch(TimetableCommonIntent.SetFinderSpots(spots))
+
+    override fun selectFinderSpot(spot: ContractLineSpot?) =
+        dispatch(TimetableCommonIntent.SelectFinderSpot(spot))
+
+    override fun clearFinder() = dispatch(TimetableCommonIntent.ClearFinder)
 
     // ── the single reducer ──────────────────────────────────────────────────
 
@@ -221,6 +239,37 @@ class TimetableCommonViewModel(
                     is DataResult.Success -> applyRemove(key, last)
                     is DataResult.Failure -> showSnackbar(result.error.toUiText())
                 }
+            }
+
+            // ── the Εύρεση selection: pure state, downstream resets ATOMIC ──
+            // A narrower step resets everything beneath it, in the same reduce
+            // tick - the finder window and the grid header can never observe a
+            // spot that belongs to the previous line.
+
+            is TimetableCommonIntent.SelectFinderParty -> updateCommonState {
+                it.copy(finderSelection = FinderSelection(party = intent.party, kind = intent.kind))
+            }
+
+            is TimetableCommonIntent.SelectFinderLine -> updateCommonState {
+                it.copy(
+                    finderSelection = it.finderSelection.copy(
+                        line = intent.line,
+                        spot = null,
+                        spots = persistentListOf(),
+                    )
+                )
+            }
+
+            is TimetableCommonIntent.SetFinderSpots -> updateCommonState {
+                it.copy(finderSelection = it.finderSelection.copy(spots = intent.spots.toImmutableList()))
+            }
+
+            is TimetableCommonIntent.SelectFinderSpot -> updateCommonState {
+                it.copy(finderSelection = it.finderSelection.copy(spot = intent.spot))
+            }
+
+            TimetableCommonIntent.ClearFinder -> updateCommonState {
+                it.copy(finderSelection = FinderSelection())
             }
 
             is TimetableCommonIntent.Reorder -> {

@@ -5,12 +5,10 @@ import eu.anifantakis.commercials.core.domain.auth.StationAccess
 import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.CommercialsQuery
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TEST_CLOCK
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeFinderRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeReportService
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeStationLogoCache
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeUserSession
-import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakePartySearchRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.FakeTimetablePreferences
@@ -51,8 +49,6 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimetableViewModelTest : TimetableTestBase() {
 
-    private val finder = FakeFinderRepository()
-    private val partySearch = FakePartySearchRepository()
     private val common = FakeTimetableCommon()
     private val reports = FakeReportService()
 
@@ -71,7 +67,7 @@ class TimetableViewModelTest : TimetableTestBase() {
         reportService: FakeReportService = reports,
         logoCache: StationLogoCache = FakeStationLogoCache(),
     ) = TimetableViewModel(
-        finder, partySearch, schedule, programs, common, prefs, session, reportService, logoCache, TEST_CLOCK
+        schedule, programs, common, prefs, session, reportService, logoCache, TEST_CLOCK
     )
 
     /**

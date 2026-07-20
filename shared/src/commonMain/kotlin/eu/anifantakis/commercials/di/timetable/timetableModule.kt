@@ -20,6 +20,7 @@ import eu.anifantakis.commercials.feature.timetable.domain.ProgramsRepository
 import eu.anifantakis.commercials.feature.timetable.domain.ScheduleRepository
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailViewModel
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.spot_finder.SpotFinderViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableViewModel
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.module.dsl.viewModel
@@ -46,8 +47,6 @@ val timetableModule = module {
 
     viewModel { params ->
         TimetableViewModel(
-            finderRepository = get(),
-            partySearch = get(),
             scheduleRepository = get(),
             programsRepository = get(),
             common = params.get(),
@@ -57,6 +56,17 @@ val timetableModule = module {
             logoCache = get(),
             refreshBus = get(),
             screenContext = get(),
+        )
+    }
+
+    // The Εύρεση console - its own screen in a floating window, resolved
+    // against the WINDOW's keyed ViewModel scope. Owns the search machinery;
+    // the selection goes up through the TimetableCommon contract (params).
+    viewModel { params ->
+        SpotFinderViewModel(
+            finderRepository = get(),
+            partySearch = get(),
+            common = params.get(),
         )
     }
     viewModel { params ->

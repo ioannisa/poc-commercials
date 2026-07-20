@@ -19,13 +19,9 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppLoadingIndicator
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppIconSize
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioColumn
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppSelectionOption
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppSpinner
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
-import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextField
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -51,7 +47,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,8 +58,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.domain.auth.AppRole
 import eu.anifantakis.commercials.core.domain.auth.StationAccess
-import eu.anifantakis.commercials.core.domain.party_search.Party
-import eu.anifantakis.commercials.core.domain.party_search.PartyKind
 import eu.anifantakis.commercials.core.presentation.commands.AppCommand
 import eu.anifantakis.commercials.core.presentation.commands.CommandRegistry
 import eu.anifantakis.commercials.core.presentation.commands.RegisterAppCommand
@@ -73,16 +66,12 @@ import org.koin.compose.koinInject
 import eu.anifantakis.commercials.core.presentation.design_system.preview.AppPreview
 import eu.anifantakis.commercials.grids.BreakSlot
 import eu.anifantakis.commercials.grids.BreakZone
-import eu.anifantakis.commercials.grids.ColumnDef
 import eu.anifantakis.commercials.grids.ContextMenuEntry
-import eu.anifantakis.commercials.grids.EnhancedDataGrid
 import eu.anifantakis.commercials.grids.LazySchedulerGrid
-import eu.anifantakis.commercials.grids.SelectionMode
-import eu.anifantakis.commercials.grids.StickyRowsConfig
-import eu.anifantakis.commercials.grids.rememberEnhancedDataGridState
 import eu.anifantakis.commercials.grids.SchedulerCellData
 import eu.anifantakis.commercials.grids.SchedulerKey
 import eu.anifantakis.commercials.grids.formatTime
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.FinderSelection
 import eu.anifantakis.commercials.feature.timetable.presentation.mappers.calculateDailyTotals
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarLabels
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.reportToolbarMetrics
@@ -93,20 +82,19 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.number
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
-import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLine
-import eu.anifantakis.commercials.feature.timetable.domain.model.ContractLineSpot
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 
 /**
- * The scheduler grid screen (grid + its Εύρεση finder dialog). Per-screen
- * ViewModel; the cells themselves live in ScheduleCellsStore, the narrow
+ * The scheduler grid screen. The Εύρεση finder is its OWN screen now
+ * (screens/spot_finder), opened as a floating window via [onOpenSpotFinder];
+ * this screen keeps only the Μηνύματα header that displays and re-arms the
+ * shared selection. The cells live in the flow's common state, the narrow
  * shared truth the detail screen's own ViewModel also observes and edits.
  *
  * Keyboard: arrows navigate, Enter opens, A/Α adds the finder-armed spot,
@@ -120,6 +108,7 @@ fun TimetableScreenRoot(
     onLogout: () -> Unit,
     onPreferences: () -> Unit,
     onAiChat: () -> Unit,
+    onOpenSpotFinder: () -> Unit,
 ) {
     ObserveEffects(viewModel.events) { effect ->
         when (effect) {
@@ -155,6 +144,7 @@ fun TimetableScreenRoot(
                 TimetableScreenNavIntent.OnLogout -> onLogout()
                 TimetableScreenNavIntent.OnPreferences -> onPreferences()
                 TimetableScreenNavIntent.OnAiChat -> onAiChat()
+                TimetableScreenNavIntent.OnOpenSpotFinder -> onOpenSpotFinder()
             }
         },
     )
@@ -171,6 +161,8 @@ private sealed interface TimetableScreenNavIntent {
     data object OnLogout : TimetableScreenNavIntent
     data object OnPreferences : TimetableScreenNavIntent
     data object OnAiChat : TimetableScreenNavIntent
+    /** The Εύρεση console - a floating window, so opening it is NAVIGATION. */
+    data object OnOpenSpotFinder : TimetableScreenNavIntent
 }
 
 @Composable
@@ -183,7 +175,6 @@ private fun TimetableScreen(
     val month = state.month
     val breaks = state.breaks
     val cellData = state.cells
-    val finder = state.finder
     val showSpotTimes = state.showSpotTimes
     val canEdit = state.canEdit
 
@@ -216,15 +207,6 @@ private fun TimetableScreen(
             onIntent = onIntent,
             onNavIntent = onNavIntent,
         )
-
-        // The Εύρεση finder now lives INSIDE the header's "Μηνύματα" group box
-        // (the legacy Messages box). Its dialog still opens over the whole screen.
-        if (state.showFinder) {
-            SpotFinderDialog(
-                finder = finder,
-                onIntent = onIntent,
-            )
-        }
 
         // The programme console's ΔΙΟΡΘ/ΠΡΟΣΘ/ΑΦΑΙΡ/Χρώμα dialogs (opened from
         // the header's «Τύποι Προγράμματος» box).
@@ -344,12 +326,12 @@ private fun TimetableScreen(
                             icon = { AppIcon(AppDrawableRepo.edit, size = AppIconSize.SMALL) },
                             items = listOf(
                                 ContextMenuEntry.Item(
-                                    label = finder.selectedSpot
+                                    label = state.finder.spot
                                         ?.let { StringKey.TIMETABLE_ADD_SPOT_NAMED.localized().withArgs(listOf(it.description.take(30))) }
                                         ?: StringKey.TIMETABLE_ADD_SPOT_HINT.localized(),
                                     icon = { AppIcon(AppDrawableRepo.add, size = AppIconSize.SMALL) },
                                     shortcut = "A",
-                                    enabled = finder.selectedSpot != null
+                                    enabled = state.finder.spot != null
                                 ) {
                                     onIntent(TimetableIntent.AddSpotAt(breakSlot.time, date))
                                 },
@@ -541,6 +523,7 @@ private fun KeyboardEnabledHeader(
                         MessagesBox(
                             finder = state.finder,
                             onIntent = onIntent,
+                            onOpenFinder = { onNavIntent(TimetableScreenNavIntent.OnOpenSpotFinder) },
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
                     } else {
@@ -768,8 +751,9 @@ private fun KeyboardEnabledHeader(
  */
 @Composable
 private fun MessagesBox(
-    finder: FinderUiState,
+    finder: FinderSelection,
     onIntent: (TimetableIntent) -> Unit,
+    onOpenFinder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AppGroupBox(
@@ -782,14 +766,14 @@ private fun MessagesBox(
         // shows the customer and contract above the finder controls, so the
         // operator always sees where the 'a'-key placements are billed.
         AppText(
-            "${Strings[StringKey.FINDER_COL_NAME]}: ${finder.selectedParty?.name ?: "—"}",
+            "${Strings[StringKey.FINDER_COL_NAME]}: ${finder.party?.name ?: "—"}",
             AppTextStyle.NOTE,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         AppText(
             "${Strings[StringKey.TIMETABLE_CONTRACT_LABEL]}: ${
-                finder.selectedLine?.let { "${it.contractNumber} / ${it.lineNo}" } ?: "—"
+                finder.line?.let { "${it.contractNumber} / ${it.lineNo}" } ?: "—"
             }",
             AppTextStyle.NOTE,
             maxLines = 1,
@@ -800,7 +784,7 @@ private fun MessagesBox(
         // - the same source the finder's contract table uses.
         AppText(
             "${Strings[StringKey.TIMETABLE_PRODUCT_LABEL]}: ${
-                finder.selectedLine?.let {
+                finder.line?.let {
                     if (it.isGift) Strings[StringKey.FINDER_GIFT_LINE] else Strings[StringKey.FINDER_ERP_PENDING]
                 } ?: "—"
             }",
@@ -819,7 +803,7 @@ private fun MessagesBox(
         ) {
             AppButton(
                 text = Strings[StringKey.TIMETABLE_FINDER_BUTTON],
-                onClick = { onIntent(TimetableIntent.OpenFinder) },
+                onClick = onOpenFinder,
                 variant = AppButtonVariant.SECONDARY,
             )
             Spacer(modifier = Modifier.width(UIConst.paddingSmall))
@@ -830,7 +814,7 @@ private fun MessagesBox(
                     fillMaxWidth = true,
                 ) {
                     AppText(
-                        finder.selectedSpot?.description ?: Strings[StringKey.TIMETABLE_NO_SPOT_SELECTED],
+                        finder.spot?.description ?: Strings[StringKey.TIMETABLE_NO_SPOT_SELECTED],
                         AppTextStyle.NOTE,
                         color = LocalContentColor.current,
                         maxLines = 1,
@@ -851,7 +835,7 @@ private fun MessagesBox(
                     }
                 }
             }
-            if (finder.selectedParty != null) {
+            if (finder.party != null) {
                 Spacer(modifier = Modifier.width(UIConst.paddingSmall))
                 AppIconButton(
                     label = Strings[StringKey.TIMETABLE_CD_CLEAR_FINDER],
@@ -886,371 +870,6 @@ private fun AccountBadge(displayName: String, isAdmin: Boolean, role: AppRole) {
         )
     }
 }
-
-// ═══ Εύρεση: the Details Console dialog (screen-private) ═══════════════
-
-/**
- * The legacy "Εύρεση" Details Console, kept close to the original layout:
- * three stacked table sections - ΠΕΛΑΤΗΣ (search + the matches as a table
- * with Κωδικός/Επωνυμία/ΑΦΜ/Τηλέφωνο), ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ (the contracts'
- * product lines; ERP product identity pending), ΜΗΝΥΜΑΤΑ (the line's spots
- * with Χρόνος/Αναλωμένα Spots/Secs) - and Επιλογή/Άκυρο bottom-right.
- * Stateless: renders [FinderUiState], dispatches [TimetableIntent]s (the
- * debounce lives in the ViewModel). "Επιλογή" arms the grid's 'a' key.
- */
-@Composable
-private fun SpotFinderDialog(
-    finder: FinderUiState,
-    onIntent: (TimetableIntent) -> Unit,
-) {
-    AppPopup(
-        onDismissRequest = { onIntent(TimetableIntent.CloseFinder) },
-        modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.92f),
-    ) {
-        Box {
-        Column(Modifier.padding(UIConst.paddingCompact)) {
-            AppText(Strings[StringKey.FINDER_CONSOLE_TITLE], AppTextStyle.ITEM_TITLE)
-
-            // ═══ ΠΕΛΑΤΗΣ ═══════════════════════════════════════════
-            SectionTitle(Strings[StringKey.FINDER_SECTION_CUSTOMER])
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppRadioRow(
-                    selected = finder.kind == PartyKind.CUSTOMER,
-                    onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.CUSTOMER)) },
-                    label = Strings[StringKey.FINDER_TAB_CUSTOMERS],
-                )
-                Spacer(Modifier.width(UIConst.paddingCompact))
-                AppRadioRow(
-                    selected = finder.kind == PartyKind.TRADER,
-                    onClick = { onIntent(TimetableIntent.FinderKindChanged(PartyKind.TRADER)) },
-                    label = Strings[StringKey.FINDER_TAB_ADVERTISERS],
-                )
-                Spacer(Modifier.width(UIConst.paddingRegular))
-                AppTextField(
-                    value = finder.query,
-                    onValueChange = { onIntent(TimetableIntent.FinderQueryChanged(it)) },
-                    label = Strings[StringKey.FINDER_SEARCH_LABEL],
-                    modifier = Modifier.weight(1f),
-                    trailingIcon = {
-                        if (finder.searching) {
-                            AppSpinner()
-                        }
-                    }
-                )
-            }
-            // While a search runs the matches fill the table; the
-            // chosen party stays pinned as its single (highlighted) row.
-            val partyRows = remember(finder.results, finder.selectedParty) {
-                finder.results.ifEmpty { listOfNotNull(finder.selectedParty) }.toImmutableList()
-            }
-            FinderTable(
-                items = partyRows,
-                columns = partyColumns(),
-                selectedKey = finder.selectedParty?.code?.takeIf { finder.results.isEmpty() },
-                rowKey = { it.code },
-                onRowClick = { onIntent(TimetableIntent.FinderPartySelected(it)) },
-                modifier = Modifier.fillMaxWidth().weight(0.24f),
-            )
-
-            // ═══ ΣΥΜΒΟΛΑΙΑ ΠΕΛΑΤΗ ══════════════════════════════════
-            SectionTitle(Strings[StringKey.FINDER_SECTION_CONTRACTS])
-            FinderTable(
-                items = finder.lines,
-                columns = contractColumns(),
-                selectedKey = finder.selectedLine?.lineId,
-                rowKey = { it.lineId },
-                onRowClick = { onIntent(TimetableIntent.FinderLineSelected(it)) },
-                modifier = Modifier.fillMaxWidth().weight(0.3f),
-            )
-
-            // ═══ ΜΗΝΥΜΑΤΑ ══════════════════════════════════════════
-            SectionTitle(Strings[StringKey.FINDER_SECTION_MESSAGES])
-            FinderTable(
-                items = finder.spots,
-                columns = spotColumns(),
-                selectedKey = finder.selectedSpot?.spotId,
-                rowKey = { it.spotId },
-                onRowClick = { onIntent(TimetableIntent.FinderSpotSelected(it)) },
-                modifier = Modifier.fillMaxWidth().weight(0.3f),
-            )
-
-            // ═══ Επιλογή / Άκυρο (bottom-right, like the original) ══
-            Row(
-                Modifier.fillMaxWidth().padding(top = UIConst.paddingSmall),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppButton(
-                    text = Strings[StringKey.FINDER_CLEAR],
-                    onClick = { onIntent(TimetableIntent.ClearFinder) },
-                    variant = AppButtonVariant.TEXT,
-                )
-                Spacer(Modifier.weight(1f))
-                // Επιλογή is the dialog's primary action - PRIMARY keeps
-                // the emphasis the old BUTTON_STRONG TextButton carried.
-                AppButton(
-                    text = Strings[StringKey.FINDER_SELECT],
-                    onClick = { onIntent(TimetableIntent.CloseFinder) },
-                    enabled = finder.selectedSpot != null,
-                )
-                AppButton(
-                    text = Strings[StringKey.COMMON_CANCEL],
-                    onClick = { onIntent(TimetableIntent.CloseFinder) },
-                    variant = AppButtonVariant.TEXT,
-                )
-            }
-        }
-
-        // Drilling down (party -> contracts -> messages) used to push a spinner
-        // INTO the column, so every click shoved the sections below it down and
-        // back - the "jumps". An overlay changes no layout at all, and the
-        // grace period means the usual sub-100ms load shows nothing whatsoever;
-        // only a genuinely slow one dims the console.
-        AppLoadingIndicator(
-            isLoading = finder.loadingLines || finder.loadingSpots,
-            appearAfter = FINDER_SPINNER_GRACE,
-        )
-        }
-    }
-}
-
-/**
- * How long a finder drill-down may take before it is worth telling the user
- * about. Comfortably above the measured local round trip, comfortably below
- * the ~1s where an unexplained wait starts to feel broken.
- */
-private val FINDER_SPINNER_GRACE = 250.milliseconds
-
-/**
- * The contracts table's date cell: the ERP issue date, or the contract's
- * PERIOD when that is absent. Load-bearing, not cosmetic: legacy doc numbers
- * repeat (a party can hold two contracts both numbered «18»), so without a
- * date the finder shows two identical rows and the operator picks blind.
- */
-private fun ContractLine.dateLabel(): String =
-    entryDate ?: listOfNotNull(startDate, endDate).joinToString(" → ")
-
-@Composable
-private fun SectionTitle(text: String) {
-    AppText(
-        text, AppTextStyle.TABLE_HEADER,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = UIConst.paddingSmall, bottom = UIConst.paddingHairline)
-    )
-}
-
-/**
- * One section of the Εύρεση console, on the SAME [EnhancedDataGrid] the Break
- * Console uses - so the two consoles share resizable/reorderable columns, the
- * sticky header, sortable headers, scrollbars and keyboard navigation instead
- * of the hand-rolled weight tables this dialog used to draw.
- *
- * The finder's selection is the VIEWMODEL's ([selectedKey]), not the grid's:
- * a click dispatches, and the grid's own highlight is re-derived whenever the
- * list changes ([items] is the effect's key). Matching by KEY, not by index,
- * is what survives the party list collapsing to its single chosen row.
- */
-@Composable
-private fun <T> FinderTable(
-    items: ImmutableList<T>,
-    columns: ImmutableList<ColumnDef<T>>,
-    selectedKey: Any?,
-    rowKey: (T) -> Any,
-    onRowClick: (T) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val state = rememberEnhancedDataGridState(columns)
-    // Keyed on the LIST (and on the selection appearing/vanishing) - never on
-    // WHICH row is selected. A click is already highlighted by the grid itself,
-    // at its OWN index; re-deriving that index from the source list would put
-    // the highlight on the wrong row whenever a sortable header is active. What
-    // still needs syncing is the list changing underneath: the party table
-    // collapsing to its single chosen row, a new search, a cleared finder.
-    LaunchedEffect(items, selectedKey == null) {
-        val index = selectedKey?.let { key -> items.indexOfFirst { rowKey(it) == key } } ?: -1
-        if (index >= 0) {
-            state.selectedRows = setOf(index)
-            state.focusedRow = index
-        } else {
-            state.clearSelection()
-        }
-    }
-    val empty = Strings[StringKey.FINDER_NO_ROWS]
-    EnhancedDataGrid(
-        items = items,
-        columns = columns,
-        modifier = modifier,
-        state = state,
-        selectionMode = SelectionMode.SINGLE,
-        // The console packs three tables into one dialog, so it runs denser
-        // than the Break Console's full-screen grid.
-        scale = AppTheme.fontSizeStep.factor,
-        rowHeight = 26.dp,
-        headerHeight = 30.dp,
-        showRowNumbers = false,
-        stickyRows = StickyRowsConfig(stickyHeader = true, stickyFooter = false),
-        onRowClick = { item, _ -> onRowClick(item) },
-        rowKey = rowKey,
-        emptyContent = {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                AppText(empty, AppTextStyle.NOTE, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
-    )
-}
-
-/*
- * The three finder tables' columns. Remembered against the language (headers
- * resolve through the non-composable .localized()) and the font-size step -
- * the grid scales its own type and rows, but column WIDTHS live here, so a
- * bigger step has to rebuild them wider or the text merely ellipsizes.
- */
-
-@Composable
-private fun partyColumns(): ImmutableList<ColumnDef<Party>> {
-    val language = LocalLanguage.current
-    val scale = AppTheme.fontSizeStep.factor
-    return remember(language, scale) {
-        persistentListOf(
-            ColumnDef<Party>(
-                id = "code",
-                header = StringKey.FINDER_COL_CODE.localized(),
-                width = 120.dp * scale,
-                extractor = { it.code },
-            ),
-            ColumnDef(
-                id = "name",
-                header = StringKey.FINDER_COL_NAME.localized(),
-                width = 380.dp * scale,
-                extractor = { it.name },
-            ),
-            ColumnDef(
-                id = "vat",
-                header = StringKey.FINDER_COL_VAT.localized(),
-                width = 130.dp * scale,
-                extractor = { it.vatNumber ?: "" },
-            ),
-            ColumnDef(
-                id = "phone",
-                header = StringKey.FINDER_COL_PHONE.localized(),
-                width = 140.dp * scale,
-                extractor = { it.phone ?: "" },
-            ),
-            ColumnDef(
-                id = "spots",
-                header = StringKey.FINDER_COL_SPOTS.localized(),
-                width = 90.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.spotCount.toString() },
-                comparator = compareBy { it.spotCount },
-            ),
-        )
-    }
-}
-
-@Composable
-private fun contractColumns(): ImmutableList<ColumnDef<ContractLine>> {
-    val language = LocalLanguage.current
-    val scale = AppTheme.fontSizeStep.factor
-    val gift = Strings[StringKey.FINDER_GIFT_LINE]
-    val pending = Strings[StringKey.FINDER_ERP_PENDING]
-    return remember(language, scale, gift, pending) {
-        persistentListOf(
-            ColumnDef<ContractLine>(
-                id = "contract",
-                header = StringKey.FINDER_COL_CONTRACT.localized(),
-                width = 110.dp * scale,
-                extractor = { it.contractNumber },
-                // Contract numbers are numeric strings: "703" must not sort
-                // before "89" the way lexicographic ordering would put it.
-                comparator = compareBy({ it.contractNumber.toLongOrNull() ?: Long.MAX_VALUE }, { it.lineNo }),
-            ),
-            ColumnDef(
-                id = "line",
-                header = StringKey.FINDER_COL_LINE.localized(),
-                width = 70.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.lineNo.toString() },
-                comparator = compareBy { it.lineNo },
-            ),
-            ColumnDef(
-                id = "description",
-                header = StringKey.FINDER_COL_DESCRIPTION.localized(),
-                width = 300.dp * scale,
-                extractor = { if (it.isGift) gift else pending },
-            ),
-            ColumnDef(
-                id = "placements",
-                header = StringKey.FINDER_COL_SPOTS_BOUGHT.localized(),
-                width = 120.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.placements.toString() },
-                comparator = compareBy { it.placements },
-            ),
-            ColumnDef(
-                id = "seconds",
-                header = StringKey.FINDER_COL_SECS_BOUGHT.localized(),
-                width = 120.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.totalSeconds.toString() },
-                comparator = compareBy { it.totalSeconds },
-            ),
-            ColumnDef(
-                id = "date",
-                header = StringKey.FINDER_COL_ISSUE_DATE.localized(),
-                width = 210.dp * scale,
-                extractor = { it.dateLabel() },
-            ),
-        )
-    }
-}
-
-@Composable
-private fun spotColumns(): ImmutableList<ColumnDef<ContractLineSpot>> {
-    val language = LocalLanguage.current
-    val scale = AppTheme.fontSizeStep.factor
-    return remember(language, scale) {
-        persistentListOf(
-            ColumnDef<ContractLineSpot>(
-                id = "description",
-                header = StringKey.FINDER_COL_MSG_DESCRIPTION.localized(),
-                width = 520.dp * scale,
-                extractor = { it.description },
-            ),
-            ColumnDef(
-                id = "duration",
-                header = StringKey.FINDER_COL_DURATION.localized(),
-                width = 130.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.durationSeconds.toString() },
-                comparator = compareBy { it.durationSeconds },
-            ),
-            ColumnDef(
-                id = "usedSpots",
-                header = StringKey.FINDER_COL_USED_SPOTS.localized(),
-                width = 140.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.placements.toString() },
-                comparator = compareBy { it.placements },
-            ),
-            ColumnDef(
-                id = "usedSecs",
-                header = StringKey.FINDER_COL_USED_SECS.localized(),
-                width = 140.dp * scale,
-                alignment = TextAlign.End,
-                headerAlignment = TextAlign.End,
-                extractor = { it.totalSeconds.toString() },
-                comparator = compareBy { it.totalSeconds },
-            ),
-        )
-    }
-}
-
 
 /**
  * Localized labels for the standalone grid toolkit (leaf takes no StringKey).

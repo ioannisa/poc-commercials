@@ -34,9 +34,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import org.koin.core.context.startKoin
@@ -327,13 +330,41 @@ class FakeProgramsRepository : ProgramsRepository {
 class FakeFinderRepository : FinderRepository {
     var lines: List<ContractLine> = emptyList()
     var spots: List<ContractLineSpot> = emptyList()
-    override suspend fun contractLines(clientCode: String, kind: PartyKind) = DataResult.Success(lines)
-    override suspend fun lineSpots(lineId: Long) = DataResult.Success(spots)
+    /** Set to exercise the failure branches of the drill-down. */
+    var failure: DataError.Network? = null
+    val lineQueries = mutableListOf<Pair<String, PartyKind>>()
+    val spotQueries = mutableListOf<Long>()
+
+    override suspend fun contractLines(
+        clientCode: String,
+        kind: PartyKind,
+    ): DataResult<List<ContractLine>, DataError.Network> {
+        lineQueries += clientCode to kind
+        failure?.let { return DataResult.Failure(it) }
+        return DataResult.Success(lines)
+    }
+
+    override suspend fun lineSpots(lineId: Long): DataResult<List<ContractLineSpot>, DataError.Network> {
+        spotQueries += lineId
+        failure?.let { return DataResult.Failure(it) }
+        return DataResult.Success(spots)
+    }
 }
 
 class FakePartySearchRepository : PartySearchRepository {
     var results: List<Party> = emptyList()
-    override suspend fun search(query: String, kind: PartyKind) = DataResult.Success(results)
+    /** Set to exercise the failure branch of a search. */
+    var failure: DataError.Network? = null
+    val queries = mutableListOf<Pair<String, PartyKind>>()
+
+    override suspend fun search(
+        query: String,
+        kind: PartyKind,
+    ): DataResult<List<Party>, DataError.Network> {
+        queries += query to kind
+        failure?.let { return DataResult.Failure(it) }
+        return DataResult.Success(results)
+    }
 }
 
 class FakeTimetablePreferences(override var showSpotTimes: Boolean = false) : TimetablePreferences
@@ -342,6 +373,11 @@ class FakeTimetablePreferences(override var showSpotTimes: Boolean = false) : Ti
  * Shared fake of the flow contract: records every verb call and lets tests
  * drive [commonState]. The whole point of the screens depending on the
  * interface rather than the concrete CommonViewModel.
+ *
+ * The FINDER verbs (and [setFilter]) also APPLY to the state, mirroring the
+ * real reducer's pure cases: both the finder window's ViewModel and the grid
+ * ViewModel observe the selection through [commonState], so a fake that only
+ * recorded would break the merge-down path the tests exercise.
  */
 class FakeTimetableCommon : TimetableCommon {
     private val _commonState = MutableStateFlow(TimetableCommonState())
@@ -364,11 +400,21 @@ class FakeTimetableCommon : TimetableCommon {
     val reorders = mutableListOf<Triple<LocalTime, LocalDate, List<Long>>>()
     val breakCreates = mutableListOf<Pair<LocalTime, LocalDate>>()
     var refreshes = 0
+    val partySelections = mutableListOf<Pair<Party, PartyKind>>()
+    val lineSelections = mutableListOf<ContractLine>()
+    val spotsSets = mutableListOf<List<ContractLineSpot>>()
+    val spotSelections = mutableListOf<ContractLineSpot?>()
+    var finderClears = 0
 
     override fun clear() { clears++ }
     override fun loadMonth(year: Int, month: Int) { loads += (year to month) }
     override fun setViewMode(mode: GridViewMode) { viewModes += mode }
-    override fun setFilter(filter: ScheduleFilter?) { filters += filter }
+    override fun setFilter(filter: ScheduleFilter?) {
+        filters += filter
+        // Applied like the real reducer, so the grid ViewModel's re-derive
+        // guard (`derived != cs.filter`) converges in tests exactly as live.
+        _commonState.update { it.copy(filter = filter) }
+    }
     override fun loadCommercials(time: LocalTime, date: LocalDate) { commercialLoads += (time to date) }
     override fun add(spotId: Long, time: LocalTime, date: LocalDate, programId: Long?) {
         adds += Triple(spotId, time, date)
@@ -378,6 +424,39 @@ class FakeTimetableCommon : TimetableCommon {
     override fun reorder(time: LocalTime, date: LocalDate, orderedIds: List<Long>) { reorders += Triple(time, date, orderedIds) }
     override fun createBreak(time: LocalTime, date: LocalDate) { breakCreates += (time to date) }
     override fun refreshMonth() { refreshes++ }
+
+    override fun selectFinderParty(party: Party, kind: PartyKind) {
+        partySelections += party to kind
+        _commonState.update { it.copy(finderSelection = FinderSelection(party = party, kind = kind)) }
+    }
+
+    override fun selectFinderLine(line: ContractLine) {
+        lineSelections += line
+        _commonState.update {
+            it.copy(
+                finderSelection = it.finderSelection.copy(
+                    line = line, spot = null, spots = persistentListOf(),
+                )
+            )
+        }
+    }
+
+    override fun setFinderSpots(spots: List<ContractLineSpot>) {
+        spotsSets += spots
+        _commonState.update {
+            it.copy(finderSelection = it.finderSelection.copy(spots = spots.toImmutableList()))
+        }
+    }
+
+    override fun selectFinderSpot(spot: ContractLineSpot?) {
+        spotSelections += spot
+        _commonState.update { it.copy(finderSelection = it.finderSelection.copy(spot = spot)) }
+    }
+
+    override fun clearFinder() {
+        finderClears++
+        _commonState.update { it.copy(finderSelection = FinderSelection()) }
+    }
 }
 
 /**

@@ -12,11 +12,18 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.ui.NavDisplay
+import eu.anifantakis.commercials.core.presentation.design_system.components.window.LocalAppWindowHost
+import eu.anifantakis.commercials.core.presentation.helper.UiText
 import eu.anifantakis.commercials.core.presentation.helper.navConfigOf
 import eu.anifantakis.commercials.core.presentation.helper.navHierarchy
+import eu.anifantakis.commercials.core.presentation.string_resources.StringKey
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommon
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.TimetableCommonViewModel
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.commercial_detail.CommercialDetailScreenRoot
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.spot_finder.SpotFinderScreenRoot
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.TimetableScreenRoot
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -58,6 +65,9 @@ sealed interface TimetableStepNavType : NavKey {
 // serializer (all targets, compile-time) - adding a step route needs no
 // registration change here, ever.
 private val stepNavConfig = navConfigOf(navHierarchy<TimetableStepNavType>())
+
+/** ONE finder window app-wide: reopening focuses it (same ViewModel scope). */
+private const val SPOT_FINDER_WINDOW_ID = "timetable-spot-finder"
 
 /**
  * ONE root entry for the whole flow. App-owned concerns (the schedule-email
@@ -118,6 +128,15 @@ private fun TimetableFlowHost(
         entryProvider = entryProvider {
 
             entry<TimetableStepNavType.Grid> {
+                // The Εύρεση console: a floating in-canvas WINDOW, not a route
+                // on this stack - the operator drags it beside the grid and
+                // keeps placing spots with 'a' while it stays open. Same id =
+                // same window; its content resolves the SpotFinderViewModel
+                // against the WINDOW's keyed ViewModel scope (minimize keeps
+                // the search; close destroys it), while `common` - captured
+                // from the flow entry - carries the selection that outlives
+                // the window.
+                val windowHost = LocalAppWindowHost.current
                 TimetableScreenRoot(
                     viewModel = koinViewModel { parametersOf(common) },
                     onOpenDetail = { time, date ->
@@ -127,6 +146,18 @@ private fun TimetableFlowHost(
                     onLogout = onLogout,
                     onPreferences = onPreferences,
                     onAiChat = onAiChat,
+                    onOpenSpotFinder = {
+                        windowHost.open(
+                            id = SPOT_FINDER_WINDOW_ID,
+                            title = UiText.Res(StringKey.FINDER_CONSOLE_TITLE),
+                            minSize = DpSize(640.dp, 480.dp),
+                        ) {
+                            SpotFinderScreenRoot(
+                                viewModel = koinViewModel { parametersOf(common as TimetableCommon) },
+                                onClose = { windowHost.close(SPOT_FINDER_WINDOW_ID) },
+                            )
+                        }
+                    },
                 )
             }
 
