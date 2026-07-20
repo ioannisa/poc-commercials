@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Density
@@ -195,7 +196,21 @@ private fun DenseSelectionRow(
                 LocalDensity provides Density(density.density * DENSE_CONTROL_SCALE, density.fontScale),
             ) { control() }
             Spacer(Modifier.width(UIConst.paddingExtraSmall))
-            AppText(label, AppTextStyle.NOTE)
+            // ONE line, ellipsised - never wrapped. These rows live in the
+            // legacy toolbar's group boxes, which sit in a
+            // height(IntrinsicSize.Min) band: a label left free to wrap breaks
+            // at the first opportunity once the box is squeezed («Προ γράμ
+            // ματο ς»), and that column's height then becomes the whole band's.
+            // A truncated label is worse than a full one and better than a
+            // vertical one; the real answer at that width is a header that
+            // reflows, which is a bigger change than this component.
+            AppText(
+                label,
+                AppTextStyle.NOTE,
+                softWrap = false,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

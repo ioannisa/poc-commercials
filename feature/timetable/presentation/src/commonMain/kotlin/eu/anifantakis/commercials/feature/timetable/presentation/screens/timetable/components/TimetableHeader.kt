@@ -7,6 +7,7 @@ import eu.anifantakis.commercials.core.presentation.util.toStringKey
 import androidx.compose.ui.layout.ContentScale
 import eu.anifantakis.commercials.core.presentation.design_system.AppDrawableRepo
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppAsyncImage
+import eu.anifantakis.commercials.core.presentation.design_system.AppTheme
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
@@ -18,8 +19,11 @@ import eu.anifantakis.commercials.core.presentation.design_system.components.App
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppSelectionOption
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppTextStyle
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -76,6 +80,14 @@ import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetab
  */
 
 /**
+ * The width the toolbar wants to lay its boxes out comfortably. Wider than
+ * this, the band fills the window; narrower, it holds this width and scrolls
+ * horizontally rather than squeeze. A round guess tuned by eye - the band has
+ * no single "correct" width, only "tight enough that labels start to wrap".
+ */
+private val MIN_HEADER_WIDTH = 1500.dp
+
+/**
  * The three grid view modes as the "Προβολή κάθε" group box's options.
  * Remembered against the language: the header re-executes on every state tick,
  * and these labels only change on a language switch.
@@ -128,10 +140,15 @@ private fun StationSelector(
     Box {
         if (stations.size > 1) {
             AppButton(onClick = { expanded = true }, variant = AppButtonVariant.TEXT) {
+                // Same trap as the keyboard hints: «ΚρήτηTV» wrapped to one
+                // letter per line once the band ran out of width.
                 AppText(
                     current.name,
                     AppTextStyle.SECTION_TITLE,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    softWrap = false,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 AppIcon(
                     AppDrawableRepo.arrowDropDown,
@@ -162,7 +179,10 @@ private fun StationSelector(
                 current.name,
                 AppTextStyle.SECTION_TITLE,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = UIConst.paddingSmall)
+                modifier = Modifier.padding(horizontal = UIConst.paddingSmall),
+                softWrap = false,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -196,9 +216,18 @@ internal fun KeyboardEnabledHeader(
         // reserve a 48dp touch floor that balloons the whole band, and desktop
         // is mouse-first so a tight target is fine.
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            // Fill the viewport when it is wide enough; below MIN_HEADER_WIDTH,
+            // hold that width and scroll HORIZONTALLY instead of squeezing the
+            // boxes (squeezing is what forced labels a letter per line, and it
+            // left the right-hand controls unreachable). At/above MIN the row
+            // exactly fills, so the desktop spread - Spacer(weight) pushing the
+            // account cluster to the end - is unchanged and nothing scrolls.
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val rowWidth = maxOf(maxWidth, MIN_HEADER_WIDTH)
+                Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(rowWidth)
                     .height(IntrinsicSize.Min)
                     .padding(horizontal = UIConst.paddingSmall, vertical = UIConst.paddingExtraSmall),
                 verticalAlignment = Alignment.Top,
@@ -425,19 +454,40 @@ internal fun KeyboardEnabledHeader(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            AppText(
-                                Strings[if (state.canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
-                                AppTextStyle.TINY,
-                            )
-                            AppText(
-                                Strings[StringKey.TIMETABLE_HINT_CLICK_FOCUS],
-                                AppTextStyle.TINY,
-                            )
+                        // TWO lines, and never more: this Row is
+                        // height(IntrinsicSize.Min), so text left free to wrap
+                        // sets the whole band's height and every fillMaxHeight
+                        // sibling stretches to match it. Unbounded, a narrow
+                        // window wrapped these to ONE LETTER per line - a ~60
+                        // line column that ate the screen and left the grid two
+                        // rows. softWrap=false keeps them single-line and lets
+                        // the ellipsis do the shrinking.
+                        //
+                        // Below COMPACT they go entirely: there is no room, and
+                        // a window that narrow is not being driven by keyboard.
+                        if (!AppTheme.window.isCompact) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                AppText(
+                                    Strings[if (state.canEdit) StringKey.TIMETABLE_HINT_KEYS_EDIT else StringKey.TIMETABLE_HINT_KEYS_VIEW],
+                                    AppTextStyle.TINY,
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                AppText(
+                                    Strings[StringKey.TIMETABLE_HINT_CLICK_FOCUS],
+                                    AppTextStyle.TINY,
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
             }
+                }   // Box (horizontalScroll)
+            }       // BoxWithConstraints
         }
     }
 }

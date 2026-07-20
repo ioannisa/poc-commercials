@@ -48,6 +48,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import eu.anifantakis.commercials.core.presentation.string_resources.LocalLanguage
 import eu.anifantakis.commercials.feature.timetable.domain.model.GridViewMode
 import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.components.KeyboardEnabledHeader
+import eu.anifantakis.commercials.feature.timetable.presentation.screens.timetable.components.CollapsibleHeaderPanel
 
 /**
  * The scheduler grid screen. The Εύρεση finder is its OWN screen now
@@ -162,18 +163,19 @@ private fun TimetableScreen(
         )
     }
 
-    Column(
+    CollapsibleHeaderPanel(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        KeyboardEnabledHeader(
-            state = state,
-            monthName = monthNames[month - 1],
-            onIntent = onIntent,
-            onNavIntent = onNavIntent,
-        )
-
+            .background(MaterialTheme.colorScheme.background),
+        header = {
+            KeyboardEnabledHeader(
+                state = state,
+                monthName = monthNames[month - 1],
+                onIntent = onIntent,
+                onNavIntent = onNavIntent,
+            )
+        },
+        body = {
         // The scheduler grid with keyboard navigation (using LazyColumn for performance)
         LazySchedulerGrid(
             labels = schedulerLabels(),
@@ -334,7 +336,8 @@ private fun TimetableScreen(
                 )
             }
         )
-    }
+        },
+    )
 }
 
 /** Menu label for a day, e.g. "05/12". */

@@ -72,9 +72,16 @@ fun AppButton(
             Spacer(Modifier.width(UIConst.paddingExtraSmall))
         }
     }
+    // A button label is one line, always: squeezed, free-wrapping text breaks
+    // mid-word («Πρ ός θε ση») and drags the button's height with it. If a
+    // label does not fit, the answer is a wider button or a shorter label -
+    // never a four-line one.
     AppText(
         text,
         if (variant == AppButtonVariant.PRIMARY) AppTextStyle.BUTTON_STRONG else AppTextStyle.BUTTON,
+        softWrap = false,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
     if (trailingIcon != null && !busy) {
         Spacer(Modifier.width(UIConst.paddingExtraSmall))
