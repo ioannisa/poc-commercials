@@ -595,16 +595,32 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                 """
                 SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
                        cl.line_no, cl.desired_qty,
-                       COUNT(DISTINCT s.id) AS spot_count, COUNT(p.id) AS placements,
-                       -- the SPOT's duration, not the airing's (see durationSeconds
-                       -- on CommercialRow). The CASE is what the LEFT JOIN needs: a
-                       -- spot with no airings must contribute 0, not its length.
-                       COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
+                       COUNT(DISTINCT s.id) AS spot_count,
+                       -- Consumption comes from the CHARGE-side leg below (MAX
+                       -- collapses its per-line row over the spots multiplicity).
+                       MAX(COALESCE(chg.placements, 0)) AS placements,
+                       MAX(COALESCE(chg.total_secs, 0)) AS total_secs
                 FROM contract_lines cl
                 JOIN contracts ct ON ct.id = cl.contract_id
                 $partyFilter
                 $spotJoin
-                LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                -- Αναλωμένα by the airing's CHARGE line - the same
+                -- COALESCE(p.contract_line_id, s.contract_line_id) read path as
+                -- the Break Console's Σύμβαση column and the grid's «Προβολή
+                -- Βάσει Συμβολαίου». Counting via the spots leg above (all of a
+                -- spot's airings onto its DEFAULT line) piled a spot's whole
+                -- 1,992 airings on one line while the lines they actually
+                -- charge showed 0 (ΖΩΓΡΑΦΑΚΗ 703 vs 789). The spot's duration,
+                -- not the airing's, per the owner's parity decision.
+                LEFT JOIN (
+                    SELECT cl2.id AS line_id, COUNT(*) AS placements,
+                           SUM(s2.duration_seconds) AS total_secs
+                    FROM placements p2
+                    JOIN spots s2 ON s2.id = p2.spot_id AND s2.hidden = FALSE
+                    JOIN contract_lines cl2 ON cl2.id = COALESCE(p2.contract_line_id, s2.contract_line_id)
+                    WHERE p2.hidden = FALSE AND p2.station_id = ?
+                    GROUP BY cl2.id
+                ) chg ON chg.line_id = cl.id
                 WHERE ($keep)
                 GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date, cl.line_no, cl.desired_qty
                 ORDER BY ct.number, cl.line_no
@@ -612,6 +628,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             ).use { ps ->
                 ps.setString(1, code)
                 ps.setString(2, stationId)
+                ps.setString(3, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
@@ -660,14 +677,20 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                        -- on CommercialRow); 0 for a spot that never aired.
                        COALESCE(SUM(CASE WHEN p.id IS NOT NULL THEN s.duration_seconds END), 0) AS total_secs
                 FROM spots s
+                -- Only the airings CHARGED to this line count as its Αναλωμένα:
+                -- a spot re-links across contracts, and its default line must
+                -- not absorb what it aired for another one (same charge-line
+                -- doctrine as partyContractLines above).
                 LEFT JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE
+                                      AND COALESCE(p.contract_line_id, s.contract_line_id) = ?
                 WHERE s.contract_line_id = ? AND s.hidden = FALSE AND s.station_id = ?
                 GROUP BY s.id, s.description, s.duration_seconds
                 ORDER BY s.description, s.id
                 """.trimIndent()
             ).use { ps ->
                 ps.setLong(1, lineId)
-                ps.setString(2, stationId)
+                ps.setLong(2, lineId)
+                ps.setString(3, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
