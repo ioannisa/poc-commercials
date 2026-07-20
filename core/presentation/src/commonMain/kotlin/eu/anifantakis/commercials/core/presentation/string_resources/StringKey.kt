@@ -605,6 +605,10 @@ enum class StringKey(val json: String = "") {
     // ── Floating windows (design-system window chrome) ──────────────────
     WINDOW_MINIMIZE,
     WINDOW_RESTORE,
+    /** Drop the scrim: work beside the app instead of on top of it. */
+    WINDOW_UNDOCK,
+    /** Put the scrim back: the window becomes a blocking dialog again. */
+    WINDOW_DOCK,
 
     /** Fallback for an unrecognized server-sent key. */
     UNMATCHED;

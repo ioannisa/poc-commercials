@@ -76,6 +76,7 @@ internal fun AppFloatingWindow(
     appDirection: LayoutDirection,
     onFocus: () -> Unit,
     onMinimize: () -> Unit,
+    onToggleDock: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
@@ -177,6 +178,7 @@ internal fun AppFloatingWindow(
                         onDragStart = ::materializeAndFocus,
                         onDrag = { delta -> window.moveBy(delta, currentContainer) },
                         onMinimize = onMinimize,
+                        onToggleDock = onToggleDock,
                         onClose = onClose,
                     )
                     HorizontalDivider()
@@ -214,6 +216,7 @@ private fun WindowTitleBar(
     onDragStart: () -> Unit,
     onDrag: (DpOffset) -> Unit,
     onMinimize: () -> Unit,
+    onToggleDock: () -> Unit,
     onClose: () -> Unit,
 ) {
     val t = AppTheme.visualTokens
@@ -245,7 +248,20 @@ private fun WindowTitleBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(horizontal = UIConst.paddingCompact),
         )
-        if (window.minimizable) {
+        // Undock / dock: the docked window is a dialog (scrim, blocks the app);
+        // the undocked one is a tool the operator works beside. Leftmost of the
+        // chrome actions - it is a MODE switch, not a lifecycle one.
+        if (window.undockable) {
+            AppIconButton(
+                label = Strings[
+                    if (window.isModal) StringKey.WINDOW_UNDOCK else StringKey.WINDOW_DOCK
+                ],
+                icon = if (window.isModal) AppDrawableRepo.openInNew else AppDrawableRepo.closeFullscreen,
+                onClick = onToggleDock,
+                size = AppIconSize.SMALL,
+            )
+        }
+        if (window.canMinimize) {
             AppIconButton(
                 label = Strings[StringKey.WINDOW_MINIMIZE],
                 icon = AppDrawableRepo.minimize,

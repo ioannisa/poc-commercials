@@ -206,6 +206,8 @@ internal class He : LanguageStrings {
         StringKey.COMMON_CLOSE -> "סגירה"
         StringKey.WINDOW_MINIMIZE -> "מזעור"
         StringKey.WINDOW_RESTORE -> "שחזור"
+        StringKey.WINDOW_UNDOCK -> "עבודה לצד היישום"
+        StringKey.WINDOW_DOCK -> "חזרה לחלון דו-שיח"
         StringKey.MONTH_SHORT_JANUARY -> "ינו"
         StringKey.MONTH_SHORT_FEBRUARY -> "פבר"
         StringKey.MONTH_SHORT_MARCH -> "מרץ"

@@ -23,7 +23,8 @@ class AppWindowGeometryTest {
     ) = AppWindowState(
         id = "test",
         title = UiText.Dynamic("Test"),
-        isModal = false,
+        modal = false,
+        undockable = false,
         closable = true,
         minimizable = true,
         resizable = true,
@@ -106,6 +107,44 @@ class AppWindowGeometryTest {
         host.open("m", UiText.Dynamic("Modal"), modal = true) {}
         host.minimize("m")
         assertEquals(false, host.windows.single().isMinimized, "a hidden modal would deadlock the UI")
+    }
+
+    // ── dock / undock (the Εύρεση console's two modes) ──────────────────
+
+    @Test
+    fun undockingDropsTheScrimAndUnlocksMinimize() {
+        val host = AppWindowHostState(FakeStoreProvider.provider)
+        host.open("f", UiText.Dynamic("Finder"), modal = true, undockable = true) {}
+        val w = host.windows.single()
+        assertEquals(true, w.isModal)
+        assertEquals(false, w.canMinimize, "docked: the minimize action is not even offered")
+
+        host.setModal("f", false)
+
+        assertEquals(false, w.isModal, "undocked - the app beneath takes clicks again")
+        assertEquals(true, w.canMinimize, "and it can now be parked while the operator works")
+    }
+
+    @Test
+    fun dockingAMinimizedWindowBringsItBack() {
+        val host = AppWindowHostState(FakeStoreProvider.provider)
+        host.open("f", UiText.Dynamic("Finder"), modal = false, undockable = true) {}
+        host.minimize("f")
+        assertEquals(true, host.windows.single().isMinimized)
+
+        host.setModal("f", true)
+
+        assertEquals(false, host.windows.single().isMinimized, "a hidden docked window would scrim an unreachable UI")
+    }
+
+    @Test
+    fun aWindowThatIsNotUndockableIgnoresTheModeSwitch() {
+        val host = AppWindowHostState(FakeStoreProvider.provider)
+        host.open("c", UiText.Dynamic("Confirm"), modal = true) {}   // undockable defaults to false
+
+        host.setModal("c", false)
+
+        assertEquals(true, host.windows.single().isModal, "a window whose point is to block must stay blocking")
     }
 }
 

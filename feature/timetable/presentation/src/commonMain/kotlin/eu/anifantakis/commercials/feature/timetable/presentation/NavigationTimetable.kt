@@ -6,6 +6,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
@@ -129,14 +130,23 @@ private fun TimetableFlowHost(
 
             entry<TimetableStepNavType.Grid> {
                 // The Εύρεση console: a floating in-canvas WINDOW, not a route
-                // on this stack - the operator drags it beside the grid and
-                // keeps placing spots with 'a' while it stays open. Same id =
-                // same window; its content resolves the SpotFinderViewModel
+                // on this stack. It opens DOCKED - a scrim'd dialog, the
+                // legacy behaviour operators know - and its title bar offers
+                // «Παράλληλη εργασία», which drops the scrim so the console
+                // can sit beside the grid while 'a' keeps placing spots. Same
+                // id = same window; its content resolves the SpotFinderViewModel
                 // against the WINDOW's keyed ViewModel scope (minimize keeps
                 // the search; close destroys it), while `common` - captured
                 // from the flow entry - carries the selection that outlives
                 // the window.
                 val windowHost = LocalAppWindowHost.current
+                // The console is a tool OF THIS FLOW: undocked it would
+                // otherwise keep floating over Preferences (the host is app
+                // -level chrome, a sibling of NavDisplay). Leaving the grid
+                // closes it - which also clears its keyed ViewModel scope.
+                DisposableEffect(windowHost) {
+                    onDispose { windowHost.close(SPOT_FINDER_WINDOW_ID) }
+                }
                 TimetableScreenRoot(
                     viewModel = koinViewModel { parametersOf(common) },
                     onOpenDetail = { time, date ->
@@ -150,6 +160,11 @@ private fun TimetableFlowHost(
                         windowHost.open(
                             id = SPOT_FINDER_WINDOW_ID,
                             title = UiText.Res(StringKey.FINDER_CONSOLE_TITLE),
+                            // Docked by default (the legacy console was modal);
+                            // the chrome lets the operator undock to work beside
+                            // the grid.
+                            modal = true,
+                            undockable = true,
                             minSize = DpSize(640.dp, 480.dp),
                         ) {
                             SpotFinderScreenRoot(

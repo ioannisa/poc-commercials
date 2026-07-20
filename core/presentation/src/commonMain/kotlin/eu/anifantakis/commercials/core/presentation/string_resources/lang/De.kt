@@ -201,6 +201,8 @@ internal class De : LanguageStrings {
         StringKey.COMMON_CLOSE -> "Schließen"
         StringKey.WINDOW_MINIMIZE -> "Minimieren"
         StringKey.WINDOW_RESTORE -> "Wiederherstellen"
+        StringKey.WINDOW_UNDOCK -> "Parallel arbeiten"
+        StringKey.WINDOW_DOCK -> "Zurück zum Dialog"
         StringKey.MONTH_SHORT_JANUARY -> "Jan"
         StringKey.MONTH_SHORT_FEBRUARY -> "Feb"
         StringKey.MONTH_SHORT_MARCH -> "Mär"

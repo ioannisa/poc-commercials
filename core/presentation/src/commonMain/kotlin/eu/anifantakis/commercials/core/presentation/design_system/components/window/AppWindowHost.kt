@@ -95,6 +95,7 @@ fun AppWindowHost(
                                 appDirection = appDirection,
                                 onFocus = { state.focus(window.id) },
                                 onMinimize = { state.minimize(window.id) },
+                                onToggleDock = { state.setModal(window.id, !window.isModal) },
                                 onClose = { state.close(window.id) },
                             ) {
                                 WindowScopedContent(window, state.viewModelStoreProvider, saveableHolder)

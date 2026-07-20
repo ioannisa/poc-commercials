@@ -201,6 +201,8 @@ internal class It : LanguageStrings {
         StringKey.COMMON_CLOSE -> "Chiudi"
         StringKey.WINDOW_MINIMIZE -> "Riduci a icona"
         StringKey.WINDOW_RESTORE -> "Ripristina"
+        StringKey.WINDOW_UNDOCK -> "Lavora accanto"
+        StringKey.WINDOW_DOCK -> "Torna a finestra di dialogo"
         StringKey.MONTH_SHORT_JANUARY -> "Gen"
         StringKey.MONTH_SHORT_FEBRUARY -> "Feb"
         StringKey.MONTH_SHORT_MARCH -> "Mar"

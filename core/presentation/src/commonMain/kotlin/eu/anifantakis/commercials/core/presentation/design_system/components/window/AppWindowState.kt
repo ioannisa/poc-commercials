@@ -47,8 +47,11 @@ internal fun Dp.clampSafe(min: Dp, max: Dp): Dp = coerceIn(min, max.coerceAtLeas
 class AppWindowState internal constructor(
     val id: String,
     title: UiText,
-    val isModal: Boolean,
+    modal: Boolean,
+    /** The caller ALLOWS undocking; whether it is docked right now is [isModal]. */
+    val undockable: Boolean,
     val closable: Boolean,
+    /** The caller's wish. A DOCKED window hides the action regardless - see [canMinimize]. */
     val minimizable: Boolean,
     val resizable: Boolean,
     val minSize: DpSize,
@@ -56,6 +59,15 @@ class AppWindowState internal constructor(
     content: @Composable () -> Unit,
 ) {
     var title: UiText by mutableStateOf(title)
+        internal set
+
+    /**
+     * DOCKED: a scrim blocks the app beneath and this window is the only thing
+     * the user can touch. Undocking (when [undockable]) drops the scrim so the
+     * window becomes a tool the operator works BESIDE - the Εύρεση console's
+     * two modes.
+     */
+    var isModal: Boolean by mutableStateOf(modal)
         internal set
 
     var position: DpOffset by mutableStateOf(DpOffset.Unspecified)
@@ -66,6 +78,9 @@ class AppWindowState internal constructor(
 
     var isMinimized: Boolean by mutableStateOf(false)
         internal set
+
+    /** A docked window may never hide: its scrim would block an unreachable UI. */
+    val canMinimize: Boolean get() = minimizable && !isModal
 
     internal var zOrder: Int by mutableStateOf(0)
     internal var content: @Composable () -> Unit by mutableStateOf(content)
@@ -144,15 +159,22 @@ class AppWindowHostState internal constructor(
      * Same id = same ViewModel scope; a second, INDEPENDENT window of the
      * same screen just needs a different id.
      *
-     * A modal window scrims and blocks everything beneath it and cannot be
-     * minimized (a hidden modal would deadlock the UI behind its scrim).
+     * A modal (docked) window scrims and blocks everything beneath it and
+     * cannot be minimized - a hidden modal would deadlock the UI behind its
+     * own scrim. Pass [undockable] to let the user drop the scrim instead.
      */
     fun open(
         id: String,
         title: UiText,
         modal: Boolean = false,
+        /**
+         * Offers a chrome action that drops the scrim, turning a docked dialog
+         * into a window the operator works BESIDE (and back). Opt-in: a window
+         * whose whole point is to block - a confirmation - must not offer it.
+         */
+        undockable: Boolean = false,
         closable: Boolean = true,
-        minimizable: Boolean = !modal,
+        minimizable: Boolean = true,
         resizable: Boolean = true,
         minSize: DpSize = DpSize(280.dp, 180.dp),
         content: @Composable () -> Unit,
@@ -168,14 +190,30 @@ class AppWindowHostState internal constructor(
         windows += AppWindowState(
             id = id,
             title = title,
-            isModal = modal,
+            modal = modal,
+            undockable = undockable,
             closable = closable,
-            minimizable = minimizable && !modal,
+            minimizable = minimizable,
             resizable = resizable,
             minSize = minSize,
             cascade = openSeq++ % CASCADE_STEPS,
             content = content,
         ).also { it.zOrder = ++topZ }
+    }
+
+    /**
+     * Docks (scrim, blocks everything) or undocks the window. Undocking also
+     * brings it to the front: it just stopped being the only reachable thing,
+     * so its z-order starts mattering.
+     */
+    fun setModal(id: String, modal: Boolean) {
+        val window = windows.firstOrNull { it.id == id }?.takeIf { it.undockable } ?: return
+        if (window.isModal == modal) return
+        window.isModal = modal
+        // A docked window can never be hidden - dock a minimized one and it
+        // must come back, or its scrim would block a UI with nothing on top.
+        if (modal) window.isMinimized = false
+        focus(id)
     }
 
     fun focus(id: String) {
@@ -185,7 +223,7 @@ class AppWindowHostState internal constructor(
 
     /** Parks the window into the taskbar strip - its ViewModels SURVIVE. */
     fun minimize(id: String) {
-        windows.firstOrNull { it.id == id }?.takeIf { it.minimizable }?.isMinimized = true
+        windows.firstOrNull { it.id == id }?.takeIf { it.canMinimize }?.isMinimized = true
     }
 
     fun restore(id: String) {
