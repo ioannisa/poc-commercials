@@ -28,6 +28,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -96,6 +97,53 @@ internal const val MAX_GRID_SCALE = 2f
  * grid anyway, and reads stay free.
  */
 internal val LocalGridScale = staticCompositionLocalOf { 1f }
+
+/**
+ * The grid's RULED LINES - the spreadsheet look the console grids want: a
+ * separator under every row and down every column edge.
+ *
+ * Both default to ON. They are separable because they answer different
+ * questions: horizontal lines help follow ONE record across wide columns,
+ * vertical ones keep numeric columns visually apart; a report-like list may
+ * legitimately want rows only.
+ *
+ * [color] null means "the palette's own cell border", which is what keeps the
+ * lines theme-correct in light and dark without every caller passing one.
+ *
+ * NOTE: switching [vertical] off does not blank the header's column edges -
+ * what stays there is the RESIZE HANDLE's own indicator, a control rather
+ * than a rule. Ruling is presentation; removing the affordance would remove
+ * the ability to resize.
+ */
+@Immutable
+data class GridLines(
+    val horizontal: Boolean = true,
+    val vertical: Boolean = true,
+    val color: Color? = null,
+    /**
+     * 1.dp, NOT [Dp.Hairline]: Hairline is literally 0.dp - it means "thinnest
+     * possible" only to `Modifier.border`, while a 0.dp-thick `HorizontalDivider`
+     * simply draws nothing. Caught in the offscreen render: the column rules
+     * showed (their draw coerces to one pixel) and the row rules silently
+     * vanished.
+     */
+    val thickness: Dp = 1.dp,
+) {
+    companion object {
+        /** No ruling at all - background banding carries the rows. */
+        val None = GridLines(horizontal = false, vertical = false)
+        /** Rows only: the pre-2026-07 look of this toolkit. */
+        val RowsOnly = GridLines(horizontal = true, vertical = false)
+    }
+}
+
+/**
+ * The active ruling, published by each public grid at its root - same reason
+ * as [LocalGridScale]: the cells that draw these lines sit several private
+ * composables deep, and threading a config through every signature would be
+ * noise. Static: a ruling change re-draws the whole grid anyway.
+ */
+internal val LocalGridLines = staticCompositionLocalOf { GridLines() }
 
 /**
  * Sort direction for columns

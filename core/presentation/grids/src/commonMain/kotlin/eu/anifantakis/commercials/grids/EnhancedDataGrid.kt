@@ -484,6 +484,13 @@ fun <T> EnhancedDataGrid(
     stickyRows: StickyRowsConfig = StickyRowsConfig(),
     stickyColumns: StickyColumnsConfig = StickyColumnsConfig(),
 
+    /**
+     * The ruled lines between rows and columns - ON for both by default (the
+     * spreadsheet look these consoles are read as). [GridLines.RowsOnly] and
+     * [GridLines.None] are the two other shapes worth naming.
+     */
+    gridLines: GridLines = GridLines(),
+
     // Editing configuration (NEW)
     enableEditing: Boolean = false,  // Master switch for editing
     onCellValueChanged: ((T, String, String, String) -> Unit)? = null,  // (item, columnId, oldValue, newValue)
@@ -799,7 +806,7 @@ fun <T> EnhancedDataGrid(
 
     // Main layout using Box for layered sticky regions
     // One place publishes the scale; every dense Text below reads it.
-    CompositionLocalProvider(LocalGridScale provides s) {
+    CompositionLocalProvider(LocalGridScale provides s, LocalGridLines provides gridLines) {
         Box(
             modifier = modifier
                 .focusRequester(focusRequester)
@@ -1313,14 +1320,18 @@ private fun <T> HeaderCell(
             )
         }
 
-        // Right border
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .fillMaxHeight()
-                .background(palette.headerBorder)
-                .align(Alignment.CenterEnd)
-        )
+        // Right border - the header's own column rule, gated with the body's
+        // so a GridLines.RowsOnly grid does not keep a ruled header.
+        val lines = LocalGridLines.current
+        if (lines.vertical) {
+            Box(
+                modifier = Modifier
+                    .width(lines.thickness)
+                    .fillMaxHeight()
+                    .background(lines.color ?: palette.headerBorder)
+                    .align(Alignment.CenterEnd)
+            )
+        }
     }
 }
 
@@ -1411,7 +1422,6 @@ private fun <T> FrozenLeftSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -1446,6 +1456,11 @@ private fun <T> FrozenLeftRow(
 
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
+
+    val lines = LocalGridLines.current
+    val rowRule = lines.horizontal
+    val ruleColor = lines.color ?: palette.cellBorder
+    val ruleWidth = lines.thickness
 
     val isSelected = rowIndex in state.selectedRows
     val isFocused = rowIndex == state.focusedRow && hasFocus
@@ -1497,6 +1512,27 @@ private fun <T> FrozenLeftRow(
                 }
             }
             .background(backgroundColor)
+            // The ROW rule, drawn ON the row - NOT as a HorizontalDivider
+            // sibling. The body's lazy column is wrapped in horizontalScroll,
+            // so its children measure against an UNBOUNDED width: a divider's
+            // fillMaxWidth() collapses to zero there and paints nothing while
+            // still taking its height, which is exactly the "gap in the column
+            // rules with no line in it" this grid shipped with. A row measures
+            // to the sum of its cells, so drawing here is both visible and
+            // correctly bounded. After .background() on purpose - modifiers
+            // paint in chain order, and the row's fill would cover it.
+            .drawBehind {
+                if (rowRule) {
+                    val t = ruleWidth.toPx().coerceAtLeast(1f)
+                    val y = size.height - t / 2f
+                    drawLine(
+                        color = ruleColor,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = t,
+                    )
+                }
+            }
             // Use separate onRightClick modifier for reliable right-click detection
             .let { mod ->
                 mod.onRightClick { offset ->
@@ -1691,7 +1727,6 @@ private fun <T> ScrollableMiddleSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -1726,6 +1761,11 @@ private fun <T> ScrollableMiddleRow(
 
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
+
+    val lines = LocalGridLines.current
+    val rowRule = lines.horizontal
+    val ruleColor = lines.color ?: palette.cellBorder
+    val ruleWidth = lines.thickness
 
     val isSelected = rowIndex in state.selectedRows
     val isFocused = rowIndex == state.focusedRow && hasFocus
@@ -1777,6 +1817,27 @@ private fun <T> ScrollableMiddleRow(
                 }
             }
             .background(backgroundColor)
+            // The ROW rule, drawn ON the row - NOT as a HorizontalDivider
+            // sibling. The body's lazy column is wrapped in horizontalScroll,
+            // so its children measure against an UNBOUNDED width: a divider's
+            // fillMaxWidth() collapses to zero there and paints nothing while
+            // still taking its height, which is exactly the "gap in the column
+            // rules with no line in it" this grid shipped with. A row measures
+            // to the sum of its cells, so drawing here is both visible and
+            // correctly bounded. After .background() on purpose - modifiers
+            // paint in chain order, and the row's fill would cover it.
+            .drawBehind {
+                if (rowRule) {
+                    val t = ruleWidth.toPx().coerceAtLeast(1f)
+                    val y = size.height - t / 2f
+                    drawLine(
+                        color = ruleColor,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = t,
+                    )
+                }
+            }
             // Use separate onRightClick modifier for reliable right-click detection
             .let { mod ->
                 mod.onRightClick { offset ->
@@ -1975,7 +2036,6 @@ private fun <T> FrozenRightSection(
                 onRowReorder = onRowReorder
             )
 
-            HorizontalDivider(color = palette.cellBorder)
         }
     }
 }
@@ -2007,6 +2067,11 @@ private fun <T> FrozenRightRow(
 
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
+
+    val lines = LocalGridLines.current
+    val rowRule = lines.horizontal
+    val ruleColor = lines.color ?: palette.cellBorder
+    val ruleWidth = lines.thickness
 
     val isSelected = rowIndex in state.selectedRows
     val isFocused = rowIndex == state.focusedRow && hasFocus
@@ -2058,6 +2123,27 @@ private fun <T> FrozenRightRow(
                 }
             }
             .background(backgroundColor)
+            // The ROW rule, drawn ON the row - NOT as a HorizontalDivider
+            // sibling. The body's lazy column is wrapped in horizontalScroll,
+            // so its children measure against an UNBOUNDED width: a divider's
+            // fillMaxWidth() collapses to zero there and paints nothing while
+            // still taking its height, which is exactly the "gap in the column
+            // rules with no line in it" this grid shipped with. A row measures
+            // to the sum of its cells, so drawing here is both visible and
+            // correctly bounded. After .background() on purpose - modifiers
+            // paint in chain order, and the row's fill would cover it.
+            .drawBehind {
+                if (rowRule) {
+                    val t = ruleWidth.toPx().coerceAtLeast(1f)
+                    val y = size.height - t / 2f
+                    drawLine(
+                        color = ruleColor,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = t,
+                    )
+                }
+            }
             // Use separate onRightClick modifier for reliable right-click detection
             .let { mod ->
                 mod.onRightClick { offset ->
@@ -2163,6 +2249,12 @@ private fun <T> DataCell(
 ) {
     val gridScale = LocalGridScale.current
     val palette = gridPalette()
+    // The column rule, drawn per CELL (the row is a Row of cells; there is no
+    // other place a vertical line can live). Resolved here so drawBehind gets
+    // plain values, not composition reads.
+    val lines = LocalGridLines.current
+    val ruleColor = lines.color ?: palette.cellBorder
+    val ruleWidth = lines.thickness
 
     // Extract actual item from stable wrapper
     val item = itemWrapper.value
@@ -2195,7 +2287,22 @@ private fun <T> DataCell(
                 if (cellBg != Color.Transparent) {
                     drawRect(color = cellBg)
                 }
-                
+
+                // The COLUMN rule, on the cell's trailing edge. Hairline
+                // resolves to one physical pixel, so it is inset by half its
+                // width to land fully inside the cell instead of straddling
+                // the boundary and disappearing on some densities.
+                if (lines.vertical) {
+                    val w = ruleWidth.toPx().coerceAtLeast(1f)
+                    val x = size.width - w / 2f
+                    drawLine(
+                        color = ruleColor,
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = w,
+                    )
+                }
+
                 // Draw focus border - using drawBehind instead of Modifier.border for performance
                 if (isCellFocused) {
                     val strokeWidth = 2.dp.toPx()
@@ -2506,10 +2613,27 @@ private fun TotalsCell(
     alignment: TextAlign
 ) {
     val gridScale = LocalGridScale.current
+    val palette = gridPalette()
+    val lines = LocalGridLines.current
+    val ruleColor = lines.color ?: palette.cellBorder
+    val ruleWidth = lines.thickness
     Box(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
+            .drawBehind {
+                // The totals row is part of the same ruled table.
+                if (lines.vertical) {
+                    val w = ruleWidth.toPx().coerceAtLeast(1f)
+                    val x = size.width - w / 2f
+                    drawLine(
+                        color = ruleColor,
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = w,
+                    )
+                }
+            }
             .padding(horizontal = 8.dp),
         contentAlignment = when (alignment) {
             TextAlign.Start -> Alignment.CenterStart
