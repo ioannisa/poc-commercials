@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppCard
@@ -42,17 +43,23 @@ import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.roundToInt
 
 /**
- * The gear-icon screen: theme selection (persisted, applied live) plus the
+ * The gear-icon settings: theme selection (persisted, applied live) plus the
  * entry points to account self-service and super-admin maintenance. The
  * account dialogs belong to :feature:auth - this screen only emits the
  * callbacks; the app layer renders them.
+ *
+ * Hosted as a slide-over panel rather than a navigation destination (it is a
+ * hub of shortcuts, not a place you go), so it takes a [modifier] for the
+ * panel's sizing and an optional [onCollapse] for the park affordance. The
+ * four maintenance entries still navigate to real screens - the host closes
+ * the panel on the way out.
  */
 @Composable
 fun PreferencesScreenRoot(
     isAdmin: Boolean,
     swaggerEnabled: Boolean,
     aiChatEnabled: Boolean,
-    onBack: () -> Unit,
+    onClose: () -> Unit,
     onChangePassword: () -> Unit,
     onApiTokens: () -> Unit,
     onAdminMcp: () -> Unit,
@@ -63,6 +70,9 @@ fun PreferencesScreenRoot(
     onDatabases: () -> Unit,
     onOpenSwagger: () -> Unit,
     onAiChat: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Panel hosting: park the panel, keeping a re-expand tab. */
+    onCollapse: (() -> Unit)? = null,
     viewModel: PreferencesViewModel = koinViewModel(),
 ) {
     PreferencesScreen(
@@ -73,9 +83,11 @@ fun PreferencesScreenRoot(
         swaggerEnabled = swaggerEnabled,
         aiChatEnabled = aiChatEnabled,
         onIntent = viewModel::onAction,
+        modifier = modifier,
+        onCollapse = onCollapse,
         onNavIntent = { navIntent ->
             when (navIntent) {
-                PreferencesScreenNavIntent.OnBack -> onBack()
+                PreferencesScreenNavIntent.OnClose -> onClose()
                 PreferencesScreenNavIntent.OnChangePassword -> onChangePassword()
                 PreferencesScreenNavIntent.OnApiTokens -> onApiTokens()
                 PreferencesScreenNavIntent.OnAdminMcp -> onAdminMcp()
@@ -98,7 +110,7 @@ fun PreferencesScreenRoot(
  * nav callback it received.
  */
 private sealed interface PreferencesScreenNavIntent {
-    data object OnBack : PreferencesScreenNavIntent
+    data object OnClose : PreferencesScreenNavIntent
     data object OnChangePassword : PreferencesScreenNavIntent
     data object OnApiTokens : PreferencesScreenNavIntent
     data object OnAdminMcp : PreferencesScreenNavIntent
@@ -121,20 +133,40 @@ private fun PreferencesScreen(
     aiChatEnabled: Boolean,
     onIntent: (PreferencesIntent) -> Unit,
     onNavIntent: (PreferencesScreenNavIntent) -> Unit,
+    modifier: Modifier = Modifier,
+    onCollapse: (() -> Unit)? = null,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(UIConst.paddingRegular).verticalScroll(rememberScrollState()),
+        modifier = modifier.padding(UIConst.paddingRegular).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 560 is this screen's own form cap (start-aligned: header row + cards).
         AppFormColumn(maxWidth = 560.dp, horizontalAlignment = Alignment.Start) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIconButton(
-                    label = Strings[StringKey.COMMON_BACK],
-                    icon = AppDrawableRepo.arrowBack,
-                    onClick = { onNavIntent(PreferencesScreenNavIntent.OnBack) },
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Single line + ellipsis: at the panel's narrowest the title
+                // must truncate, never wrap the actions onto a second row.
+                AppText(
+                    Strings[StringKey.PREFERENCES_TITLE],
+                    AppTextStyle.SCREEN_TITLE,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-                AppText(Strings[StringKey.PREFERENCES_TITLE], AppTextStyle.SCREEN_TITLE)
+                onCollapse?.let {
+                    AppIconButton(
+                        label = Strings[StringKey.COMMON_COLLAPSE],
+                        icon = AppDrawableRepo.keyboardArrowRight,
+                        onClick = it,
+                    )
+                }
+                AppIconButton(
+                    label = Strings[StringKey.COMMON_CLOSE],
+                    icon = AppDrawableRepo.close,
+                    onClick = { onNavIntent(PreferencesScreenNavIntent.OnClose) },
+                )
             }
 
             Spacer(Modifier.height(UIConst.paddingSmall))
@@ -326,6 +358,7 @@ private fun PreferencesScreenPreview() = AppPreview(padded = false) {
         aiChatEnabled = true,
         onIntent = {},
         onNavIntent = {},
+        modifier = Modifier.fillMaxSize(),
     )
 }
 
@@ -342,6 +375,7 @@ private fun PreferencesScreenAdminPreview() = AppPreview(padded = false) {
         aiChatEnabled = false,
         onIntent = {},
         onNavIntent = {},
+        modifier = Modifier.fillMaxSize(),
     )
 }
 
@@ -357,5 +391,6 @@ private fun PreferencesScreenLargeFontPreview() = AppPreview(padded = false) {
         aiChatEnabled = true,
         onIntent = {},
         onNavIntent = {},
+        modifier = Modifier.fillMaxSize(),
     )
 }
