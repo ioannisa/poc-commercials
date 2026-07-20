@@ -591,36 +591,21 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             else "s.id IS NOT NULL OR (NOT EXISTS (SELECT 1 FROM spots x WHERE x.contract_line_id = cl.id) AND ct.customer_id = cu.id)"
 
         return connection().use { c ->
-            c.prepareStatement(
+            // ── phase 1: the party's LINES (cheap - no placements touched) ──
+            data class Bare(
+                val lineId: Long, val number: String, val isGift: Boolean, val lineNo: Int,
+                val desiredQty: Int, val spotCount: Int,
+                val entryDate: String?, val startDate: String?, val endDate: String?,
+            )
+            val bare = c.prepareStatement(
                 """
                 SELECT cl.id AS line_id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date,
                        cl.line_no, cl.desired_qty,
-                       COUNT(DISTINCT s.id) AS spot_count,
-                       -- Consumption comes from the CHARGE-side leg below (MAX
-                       -- collapses its per-line row over the spots multiplicity).
-                       MAX(COALESCE(chg.placements, 0)) AS placements,
-                       MAX(COALESCE(chg.total_secs, 0)) AS total_secs
+                       COUNT(DISTINCT s.id) AS spot_count
                 FROM contract_lines cl
                 JOIN contracts ct ON ct.id = cl.contract_id
                 $partyFilter
                 $spotJoin
-                -- Αναλωμένα by the airing's CHARGE line - the same
-                -- COALESCE(p.contract_line_id, s.contract_line_id) read path as
-                -- the Break Console's Σύμβαση column and the grid's «Προβολή
-                -- Βάσει Συμβολαίου». Counting via the spots leg above (all of a
-                -- spot's airings onto its DEFAULT line) piled a spot's whole
-                -- 1,992 airings on one line while the lines they actually
-                -- charge showed 0 (ΖΩΓΡΑΦΑΚΗ 703 vs 789). The spot's duration,
-                -- not the airing's, per the owner's parity decision.
-                LEFT JOIN (
-                    SELECT cl2.id AS line_id, COUNT(*) AS placements,
-                           SUM(s2.duration_seconds) AS total_secs
-                    FROM placements p2
-                    JOIN spots s2 ON s2.id = p2.spot_id AND s2.hidden = FALSE
-                    JOIN contract_lines cl2 ON cl2.id = COALESCE(p2.contract_line_id, s2.contract_line_id)
-                    WHERE p2.hidden = FALSE AND p2.station_id = ?
-                    GROUP BY cl2.id
-                ) chg ON chg.line_id = cl.id
                 WHERE ($keep)
                 GROUP BY cl.id, ct.number, ct.is_gift, ct.entry_date, ct.start_date, ct.end_date, cl.line_no, cl.desired_qty
                 ORDER BY ct.number, cl.line_no
@@ -628,19 +613,16 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             ).use { ps ->
                 ps.setString(1, code)
                 ps.setString(2, stationId)
-                ps.setString(3, stationId)
                 ps.executeQuery().use { rs ->
                     buildList {
                         while (rs.next()) add(
-                            ContractLineRow(
+                            Bare(
                                 lineId = rs.getLong("line_id"),
-                                contractNumber = rs.getString("number"),
+                                number = rs.getString("number"),
                                 isGift = rs.getBoolean("is_gift"),
                                 lineNo = rs.getInt("line_no"),
                                 desiredQty = rs.getInt("desired_qty"),
                                 spotCount = rs.getInt("spot_count"),
-                                placements = rs.getInt("placements"),
-                                totalSeconds = rs.getLong("total_secs"),
                                 entryDate = rs.getString("entry_date"),
                                 startDate = rs.getString("start_date"),
                                 endDate = rs.getString("end_date"),
@@ -648,6 +630,67 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
                         )
                     }
                 }
+            }
+            if (bare.isEmpty()) return@use emptyList()
+
+            // ── phase 2: Αναλωμένα by the airing's CHARGE line, for JUST these
+            // lines. Same COALESCE(p.contract_line_id, s.contract_line_id) read
+            // path as the Break Console's Σύμβαση column and «Προβολή Βάσει
+            // Συμβολαίου» - but split into its two index-friendly arms: the
+            // explicit charges range-scan idx_placements_line, the default-line
+            // fallback drives spots(fk_spots_line) -> placements(spot_id). The
+            // first cut aggregated the WHOLE station in one derived table -
+            // 4M rows and ~6s on every finder click. (The spot's duration, not
+            // the airing's, per the owner's parity decision.)
+            val ids = bare.map { it.lineId }
+            val qs = ids.joinToString(",") { "?" }
+            data class Consumed(val placements: Int, val totalSeconds: Long)
+            val consumed = HashMap<Long, Consumed>()
+            c.prepareStatement(
+                """
+                SELECT line_id, SUM(cnt) AS placements, SUM(secs) AS total_secs FROM (
+                    SELECT p.contract_line_id AS line_id, COUNT(*) AS cnt, SUM(s.duration_seconds) AS secs
+                    FROM placements p
+                    JOIN spots s ON s.id = p.spot_id AND s.hidden = FALSE
+                    WHERE p.contract_line_id IN ($qs) AND p.hidden = FALSE AND p.station_id = ?
+                    GROUP BY p.contract_line_id
+                    UNION ALL
+                    SELECT s.contract_line_id, COUNT(*), SUM(s.duration_seconds)
+                    FROM spots s
+                    JOIN placements p ON p.spot_id = s.id AND p.hidden = FALSE AND p.contract_line_id IS NULL
+                    WHERE s.contract_line_id IN ($qs) AND s.hidden = FALSE AND s.station_id = ?
+                    GROUP BY s.contract_line_id
+                ) u GROUP BY line_id
+                """.trimIndent()
+            ).use { ps ->
+                var i = 1
+                ids.forEach { ps.setLong(i++, it) }
+                ps.setString(i++, stationId)
+                ids.forEach { ps.setLong(i++, it) }
+                ps.setString(i, stationId)
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        consumed[rs.getLong("line_id")] =
+                            Consumed(rs.getInt("placements"), rs.getLong("total_secs"))
+                    }
+                }
+            }
+
+            bare.map { b ->
+                val chg = consumed[b.lineId]
+                ContractLineRow(
+                    lineId = b.lineId,
+                    contractNumber = b.number,
+                    isGift = b.isGift,
+                    lineNo = b.lineNo,
+                    desiredQty = b.desiredQty,
+                    spotCount = b.spotCount,
+                    placements = chg?.placements ?: 0,
+                    totalSeconds = chg?.totalSeconds ?: 0,
+                    entryDate = b.entryDate,
+                    startDate = b.startDate,
+                    endDate = b.endDate,
+                )
             }
         }
     }

@@ -615,6 +615,9 @@ class GroupDb(val config: GroupConfig, maxPoolSize: Int) {
         // Product lines + per-airing charge (see the CREATE TABLE notes).
         ensureColumn(c, "contract_lines", "spot_type_id", "BIGINT NULL")
         ensureColumn(c, "placements", "contract_line_id", "BIGINT NULL")
+        // The finder's per-line Αναλωμένα aggregate by CHARGE line - without
+        // this, "which airings charge line X" is a 4M-row scan per click.
+        ensureIndex(c, "placements", "idx_placements_line", "contract_line_id")
         // Main address (see the customers CREATE TABLE note).
         ensureColumn(c, "customers", "address_street", "VARCHAR(160) NULL")
         ensureColumn(c, "customers", "address_zip", "VARCHAR(16) NULL")
