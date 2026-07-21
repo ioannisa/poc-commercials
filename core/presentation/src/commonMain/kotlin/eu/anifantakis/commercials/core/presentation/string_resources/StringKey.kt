@@ -123,6 +123,11 @@ enum class StringKey(val json: String = "") {
     TIMETABLE_PROGRAM_NAME_LABEL,
     /** The catalog window's type-to-narrow box. */
     TIMETABLE_PROGRAM_FILTER,
+    /** The «Εμφάνιση» radio in the catalog: Ενεργά / Όλα, and each row's «ενεργό». */
+    TIMETABLE_PROGRAM_SHOW,
+    TIMETABLE_PROGRAM_SHOW_ACTIVE,
+    TIMETABLE_PROGRAM_SHOW_ALL,
+    TIMETABLE_PROGRAM_ACTIVE,
     /** The readout's discreet offer: arm this cell's programme as the brush. */
     TIMETABLE_ARM_CELL_PROGRAM,
     TIMETABLE_PROGRAM_ADD_TITLE,

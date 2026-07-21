@@ -26,6 +26,12 @@ import kotlinx.coroutines.launch
 enum class ProgramDialog { ADD, EDIT, REMOVE, COLOR }
 
 /**
+ * The «Εμφάνιση» radio: the active-only dropdown, or every programme incl.
+ * retired ones (where each row carries a "ενεργό" checkbox to toggle it).
+ */
+enum class ProgramShow { ACTIVE, ALL }
+
+/**
  * The console's own state: the CATALOG and which dialog is open. The armed
  * brush is NOT here - it belongs to the flow (the grid's 'a' key and the
  * «Προβολή Βάσει…» filter read it), so it arrives merged in [selectedId].
@@ -36,6 +42,8 @@ data class ProgramTypesState(
     val dialog: ProgramDialog? = null,
     /** Narrows [visible] as the operator types - purely local, never persisted. */
     val filter: String = "",
+    /** Which set is loaded: active-only, or every programme with its flag. */
+    val show: ProgramShow = ProgramShow.ACTIVE,
     /**
      * Merged from the flow's common state - the single truth for the brush.
      * Resolved against [programs] so a rename/recolour shows through even
@@ -65,6 +73,11 @@ data class ProgramTypesState(
 sealed interface ProgramTypesIntent {
     data class Select(val programId: Long) : ProgramTypesIntent
     data class FilterChanged(val value: String) : ProgramTypesIntent
+    data class ShowChanged(val show: ProgramShow) : ProgramTypesIntent
+    /**
+     * The "ενεργό" checkbox in the "Όλα" view: retire or restore a programme.
+     */
+    data class SetActive(val programId: Long, val active: Boolean) : ProgramTypesIntent
     data class OpenDialog(val dialog: ProgramDialog) : ProgramTypesIntent
     data object CloseDialog : ProgramTypesIntent
     data class Create(val name: String, val colorArgb: Int?) : ProgramTypesIntent
@@ -112,6 +125,13 @@ class ProgramTypesViewModel(
 
             is ProgramTypesIntent.FilterChanged -> _state.update { it.copy(filter = intent.value) }
 
+            is ProgramTypesIntent.ShowChanged -> {
+                _state.update { it.copy(show = intent.show) }
+                load()
+            }
+
+            is ProgramTypesIntent.SetActive -> setActive(intent.programId, intent.active)
+
             is ProgramTypesIntent.OpenDialog -> {
                 // ΔΙΟΡΘ/ΑΦΑΙΡ/Χρώμα act ON the selection; ΠΡΟΣΘ never needs one.
                 if (intent.dialog != ProgramDialog.ADD && _state.value.selected == null) {
@@ -138,7 +158,12 @@ class ProgramTypesViewModel(
      */
     private fun load(selectId: Long? = null) {
         viewModelScope.launch {
-            when (val result = repository.list()) {
+            // "Όλα" pulls the full catalog (retired included); "Ενεργά" the
+            // active-only dropdown. Switching between them re-fetches, so the
+            // heavy full list is only paid for when the operator asks for it.
+            val query =
+                if (_state.value.show == ProgramShow.ALL) repository.listAll() else repository.list()
+            when (val result = query) {
                 is DataResult.Success -> {
                     val programs = result.data.toImmutableList()
                     _state.update { it.copy(programs = programs) }
@@ -216,6 +241,21 @@ class ProgramTypesViewModel(
                     common.selectProgram(null)
                     load()
                 }
+                is DataResult.Failure -> showSnackbar(result.error.toUiText())
+            }
+        }
+    }
+
+    /**
+     * The "ενεργό" checkbox. Reloads the CURRENT view: in "Όλα" the row stays
+     * (now unchecked), and load()'s own re-push keeps the armed brush only if
+     * it survives the fresh list - so retiring the armed programme and then
+     * switching to "Ενεργά" disarms it for free, no special case here.
+     */
+    private fun setActive(id: Long, active: Boolean) {
+        viewModelScope.launch {
+            when (val result = repository.setActive(id, active)) {
+                is DataResult.Success -> load()
                 is DataResult.Failure -> showSnackbar(result.error.toUiText())
             }
         }

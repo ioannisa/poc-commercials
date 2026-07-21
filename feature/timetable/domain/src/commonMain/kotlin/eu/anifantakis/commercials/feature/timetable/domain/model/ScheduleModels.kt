@@ -77,6 +77,12 @@ data class Program(
     val name: String,
     /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
     val colorArgb: Int? = null,
+    /**
+     * false = retired: kept for painted history but out of the active list.
+     * Only the catalog's "Όλα" view surfaces these; everywhere else (the
+     * dropdown, the armed brush) a programme is active by construction.
+     */
+    val active: Boolean = true,
 )
 
 /**

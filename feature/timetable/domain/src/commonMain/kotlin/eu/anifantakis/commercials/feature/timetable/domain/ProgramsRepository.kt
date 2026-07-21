@@ -15,6 +15,12 @@ interface ProgramsRepository {
     /** The visible programmes, sorted by name - the dropdown's content. */
     suspend fun list(): DataResult<List<Program>, DataError.Network>
 
+    /** The "Όλα" view: every programme incl. retired ones, each with [Program.active]. */
+    suspend fun listAll(): DataResult<List<Program>, DataError.Network>
+
+    /** The "ενεργό" checkbox: retire (false) or restore (true) a programme. */
+    suspend fun setActive(id: Long, active: Boolean): EmptyDataResult<DataError.Network>
+
     /** ΠΡΟΣΘ: create a programme; returns it with its server id. */
     suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network>
 

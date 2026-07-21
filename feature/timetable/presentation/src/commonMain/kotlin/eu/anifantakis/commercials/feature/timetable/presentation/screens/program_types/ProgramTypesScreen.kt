@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import eu.anifantakis.commercials.core.presentation.design_system.UIConst
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButton
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppButtonVariant
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppCheckbox
+import eu.anifantakis.commercials.core.presentation.design_system.components.AppRadioRow
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppPopup
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppText
 import eu.anifantakis.commercials.core.presentation.design_system.components.AppVerticalScrollbar
@@ -74,6 +76,27 @@ private fun ProgramTypesScreen(
     onClose: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().padding(UIConst.paddingRegular)) {
+        // «Εμφάνιση»: the active-only dropdown, or every programme incl. retired
+        // ones - where each row gets a "ενεργό" checkbox to retire/restore it.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
+        ) {
+            AppText(Strings[StringKey.TIMETABLE_PROGRAM_SHOW], AppTextStyle.BODY_STRONG)
+            AppRadioRow(
+                selected = state.show == ProgramShow.ACTIVE,
+                onClick = { onIntent(ProgramTypesIntent.ShowChanged(ProgramShow.ACTIVE)) },
+                label = Strings[StringKey.TIMETABLE_PROGRAM_SHOW_ACTIVE],
+            )
+            AppRadioRow(
+                selected = state.show == ProgramShow.ALL,
+                onClick = { onIntent(ProgramTypesIntent.ShowChanged(ProgramShow.ALL)) },
+                label = Strings[StringKey.TIMETABLE_PROGRAM_SHOW_ALL],
+            )
+        }
+        Spacer(Modifier.height(UIConst.paddingExtraSmall))
+
         // Type to narrow: the catalog runs to a couple of hundred entries, so
         // scrolling to one by eye is not a workflow.
         AppTextField(
@@ -104,6 +127,16 @@ private fun ProgramTypesScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(UIConst.paddingSmall),
                 ) {
+                    // In «Όλα», a leading checkbox retires/restores the row. Its
+                    // own toggle consumes the tap, so it never doubles as a Select.
+                    if (state.show == ProgramShow.ALL) {
+                        AppCheckbox(
+                            checked = program.active,
+                            onCheckedChange = { on ->
+                                onIntent(ProgramTypesIntent.SetActive(program.id, on))
+                            },
+                        )
+                    }
                     ProgramSwatch(program)
                     AppText(
                         program.name,

@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -141,6 +142,38 @@ class ProgramTypesViewModelTest : TimetableTestBase() {
 
         vm.onAction(ProgramTypesIntent.OpenDialog(ProgramDialog.ADD))
         assertEquals(ProgramDialog.ADD, vm.state.dialog, "ΠΡΟΣΘ opens with nothing selected")
+    }
+
+    /**
+     * The reason this feature exists: a retired programme still paints April's
+     * cells but is invisible to the active-only catalog. «Όλα» surfaces it (so
+     * the filter can now find it), and the row's checkbox restores it.
+     */
+    @Test
+    fun theAllViewSurfacesRetiredProgrammesAndTogglesThem() = runTest(testDispatcher) {
+        repository.programs = listOf(
+            program(1, "News"),
+            program(2, "Εορταστικό").copy(active = false),
+        )
+        val vm = vm()
+        advanceUntilIdle()
+
+        // Ενεργά (default): the retired one is absent - the bug the user hit.
+        assertEquals(listOf("News"), vm.state.programs.map { it.name })
+
+        // Όλα: both appear, and the filter can now reach the retired one.
+        vm.onAction(ProgramTypesIntent.ShowChanged(ProgramShow.ALL))
+        advanceUntilIdle()
+        assertEquals(2, vm.state.programs.size)
+        assertFalse(vm.state.programs.first { it.id == 2L }.active)
+        vm.onAction(ProgramTypesIntent.FilterChanged("Εο"))
+        assertEquals(listOf("Εορταστικό"), vm.state.visible.map { it.name })
+
+        // The checkbox restores it: setActive(true), and the flag flips.
+        vm.onAction(ProgramTypesIntent.SetActive(2L, true))
+        advanceUntilIdle()
+        assertEquals(listOf(2L to true), repository.activeSet)
+        assertTrue(vm.state.programs.first { it.id == 2L }.active)
     }
 
     @Test

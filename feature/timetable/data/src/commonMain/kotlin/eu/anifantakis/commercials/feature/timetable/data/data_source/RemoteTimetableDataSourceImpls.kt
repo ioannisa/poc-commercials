@@ -11,6 +11,7 @@ import eu.anifantakis.commercials.feature.timetable.data.dto.BreakSlotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CommercialDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ContractLineDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.CreateProgramRequest
+import eu.anifantakis.commercials.feature.timetable.data.dto.SetProgramActiveRequest
 import eu.anifantakis.commercials.feature.timetable.data.dto.FinderSpotDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ProgramDto
 import eu.anifantakis.commercials.feature.timetable.data.dto.ReorderPlacementsRequest
@@ -113,6 +114,13 @@ class RemoteProgramsDataSourceImpl(private val api: ApiHttpClient) : RemoteProgr
     override suspend fun list(): DataResult<List<Program>, DataError.Network> =
         api.get<List<ProgramDto>>("/api/schedule/programs")
             .map { list -> list.map { it.toDomain() } }
+
+    override suspend fun listAll(): DataResult<List<Program>, DataError.Network> =
+        api.get<List<ProgramDto>>("/api/schedule/programs", "all" to true)
+            .map { list -> list.map { it.toDomain() } }
+
+    override suspend fun setActive(id: Long, active: Boolean): EmptyDataResult<DataError.Network> =
+        api.putEmpty("/api/schedule/programs/$id/active", SetProgramActiveRequest(active))
 
     override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> =
         api.post<CreateProgramRequest, ProgramDto>(

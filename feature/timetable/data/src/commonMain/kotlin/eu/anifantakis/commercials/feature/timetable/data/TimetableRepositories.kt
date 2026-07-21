@@ -82,6 +82,11 @@ class ProgramsRepositoryImpl(
 
     override suspend fun list(): DataResult<List<Program>, DataError.Network> = remoteDataSource.list()
 
+    override suspend fun listAll(): DataResult<List<Program>, DataError.Network> = remoteDataSource.listAll()
+
+    override suspend fun setActive(id: Long, active: Boolean): EmptyDataResult<DataError.Network> =
+        remoteDataSource.setActive(id, active)
+
     override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> =
         remoteDataSource.create(name, colorArgb)
 

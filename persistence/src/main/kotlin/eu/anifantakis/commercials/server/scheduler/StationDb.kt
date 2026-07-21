@@ -1029,6 +1029,49 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
             }
         }
 
+    /**
+     * The console's "Όλα" view: EVERY programme, retired ones included, each
+     * with its [ProgramRow.active] flag - the same rows the month grid still
+     * paints from, so an old programme keeps its colour but shows unchecked.
+     */
+    fun listAllPrograms(): List<ProgramRow> =
+        connection().use { c ->
+            c.prepareStatement(
+                "SELECT id, name, color_argb, hidden FROM programs WHERE station_id = ? ORDER BY name"
+            ).use { ps ->
+                ps.setString(1, stationId)
+                ps.executeQuery().use { rs ->
+                    buildList {
+                        while (rs.next()) add(
+                            ProgramRow(
+                                id = rs.getLong("id"),
+                                name = rs.getString("name"),
+                                colorArgb = rs.getInt("color_argb").takeIf { !rs.wasNull() },
+                                active = !rs.getBoolean("hidden"),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+    /**
+     * The "ενεργό" checkbox: retire (hidden = true) or restore a programme.
+     * The two-way form of ΑΦΑΙΡ [hideProgram] - no `hidden = FALSE` guard, so
+     * it can bring one back. Painted history is untouched either way.
+     */
+    fun setProgramActive(id: Long, active: Boolean): Boolean =
+        connection().use { c ->
+            c.prepareStatement(
+                "UPDATE programs SET hidden = ? WHERE id = ? AND station_id = ?"
+            ).use { ps ->
+                ps.setBoolean(1, !active)
+                ps.setLong(2, id)
+                ps.setString(3, stationId)
+                ps.executeUpdate() > 0
+            }
+        }
+
     /** ΠΡΟΣΘ: a new programme on this station (no legacy_id - it is app-born). */
     fun createProgram(name: String, colorArgb: Int?): ProgramRow =
         connection().use { c ->
@@ -1794,7 +1837,7 @@ class StationDb(private val group: GroupDb, private val station: StationConfig) 
 private data class BreakRow(val id: Long, val programId: Long?)
 
 /** One programme of the station's catalog (the "Τύποι Προγράμματος" dropdown). */
-data class ProgramRow(val id: Long, val name: String, val colorArgb: Int?)
+data class ProgramRow(val id: Long, val name: String, val colorArgb: Int?, val active: Boolean = true)
 
 /** Outcome of [StationDb.addPlacement]; the routes map each case to a status. */
 sealed interface AddPlacementResult {

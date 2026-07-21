@@ -57,6 +57,8 @@ interface RemotePlacementsDataSource {
 /** The programme catalog (Τύποι Προγράμματος): dropdown content + its CRUD. */
 interface RemoteProgramsDataSource {
     suspend fun list(): DataResult<List<Program>, DataError.Network>
+    suspend fun listAll(): DataResult<List<Program>, DataError.Network>
+    suspend fun setActive(id: Long, active: Boolean): EmptyDataResult<DataError.Network>
     suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network>
     suspend fun update(id: Long, name: String?, colorArgb: Int?): EmptyDataResult<DataError.Network>
     suspend fun remove(id: Long): EmptyDataResult<DataError.Network>

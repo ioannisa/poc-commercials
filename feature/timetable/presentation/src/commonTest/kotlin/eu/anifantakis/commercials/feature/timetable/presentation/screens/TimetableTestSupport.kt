@@ -298,16 +298,27 @@ class FakePlacementsRepository : PlacementsRepository {
 }
 
 class FakeProgramsRepository : ProgramsRepository {
+    /** The whole catalog, retired rows included (each carries its own active flag). */
     var programs: List<Program> = emptyList()
     val created = mutableListOf<Pair<String, Int?>>()
     val updates = mutableListOf<Triple<Long, String?, Int?>>()
     val removed = mutableListOf<Long>()
+    val activeSet = mutableListOf<Pair<Long, Boolean>>()
 
     /** Set to exercise the catalog's failure branch. */
     var listFailure: DataError.Network? = null
 
     override suspend fun list(): DataResult<List<Program>, DataError.Network> =
+        listFailure?.let { DataResult.Failure(it) } ?: DataResult.Success(programs.filter { it.active })
+
+    override suspend fun listAll(): DataResult<List<Program>, DataError.Network> =
         listFailure?.let { DataResult.Failure(it) } ?: DataResult.Success(programs)
+
+    override suspend fun setActive(id: Long, active: Boolean): EmptyDataResult<DataError.Network> {
+        activeSet += id to active
+        programs = programs.map { if (it.id == id) it.copy(active = active) else it }
+        return DataResult.Success(Unit)
+    }
 
     override suspend fun create(name: String, colorArgb: Int?): DataResult<Program, DataError.Network> {
         created += name to colorArgb
@@ -325,8 +336,9 @@ class FakeProgramsRepository : ProgramsRepository {
     }
 
     override suspend fun remove(id: Long): EmptyDataResult<DataError.Network> {
+        // Soft delete, like the server: the row stays, it just goes inactive.
         removed += id
-        programs = programs.filterNot { it.id == id }
+        programs = programs.map { if (it.id == id) it.copy(active = false) else it }
         return DataResult.Success(Unit)
     }
 }

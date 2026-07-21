@@ -119,6 +119,8 @@ internal data class ProgramDto(
     val name: String,
     /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
     val colorArgb: Int? = null,
+    /** false = retired; the server only marks it on the "Όλα" list. */
+    val active: Boolean = true,
 )
 
 @Serializable
@@ -127,3 +129,7 @@ internal data class CreateProgramRequest(val name: String, val colorArgb: Int? =
 /** Nulls keep the current value - send only what changed. */
 @Serializable
 internal data class UpdateProgramRequest(val name: String? = null, val colorArgb: Int? = null)
+
+/** The "ενεργό" checkbox: retire (false) or restore (true) a programme. */
+@Serializable
+internal data class SetProgramActiveRequest(val active: Boolean)

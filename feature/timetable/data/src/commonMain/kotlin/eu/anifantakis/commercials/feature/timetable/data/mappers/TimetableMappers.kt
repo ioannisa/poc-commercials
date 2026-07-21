@@ -66,5 +66,5 @@ internal fun FinderSpotDto.toDomain(): ContractLineSpot = ContractLineSpot(
 )
 
 internal fun ProgramDto.toDomain(): Program = Program(
-    id = id, name = name, colorArgb = colorArgb,
+    id = id, name = name, colorArgb = colorArgb, active = active,
 )

@@ -159,6 +159,8 @@ data class ProgramDto(
     val name: String,
     /** Packed ARGB; null -> the programme paints nothing (zone colours apply). */
     val colorArgb: Int? = null,
+    /** false = retired (hidden from the active list); only the "Όλα" view shows it. */
+    val active: Boolean = true,
 )
 
 @Serializable
@@ -172,6 +174,12 @@ data class CreateProgramRequest(
 data class UpdateProgramRequest(
     val name: String? = null,
     val colorArgb: Int? = null,
+)
+
+/** The console's "ενεργό" checkbox: retire (false) or restore (true) a programme. */
+@Serializable
+data class SetProgramActiveRequest(
+    val active: Boolean,
 )
 
 
@@ -585,8 +593,13 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
          */
         get("/schedule/programs") {
             val access = call.editorAccessOrRespond(registry) ?: return@get
-            val programs = withContext(Dispatchers.IO) { access.db.listPrograms() }
-            call.respond(programs.map { ProgramDto(it.id, it.name, it.colorArgb) })
+            // ?all=true -> the "Όλα" view (retired programmes included, each
+            // carrying its active flag); default is the active-only dropdown.
+            val all = call.request.queryParameters["all"].toBoolean()
+            val programs = withContext(Dispatchers.IO) {
+                if (all) access.db.listAllPrograms() else access.db.listPrograms()
+            }
+            call.respond(programs.map { ProgramDto(it.id, it.name, it.colorArgb, it.active) })
         }
 
         /**
@@ -646,6 +659,25 @@ fun Route.scheduleRoutes(registry: StationRegistry) {
                 return@delete
             }
             val ok = withContext(Dispatchers.IO) { access.db.hideProgram(id) }
+            if (ok) call.respond(HttpStatusCode.NoContent)
+            else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No programme $id on this station"))
+        }
+
+        /**
+         * The "ενεργό" checkbox: retire or restore a programme. Unlike ΑΦΑΙΡ,
+         * this is two-way - the "Όλα" view can bring a retired programme back.
+         *
+         * Tag: Schedule
+         */
+        put("/schedule/programs/{id}/active") {
+            val access = call.editorAccessOrRespond(registry) ?: return@put
+            val id = call.parameters["id"]?.toLongOrNull()
+            if (id == null) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "numeric id required"))
+                return@put
+            }
+            val req = call.receive<SetProgramActiveRequest>()
+            val ok = withContext(Dispatchers.IO) { access.db.setProgramActive(id, req.active) }
             if (ok) call.respond(HttpStatusCode.NoContent)
             else call.respond(HttpStatusCode.NotFound, mapOf("error" to "No programme $id on this station"))
         }
